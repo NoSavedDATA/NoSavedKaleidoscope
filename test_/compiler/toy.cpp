@@ -746,10 +746,9 @@ Value *NumberExprAST::codegen() {
 }
 
 Value *CudaNumExprAST::codegen() {
-  
   Value *L = LHS->codegen();
   Value *R = RHS->codegen();
-
+  
   return Builder->CreateFMul(L, R, "multmp");
   //return ConstantFP::get(*TheContext, APFloat(Val));
 }

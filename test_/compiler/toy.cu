@@ -164,14 +164,28 @@ public:
   Value *codegen() override;
 };
 
+
 class CudaNumExprAST : public ExprAST {
-  float Val;
+  std::unique_ptr<ExprAST> LHS, RHS;
 
   public:
-    CudaNumExprAST(float Val) : Val(Val) {}
+    CudaNumExprAST(std::unique_ptr<ExprAST> LHS, std::unique_ptr<ExprAST> RHS)
+        : LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
   Value *codegen() override;
 };
+
+/*
+class CudaNumExprAST : public ExprAST {
+  float LHS, RHS;
+
+  public:
+    CudaNumExprAST(float LHS, float RHS)
+        : LHS(LHS), RHS(RHS) {}
+
+  Value *codegen() override;
+};
+*/
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {
@@ -585,9 +599,10 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     }
 
     // Merge LHS/RHS.
-    std::cout << "Bin op is: " << BinOp << "\n";
+    //std::cout << "Bin op is: " << BinOp << "\n";
     if(BinOp==64) //@
       LHS = std::make_unique<CudaNumExprAST>(std::move(LHS), std::move(RHS));
+      //LHS = std::make_unique<CudaNumExprAST>(LHS, RHS);
     else
       LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
   }
@@ -745,7 +760,20 @@ Value *NumberExprAST::codegen() {
 }
 
 Value *CudaNumExprAST::codegen() {
-  return ConstantFP::get(*TheContext, APFloat(Val));
+  Value *L = LHS->codegen();
+  Value *R = RHS->codegen();
+  //float L = LHS;
+  //float R = RHS;
+
+  std::cout << L;
+  int kDataLen = 1;
+  float* device_x;
+  cudaMalloc(&device_x, kDataLen * sizeof(float));
+  //cudaMemcpy(device_x, host_x, kDataLen * sizeof(float), cudaMemcpyHostToDevice);
+
+  //return ConstantFP::get(*TheContext, APFloat(2));
+  return Builder->CreateFMul(L, R, "multmp");
+  //return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
 Value *VariableExprAST::codegen() {
@@ -1198,7 +1226,7 @@ static void HandleTopLevelExpression() {
       auto *FP = Sym.getAddress().toPtr<float (*)()>();
       auto fp = FP();
       
-      std::cout << "\nResult times 5 is " << fp*5 << "\n";
+      //std::cout << "\nResult times 5 is " << fp*5 << "\n";
       fprintf(stderr, "%.2f\n", fp);
 
       // Delete the anonymous expression module from the JIT.
