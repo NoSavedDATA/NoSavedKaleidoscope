@@ -165,10 +165,11 @@ public:
 };
 
 class CudaNumExprAST : public ExprAST {
-  float Val;
+  std::unique_ptr<ExprAST> LHS, RHS;
 
   public:
-    CudaNumExprAST(float Val) : Val(Val) {}
+    CudaNumExprAST(std::unique_ptr<ExprAST> LHS, std::unique_ptr<ExprAST> RHS)
+        : LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
   Value *codegen() override;
 };
@@ -745,7 +746,12 @@ Value *NumberExprAST::codegen() {
 }
 
 Value *CudaNumExprAST::codegen() {
-  return ConstantFP::get(*TheContext, APFloat(Val));
+  
+  Value *L = LHS->codegen();
+  Value *R = RHS->codegen();
+
+  return Builder->CreateFMul(L, R, "multmp");
+  //return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
 Value *VariableExprAST::codegen() {
