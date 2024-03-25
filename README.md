@@ -1,3 +1,18 @@
+Install
+
+Install cuda toolkit 12.0, then:
+
+```bash
+bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+
+wget https://apt.llvm.org/llvm.sh
+chmod +x llvm.sh
+sudo ./llvm.sh 19 all
+
+sudo apt-get intall llvm clang zlib1g-dev libzstd-dev
+```
+
+<hr>
 dl.lib e rt.lib (isso é uma tentativa de adicionar as bibliotecas dl.lib ou rt.lib ao linker com -ldl e -lrt)
 
 clang++ .\test.cu -o axpy.exe --cuda-path=$env:CUDA_PATH --cuda-gpu-arch=sm_75 -L"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.6\lib\x64" -lcudart_static -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH
