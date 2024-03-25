@@ -27,7 +27,7 @@ clang++ -g -rdynamic toy.cpp `llvm-config --cxxflags --ldflags --system-libs --l
 
 CUDA:
 
-clang++ -g -O3 lexer.cu `llvm-config --cxxflags --ldflags --system-libs --libs core` --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/local/cuda-12/lib64" -lcudart_static -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -o compilador
+clang++ -g -O3 -rdynamic toy.cu `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/local/cuda-12/lib64" -lcudart_static -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -o compilador
 
 
 
