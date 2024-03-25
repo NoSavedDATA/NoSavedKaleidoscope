@@ -1,14 +1,16 @@
 #include <iostream>
+#include <vector>
 
 __global__ void axpy(float a, float* x, float* y) {
   y[threadIdx.x] = a * x[threadIdx.x];
 }
 
 int main(int argc, char* argv[]) {
-  const int kDataLen = 4;
+  const int kDataLen = 20000;
 
   float a = 2.0f;
-  float host_x[kDataLen] = {1.0f, 2.0f, 3.0f, 4.0f};
+  float host_x[kDataLen];// = {1.0f, 2.0f, 3.0f, 4.0f};
+  std::fill(host_x, host_x + kDataLen, 1.0f);
   float host_y[kDataLen];
 
   // Copy input data to device.
@@ -21,6 +23,9 @@ int main(int argc, char* argv[]) {
 
   // Launch the kernel.
   axpy<<<1, kDataLen>>>(a, device_x, device_y);
+  
+  // kDataLen = num of threads
+
 
   // Copy output data to host.
   cudaDeviceSynchronize();

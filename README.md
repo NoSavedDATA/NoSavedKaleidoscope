@@ -20,7 +20,10 @@ Compiler:
 
 cpu:
 
-clang++ -g -O3 lexer.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core` -o compilador
+clang++ -g -O3 -rdynamic lexer.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core` -o compilador
+clang++ -g -rdynamic lexer.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` -O3 -o toy
+
+clang++ -g -rdynamic toy.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` -O3 -o toy
 
 CUDA:
 
@@ -36,6 +39,7 @@ clang++ -g -O3 lexer.cu `llvm-config --cxxflags --ldflags --system-libs --libs c
 
 
 
-=============================================================================================================================================================================cmake .. -G "Visual Studio 16 2019" -DCMAKE_INSTALL_PREFIX=C:\some_folder -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -Thost=x64
+=============================================================================================================================================================================
+cmake .. -G "Visual Studio 16 2019" -DCMAKE_INSTALL_PREFIX=C:\some_folder -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -Thost=x64
 cmake .. -G "Visual Studio 16 2019" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -Thost=x64
 cmake --build . --target install
