@@ -15,9 +15,11 @@ int main(int argc, char* argv[]) {
 
   // Copy input data to device.
   float* device_x;
-  float* device_y;
   cudaMalloc(&device_x, kDataLen * sizeof(float));
+
+  float* device_y;
   cudaMalloc(&device_y, kDataLen * sizeof(float));
+  
   cudaMemcpy(device_x, host_x, kDataLen * sizeof(float),
              cudaMemcpyHostToDevice);
 
