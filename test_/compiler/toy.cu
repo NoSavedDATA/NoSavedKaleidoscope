@@ -569,16 +569,13 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary() {
   // If the current token is not an operator, it must be a primary expr.
-  std::cout << "Current Token\n";
+  
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
-  {
-    std::cout << "No Unary Parse\n";
     return ParsePrimary();
-  }
+  
   
   // If this is a unary operator, read it.
   int Opc = CurTok;
-  std::cout << Opc << " Parsing unary\n";
   getNextToken();
   if (auto Operand = ParseUnary())
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
@@ -601,7 +598,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     // Okay, we know this is a binop.
     int BinOp = CurTok;
     getNextToken(); // eat binop
-    std::cout << CurTok <<  " token\n";
+
     // Parse the unary expression after the binary operator.
     auto RHS = ParseUnary();
     if (!RHS)
@@ -865,7 +862,6 @@ Value *UnaryExprAST::codegen() {
   if (!OperandV)
     return nullptr;
 
-  std::cout << Opcode << " Unary Operator codegen\n";
   Function *F = getFunction(std::string("unary") + Opcode);
   if (!F)
     return LogErrorV("Unknown unary operator");
@@ -914,12 +910,10 @@ Value *BinaryExprAST::codegen() {
   case 77:
     return LogErrorV("GOTCHA");
   case '<':
-    std::cout << "< HERE";
     L = Builder->CreateFCmpULT(L, R, "cmptmp");
     // Convert bool 0/1 to float 0.0 or 1.0
     return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
   case '>':
-    std::cout << "> HERE";
     L = Builder->CreateFCmpULT(R, L, "cmptmp");
     // Convert bool 0/1 to float 0.0 or 1.0
     return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
@@ -1373,6 +1367,7 @@ int main() {
 
   // Install standard binary operators.
   // 1 is lowest precedence.
+  BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
