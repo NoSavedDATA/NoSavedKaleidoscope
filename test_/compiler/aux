@@ -1,0 +1,12 @@
+def check(x)
+	var i=2 in
+	(if x<5
+		i=i*i*2
+		i=i+1
+	else
+		i=3) :
+	i;
+
+check(5);
+check(2);
+

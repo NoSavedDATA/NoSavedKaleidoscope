@@ -1,0 +1,8 @@
+extern putchard(char);
+
+def star(n)
+	for i=1, i<n
+		putchard(42);
+
+star(15);
+

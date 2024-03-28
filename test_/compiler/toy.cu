@@ -53,13 +53,16 @@ enum Token {
   tok_else = -8,
   tok_for = -9,
   tok_in = -10,
+  tok_tab = 9,
 
   // operators
   tok_binary = -11,
   tok_unary = -12,
 
   // var definition
-  tok_var = -13
+  tok_var = -13,
+
+  tok_space = -14
 };
 
 static std::string IdentifierStr; // Filled in if tok_identifier
@@ -69,11 +72,13 @@ static float NumVal;             // Filled in if tok_number
 static int get_token() {
   static int LastChar = ' ';
 
-  // Skip any whitespace.
-  //while (LastChar==32)
-  while (isspace(LastChar))
+  // Skip any whitespace and backspace.
+  //while (LastChar==32 || LastChar==tok_tab)
+  while (LastChar==32)
     LastChar = getchar();
-  
+  //while (isspace(LastChar))
+    
+    
 
   if (isalpha(LastChar)) { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
@@ -133,7 +138,10 @@ static int get_token() {
   LastChar = getchar();
   int otherChar = LastChar;
 
+
   
+  if(ThisChar==10)
+    return tok_space;
 
   if((ThisChar==47)&&(otherChar == 47)){
     LastChar = getchar();
@@ -332,6 +340,9 @@ static std::map<char, int> BinopPrecedence;
 
 /// get_tokenPrecedence - Get the precedence of the pending binary operator token.
 static int get_tokenPrecedence() {
+  if (CurTok==tok_space)
+    return 1;
+
   if (!isascii(CurTok))
     return -1;
 
@@ -353,10 +364,10 @@ std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
   return nullptr;
 }
 
-static std::unique_ptr<ExprAST> ParseExpression();
+static std::unique_ptr<ExprAST> ParseExpression(int tabcount=0);
 
 /// numberexpr ::= number
-static std::unique_ptr<ExprAST> ParseNumberExpr() {
+static std::unique_ptr<ExprAST> ParseNumberExpr(int tabcount=0) {
   auto Result = std::make_unique<NumberExprAST>(NumVal);
   getNextToken(); // consume the number
   return std::move(Result);
@@ -370,7 +381,9 @@ static std::unique_ptr<ExprAST> ParseParenExpr() {
     return nullptr;
 
   if (CurTok != ')')
-    return LogError("expected ')'");
+    return LogError("expected ')' in parenthesis expression");
+  
+  std::cout << "Close brackets\n";
   getNextToken(); // eat ).
   return V;
 }
@@ -378,7 +391,7 @@ static std::unique_ptr<ExprAST> ParseParenExpr() {
 /// identifierexpr
 ///   ::= identifier
 ///   ::= identifier '(' expression* ')'
-static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
+static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
   std::string IdName = IdentifierStr;
 
   getNextToken(); // eat identifier.
@@ -412,22 +425,44 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
 }
 
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
-static std::unique_ptr<ExprAST> ParseIfExpr() {
-  getNextToken(); // eat the if.
+static std::unique_ptr<ExprAST> ParseIfExpr(int tabcount=1) {
+  
+  std::cout << tabcount << " " << CurTok << "current if token\n";
+  if(CurTok==tok_space)
+    getNextToken();
 
+  getNextToken(); // eat the if.
+  //CurTok = '(';
+  std::cout << CurTok << "post if token\n";
+  
+
+  //std::cout << CurTok << " Cond token \n";
   // condition.
-  auto Cond = ParseExpression();
+  auto Cond = ParseExpression(tabcount+1);
   if (!Cond)
     return nullptr;
 
-  auto Then = ParseExpression();
+  if(CurTok==tok_space)
+    getNextToken();
+
+
+  //std::cout << "If then token " << CurTok << "\n";
+  auto Then = ParseExpression(tabcount+1);
+  //std::cout << "Then finished \n";
   if (!Then)
+  {
+    //std::cout << "Then is null \n";
     return nullptr;
+  }
   
+  //std::cout << "If else token " << CurTok << "\n";
   
+  if(CurTok==tok_space)
+    getNextToken();
+
+
   if (CurTok != tok_else){
     auto Else = std::make_unique<NumberExprAST>(0);
-
     getNextToken();
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
@@ -435,7 +470,7 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
   else {
     getNextToken();
 
-    auto Else = ParseExpression();
+    auto Else = ParseExpression(tabcount+1);
     if (!Else)
       return nullptr;
     
@@ -458,30 +493,26 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
     return LogError("expected '=' after for");
   getNextToken(); // eat '='.
 
-  auto Start = ParseExpression();
+  auto Start = ParseExpression(0);
   if (!Start)
     return nullptr;
   if (CurTok != ',')
     return LogError("expected ',' after for start value");
   getNextToken();
 
-  auto End = ParseExpression();
+  auto End = ParseExpression(0);
   if (!End)
     return nullptr;
 
-  // The step value is optional.
-  std::unique_ptr<ExprAST> Step;
-  if (CurTok == ',') {
+  std::unique_ptr<ExprAST> Step = std::make_unique<NumberExprAST>(1.0);
+  if (CurTok == ',') { // The step value is optional.
     getNextToken();
-    Step = ParseExpression();
-    if (!Step)
-      return nullptr;
+    auto aux = ParseExpression(0);
+    if (aux)
+      Step = std::move(aux);
   }
 
-  if (CurTok != tok_in)
-    return LogError("expected 'in' after for");
-  getNextToken(); // eat 'in'.
-
+  
   auto Body = ParseExpression();
   if (!Body)
     return nullptr;
@@ -494,6 +525,11 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
 //                    (',' identifier ('=' expression)?)* 'in' expression
 static std::unique_ptr<ExprAST> ParseVarExpr() {
   getNextToken(); // eat the var.
+
+  // mem2reg is alloca-driven: it looks for allocas and if it can handle them, it promotes them. It does not apply to global variables or heap allocations.
+  // mem2reg only promotes allocas whose uses are direct loads and stores. If the address of the stack object is passed to a function,
+  //or if any funny pointer arithmetic is involved, the alloca will not be promoted.
+  // can at least the values be passed as args?
 
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
 
@@ -526,11 +562,6 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
       return LogError("expected identifier list after var");
   }
 
-  // At this point, we have to have 'in'.
-  if (CurTok != tok_in)
-    return LogError("expected 'in' keyword after 'var'");
-  getNextToken(); // eat 'in'.
-
   auto Body = ParseExpression();
   if (!Body)
     return nullptr;
@@ -545,14 +576,17 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
 ///   ::= ifexpr
 ///   ::= forexpr
 ///   ::= varexpr
-static std::unique_ptr<ExprAST> ParsePrimary() {
+static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
+  while(CurTok==tok_tab)
+    getNextToken();
   switch (CurTok) {
   default:
+    std::cout << CurTok << " current token from expecting expression error\n";
     return LogError("unknown token when expecting an expression");
   case tok_identifier:
-    return ParseIdentifierExpr();
+    return ParseIdentifierExpr(tabcount);
   case tok_number:
-    return ParseNumberExpr();
+    return ParseNumberExpr(tabcount);
   case '(':
     return ParseParenExpr();
   case tok_if:
@@ -561,23 +595,33 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
     return ParseForExpr();
   case tok_var:
     return ParseVarExpr();
+  case tok_space:
+    getNextToken();
+    return ParsePrimary();
   }
 }
 
 /// unary
 ///   ::= primary
 ///   ::= '!' unary
-static std::unique_ptr<ExprAST> ParseUnary() {
+static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
+  
+  while((CurTok==tok_tab)||(CurTok==tok_space))
+    getNextToken();
   // If the current token is not an operator, it must be a primary expr.
   
+  //std::cout << "Unary current token " << CurTok << "\n";
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
-    return ParsePrimary();
+  {
+    //std::cout << "Returning, non-ascii found.\n";
+    return ParsePrimary(tabcount);
+  }
   
   
   // If this is a unary operator, read it.
   int Opc = CurTok;
   getNextToken();
-  if (auto Operand = ParseUnary())
+  if (auto Operand = ParseUnary(tabcount))
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
   return nullptr;
 }
@@ -585,54 +629,137 @@ static std::unique_ptr<ExprAST> ParseUnary() {
 /// binoprhs
 ///   ::= ('+' unary)*
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
-                                              std::unique_ptr<ExprAST> LHS) {
+                                              std::unique_ptr<ExprAST> LHS,
+                                              int tabcount=0) {
+  
   // If this is a binop, find its precedence.
+  int RhsTok = 0;
+  int LhsTok = 0;
+  std::string LName, RName;
   while (true) {
     int TokPrec = get_tokenPrecedence();
 
     // If this is a binop that binds at least as tightly as the current binop,
     // consume it, otherwise we are done.
+    
+
+    if (TokPrec==BinopPrecedence[':'])
+    {
+      getNextToken();
+      return LHS;
+    }
     if (TokPrec < ExprPrec)
       return LHS;
 
     // Okay, we know this is a binop.
     int BinOp = CurTok;
-    getNextToken(); // eat binop
-
-    // Parse the unary expression after the binary operator.
-    auto RHS = ParseUnary();
-    if (!RHS)
-      return nullptr;
     
 
-    // If BinOp binds less tightly with RHS than the operator after RHS, let
-    // the pending operator take RHS as its LHS.
-    int NextPrec = get_tokenPrecedence();
-    if (TokPrec < NextPrec) {
-      RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
-      if (!RHS)
-        return nullptr;
+    if (CurTok==')')
+      return LHS;
+
+    
+    getNextToken(); // eat binop
+    if (CurTok==tok_number)
+      RName = std::to_string(NumVal);
+    else
+      RName = IdentifierStr;
+
+    // Get the Right Hand Side token
+
+    int seen_tabs = 0;
+    
+    
+    while(CurTok==tok_tab)
+    {
+      getNextToken();
+      seen_tabs+=1;
     }
 
-    // Merge LHS/RHS.
-    //std::cout << "Bin op is: " << BinOp << "\n";
-    if(BinOp==64) //@
-      LHS = std::make_unique<CudaNumExprAST>(std::move(LHS), std::move(RHS));
-      //LHS = std::make_unique<CudaNumExprAST>(LHS, RHS);
-    else
-      LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+    if (CurTok==')')
+      return LHS;
+    
+    RhsTok = CurTok;
+
+    
+    
+    
+    std::cout << "Before RHS " << LhsTok << " " << BinOp << " " << CurTok << " " << seen_tabs << "/" << tabcount << " " << RName << " \n";
+    if((BinOp==tok_space) && (!( (CurTok==tok_identifier) || (CurTok==tok_number) )))
+    {
+      std::cout << "RETURNING LHS\n";
+      return LHS;
+    }
+    
+
+
+    auto RHS = ParseUnary(); // Returns an identifier, number or expression result
+  
+    if (!RHS)
+    {
+      //std::cout << "RETURNING NULL Parse Unary \n";
+      return nullptr;
+    }
+
+    
+    if ((seen_tabs<tabcount)&&(seen_tabs>0))
+    {
+      //std::cout << "DIMNISHING IJFNASEJHFBEAIUYSBFESABHFGIYBUEASFBEIAUSBFYEASUIBFYAEUSB\n";
+      //LHS = std::move(RHS); //RETORNA O LADO DIREITO COMO O PRÓPRIO ELSE
+      
+      //LHS = ParseBinOpRHS(TokPrec + 1, std::move(LHS), tabcount);
+
+      //RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS), tabcount);
+      //LHS = std::make_unique<BinaryExprAST>(tok_space, std::move(LHS), std::move(RHS));
+      
+      //LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+      
+      //return LHS;// RETORNA A VARIÁVEL COM ERRO DE INDEX
+    } else {
+
+
+      // If BinOp binds less tightly with RHS than the operator after RHS, let
+      // the pending operator take RHS as its LHS.
+      int NextPrec = get_tokenPrecedence();
+        
+      // || ((seen_tabs<tabcount)&&(seen_tabs>0))
+      if (TokPrec < NextPrec){
+        //std::cout << NextPrec << " Next Prec\n";
+        RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS), tabcount);
+        //std::cout << "Error after RHS parse \n";
+        if (!RHS)
+        {
+          //std::cout << "RETURNING NULL Recursive Bin Op \n";
+          return nullptr;
+        }
+      }
+
+        
+      //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
+      if(BinOp==64) //@
+        LHS = std::make_unique<CudaNumExprAST>(std::move(LHS), std::move(RHS));
+        //LHS = std::make_unique<CudaNumExprAST>(LHS, RHS);
+      else
+        LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+      
+      
+
+      LhsTok = RhsTok;
+    
   }
 }
 
 /// expression
 ///   ::= unary binoprhs
 ///
-static std::unique_ptr<ExprAST> ParseExpression() {
-  auto LHS = ParseUnary();
+static std::unique_ptr<ExprAST> ParseExpression(int tabcount) {
+  //std::cout << "Parse Expression tabcount " << tabcount << "\n";
+  
+  auto LHS = ParseUnary(tabcount);
   if (!LHS)
     return nullptr;
 
-  return ParseBinOpRHS(0, std::move(LHS));
+  return ParseBinOpRHS(0, std::move(LHS), tabcount);
 }
 
 /// prototype
@@ -901,12 +1028,16 @@ Value *BinaryExprAST::codegen() {
   switch (Op) {
   case '+':
     return Builder->CreateFAdd(L, R, "addtmp");
+  case ':':
+    return L;
+  case tok_space:
+    return R;
   case '-':
     return Builder->CreateFSub(L, R, "subtmp");
   case '*':
     return Builder->CreateFMul(L, R, "multmp");
   case '/':
-    return Builder->CreateFDiv(L, R, "div instruct");
+    return Builder->CreateFDiv(L, R, "divtmp");
   case 77:
     return LogErrorV("GOTCHA");
   case '<':
@@ -1051,7 +1182,7 @@ Value *ForExprAST::codegen() {
   Builder->SetInsertPoint(LoopBB);
 
   // Within the loop, the variable is defined equal to the PHI node.  If it
-  // shadows an existing variable, we have to restore it, so save it now.
+  // shadows an existing variable, we have to restore it outside this scope
   AllocaInst *OldVal = NamedValues[VarName];
   NamedValues[VarName] = Alloca;
 
@@ -1067,10 +1198,7 @@ Value *ForExprAST::codegen() {
     StepVal = Step->codegen();
     if (!StepVal)
       return nullptr;
-  } else {
-    // If not specified, use 1.0.
-    StepVal = ConstantFP::get(*TheContext, APFloat(1.0));
-  }
+  } 
 
   // Compute the end condition.
   Value *EndCond = End->codegen();
@@ -1081,7 +1209,7 @@ Value *ForExprAST::codegen() {
   // the body of the loop mutates the variable.
   Value *CurVar = Builder->CreateLoad(Type::getFloatTy(*TheContext), Alloca,
                                       VarName.c_str());
-  Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar");
+  Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar"); // Increment
   Builder->CreateStore(NextVar, Alloca);
 
   // Convert condition to a bool by comparing equal to 0.0.
@@ -1092,7 +1220,7 @@ Value *ForExprAST::codegen() {
   BasicBlock *AfterBB =
       BasicBlock::Create(*TheContext, "afterloop", TheFunction);
 
-  // Insert the conditional branch into the end of LoopEndBB.
+  // goto branch
   Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
 
   // Any new code will be inserted in AfterBB.
@@ -1107,6 +1235,8 @@ Value *ForExprAST::codegen() {
   // for expr always returns 0.0.
   return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
+
+
 
 Value *VarExprAST::codegen() {
   std::vector<AllocaInst *> OldBindings;
@@ -1143,7 +1273,7 @@ Value *VarExprAST::codegen() {
     NamedValues[VarName] = Alloca;
   }
 
-  // Codegen the body, now that all vars are in scope.
+  // Codegen the body that is contained by the in expression
   Value *BodyVal = Body->codegen();
   if (!BodyVal)
     return nullptr;
@@ -1155,6 +1285,8 @@ Value *VarExprAST::codegen() {
   // Return the body computation.
   return BodyVal;
 }
+
+
 
 Function *PrototypeAST::codegen() {
   // Make the function type:  float(float,float) etc.
@@ -1182,6 +1314,8 @@ const std::string& FunctionAST::getName() const {
 }
 
 Function *FunctionAST::codegen() {
+
+  
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
   // reference to it for use below.
   auto &P = *Proto;
@@ -1198,6 +1332,8 @@ Function *FunctionAST::codegen() {
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(BB);
 
+
+
   // Record the function arguments in the NamedValues map.
   NamedValues.clear();
   for (auto &Arg : TheFunction->args()) {
@@ -1211,6 +1347,8 @@ Function *FunctionAST::codegen() {
     NamedValues[std::string(Arg.getName())] = Alloca;
   }
 
+
+
   if (Value *RetVal = Body->codegen()) {
     // Finish off the function.
     Builder->CreateRet(RetVal);
@@ -1220,6 +1358,7 @@ Function *FunctionAST::codegen() {
 
     return TheFunction;
   }
+
 
   // Error reading body, remove function.
   TheFunction->eraseFromParent();
@@ -1316,7 +1455,7 @@ static void HandleTopLevelExpression() {
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
   while (true) {
-    fprintf(stderr, "ready> ");
+    //fprintf(stderr, "ready> ");
     switch (CurTok) {
     case tok_eof:
       return;
@@ -1367,6 +1506,9 @@ int main() {
 
   // Install standard binary operators.
   // 1 is lowest precedence.
+  BinopPrecedence[tok_space] = 1;
+  BinopPrecedence[':'] = 9;
+  BinopPrecedence['='] = 2;
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
   BinopPrecedence['+'] = 20;
@@ -1377,7 +1519,7 @@ int main() {
   BinopPrecedence['@'] = 60;
 
   // Prime the first token.
-  fprintf(stderr, "ready> ");
+  //fprintf(stderr, "ready> ");
   getNextToken();
 
   TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
