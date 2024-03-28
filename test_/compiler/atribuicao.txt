@@ -1,0 +1,14 @@
+def binary: 1 (x y) y;
+
+
+
+
+def fibi(x)
+  var a = 1, b = 1, c=0 in
+  (for i = 3, i < x
+     c = a + b :
+     a = b :
+     b = c) :
+  b;
+
+fibi(10);

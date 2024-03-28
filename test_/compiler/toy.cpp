@@ -152,17 +152,20 @@ public:
   virtual ~ExprAST() = default;
 
   virtual Value *codegen() = 0;
+  virtual float *ccode() = 0;
 };
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST {
   float Val;
 
-public:
-  NumberExprAST(float Val) : Val(Val) {}
+  public:
+    NumberExprAST(float Val) : Val(Val) {} //{std::cout << "number created";}
 
   Value *codegen() override;
+  float *ccode() override;
 };
+
 
 class CudaNumExprAST : public ExprAST {
   std::unique_ptr<ExprAST> LHS, RHS;
@@ -172,7 +175,20 @@ class CudaNumExprAST : public ExprAST {
         : LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
   Value *codegen() override;
+  float *ccode() override;
 };
+
+/*
+class CudaNumExprAST : public ExprAST {
+  float LHS, RHS;
+
+  public:
+    CudaNumExprAST(float LHS, float RHS)
+        : LHS(LHS), RHS(RHS) {}
+
+  Value *codegen() override;
+};
+*/
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {
@@ -182,6 +198,7 @@ public:
   VariableExprAST(const std::string &Name) : Name(Name) {}
 
   Value *codegen() override;
+  float *ccode() override;
   const std::string &getName() const { return Name; }
 };
 
@@ -195,6 +212,7 @@ public:
       : Opcode(Opcode), Operand(std::move(Operand)) {}
 
   Value *codegen() override;
+  float *ccode() override;
 };
 
 /// BinaryExprAST - Expression class for a binary operator.
@@ -208,6 +226,7 @@ public:
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
   Value *codegen() override;
+  float *ccode() override;
 };
 
 /// CallExprAST - Expression class for function calls.
@@ -221,6 +240,7 @@ public:
       : Callee(Callee), Args(std::move(Args)) {}
 
   Value *codegen() override;
+  float *ccode() override;
 };
 
 /// IfExprAST - Expression class for if/then/else.
@@ -233,6 +253,7 @@ public:
       : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
   Value *codegen() override;
+  float *ccode() override;
 };
 
 /// ForExprAST - Expression class for for/in.
@@ -248,6 +269,7 @@ public:
         Step(std::move(Step)), Body(std::move(Body)) {}
 
   Value *codegen() override;
+  float *ccode() override;
 };
 
 /// VarExprAST - Expression class for var/in
@@ -262,6 +284,7 @@ public:
       : VarNames(std::move(VarNames)), Body(std::move(Body)) {}
 
   Value *codegen() override;
+  float *ccode() override;
 };
 
 /// PrototypeAST - This class represents the "prototype" for a function,
@@ -397,25 +420,28 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
   if (!Cond)
     return nullptr;
 
-  if (CurTok != tok_then)
-    return LogError("expected then"); //TODO: remove then
-  getNextToken(); // eat the then
-
   auto Then = ParseExpression();
   if (!Then)
     return nullptr;
+  
+  
+  if (CurTok != tok_else){
+    auto Else = std::make_unique<NumberExprAST>(0);
 
-  if (CurTok != tok_else)
-    return LogError("expected else");
-
-  getNextToken();
-
-  auto Else = ParseExpression();
-  if (!Else)
-    return nullptr;
-
-  return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
+    getNextToken();
+    return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
+  }
+  else {
+    getNextToken();
+
+    auto Else = ParseExpression();
+    if (!Else)
+      return nullptr;
+    
+    return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
+                                      std::move(Else));
+  }
 }
 
 /// forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
@@ -452,9 +478,6 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
       return nullptr;
   }
 
-  if (CurTok != tok_in)
-    return LogError("expected 'in' after for");
-  getNextToken(); // eat 'in'.
 
   auto Body = ParseExpression();
   if (!Body)
@@ -543,9 +566,11 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary() {
   // If the current token is not an operator, it must be a primary expr.
+  
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
     return ParsePrimary();
-
+  
+  
   // If this is a unary operator, read it.
   int Opc = CurTok;
   getNextToken();
@@ -575,6 +600,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     auto RHS = ParseUnary();
     if (!RHS)
       return nullptr;
+    
 
     // If BinOp binds less tightly with RHS than the operator after RHS, let
     // the pending operator take RHS as its LHS.
@@ -586,9 +612,10 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     }
 
     // Merge LHS/RHS.
-    std::cout << "Bin op is: " << BinOp << "\n";
+    //std::cout << "Bin op is: " << BinOp << "\n";
     if(BinOp==64) //@
       LHS = std::make_unique<CudaNumExprAST>(std::move(LHS), std::move(RHS));
+      //LHS = std::make_unique<CudaNumExprAST>(LHS, RHS);
     else
       LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
   }
@@ -744,12 +771,76 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 Value *NumberExprAST::codegen() {
   return ConstantFP::get(*TheContext, APFloat(Val));
 }
+float *CudaNumExprAST::ccode() {
+  return 0;
+}
+float *NumberExprAST::ccode() {
+  return &Val;
+}
+float *VariableExprAST::ccode() {
+  return 0;
+}
+float *UnaryExprAST::ccode() {
+  return 0;
+}
+float *BinaryExprAST::ccode() {
+  return 0;
+}
+float *CallExprAST::ccode() {
+  return 0;
+}
+float *IfExprAST::ccode() {
+  return 0;
+}
+float *ForExprAST::ccode() {
+  return 0;
+}
+float *VarExprAST::ccode() {
+  return 0;
+}
+
+__global__ void vec_mult(float a, float* x, float* y) {
+  //y[threadIdx.x] = a * x[threadIdx.x];
+  *y = a * *x;
+}
 
 Value *CudaNumExprAST::codegen() {
-  Value *L = LHS->codegen();
-  Value *R = RHS->codegen();
+  //float *aux = LHS->ccode();
+  //Value *L = LHS->codegen();
+  //Value *R = RHS->codegen();
+  float *L = LHS->ccode();
+  float *R = RHS->ccode();
   
-  return Builder->CreateFMul(L, R, "multmp");
+  std::cout << *L;
+  int kDataLen = 1;
+  float* device_x;
+  float result[kDataLen];
+
+  cudaMalloc(&device_x, kDataLen * sizeof(float));
+  cudaMemcpy(device_x, L, kDataLen * sizeof(float), cudaMemcpyHostToDevice);
+  
+  float* device_y;
+  cudaMalloc(&device_y, kDataLen * sizeof(float));
+  
+  cudaMemcpy(device_x, L, kDataLen * sizeof(float),
+             cudaMemcpyHostToDevice);
+
+  // Launch the kernel.
+  vec_mult<<<1, kDataLen>>>(*R, device_x, device_y);
+  vec_mult<<<1, kDataLen>>>(*R, device_x, device_y);
+
+  cudaDeviceSynchronize();
+  cudaMemcpy(result, device_y, kDataLen * sizeof(float),
+             cudaMemcpyDeviceToHost);
+
+  // Print the results.
+  for (int i = 0; i < kDataLen; ++i) {
+    std::cout << "y[" << i << "] = " << result[i] << "\n";
+  }
+  
+
+  return ConstantFP::get(*TheContext, APFloat(result[0]));
+  //return Builder->CreateFDiv(L, R, "multmp");
   //return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
@@ -816,12 +907,10 @@ Value *BinaryExprAST::codegen() {
   case 77:
     return LogErrorV("GOTCHA");
   case '<':
-    std::cout << "< HERE";
     L = Builder->CreateFCmpULT(L, R, "cmptmp");
     // Convert bool 0/1 to float 0.0 or 1.0
     return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
   case '>':
-    std::cout << "> HERE";
     L = Builder->CreateFCmpULT(R, L, "cmptmp");
     // Convert bool 0/1 to float 0.0 or 1.0
     return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
@@ -878,23 +967,29 @@ Value *IfExprAST::codegen() {
   Builder->CreateCondBr(CondV, ThenBB, ElseBB);
 
   // Emit then value.
-  Builder->SetInsertPoint(ThenBB);
+  Builder->SetInsertPoint(ThenBB);// Move Insertion Point to the end of the specified block.
+  // However, since the “then” block is empty, it also starts out by inserting at the beginning of the block
 
   Value *ThenV = Then->codegen();
   if (!ThenV)
     return nullptr;
 
-  Builder->CreateBr(MergeBB);
-  // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
-  ThenBB = Builder->GetInsertBlock();
+  Builder->CreateBr(MergeBB); // Create Conditional Branch
+
+  
+  ThenBB = Builder->GetInsertBlock(); // Get the current block, in case it was moved into another one due to nested ifs
 
   // Emit else block.
-  TheFunction->insert(TheFunction->end(), ElseBB);
+  TheFunction->insert(TheFunction->end(), ElseBB); // Actually add the else into the function
   Builder->SetInsertPoint(ElseBB);
 
   Value *ElseV = Else->codegen();
+
   if (!ElseV)
+  {
     return nullptr;
+  }
+    
 
   Builder->CreateBr(MergeBB);
   // Codegen of 'Else' can change the current block, update ElseBB for the PHI.
@@ -907,6 +1002,7 @@ Value *IfExprAST::codegen() {
 
   PN->addIncoming(ThenV, ThenBB);
   PN->addIncoming(ElseV, ElseBB);
+  
   return PN;
 }
 
@@ -1187,14 +1283,15 @@ static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   if (auto FnAST = ParseTopLevelExpr()) {
     if (FnAST->codegen()) {
-      // Create a ResourceTracker to track JIT'd memory allocated to our
+      // Create a ResourceTracker for memory managment
       // anonymous expression -- that way we can free it after executing.
       auto RT = TheJIT->getMainJITDylib().createResourceTracker();
 
       auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
-      ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
+      ExitOnErr(TheJIT->addModule(std::move(TSM), RT)); //Add LLVM IR support
       InitializeModule();
 
+      // Lookup tracks pointers to the compiled code.
       // Get the anonymous expression's JITSymbol.
       auto Sym = ExitOnErr(TheJIT->lookup("__anon_expr"));
 
@@ -1203,7 +1300,7 @@ static void HandleTopLevelExpression() {
       auto *FP = Sym.getAddress().toPtr<float (*)()>();
       auto fp = FP();
       
-      std::cout << "\nResult times 5 is " << fp*5 << "\n";
+      //std::cout << "\nResult times 5 is " << fp*5 << "\n";
       fprintf(stderr, "%.2f\n", fp);
 
       // Delete the anonymous expression module from the JIT.
@@ -1264,11 +1361,13 @@ extern "C" float printd(float X) {
 
 int main() {
   InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter();
+  InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
   InitializeNativeTargetAsmParser();
 
   // Install standard binary operators.
   // 1 is lowest precedence.
+  BinopPrecedence['='] = 2;
+  BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
