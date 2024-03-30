@@ -748,6 +748,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     
   }
 }
+}
 
 /// expression
 ///   ::= unary binoprhs
