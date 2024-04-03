@@ -1,7 +1,5 @@
-def binary: 1 (x y) y;
-
 def fibi(x)
-  var a = 1, b = 1, c in
+  var a = 1, b = 1, c
   (for i = 3, i < x :
      c = a + b
      a = b
@@ -9,3 +7,5 @@ def fibi(x)
   b;
 
 fibi(10);
+
+1+1;

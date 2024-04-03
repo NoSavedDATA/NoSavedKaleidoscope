@@ -605,6 +605,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
 ///   ::= primary
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
+  std::cout << "Parse Unary";
   
   while((CurTok==tok_tab)||(CurTok==tok_space))
     getNextToken();
@@ -651,7 +652,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     if (TokPrec < ExprPrec)
       return LHS;
 
-    // Okay, we know this is a binop.
+    
     int BinOp = CurTok;
     
 
@@ -676,15 +677,21 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
       seen_tabs+=1;
     }
 
+    if(CurTok==':')
+    {
+      getNextToken();
+      return LHS;
+    }
+
     if (CurTok==')')
       return LHS;
     
     RhsTok = CurTok;
 
-    
-    
-    
+
     std::cout << "Before RHS " << LhsTok << " " << BinOp << " " << CurTok << " " << seen_tabs << "/" << tabcount << " " << RName << " \n";
+
+    
     if((BinOp==tok_space) && (!( (CurTok==tok_identifier) || (CurTok==tok_number) )))
     {
       std::cout << "RETURNING LHS\n";
@@ -748,12 +755,13 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     
   }
 }
+}
 
 /// expression
 ///   ::= unary binoprhs
 ///
 static std::unique_ptr<ExprAST> ParseExpression(int tabcount) {
-  //std::cout << "Parse Expression tabcount " << tabcount << "\n";
+  std::cout << "Parse Expression tabcount " << tabcount << "\n";
   
   auto LHS = ParseUnary(tabcount);
   if (!LHS)
@@ -842,6 +850,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
 
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
+  std::cout << "Top Level Expression\n";
   if (auto E = ParseExpression()) {
     // Make an anonymous proto.
     auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
@@ -1456,6 +1465,7 @@ static void HandleTopLevelExpression() {
 static void MainLoop() {
   while (true) {
     //fprintf(stderr, "ready> ");
+    std::cout << "MAIN LOOP\n" << CurTok << "\n\n";
     switch (CurTok) {
     case tok_eof:
       return;
@@ -1471,6 +1481,10 @@ static void MainLoop() {
       break;
     case tok_extern:
       HandleExtern();
+      break;
+    case tok_space:
+      getNextToken();
+      MainLoop();
       break;
     default:
       HandleTopLevelExpression();
