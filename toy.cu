@@ -355,7 +355,7 @@ static int get_tokenPrecedence() {
 
 /// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogError(const char *Str) {
-  fprintf(stderr, "Error: %s\n", Str);
+  fprintf(stderr, "Erro: %s\n", Str);
   return nullptr;
 }
 
@@ -381,7 +381,7 @@ static std::unique_ptr<ExprAST> ParseParenExpr() {
     return nullptr;
 
   if (CurTok != ')')
-    return LogError("expected ')' in parenthesis expression");
+    return LogError("Esperado ')' na expressão em paranteses");
   
   std::cout << "Close brackets\n";
   getNextToken(); // eat ).
@@ -413,7 +413,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
         break;
 
       if (CurTok != ',')
-        return LogError("Expected ')' or ',' in argument list");
+        return LogError("Esperado ')' ou ',' na lista de argumentos");
       getNextToken();
     }
   }
@@ -427,13 +427,13 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
 static std::unique_ptr<ExprAST> ParseIfExpr(int tabcount=1) {
   
-  std::cout << tabcount << " " << CurTok << "current if token\n";
+  std::cout << tabcount << " " << CurTok << "token if atual\n";
   if(CurTok==tok_space)
     getNextToken();
 
   getNextToken(); // eat the if.
   //CurTok = '(';
-  std::cout << CurTok << "post if token\n";
+  std::cout << CurTok << "token if posterior\n";
   
 
   //std::cout << CurTok << " Cond token \n";
@@ -484,20 +484,20 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   getNextToken(); // eat the for.
 
   if (CurTok != tok_identifier)
-    return LogError("expected identifier after for");
+    return LogError("identificador esperado depois do for");
 
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
   if (CurTok != '=')
-    return LogError("expected '=' after for");
+    return LogError("Esperada atribuição do valor inicial");
   getNextToken(); // eat '='.
 
   auto Start = ParseExpression(0);
   if (!Start)
     return nullptr;
   if (CurTok != ',')
-    return LogError("expected ',' after for start value");
+    return LogError("Esperado ',' depois de atribuir valor inicial do for");
   getNextToken();
 
   auto End = ParseExpression(0);
@@ -535,7 +535,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
 
   // At least one variable name is required.
   if (CurTok != tok_identifier)
-    return LogError("expected identifier after var");
+    return LogError("Esperado identificador após var");
 
   while (true) {
     std::string Name = IdentifierStr;
@@ -559,7 +559,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
     getNextToken(); // eat the ','.
 
     if (CurTok != tok_identifier)
-      return LogError("expected identifier list after var");
+      return LogError("esperado um ou mais identificadores após var");
   }
 
   auto Body = ParseExpression();
@@ -581,8 +581,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     getNextToken();
   switch (CurTok) {
   default:
-    std::cout << CurTok << " current token from expecting expression error\n";
-    return LogError("unknown token when expecting an expression");
+    std::cout << CurTok << " token atual de erro esperando expressão\n";
+    return LogError("token desconhecido ao esperar uma expressão");
   case tok_identifier:
     return ParseIdentifierExpr(tabcount);
   case tok_number:
@@ -788,7 +788,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 
   switch (CurTok) {
   default:
-    return LogErrorP("Expected function name in prototype");
+    return LogErrorP("Esperado nome da função no protótipo");
   case tok_identifier:
     FnName = IdentifierStr;
     Kind = 0;
@@ -797,7 +797,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
   case tok_unary:
     getNextToken();
     if (!isascii(CurTok))
-      return LogErrorP("Expected unary operator");
+      return LogErrorP("Esperado operador unário");
     FnName = "unary";
     FnName += (char)CurTok;
     Kind = 1;
@@ -806,7 +806,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
   case tok_binary:
     getNextToken();
     if (!isascii(CurTok))
-      return LogErrorP("Expected binary operator");
+      return LogErrorP("Esperado operador binário");
     FnName = "binary";
     FnName += (char)CurTok;
     Kind = 2;
@@ -815,7 +815,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     // Read the precedence if present.
     if (CurTok == tok_number) {
       if (NumVal < 1 || NumVal > 100)
-        return LogErrorP("Invalid precedecnce: must be 1..100");
+        return LogErrorP("Precedência inválida: deve ser entre 1 e 100");
       BinaryPrecedence = (unsigned)NumVal;
       getNextToken();
     }
@@ -823,20 +823,20 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
   }
 
   if (CurTok != '(')
-    return LogErrorP("Expected '(' in prototype");
+    return LogErrorP("Esperado '(' no protótipo");
 
   std::vector<std::string> ArgNames;
   while (getNextToken() == tok_identifier)
     ArgNames.push_back(IdentifierStr);
   if (CurTok != ')')
-    return LogErrorP("Expected ')' in prototype");
+    return LogErrorP("Esperado ')' no protótipo");
 
   // success.
   getNextToken(); // eat ')'.
 
   // Verify right number of names for operator.
   if (Kind && ArgNames.size() != Kind)
-    return LogErrorP("Invalid number of operands for operator");
+    return LogErrorP("Número inválido de operandos para o operador");
 
   return std::make_unique<PrototypeAST>(FnName, ArgNames, Kind != 0,
                                          BinaryPrecedence);
@@ -993,7 +993,7 @@ Value *VariableExprAST::codegen() {
   // Look this variable up in the function.
   Value *V = NamedValues[Name];
   if (!V)
-    return LogErrorV("Unknown variable name");
+    return LogErrorV("Nome de variável desconhecido");
 
   // Load the value.
   return Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
@@ -1020,7 +1020,7 @@ Value *BinaryExprAST::codegen() {
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
     if (!LHSE)
-      return LogErrorV("destination of '=' must be a variable");
+      return LogErrorV("Destino do '=' deve ser uma variável");
     // Codegen the RHS.
     Value *Val = RHS->codegen();
     if (!Val)
@@ -1029,7 +1029,7 @@ Value *BinaryExprAST::codegen() {
     // Look up the name.
     Value *Variable = NamedValues[LHSE->getName()];
     if (!Variable)
-      return LogErrorV("Unknown variable name");
+      return LogErrorV("Nome de variável desconhecido");
 
     Builder->CreateStore(Val, Variable);
     return Val;
@@ -1080,7 +1080,7 @@ Value *CallExprAST::codegen() {
   // Look up the name in the global module table.
   Function *CalleeF = getFunction(Callee);
   if (!CalleeF)
-    return LogErrorV("Unknown function referenced");
+    return LogErrorV("Função referenciada desconhecida");
 
   // If argument mismatch error.
   if (CalleeF->arg_size() != Args.size())
@@ -1406,7 +1406,7 @@ ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
     InitializeModule();
     return TSM;
   } else
-    report_fatal_error("Couldn't compile lazily JIT'd function");
+    report_fatal_error("Não foi possível compilar a função JIT de forma lazy");
 }
 
 static void HandleDefinition() {
@@ -1423,7 +1423,7 @@ static void HandleDefinition() {
 static void HandleExtern() {
   if (auto ProtoAST = ParseExtern()) {
     if (auto *FnIR = ProtoAST->codegen()) {
-      fprintf(stderr, "Read extern: ");
+      fprintf(stderr, "Ler extern: ");
       FnIR->print(errs());
       fprintf(stderr, "\n");
       FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
@@ -1483,7 +1483,7 @@ static void MainLoop() {
       getNextToken();
       break;
     case tok_tab:
-      LogError("Unexpected tab found\n");
+      LogError("Tab inesperado encontrado\n");
       break;
     /*
     case 10: // ignore top-level semicolons.
