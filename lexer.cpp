@@ -250,7 +250,7 @@ static std::unique_ptr<ExprAST> ParseParenExpr() {
     return nullptr;
 
   if (CurTok != ')')
-    return LogError("expected ')'");
+    return LogError("Esperado: ')'");
   getNextToken(); // eat ).
   return V;
 }
@@ -280,7 +280,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
         break;
 
       if (CurTok != ',')
-        return LogError("Expected ')' or ',' in argument list");
+        return LogError("Esperado ')' ou ',' na lista de argumentos");
       getNextToken();
     }
   }
@@ -298,7 +298,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
 static std::unique_ptr<ExprAST> ParsePrimary() {
   switch (CurTok) {
   default:
-    return LogError("unknown token when expecting an expression");
+    return LogError("Token desconhecido ao esperar uma expressão");
   case tok_identifier:
     return ParseIdentifierExpr();
   case tok_number:
@@ -360,19 +360,19 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 ///   ::= id '(' id* ')'
 static std::unique_ptr<PrototypeAST> ParsePrototype() {
   if (CurTok != tok_identifier)
-    return LogErrorP("Expected function name in prototype");
+    return LogErrorP("Nome da função esperado no protótipo");
 
   std::string FnName = IdentifierStr;
   getNextToken();
 
   if (CurTok != '(')
-    return LogErrorP("Expected '(' in prototype");
+    return LogErrorP("Esperado '(' no protótipo");
 
   std::vector<std::string> ArgNames;
   while (getNextToken() == tok_identifier)
     ArgNames.push_back(IdentifierStr);
   if (CurTok != ')')
-    return LogErrorP("Expected ')' in prototype");
+    return LogErrorP("Esperado ')' no protótipo");
 
   // success.
   getNextToken(); // eat ')'.
@@ -456,7 +456,7 @@ Value *VariableExprAST::codegen() {
   // Look this variable up in the function.
   Value *V = NamedValues[Name];
   if (!V)
-    return LogErrorV("Unknown variable name");
+    return LogErrorV("Nome de váriavel desconhecido");
   return V;
 }
 
@@ -478,7 +478,7 @@ Value *BinaryExprAST::codegen() {
     // Convert bool 0/1 to double 0.0 or 1.0
     return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext), "booltmp");
   default:
-    return LogErrorV("invalid binary operator");
+    return LogErrorV("Operador binário inválido");
   }
 }
 
@@ -486,11 +486,11 @@ Value *CallExprAST::codegen() {
   // Look up the name in the global module table.
   Function *CalleeF = getFunction(Callee);
   if (!CalleeF)
-    return LogErrorV("Unknown function referenced");
+    return LogErrorV("Função desconhecida referenciada");
 
   // If argument mismatch error.
   if (CalleeF->arg_size() != Args.size())
-    return LogErrorV("Incorrect # arguments passed");
+    return LogErrorV("Argumentos # incorretamente passados");
 
   std::vector<Value *> ArgsV;
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
@@ -599,7 +599,7 @@ static void InitializeModuleAndManagers() {
 static void HandleDefinition() {
   if (auto FnAST = ParseDefinition()) {
     if (auto *FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read function definition:");
+      fprintf(stderr, "Ler a definição da função:");
       FnIR->print(errs());
       fprintf(stderr, "\n");
       ExitOnErr(TheJIT->addModule(
@@ -615,7 +615,7 @@ static void HandleDefinition() {
 static void HandleExtern() {
   if (auto ProtoAST = ParseExtern()) {
     if (auto *FnIR = ProtoAST->codegen()) {
-      fprintf(stderr, "Read extern: ");
+      fprintf(stderr, "Lendo extern: ");
       FnIR->print(errs());
       fprintf(stderr, "\n");
       FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
