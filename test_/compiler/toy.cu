@@ -74,7 +74,7 @@ static int get_token() {
 
   // Skip any whitespace and backspace.
   //while (LastChar==32 || LastChar==tok_tab)
-  while (LastChar==32)
+  while (LastChar==32 || LastChar==tok_tab)
     LastChar = getchar();
   //while (isspace(LastChar))
     
@@ -605,6 +605,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
 ///   ::= primary
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
+  std::cout << "Parse Unary";
   
   while((CurTok==tok_tab)||(CurTok==tok_space))
     getNextToken();
@@ -651,9 +652,14 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     if (TokPrec < ExprPrec)
       return LHS;
 
-    // Okay, we know this is a binop.
-    int BinOp = CurTok;
     
+    int BinOp = CurTok;
+
+    if(CurTok==':')
+    {
+      getNextToken();
+      return LHS;
+    }
 
     if (CurTok==')')
       return LHS;
@@ -676,25 +682,31 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
       seen_tabs+=1;
     }
 
-    if (CurTok==')')
-      return LHS;
+    
+
     
     RhsTok = CurTok;
 
-    
-    
-    
+
     std::cout << "Before RHS " << LhsTok << " " << BinOp << " " << CurTok << " " << seen_tabs << "/" << tabcount << " " << RName << " \n";
+
+    
     if((BinOp==tok_space) && (!( (CurTok==tok_identifier) || (CurTok==tok_number) )))
     {
-      std::cout << "RETURNING LHS\n";
+      std::cout << "SPACE WITHOUT NUMBER OR VAR " << CurTok << "\n";
       return LHS;
     }
     
 
 
     auto RHS = ParseUnary(); // Returns an identifier, number or expression result
-  
+    /*
+    if(BinOp==tok_space)
+    {
+      std::cout << "FOUND SPACE HEREEE\n\n";
+      return RHS;
+    }
+    */
     if (!RHS)
     {
       //std::cout << "RETURNING NULL Parse Unary \n";
@@ -702,7 +714,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     }
 
     
-    if ((seen_tabs<tabcount)&&(seen_tabs>0))
+    if ((CurTok==tok_space)&&(seen_tabs<tabcount)&&(seen_tabs>0))
     {
       //std::cout << "DIMNISHING IJFNASEJHFBEAIUYSBFESABHFGIYBUEASFBEIAUSBFYEASUIBFYAEUSB\n";
       //LHS = std::move(RHS); //RETORNA O LADO DIREITO COMO O PRÓPRIO ELSE
@@ -715,6 +727,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
       //LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
       
       //return LHS;// RETORNA A VARIÁVEL COM ERRO DE INDEX
+      return RHS;
     } else {
 
 
@@ -843,6 +856,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
 
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
+  //std::cout << "Top Level Expression\n";
   if (auto E = ParseExpression()) {
     // Make an anonymous proto.
     auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
@@ -1457,11 +1471,19 @@ static void HandleTopLevelExpression() {
 static void MainLoop() {
   while (true) {
     //fprintf(stderr, "ready> ");
+    if (CurTok!=tok_space)
+      std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
     switch (CurTok) {
     case tok_eof:
       return;
     case ';': // ignore top-level semicolons.
       getNextToken();
+      break;
+    case tok_space:
+      getNextToken();
+      break;
+    case tok_tab:
+      LogError("Unexpected tab found\n");
       break;
     /*
     case 10: // ignore top-level semicolons.
@@ -1473,6 +1495,7 @@ static void MainLoop() {
     case tok_extern:
       HandleExtern();
       break;
+    //case (tok_space || 59):
     default:
       HandleTopLevelExpression();
       break;
