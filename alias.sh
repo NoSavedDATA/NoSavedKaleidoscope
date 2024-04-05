@@ -2,9 +2,14 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
+culang() {
+    $DIR/bin/culang $@
+}
+
 if ! command -v culang &> /dev/null; then
     echo "Adding culang to PATH"
     export PATH="$DIR/bin/culang:$PATH"
+    export -f culang
 fi
 
 cumpile() {
