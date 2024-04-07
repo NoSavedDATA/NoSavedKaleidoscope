@@ -12,7 +12,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
-#include "include/KaleidoscopeJIT.h"
+#include "../include/KaleidoscopeJIT.h"
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -52,7 +52,7 @@ enum Token {
   tok_then = -7,
   tok_else = -8,
   tok_for = -9,
-  tok_in = -10,
+  tok_while = -10,
   tok_tab = 9,
 
   // operators
@@ -97,8 +97,8 @@ static int get_token() {
       return tok_else;
     if (IdentifierStr == "for")
       return tok_for;
-    if (IdentifierStr == "in")
-      return tok_in;
+    if (IdentifierStr == "while")
+      return tok_while;
     if (IdentifierStr == "binary")
       return tok_binary;
     if (IdentifierStr == "unary")
@@ -264,7 +264,7 @@ public:
   float *ccode() override;
 };
 
-/// ForExprAST - Expression class for for/in.
+/// ForExprAST - Expression class for for.
 class ForExprAST : public ExprAST {
   std::string VarName;
   std::unique_ptr<ExprAST> Start, End, Step, Body;
@@ -277,6 +277,18 @@ public:
         Step(std::move(Step)), Body(std::move(Body)) {}
 
   Value *codegen() override;
+  float *ccode() override;
+};
+
+/// WhileExprAST - Expression class for while.
+class WhileExprAST : public ExprAST {
+	std::unique_ptr<ExprAST> Cond, Body;
+
+public:
+	WhileExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Body)
+		: Cond(std::move(Cond)), Body(std::move(Body)) {}
+
+	Value* codegen() override;
   float *ccode() override;
 };
 
@@ -484,7 +496,7 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   getNextToken(); // eat the for.
 
   if (CurTok != tok_identifier)
-    return LogError("identificador esperado depois do for");
+    return LogError("identificador da variável de controle esperado depois do for");
 
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
@@ -520,6 +532,27 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body));
 }
+
+
+/// whileexpr ::= 'while' identifier '=' expr ',' expr (',' expr)? 'in' expression
+static std::unique_ptr<ExprAST> ParseWhileExpr() {
+  getNextToken(); // eat the while.
+
+  if (CurTok != tok_identifier)
+    return LogError("identificador da variável de controle esperado depois do while");
+
+
+  auto Cond = ParseExpression(0);
+  if (!Cond)
+    return nullptr;
+  
+  auto Body = ParseExpression();
+  if (!Body)
+    return nullptr;
+
+  return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body));
+}
+
 
 /// varexpr ::= 'var' identifier ('=' expression)?
 //                    (',' identifier ('=' expression)?)* 'in' expression
@@ -593,6 +626,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     return ParseIfExpr();
   case tok_for:
     return ParseForExpr();
+  case tok_while:
+    return ParseWhileExpr();
   case tok_var:
     return ParseVarExpr();
   case tok_space:
@@ -696,6 +731,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
       std::cout << "SPACE WITHOUT NUMBER OR VAR " << CurTok << "\n";
       return LHS;
     }
+    
     
 
 
@@ -916,6 +952,7 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 Value *NumberExprAST::codegen() {
   return ConstantFP::get(*TheContext, APFloat(Val));
 }
+
 float *CudaNumExprAST::ccode() {
   return 0;
 }
@@ -938,6 +975,9 @@ float *IfExprAST::ccode() {
   return 0;
 }
 float *ForExprAST::ccode() {
+  return 0;
+}
+float *WhileExprAST::ccode() {
   return 0;
 }
 float *VarExprAST::ccode() {
@@ -1172,6 +1212,45 @@ Value *IfExprAST::codegen() {
 //   store nextvar -> var
 //   br endcond, loop, endloop
 // outloop:
+Value *WhileExprAST::codegen() {
+	Function* TheFunction = Builder->GetInsertBlock()->getParent();
+
+	BasicBlock *entryBB = BasicBlock::Create(*TheContext, "entry_while", TheFunction);
+	BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop_while", TheFunction);
+	BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "end_while", TheFunction);
+
+	
+	Builder->CreateBr(entryBB);
+
+	// Handle Cond
+
+	Builder->SetInsertPoint(entryBB);
+	Value* condVal = Cond->codegen();
+	if (! condVal)
+    return nullptr;
+
+	condVal = Builder->CreateFCmpONE(condVal, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
+	Builder->CreateCondBr(condVal, LoopBB, AfterBB);
+	entryBB = Builder->GetInsertBlock();
+
+
+	// Handle Loop Body
+	
+  Builder->SetInsertPoint(LoopBB);
+	Value* bodyVal = Body->codegen();
+	if (! bodyVal)
+    return nullptr;
+	Builder->CreateBr(entryBB);
+
+
+	// Handle Loop End
+	
+	Builder->SetInsertPoint(AfterBB);
+
+	return Constant::getNullValue(Type::getFloatTy(*TheContext));
+}
+
+
 Value *ForExprAST::codegen() {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
@@ -1193,7 +1272,7 @@ Value *ForExprAST::codegen() {
   // Insert an explicit fall through from the current block to the LoopBB.
   Builder->CreateBr(LoopBB);
 
-  // Start insertion in LoopBB.
+  
   Builder->SetInsertPoint(LoopBB);
 
   // Within the loop, the variable is defined equal to the PHI node.  If it
@@ -1250,6 +1329,7 @@ Value *ForExprAST::codegen() {
   // for expr always returns 0.0.
   return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
+
 
 
 
