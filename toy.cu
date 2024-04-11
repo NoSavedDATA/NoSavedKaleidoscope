@@ -439,13 +439,13 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
 static std::unique_ptr<ExprAST> ParseIfExpr(int tabcount=1) {
   
-  std::cout << tabcount << " " << CurTok << "token if atual\n";
+  //std::cout << tabcount << " " << CurTok << "token if atual\n";
   if(CurTok==tok_space)
     getNextToken();
 
   getNextToken(); // eat the if.
   //CurTok = '(';
-  std::cout << CurTok << "token if posterior\n";
+  //std::cout << CurTok << "token if posterior\n";
   
 
   //std::cout << CurTok << " Cond token \n";
@@ -496,20 +496,20 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   getNextToken(); // eat the for.
 
   if (CurTok != tok_identifier)
-    return LogError("identificador da variável de controle esperado depois do for");
+    return LogError("identificador da variável de controle esperado depois do for.");
 
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
   if (CurTok != '=')
-    return LogError("Esperada atribuição do valor inicial");
+    return LogError("Esperada atribuição do valor inicial do for.");
   getNextToken(); // eat '='.
 
   auto Start = ParseExpression(0);
   if (!Start)
     return nullptr;
   if (CurTok != ',')
-    return LogError("Esperado ',' depois de atribuir valor inicial do for");
+    return LogError("Esperado ',' depois de atribuir valor inicial do for.");
   getNextToken();
 
   auto End = ParseExpression(0);
@@ -539,7 +539,7 @@ static std::unique_ptr<ExprAST> ParseWhileExpr() {
   getNextToken(); // eat the while.
 
   if (CurTok != tok_identifier)
-    return LogError("identificador da variável de controle esperado depois do while");
+    return LogError("Identificador da variável de controle esperado depois do while.");
 
 
   auto Cond = ParseExpression(0);
@@ -568,7 +568,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
 
   // At least one variable name is required.
   if (CurTok != tok_identifier)
-    return LogError("Esperado identificador após var");
+    return LogError("Esperado identificador após var.");
 
   while (true) {
     std::string Name = IdentifierStr;
@@ -592,7 +592,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
     getNextToken(); // eat the ','.
 
     if (CurTok != tok_identifier)
-      return LogError("esperado um ou mais identificadores após var");
+      return LogError("Esperado um ou mais identificadores após var.");
   }
 
   auto Body = ParseExpression();
@@ -614,8 +614,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     getNextToken();
   switch (CurTok) {
   default:
-    std::cout << CurTok << " token atual de erro esperando expressão\n";
-    return LogError("token desconhecido ao esperar uma expressão");
+    //std::cout << CurTok << " token atual de erro esperando expressão\n";
+    return LogError("Token inesperado");
   case tok_identifier:
     return ParseIdentifierExpr(tabcount);
   case tok_number:
@@ -640,7 +640,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
 ///   ::= primary
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
-  std::cout << "Parse Unary";
+  //std::cout << "Parse Unary";
   
   while((CurTok==tok_tab)||(CurTok==tok_space))
     getNextToken();
@@ -723,12 +723,12 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     RhsTok = CurTok;
 
 
-    std::cout << "Before RHS " << LhsTok << " " << BinOp << " " << CurTok << " " << seen_tabs << "/" << tabcount << " " << RName << " \n";
+    //std::cout << "Before RHS " << LhsTok << " " << BinOp << " " << CurTok << " " << seen_tabs << "/" << tabcount << " " << RName << " \n";
 
     
     if((BinOp==tok_space) && (!( (CurTok==tok_identifier) || (CurTok==tok_number) )))
     {
-      std::cout << "SPACE WITHOUT NUMBER OR VAR " << CurTok << "\n";
+      //std::cout << "SPACE WITHOUT NUMBER OR VAR " << CurTok << "\n";
       return LHS;
     }
     
@@ -1551,8 +1551,8 @@ static void HandleTopLevelExpression() {
 static void MainLoop() {
   while (true) {
     //fprintf(stderr, "ready> ");
-    if (CurTok!=tok_space)
-      std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
+    //if (CurTok!=tok_space)
+    //  std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
     switch (CurTok) {
     case tok_eof:
       return;
