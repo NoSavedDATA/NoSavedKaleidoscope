@@ -371,6 +371,14 @@ std::unique_ptr<ExprAST> LogError(const char *Str) {
   return nullptr;
 }
 
+// Modified LogError function with token parameter
+std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
+  char buf[100];
+  snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
+  fprintf(stderr, "Erro: %s\n", buf);
+  return nullptr;
+}
+
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
   LogError(Str);
   return nullptr;
@@ -615,7 +623,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
   switch (CurTok) {
   default:
     //std::cout << CurTok << " token atual de erro esperando expressão\n";
-    return LogError("Token inesperado");
+    return LogErrorT(CurTok);
   case tok_identifier:
     return ParseIdentifierExpr(tabcount);
   case tok_number:
