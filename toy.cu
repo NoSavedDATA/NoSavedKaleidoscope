@@ -27,6 +27,12 @@
 #include <utility>
 #include <vector>
 
+#include <cublas_v2.h>
+#include <cuda_runtime.h>
+#include <cublasLt.h>
+#include <omp.h>
+#include "cu_commons.h"
+
 using namespace llvm;
 using namespace llvm::orc;
 
@@ -59,10 +65,13 @@ enum Token {
   tok_binary = -11,
   tok_unary = -12,
 
-  // var definition
-  tok_var = -13,
 
-  tok_space = -14
+  tok_space = -14,
+
+  
+  // var definition
+  tok_var = -15,
+  tok_tensor = -16
 };
 
 static std::string IdentifierStr; // Filled in if tok_identifier
@@ -105,6 +114,8 @@ static int get_token() {
       return tok_unary;
     if (IdentifierStr == "var")
       return tok_var;
+    if (IdentifierStr == "tensor")
+      return tok_tensor;
     return tok_identifier;
   }
 
@@ -158,9 +169,17 @@ static int get_token() {
 class ExprAST {
 public:
   virtual ~ExprAST() = default;
+  std::string Type = "None";
+  std::string Name = "Unnamed";
 
   virtual Value *codegen() = 0;
   virtual float *ccode() = 0;
+  /*virtual void setType(std::string Type) {
+    this->Type=Type;
+  }*/
+  virtual std::string GetName() {
+    return Name;
+  }
 };
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
@@ -169,6 +188,7 @@ class NumberExprAST : public ExprAST {
 
   public:
     NumberExprAST(float Val) : Val(Val) {} //{std::cout << "number created";}
+  std::string Type = "num";
 
   Value *codegen() override;
   float *ccode() override;
@@ -186,29 +206,56 @@ class CudaNumExprAST : public ExprAST {
   float *ccode() override;
 };
 
-/*
-class CudaNumExprAST : public ExprAST {
-  float LHS, RHS;
-
-  public:
-    CudaNumExprAST(float LHS, float RHS)
-        : LHS(LHS), RHS(RHS) {}
-
-  Value *codegen() override;
-};
-*/
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {
   std::string Name;
 
-public:
-  VariableExprAST(const std::string &Name) : Name(Name) {}
+  public:
+    VariableExprAST(const std::string &Name) : Name(Name) {}
+
+    Value *codegen() override;
+    float *ccode() override;
+    const std::string &getName() const { return Name; }
+    std::string GetName() override {
+    return Name;
+  }
+};
+
+
+/// VarExprAST - Expression class for var/in
+class VarExprAST : public ExprAST {
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::unique_ptr<ExprAST> Body;
+  std::string Type;
+
+  public:
+    VarExprAST(
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+        std::unique_ptr<ExprAST> Body,
+        std::string Type)
+        : VarNames(std::move(VarNames)), Body(std::move(Body)), Type(Type) {}
 
   Value *codegen() override;
   float *ccode() override;
-  const std::string &getName() const { return Name; }
 };
+
+class TensorExprAST : public ExprAST {
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::unique_ptr<ExprAST> Body;
+  std::string Type;
+
+  public:
+    TensorExprAST(
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+        std::unique_ptr<ExprAST> Body,
+        std::string Type)
+        : VarNames(std::move(VarNames)), Body(std::move(Body)), Type(Type) {}
+
+  Value *codegen() override;
+  float *ccode() override;
+};
+
 
 /// UnaryExprAST - Expression class for a unary operator.
 class UnaryExprAST : public ExprAST {
@@ -292,20 +339,6 @@ public:
   float *ccode() override;
 };
 
-/// VarExprAST - Expression class for var/in
-class VarExprAST : public ExprAST {
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::unique_ptr<ExprAST> Body;
-
-public:
-  VarExprAST(
-      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::unique_ptr<ExprAST> Body)
-      : VarNames(std::move(VarNames)), Body(std::move(Body)) {}
-
-  Value *codegen() override;
-  float *ccode() override;
-};
 
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
@@ -316,11 +349,11 @@ class PrototypeAST {
   bool IsOperator;
   unsigned Precedence; // Precedence if a binary op.
 
-public:
-  PrototypeAST(const std::string &Name, std::vector<std::string> Args,
-               bool IsOperator = false, unsigned Prec = 0)
-      : Name(Name), Args(std::move(Args)), IsOperator(IsOperator),
-        Precedence(Prec) {}
+  public:
+    PrototypeAST(const std::string &Name, std::vector<std::string> Args,
+                bool IsOperator = false, unsigned Prec = 0)
+        : Name(Name), Args(std::move(Args)), IsOperator(IsOperator),
+          Precedence(Prec) {}
 
   Function *codegen();
   const std::string &getName() const { return Name; }
@@ -415,7 +448,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
   std::string IdName = IdentifierStr;
 
   getNextToken(); // eat identifier.
-
+  
   if (CurTok != '(') // Simple variable ref.
     return std::make_unique<VariableExprAST>(IdName);
 
@@ -564,13 +597,13 @@ static std::unique_ptr<ExprAST> ParseWhileExpr() {
 
 /// varexpr ::= 'var' identifier ('=' expression)?
 //                    (',' identifier ('=' expression)?)* 'in' expression
-static std::unique_ptr<ExprAST> ParseVarExpr() {
+static std::unique_ptr<ExprAST> ParseVarExpr(std::string Type) {
   getNextToken(); // eat the var.
+  
 
-  // mem2reg is alloca-driven: it looks for allocas and if it can handle them, it promotes them. It does not apply to global variables or heap allocations.
+  // mem2reg is alloca-driven: it looks for allocas and if it can handle them, it promotes them. It DOES NOT APPLY TO GLOBAL variables or heap allocations.
   // mem2reg only promotes allocas whose uses are direct loads and stores. If the address of the stack object is passed to a function,
   //or if any funny pointer arithmetic is involved, the alloca will not be promoted.
-  // can at least the values be passed as args?
 
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
 
@@ -607,7 +640,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
   if (!Body)
     return nullptr;
 
-  return std::make_unique<VarExprAST>(std::move(VarNames), std::move(Body));
+  return std::make_unique<VarExprAST>(std::move(VarNames), std::move(Body), Type);
 }
 
 /// primary
@@ -637,7 +670,9 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
   case tok_while:
     return ParseWhileExpr();
   case tok_var:
-    return ParseVarExpr();
+    return ParseVarExpr("var");
+  case tok_tensor:
+    return ParseVarExpr("tensor");
   case tok_space:
     getNextToken();
     return ParsePrimary();
@@ -793,12 +828,12 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
 
         
       //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
-      if(BinOp==64) //@
+      if(BinOp==64) // @
         LHS = std::make_unique<CudaNumExprAST>(std::move(LHS), std::move(RHS));
         //LHS = std::make_unique<CudaNumExprAST>(LHS, RHS);
       else
         LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
-      
+        
       
 
       LhsTok = RhsTok;
@@ -812,6 +847,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
 ///
 static std::unique_ptr<ExprAST> ParseExpression(int tabcount) {
   //std::cout << "Parse Expression tabcount " << tabcount << "\n";
+  //std::cout << "Parse Expression\n";
   
   auto LHS = ParseUnary(tabcount);
   if (!LHS)
@@ -925,6 +961,8 @@ static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<IRBuilder<>> Builder;
 static std::unique_ptr<Module> TheModule;
 static std::map<std::string, AllocaInst *> NamedValues;
+static std::map<std::string, float> StoredValues;
+static std::map<std::string, float *> NamedTensors;
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 static ExitOnError ExitOnErr;
 
@@ -1037,82 +1075,254 @@ Value *CudaNumExprAST::codegen() {
   //return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
+
+float currentCudaResult[100];
+bool used_cuda = false;
+
+
+Value *CudaMult(float *L, float R) {
+  //float R = cast<ConstantFP>(r)->getValueAPF().convertToFloat();
+  
+
+  std::cout << "Cuda in is: " << *L << "\n";
+  int kDataLen = 1;
+
+
+  float* device_x;
+  cudaMalloc(&device_x, kDataLen * sizeof(float));
+  cudaMemcpy(device_x, L, kDataLen * sizeof(float), cudaMemcpyHostToDevice);
+  
+
+  float* device_y;
+  cudaMalloc(&device_y, kDataLen * sizeof(float));
+  cudaMemcpy(device_x, L, kDataLen * sizeof(float),
+             cudaMemcpyHostToDevice);
+
+
+  // Launch the kernel.
+  vec_mult<<<1, kDataLen>>>(R, device_x, device_y);
+  //vec_mult<<<1, kDataLen>>>(R, device_x, device_y);
+
+  cudaDeviceSynchronize();
+  cudaMemcpy(currentCudaResult, device_y, kDataLen * sizeof(float),
+             cudaMemcpyDeviceToHost);
+
+  // Print the results.
+  for (int i = 0; i < kDataLen; ++i) {
+    std::cout << "y[" << i << "] = " << currentCudaResult[i] << "\n";
+  }
+  std::cout << "\n";
+
+  used_cuda = true;
+
+  return ConstantFP::get(*TheContext, APFloat(currentCudaResult[0]));
+  //return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+
 Value *VariableExprAST::codegen() {
   // Look this variable up in the function.
-  Value *V = NamedValues[Name];
-  if (!V)
-    return LogErrorV("Nome de variável desconhecido");
 
-  // Load the value.
-  return Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
+  //std::cout << "Var Code Gen \n";
+  if (NamedValues.count(Name) != 0) 
+  {
+    Type="var";
+    Value *V = NamedValues[Name];
+    std::cout << "Now Loading Var to Context \n";
+    
+    
+    // Load the value.
+    return Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
+    //return ConstantFP::get(*TheContext, APFloat(StoredValues[Name]));
+
+  } else if (StoredValues.count(Name) !=0) {
+    //std::cout << "Pre load\n";
+    //float val = cast<ConstantFP>(StoredValues[Name])->getValueAPF().convertToFloat();
+    //std::cout << "Now Loading Var " << val << " to Context \n";
+    std::cout << "Now Loading Stored to Context \n";
+
+
+    return ConstantFP::get(*TheContext, APFloat(StoredValues[Name]));
+    //return StoredValues[Name];//Builder->CreateLoad(Type::getFloatTy(*TheContext), StoredValues[Name], Name.c_str());
+
+  } else {
+    Type="tensor";
+    float *v = NamedTensors[Name];
+    if (!v)
+      return LogErrorV("O nome do tensor/variável é desconhecido");
+
+    std::cout << "Now Loading Tensor " << *v << " to Context \n";
+    
+    // float_to_value
+    Value *V = ConstantFP::get(*TheContext, APFloat(0.0f));
+    return V;
+  }
 }
 
-Value *UnaryExprAST::codegen() {
-  Value *OperandV = Operand->codegen();
-  if (!OperandV)
-    return nullptr;
 
-  Function *F = getFunction(std::string("unary") + Opcode);
-  if (!F)
-    return LogErrorV("Unknown unary operator");
 
-  return Builder->CreateCall(F, OperandV, "unop");
-}
 
 Value *BinaryExprAST::codegen() {
   // Special case '=' because we don't want to emit the LHS as an expression.
   if (Op == '=') {
+    
     // Assignment requires the LHS to be an identifier.
     // This assume we're building without RTTI because LLVM builds that way by
     // default.  If you build LLVM with RTTI this can be changed to a
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
     if (!LHSE)
-      return LogErrorV("Destino do '=' deve ser uma variável");
+      return LogErrorV("Destino do '=' deve ser uma variável ou operação.");
     // Codegen the RHS.
+    
     Value *Val = RHS->codegen();
     if (!Val)
       return nullptr;
 
     // Look up the name.
-    Value *Variable = NamedValues[LHSE->getName()];
-    if (!Variable)
-      return LogErrorV("Nome de variável desconhecido");
+    if (NamedValues.count(LHSE->getName()) != 0) {
+      Value *Variable = NamedValues[LHSE->getName()];
+      std::cout << "SAVING INTO " <<  LHSE->getName()  << " -------------------------------\n";
+      if (!Variable)
+        return LogErrorV("O nome da variável é desconhecido.");
 
-    Builder->CreateStore(Val, Variable);
-    return Val;
+      Builder->CreateStore(Val, Variable);
+    
+      
+      try {
+      Value *ValCopy = Val;
+      std::cout << "Casting\n";
+      float val = cast<ConstantFP>(ValCopy)->getValueAPF().convertToFloat();
+      StoredValues[LHSE->getName()] = val;
+      } catch (...){}
+
+      return Val;
+      
+    } else if (StoredValues.count(LHSE->getName()) !=0){
+      float val = cast<ConstantFP>(Val)->getValueAPF().convertToFloat();
+      StoredValues[LHSE->getName()] = val;
+      return Val;
+
+    } else {
+      float Variable = *NamedTensors[LHSE->getName()];
+      if (!Variable)
+        return LogErrorV("O nome do tensor/variável é desconhecido.");
+
+      //for (const auto& pair : NamedTensors)
+      //  std::cout << pair.first << ": " << *(pair.second) << std::endl;
+
+      // value_to_float
+      //float val = cast<ConstantFP>(Val)->getValueAPF().convertToFloat();
+
+      float val = cast<ConstantFP>(Val)->getValueAPF().convertToFloat();
+
+      std::cout << "SAVING INTO " <<  LHSE->getName() << " " << val << "\n";
+      
+      if (used_cuda)
+      {
+        
+        NamedTensors[LHSE->getName()] = new float(currentCudaResult[0]);
+        
+        used_cuda=false;
+        //std::cout << "SAVED " << *NamedTensors[LHSE->getName()] << "\n"; 
+      }
+      return Val;
+    }
   }
+
+
+  
 
   Value *L = LHS->codegen();
   Value *R = RHS->codegen();
+
+  //std::cout << "LHS type " << LHS->Type << "\nRHS type " << RHS->Type << "\n\n";
+
+  if ((RHS->Type=="tensor") && (LHS->Type!="tensor"))
+  {
+    std::unique_ptr<ExprAST> aux = std::move(LHS);
+    LHS = std::move(RHS);
+    RHS = std::move(aux);
+
+    Value *aux_ = std::move(L);
+    L = std::move(R);
+    R = std::move(aux_);
+  }
+
+  
+
   if (!L || !R)
     return nullptr;
 
-  switch (Op) {
-  case '+':
-    return Builder->CreateFAdd(L, R, "addtmp");
-  case ':':
-    return L;
-  case tok_space:
-    return R;
-  case '-':
-    return Builder->CreateFSub(L, R, "subtmp");
-  case '*':
-    return Builder->CreateFMul(L, R, "multmp");
-  case '/':
-    return Builder->CreateFDiv(L, R, "divtmp");
-  case 77:
-    return LogErrorV("GOTCHA");
-  case '<':
-    L = Builder->CreateFCmpULT(L, R, "cmptmp");
-    // Convert bool 0/1 to float 0.0 or 1.0
-    return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-  case '>':
-    L = Builder->CreateFCmpULT(R, L, "cmptmp");
-    // Convert bool 0/1 to float 0.0 or 1.0
-    return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-  default:
-    break;
+  if ((LHS->Type=="tensor") || (used_cuda))
+  {
+    float *v, b;
+    if (LHS->Type=="tensor")
+      v = NamedTensors[LHS->GetName()];
+    
+    if (used_cuda)
+      v = new float(currentCudaResult[0]);
+
+    float r;
+    if (RHS->Type=="var")
+      r = StoredValues[RHS->GetName()];
+    else
+      r = cast<ConstantFP>(R)->getValueAPF().convertToFloat();
+    
+    std::cout << "Deciding CUDA Operation \n";
+    L = ConstantFP::get(*TheContext, APFloat(*v));
+    float val1 = cast<ConstantFP>(L)->getValueAPF().convertToFloat();
+    std::cout << "Pre print\n";
+
+    
+    
+    std::cout << "L value: " << val1 << " | R value: " << r  << ".\n";
+
+
+    switch (Op)
+    {
+    case ':':
+      return L;
+    case tok_space:
+      return R;
+    case '+':
+      return Builder->CreateFAdd(L, R, "addtmp");
+    case '*':
+      //return Builder->CreateFMul(L, R, "multmp");
+      return CudaMult(v, r);
+    default:
+      break;
+    }
+  } else {
+
+    switch (Op) {
+    case '+':
+      return Builder->CreateFAdd(L, R, "addtmp");
+    case ':':
+      return L;
+    case tok_space:
+      return R;
+    case '-':
+      return Builder->CreateFSub(L, R, "subtmp");
+    case '*':
+      std::cout << "Simple Multiplication.\n";
+      return Builder->CreateFMul(L, R, "multmp");
+    case '/':
+      return Builder->CreateFDiv(L, R, "divtmp");
+    case 77:
+      return LogErrorV("GOTCHA");
+    case '<':
+      L = Builder->CreateFCmpULT(L, R, "cmptmp");
+      // Convert bool 0/1 to float 0.0 or 1.0
+      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+    case '>':
+      L = Builder->CreateFCmpULT(R, L, "cmptmp");
+      // Convert bool 0/1 to float 0.0 or 1.0
+      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+    default:
+      break;
+    }
   }
 
   // If it wasn't a builtin binary operator, it must be a user defined one. Emit
@@ -1123,6 +1333,21 @@ Value *BinaryExprAST::codegen() {
   Value *Ops[] = {L, R};
   return Builder->CreateCall(F, Ops, "binop");
 }
+
+
+
+Value *UnaryExprAST::codegen() {
+  Value *OperandV = Operand->codegen();
+  if (!OperandV)
+    return nullptr;
+
+  Function *F = getFunction(std::string("unary") + Opcode);
+  if (!F)
+    return LogErrorV("Operador unário desconhecido.");
+
+  return Builder->CreateCall(F, OperandV, "unop");
+}
+
 
 Value *CallExprAST::codegen() {
   // Look up the name in the global module table.
@@ -1350,6 +1575,7 @@ Value *VarExprAST::codegen() {
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
     ExprAST *Init = VarNames[i].second.get();
+    std::cout << "Code gen for " << Type << "\n";
 
     // Emit the initializer before adding the variable to scope, this prevents
     // the initializer from referencing the variable itself, and permits stuff
@@ -1365,15 +1591,24 @@ Value *VarExprAST::codegen() {
       InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
     }
 
-    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
-    Builder->CreateStore(InitVal, Alloca);
 
-    // Remember the old variable binding so that we can restore the binding when
-    // we unrecurse.
-    OldBindings.push_back(NamedValues[VarName]);
+    if (Type=="var")
+    {
+      AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+      Builder->CreateStore(InitVal, Alloca);
 
-    // Remember this binding.
-    NamedValues[VarName] = Alloca;
+      // Remember the old variable binding so that we can restore the binding when
+      // we unrecurse.
+      OldBindings.push_back(NamedValues[VarName]);
+
+      // Remember this binding.
+      NamedValues[VarName] = Alloca;
+    }
+    if (Type=="tensor")
+    {
+      NamedTensors[VarName] = make_random_float(1);
+      //NamedTensors[VarName] = {33.0f,0.0f};
+    }
   }
 
   // Codegen the body that is contained by the in expression
@@ -1382,8 +1617,9 @@ Value *VarExprAST::codegen() {
     return nullptr;
 
   // Pop all our variables from scope.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
-    NamedValues[VarNames[i].first] = OldBindings[i];
+  if (Type=="var")
+    for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
+      NamedValues[VarNames[i].first] = OldBindings[i];
 
   // Return the body computation.
   return BodyVal;
@@ -1417,7 +1653,6 @@ const std::string& FunctionAST::getName() const {
 }
 
 Function *FunctionAST::codegen() {
-
   
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
   // reference to it for use below.
@@ -1558,7 +1793,6 @@ static void HandleTopLevelExpression() {
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
   while (true) {
-    //fprintf(stderr, "ready> ");
     //if (CurTok!=tok_space)
     //  std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
     switch (CurTok) {
@@ -1573,10 +1807,6 @@ static void MainLoop() {
     case tok_tab:
       LogError("Tab inesperado encontrado\n");
       break;
-    /*
-    case 10: // ignore top-level semicolons.
-      getNextToken();
-      break;*/
     case tok_def:
       HandleDefinition();
       break;
