@@ -1077,12 +1077,22 @@ Value *CudaNumExprAST::codegen() {
 
 
 float currentCudaResult[100];
-bool used_cuda = false;
+int used_cuda = 0;
+bool seen_var_load = false;
+bool seen_var_attr = false;
 
 
-Value *CudaMult(float *L, float R) {
+extern "C" float CudaMult(char *tensorName, float R, int _used_cuda) {
+  std::cout << "Cuda Mult Here! " << tensorName << " used cuda " << _used_cuda << " R " << R << "\n";
   //float R = cast<ConstantFP>(r)->getValueAPF().convertToFloat();
+  float *L;
+
   
+  if (_used_cuda==1)
+    L = new float(currentCudaResult[0]);
+  else
+    L = NamedTensors[tensorName];
+
 
   std::cout << "Cuda in is: " << *L << "\n";
   int kDataLen = 1;
@@ -1113,10 +1123,9 @@ Value *CudaMult(float *L, float R) {
   }
   std::cout << "\n";
 
-  used_cuda = true;
 
-  return ConstantFP::get(*TheContext, APFloat(currentCudaResult[0]));
-  //return ConstantFP::get(*TheContext, APFloat(0.0f));
+  //return ConstantFP::get(*TheContext, APFloat(currentCudaResult[0]));
+  return 0;
 }
 
 
@@ -1125,34 +1134,31 @@ Value *VariableExprAST::codegen() {
   // Look this variable up in the function.
 
   //std::cout << "Var Code Gen \n";
+
+  for (const auto& pair : StoredValues) 
+    std::cout <<"Stored value: "<< pair.second << std::endl;
+
   if (NamedValues.count(Name) != 0) 
   {
     Type="var";
     Value *V = NamedValues[Name];
-    std::cout << "Now Loading Var to Context \n";
-    
-    
-    // Load the value.
+    std::cout << "Now Loading Var "<< Name <<" to Context " << seen_var_attr << "  \n";
+    seen_var_load = true;  
+
     return Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
-    //return ConstantFP::get(*TheContext, APFloat(StoredValues[Name]));
-
-  } else if (StoredValues.count(Name) !=0) {
-    //std::cout << "Pre load\n";
-    //float val = cast<ConstantFP>(StoredValues[Name])->getValueAPF().convertToFloat();
-    //std::cout << "Now Loading Var " << val << " to Context \n";
-    std::cout << "Now Loading Stored to Context \n";
-
-
-    return ConstantFP::get(*TheContext, APFloat(StoredValues[Name]));
-    //return StoredValues[Name];//Builder->CreateLoad(Type::getFloatTy(*TheContext), StoredValues[Name], Name.c_str());
 
   } else {
     Type="tensor";
     float *v = NamedTensors[Name];
     if (!v)
-      return LogErrorV("O nome do tensor/variável é desconhecido");
+    {
+      std::cout << "Erro: O nome do tensor/variável " << Name << " é desconhecido\n";
+      return LogErrorV(" ");
+      //return LogErrorV("O nome do tensor/variável é desconhecido");
+    }
+      
 
-    std::cout << "Now Loading Tensor " << *v << " to Context \n";
+    std::cout << "Now Loading Tensor " << Name << ": " << *v << " to Context \n";
     
     // float_to_value
     Value *V = ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -1162,6 +1168,25 @@ Value *VariableExprAST::codegen() {
 
 
 
+extern "C" float toStoredValues(float Val, char * name_to_store)
+{
+  std::cout << "ULULULULULULULLULULULULULULULULU " << name_to_store << " \n";
+  std::cout << typeid(Val).name() << std::endl;
+
+  StoredValues[name_to_store] = Val;
+  
+  std::cout << Val << "stored\n";
+  return 0;
+}
+
+
+extern "C" float temporaryCudaResult(char *name_to_store)
+{
+  NamedTensors[name_to_store] = new float(currentCudaResult[0]);
+  return 0;
+}
+
+//Function *callCudaMult, *CallToStoredValues;
 
 Value *BinaryExprAST::codegen() {
   // Special case '=' because we don't want to emit the LHS as an expression.
@@ -1176,12 +1201,14 @@ Value *BinaryExprAST::codegen() {
       return LogErrorV("Destino do '=' deve ser uma variável ou operação.");
     // Codegen the RHS.
     
+    seen_var_attr = true;
     Value *Val = RHS->codegen();
     if (!Val)
       return nullptr;
 
     // Look up the name.
     if (NamedValues.count(LHSE->getName()) != 0) {
+      
       Value *Variable = NamedValues[LHSE->getName()];
       std::cout << "SAVING INTO " <<  LHSE->getName()  << " -------------------------------\n";
       if (!Variable)
@@ -1189,46 +1216,43 @@ Value *BinaryExprAST::codegen() {
 
       Builder->CreateStore(Val, Variable);
     
-      
-      try {
-      Value *ValCopy = Val;
-      std::cout << "Casting\n";
-      float val = cast<ConstantFP>(ValCopy)->getValueAPF().convertToFloat();
-      StoredValues[LHSE->getName()] = val;
-      } catch (...){}
 
-      return Val;
+      /*
+
+      Function *CallToStoredValuesFn = TheModule->getFunction("toStoredValues");
       
-    } else if (StoredValues.count(LHSE->getName()) !=0){
+      Value *V = ConstantFP::get(*TheContext, APFloat(0.0f));
+      std::cout << "Casting " << RHS->GetName() << " \n";
       float val = cast<ConstantFP>(Val)->getValueAPF().convertToFloat();
-      StoredValues[LHSE->getName()] = val;
-      return Val;
+      //StoredValues[LHSE->getName()] = val;
 
+      Value *valStr = Builder->CreateGlobalString(LHSE->getName());
+      Builder->CreateCall(CallToStoredValuesFn, {Val, valStr});
+      */
+      
+      seen_var_load=false;
+      return Val;
+      
     } else {
       float Variable = *NamedTensors[LHSE->getName()];
       if (!Variable)
         return LogErrorV("O nome do tensor/variável é desconhecido.");
-
-      //for (const auto& pair : NamedTensors)
-      //  std::cout << pair.first << ": " << *(pair.second) << std::endl;
-
-      // value_to_float
-      //float val = cast<ConstantFP>(Val)->getValueAPF().convertToFloat();
-
-      float val = cast<ConstantFP>(Val)->getValueAPF().convertToFloat();
-
-      std::cout << "SAVING INTO " <<  LHSE->getName() << " " << val << "\n";
       
       if (used_cuda)
       {
         
-        NamedTensors[LHSE->getName()] = new float(currentCudaResult[0]);
+        Value *valStr = Builder->CreateGlobalString(LHSE->getName());
+        Function *temporaryCudaResultFn = TheModule->getFunction("temporaryCudaResult");
+        Builder->CreateCall(temporaryCudaResultFn, {valStr});
+        //NamedTensors[LHSE->getName()] = new float(currentCudaResult[0]);
         
-        used_cuda=false;
-        //std::cout << "SAVED " << *NamedTensors[LHSE->getName()] << "\n"; 
+        used_cuda=0;
+        std::cout << "SAVED " << *NamedTensors[LHSE->getName()] << "\n"; 
       }
       return Val;
     }
+    seen_var_attr=false;  
+    //return Val;
   }
 
 
@@ -1256,29 +1280,20 @@ Value *BinaryExprAST::codegen() {
     return nullptr;
 
   if ((LHS->Type=="tensor") || (used_cuda))
-  {
-    float *v, b;
-    if (LHS->Type=="tensor")
-      v = NamedTensors[LHS->GetName()];
-    
-    if (used_cuda)
-      v = new float(currentCudaResult[0]);
+  {  
 
-    float r;
-    if (RHS->Type=="var")
-      r = StoredValues[RHS->GetName()];
-    else
-      r = cast<ConstantFP>(R)->getValueAPF().convertToFloat();
-    
-    std::cout << "Deciding CUDA Operation \n";
-    L = ConstantFP::get(*TheContext, APFloat(*v));
-    float val1 = cast<ConstantFP>(L)->getValueAPF().convertToFloat();
-    std::cout << "Pre print\n";
+    std::cout << "Deciding CUDA Operation for: " << LHS->GetName() << " \n";
 
-    
-    
-    std::cout << "L value: " << val1 << " | R value: " << r  << ".\n";
 
+    //std::cout << "L value: " << val1 << " | R value: " << r  << ".\n";
+
+    Function *CudaFn;
+
+  
+    Value *tensorName = Builder->CreateGlobalString(LHS->GetName());
+
+    Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
+    used_cuda = 1;
 
     switch (Op)
     {
@@ -1290,7 +1305,12 @@ Value *BinaryExprAST::codegen() {
       return Builder->CreateFAdd(L, R, "addtmp");
     case '*':
       //return Builder->CreateFMul(L, R, "multmp");
-      return CudaMult(v, r);
+      //return CudaMult(v, r);
+      CudaFn = TheModule->getFunction("CudaMult");
+      std::cout << "Function accessed\n";
+      
+      return Builder->CreateCall(CudaFn, {tensorName, R, used_cuda_aux}, "cudamult");
+      return ConstantFP::get(*TheContext, APFloat(0.0f));
     default:
       break;
     }
@@ -1306,7 +1326,6 @@ Value *BinaryExprAST::codegen() {
     case '-':
       return Builder->CreateFSub(L, R, "subtmp");
     case '*':
-      std::cout << "Simple Multiplication.\n";
       return Builder->CreateFMul(L, R, "multmp");
     case '/':
       return Builder->CreateFDiv(L, R, "divtmp");
@@ -1348,26 +1367,6 @@ Value *UnaryExprAST::codegen() {
   return Builder->CreateCall(F, OperandV, "unop");
 }
 
-
-Value *CallExprAST::codegen() {
-  // Look up the name in the global module table.
-  Function *CalleeF = getFunction(Callee);
-  if (!CalleeF)
-    return LogErrorV("Função referenciada desconhecida");
-
-  // If argument mismatch error.
-  if (CalleeF->arg_size() != Args.size())
-    return LogErrorV("Incorrect # arguments passed");
-
-  std::vector<Value *> ArgsV;
-  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
-    ArgsV.push_back(Args[i]->codegen());
-    if (!ArgsV.back())
-      return nullptr;
-  }
-
-  return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-}
 
 Value *IfExprAST::codegen() {
   Value *CondV = Cond->codegen();
@@ -1564,8 +1563,6 @@ Value *ForExprAST::codegen() {
 }
 
 
-
-
 Value *VarExprAST::codegen() {
   std::vector<AllocaInst *> OldBindings;
 
@@ -1575,7 +1572,6 @@ Value *VarExprAST::codegen() {
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
     ExprAST *Init = VarNames[i].second.get();
-    std::cout << "Code gen for " << Type << "\n";
 
     // Emit the initializer before adding the variable to scope, this prevents
     // the initializer from referencing the variable itself, and permits stuff
@@ -1592,11 +1588,15 @@ Value *VarExprAST::codegen() {
     }
 
 
+    float val;
     if (Type=="var")
     {
       AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
       Builder->CreateStore(InitVal, Alloca);
 
+      val = cast<ConstantFP>(InitVal)->getValueAPF().convertToFloat();
+      StoredValues[VarName] = val;
+      
       // Remember the old variable binding so that we can restore the binding when
       // we unrecurse.
       OldBindings.push_back(NamedValues[VarName]);
@@ -1626,6 +1626,34 @@ Value *VarExprAST::codegen() {
 }
 
 
+std::vector<float> ArgsStack;
+
+Value *CallExprAST::codegen() {
+  // Look up the name in the global module table.
+  Function *CalleeF = getFunction(Callee);
+  if (!CalleeF)
+    return LogErrorV("Função referenciada desconhecida");
+
+  // If argument mismatch error.
+  if (CalleeF->arg_size() != Args.size())
+    return LogErrorV("Incorrect # arguments passed");
+
+  std::vector<Value *> ArgsV;
+  float val;
+  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
+    auto cg = Args[i]->codegen();
+    ArgsV.push_back(cg);
+
+    //std::cout << "ADD TO STACK\n";
+    //val = cast<ConstantFP>(cg)->getValueAPF().convertToFloat();
+    //ArgsStack.push_back(val);
+
+    if (!ArgsV.back())
+      return nullptr;
+  }
+
+  return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+}
 
 Function *PrototypeAST::codegen() {
   // Make the function type:  float(float,float) etc.
@@ -1674,6 +1702,8 @@ Function *FunctionAST::codegen() {
 
   // Record the function arguments in the NamedValues map.
   NamedValues.clear();
+  float val;
+  int i = 0;
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
     AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
@@ -1683,8 +1713,19 @@ Function *FunctionAST::codegen() {
 
     // Add arguments to variable symbol table.
     NamedValues[std::string(Arg.getName())] = Alloca;
-  }
 
+    /*
+    std::cout << "Storing value " << std::string(Arg.getName()) << " \n";
+    //val = cast<ConstantFP>(&Arg)->getValueAPF().convertToFloat();
+    val = ArgsStack[i];
+    StoredValues[std::string(Arg.getName())] = val;
+    std::cout << "Stored \n";
+    i+=1;
+    */
+    
+    
+  }
+  //ArgsStack.clear();
 
 
   if (Value *RetVal = Body->codegen()) {
@@ -1716,8 +1757,58 @@ static void InitializeModule() {
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
   TheModule->setDataLayout(TheJIT->getDataLayout());
 
+  std::cout << "Initialize Module\n";
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
+
+  Type *floatPtrType = PointerType::get(Type::getFloatTy(*TheContext), 0);
+
+  
+  // Function takes two float pointers and returns a float pointer
+  FunctionType *CudaMultTy = FunctionType::get(
+      Type::getFloatTy(*TheContext), // Return type: pointer to float
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, // char *, float, int
+      false // Not vararg
+  );
+
+  Function::Create(
+    CudaMultTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "CudaMult", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
+
+
+
+  FunctionType *CallToStoredValuesTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0)}, // float, char *
+      false 
+  );
+  
+  Function::Create(
+    CallToStoredValuesTy,
+    Function::ExternalLinkage, 
+    "toStoredValues", 
+    TheModule.get() 
+  );
+
+
+
+  FunctionType *temporaryCudaResultTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, // char *
+      false 
+  );
+  
+  Function::Create(
+    temporaryCudaResultTy,
+    Function::ExternalLinkage, 
+    "temporaryCudaResult", 
+    TheModule.get() 
+  );
+  
+
 }
 
 ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
@@ -1766,11 +1857,12 @@ static void HandleTopLevelExpression() {
       auto RT = TheJIT->getMainJITDylib().createResourceTracker();
 
       auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
-      ExitOnErr(TheJIT->addModule(std::move(TSM), RT)); //Add LLVM IR support
+      ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
+      // Add IR module
+
       InitializeModule();
 
-      // Lookup tracks pointers to the compiled code.
-      // Get the anonymous expression's JITSymbol.
+      // Points __anon_expr
       auto Sym = ExitOnErr(TheJIT->lookup("__anon_expr"));
 
       // Get the symbol's address and cast it to the right type (takes no
