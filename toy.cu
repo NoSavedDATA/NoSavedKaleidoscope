@@ -12,7 +12,6 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
-#include "../include/KaleidoscopeJIT.h"
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -31,7 +30,9 @@
 #include <cuda_runtime.h>
 #include <cublasLt.h>
 #include <omp.h>
-#include "cu_commons.h"
+
+#include "include/KaleidoscopeJIT.h"
+#include "include/cu_commons.h"
 
 using namespace llvm;
 using namespace llvm::orc;
