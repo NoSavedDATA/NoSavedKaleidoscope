@@ -1078,8 +1078,7 @@ Value *CudaNumExprAST::codegen() {
 
 float currentCudaResult[100];
 int used_cuda = 0;
-bool seen_var_load = false;
-bool seen_var_attr = false;
+
 
 
 extern "C" float CudaMult(char *tensorName, float R, int _used_cuda) {
@@ -1135,15 +1134,13 @@ Value *VariableExprAST::codegen() {
 
   //std::cout << "Var Code Gen \n";
 
-  for (const auto& pair : StoredValues) 
-    std::cout <<"Stored value: "<< pair.second << std::endl;
 
   if (NamedValues.count(Name) != 0) 
   {
     Type="var";
     Value *V = NamedValues[Name];
-    std::cout << "Now Loading Var "<< Name <<" to Context " << seen_var_attr << "  \n";
-    seen_var_load = true;  
+    std::cout << "Now Loading Var "<< Name <<" to Context" << "  \n";
+    
 
     return Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
 
@@ -1201,7 +1198,6 @@ Value *BinaryExprAST::codegen() {
       return LogErrorV("Destino do '=' deve ser uma variável ou operação.");
     // Codegen the RHS.
     
-    seen_var_attr = true;
     Value *Val = RHS->codegen();
     if (!Val)
       return nullptr;
@@ -1210,7 +1206,7 @@ Value *BinaryExprAST::codegen() {
     if (NamedValues.count(LHSE->getName()) != 0) {
       
       Value *Variable = NamedValues[LHSE->getName()];
-      std::cout << "SAVING INTO " <<  LHSE->getName()  << " -------------------------------\n";
+      
       if (!Variable)
         return LogErrorV("O nome da variável é desconhecido.");
 
@@ -1218,20 +1214,12 @@ Value *BinaryExprAST::codegen() {
     
 
       /*
-
       Function *CallToStoredValuesFn = TheModule->getFunction("toStoredValues");
-      
-      Value *V = ConstantFP::get(*TheContext, APFloat(0.0f));
-      std::cout << "Casting " << RHS->GetName() << " \n";
-      float val = cast<ConstantFP>(Val)->getValueAPF().convertToFloat();
-      //StoredValues[LHSE->getName()] = val;
 
       Value *valStr = Builder->CreateGlobalString(LHSE->getName());
       Builder->CreateCall(CallToStoredValuesFn, {Val, valStr});
       */
       
-      seen_var_load=false;
-      return Val;
       
     } else {
       float Variable = *NamedTensors[LHSE->getName()];
@@ -1244,15 +1232,12 @@ Value *BinaryExprAST::codegen() {
         Value *valStr = Builder->CreateGlobalString(LHSE->getName());
         Function *temporaryCudaResultFn = TheModule->getFunction("temporaryCudaResult");
         Builder->CreateCall(temporaryCudaResultFn, {valStr});
-        //NamedTensors[LHSE->getName()] = new float(currentCudaResult[0]);
         
         used_cuda=0;
-        std::cout << "SAVED " << *NamedTensors[LHSE->getName()] << "\n"; 
       }
-      return Val;
+      
     }
-    seen_var_attr=false;  
-    //return Val;
+    return Val;
   }
 
 
@@ -1593,9 +1578,6 @@ Value *VarExprAST::codegen() {
     {
       AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
       Builder->CreateStore(InitVal, Alloca);
-
-      val = cast<ConstantFP>(InitVal)->getValueAPF().convertToFloat();
-      StoredValues[VarName] = val;
       
       // Remember the old variable binding so that we can restore the binding when
       // we unrecurse.
@@ -1626,7 +1608,7 @@ Value *VarExprAST::codegen() {
 }
 
 
-std::vector<float> ArgsStack;
+
 
 Value *CallExprAST::codegen() {
   // Look up the name in the global module table.
@@ -1641,12 +1623,9 @@ Value *CallExprAST::codegen() {
   std::vector<Value *> ArgsV;
   float val;
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
-    auto cg = Args[i]->codegen();
-    ArgsV.push_back(cg);
+    
+    ArgsV.push_back(Args[i]->codegen());
 
-    //std::cout << "ADD TO STACK\n";
-    //val = cast<ConstantFP>(cg)->getValueAPF().convertToFloat();
-    //ArgsStack.push_back(val);
 
     if (!ArgsV.back())
       return nullptr;
@@ -1714,18 +1693,8 @@ Function *FunctionAST::codegen() {
     // Add arguments to variable symbol table.
     NamedValues[std::string(Arg.getName())] = Alloca;
 
-    /*
-    std::cout << "Storing value " << std::string(Arg.getName()) << " \n";
-    //val = cast<ConstantFP>(&Arg)->getValueAPF().convertToFloat();
-    val = ArgsStack[i];
-    StoredValues[std::string(Arg.getName())] = val;
-    std::cout << "Stored \n";
-    i+=1;
-    */
-    
     
   }
-  //ArgsStack.clear();
 
 
   if (Value *RetVal = Body->codegen()) {
@@ -1757,7 +1726,9 @@ static void InitializeModule() {
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
   TheModule->setDataLayout(TheJIT->getDataLayout());
 
-  std::cout << "Initialize Module\n";
+  //std::cout << "Initialize Module\n";
+  // TODO: It's creating one initialize for each ";" (top level expression).
+
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
 
