@@ -44,20 +44,23 @@ class FunctionAST {
   //std::vector<ExprAST> Body;
   std::unique_ptr<ExprAST> Body;
 
-public:
-  /*
-  FunctionAST(std::unique_ptr<PrototypeAST> Proto,
-              std::vector<ExprAST> Body)
-      : Proto(std::move(Proto)), Body(std::move(Body)) {}
-  */
-  FunctionAST(std::unique_ptr<PrototypeAST> Proto,
-              std::unique_ptr<ExprAST> Body)
-      : Proto(std::move(Proto)), Body(std::move(Body)) {}
+  public:
+    /*
+    FunctionAST(std::unique_ptr<PrototypeAST> Proto,
+                std::vector<ExprAST> Body)
+        : Proto(std::move(Proto)), Body(std::move(Body)) {}
+    */
+    FunctionAST(std::unique_ptr<PrototypeAST> Proto,
+                std::unique_ptr<ExprAST> Body)
+        : Proto(std::move(Proto)), Body(std::move(Body)) {}
   
   const PrototypeAST& getProto() const;
   const std::string& getName() const;
   llvm::Function *codegen();
 };
+
+
+
 
 /// This will compile FnAST to IR, rename the function to add the given
 /// suffix (needed to prevent a name-clash with the function's stub),
@@ -72,10 +75,11 @@ namespace orc {
 class KaleidoscopeASTLayer;
 class KaleidoscopeJIT;
 
+
 class KaleidoscopeASTMaterializationUnit : public MaterializationUnit {
-public:
-  KaleidoscopeASTMaterializationUnit(KaleidoscopeASTLayer &L,
-                                     std::unique_ptr<FunctionAST> F);
+  public:
+    KaleidoscopeASTMaterializationUnit(KaleidoscopeASTLayer &L,
+                                      std::unique_ptr<FunctionAST> F);
 
   StringRef getName() const override {
     return "KaleidoscopeASTMaterializationUnit";
@@ -83,14 +87,15 @@ public:
 
   void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
 
-private:
-  void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
-    llvm_unreachable("Kaleidoscope functions are not overridable");
-  }
+  private:
+    void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
+      llvm_unreachable("Kaleidoscope functions are not overridable");
+    }
 
   KaleidoscopeASTLayer &L;
   std::unique_ptr<FunctionAST> F;
 };
+
 
 class KaleidoscopeASTLayer {
 public:
@@ -108,6 +113,7 @@ public:
             std::unique_ptr<FunctionAST> F) {
     BaseLayer.emit(std::move(MR), irgenAndTakeOwnership(*F, ""));
   }
+  
 
   MaterializationUnit::Interface getInterface(FunctionAST &F) {
     MangleAndInterner Mangle(BaseLayer.getExecutionSession(), DL);
@@ -117,19 +123,21 @@ public:
     return MaterializationUnit::Interface(std::move(Symbols), nullptr);
   }
 
-private:
-  IRLayer &BaseLayer;
-  const DataLayout &DL;
+  private:
+    IRLayer &BaseLayer;
+    const DataLayout &DL;
 };
+
 
 KaleidoscopeASTMaterializationUnit::KaleidoscopeASTMaterializationUnit(
     KaleidoscopeASTLayer &L, std::unique_ptr<FunctionAST> F)
     : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {}
 
+
 void KaleidoscopeASTMaterializationUnit::materialize(
-    std::unique_ptr<MaterializationResponsibility> R) {
-  L.emit(std::move(R), std::move(F));
-}
+    std::unique_ptr<MaterializationResponsibility> R)
+    { L.emit(std::move(R), std::move(F)); }
+
 
 class KaleidoscopeJIT {
 private:
