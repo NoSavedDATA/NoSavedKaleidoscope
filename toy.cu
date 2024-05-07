@@ -491,14 +491,16 @@ class WhileExprAST : public ExprAST {
 class PrototypeAST {
   std::string Name;
   std::vector<std::string> Args;
+  std::vector<std::string> Types;
   bool IsOperator;
   unsigned Precedence; // Precedence if a binary op.
 
   public:
     PrototypeAST(const std::string &Name, std::vector<std::string> Args,
+                std::vector<std::string> Types,
                 bool IsOperator = false, unsigned Prec = 0)
-        : Name(Name), Args(std::move(Args)), IsOperator(IsOperator),
-          Precedence(Prec) {}
+        : Name(Name), Args(std::move(Args)), Types(std::move(Types)),
+          IsOperator(IsOperator), Precedence(Prec) {}
 
   Function *codegen();
   const std::string &getName() const { return Name; }
@@ -561,11 +563,11 @@ static int get_tokenPrecedence() {
 
 /// LogError* - These are little helper functions for error handling.
 //std::unique_ptr<ExprAST> LogError(const char *Str) {
-  std::unique_ptr<ExprAST> LogError(std::string Str) {
+std::unique_ptr<ExprAST> LogError(std::string Str) {
   //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
   if (Str!=" ")
     std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0m " << Str << "\n\n";
-  while(CurTok!=tok_space && CurTok!=tok_tab && CurTok!=';')
+  while(CurTok!=tok_space && CurTok!=tok_tab && CurTok!=';' && CurTok!=',' && CurTok!=')')
     getNextToken();
   
   return nullptr;
@@ -586,8 +588,23 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
   return nullptr;
 }
 
+
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
   LogError(Str);
+  while(CurTok!=tok_space && CurTok!=tok_tab && CurTok!=';')
+    getNextToken();
+  return nullptr;
+}
+
+
+std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str) {
+  LogError(Str);
+  while(CurTok!=tok_space && CurTok!=tok_tab && CurTok!=';' && CurTok!=',' && CurTok!=')')
+  {
+    std::cout << "LogErrorP: " << IdentifierStr << "\n";
+    
+    getNextToken();
+    }
   return nullptr;
 }
 
@@ -935,6 +952,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
 
 
 static std::unique_ptr<ExprAST> ParseTensorExpr() {
+  // TODO: Allow finishing line with ";"
   getNextToken(); // eat the tensor.
   
   std::vector<std::unique_ptr<ExprAST>> dims;
@@ -1379,20 +1397,35 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
 
   getNextToken();
 
-  std::vector<std::string> ArgNames;
+  bool is_tensor=false;
+  std::vector<std::string> ArgNames, ArgTypes;
   while (CurTok != ')')
   {
-    
-    ArgNames.push_back(IdentifierStr);
-    getNextToken();
+    ArgTypes.push_back(IdentifierStr);
+    if (IdentifierStr=="t")
+      is_tensor=true;
+    if (IdentifierStr!="t" && IdentifierStr!="f")
+      LogErrorP_to_comma("Tipo da variável no protótipo precisa ser t ou f.");
+    else {
+      getNextToken();
 
+      ArgNames.push_back(IdentifierStr);
+      if (is_tensor)
+        tensorVars.push_back(IdentifierStr);
+      
+      getNextToken();
+    }
+    is_tensor=false;
 
 
     if (CurTok == ')')
         break;
       
     if (CurTok != ',')
+    {
+      std::cout << "comma Cur Tok " << IdentifierStr << "\n";
       return LogErrorP("Esperado ')' ou ',' na lista de argumentos do protótipo.");
+    }
     getNextToken();
   }
 
@@ -1403,7 +1436,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
   if (Kind && ArgNames.size() != Kind)
     return LogErrorP("Número inválido de operandos para o operador");
 
-  return std::make_unique<PrototypeAST>(FnName, ArgNames, Kind != 0,
+  return std::make_unique<PrototypeAST>(FnName, ArgNames, ArgTypes, Kind != 0,
                                          BinaryPrecedence);
 }
 
@@ -1426,6 +1459,7 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   if (auto E = ParseExpression()) {
     // Make an anonymous proto.
     auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
+                                                std::vector<std::string>(),
                                                 std::vector<std::string>());
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
@@ -1504,7 +1538,8 @@ static std::unique_ptr<ExprAST> ParseClass() {
     
     auto Func = ParseDefinition(Name);
     if (!Func)
-      return LogError("Falha no parsing da função da Classe.");
+      return nullptr;
+      //return LogError("Falha no parsing da função da Classe.");
     if (!ends_with(Func->getProto().getName(),"__init__") && i==0)
       return LogError("Classe requer método init");
     
@@ -1884,12 +1919,26 @@ extern "C" float logE(char *tensorName, int _used_cuda) {
 }
 
 
-extern "C" float FirstArgOnDemand(char *arg_name, int nested_function)
+extern "C" float FirstArgOnDemand(char *pre_dot, int nested_function)
 {
   if (nested_function)
-    FirstArg = FirstArg+arg_name;
+    FirstArg = FirstArg+pre_dot;
   else
-    FirstArg = arg_name;
+    FirstArg = pre_dot;
+  return 0;
+}
+
+extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
+{
+  if (nested_function)
+    if(ends_with(FirstArg, pre_dot))
+    {
+      size_t pos = FirstArg.find(pre_dot);
+
+      FirstArg.erase(pos, std::strlen(pre_dot));
+    }
+    
+  
   return 0;
 }
 
@@ -2889,7 +2938,7 @@ Value *CallExprAST::codegen() {
 
   // If argument mismatch error.
   if ((CalleeF->arg_size()-args_removal) != Args.size())
-    return LogErrorV("Incorrect # arguments passed");
+    return LogErrorV("Parâmetros passados incorretos.");
 
   std::vector<Value *> ArgsV;
   
@@ -2899,7 +2948,6 @@ Value *CallExprAST::codegen() {
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     //std::cout << "\n\nCallExprAST::codegen: " << i << ".\n";
     Value * arg = Args[i]->codegen();
-    
       
     //std::cout << "Args[i]: " << Args[i]->Name << "\n";
 
@@ -2913,7 +2961,12 @@ Value *CallExprAST::codegen() {
   
   //std::cout << "\n\n";
 
-  return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  Value * ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  if(Class!="None")
+    Builder->CreateCall(TheModule->getFunction("DimnishFirstArgOnDemand"),
+                                                  {Builder->CreateGlobalString(Pre_dot),
+                                                   ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)});
+  return ret;
 }
 
 
@@ -2976,7 +3029,9 @@ Function *FunctionAST::codegen() {
 
 
   //std::cout << "\n\n";
+
   NamedValues.clear();
+
   float val;
   int i = 0;
   for (auto &Arg : TheFunction->args()) {
@@ -3022,7 +3077,7 @@ Function *FunctionAST::codegen() {
 
 
 const PrototypeAST& ClassAST::getProto(int i) const {
-  return Functions[i]->getProto(); //TODO: TÁ ERRADO?
+  return Functions[i]->getProto(); 
 }
 
 const std::string& ClassAST::getName(int i) const {
@@ -3236,6 +3291,22 @@ static void InitializeModule() {
     "FirstArgOnDemand",
     TheModule.get()
   );
+
+
+  // char *, int
+  FunctionType *DimnishFirstArgOnDemandTy = FunctionType::get(
+      //PointerType::get(Type::getVoidTy(*TheContext), 0),
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext)},
+      false // Not vararg
+  );
+  Function::Create(
+    DimnishFirstArgOnDemandTy,
+    Function::ExternalLinkage,
+    "DimnishFirstArgOnDemand",
+    TheModule.get()
+  );
+  
 
   // char *, char *
   FunctionType * ConcatStrTy = FunctionType::get(
