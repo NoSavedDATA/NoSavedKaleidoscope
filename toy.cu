@@ -46,10 +46,17 @@
 
 static cublasHandle_t cublas_handle;
 static cublasLtHandle_t cublaslt_handle;
-static size_t cublaslt_workspace_size = 32 * 1024 * 1024; // 2 MB
+
+// cuBLAS workspace. Hardcoding to 32MiB but only Hopper needs 32, for others 4 is OK
+static size_t cublaslt_workspace_size = 32 * 1024 * 1024; // 32 MB
 static void* cublaslt_workspace = NULL;
 static cublasComputeType_t cublas_compute_type;
 
+
+cublasComputeType_t cublas_compute = CUBLAS_COMPUTE_32F;
+
+#define CUBLAS_LOWP CUDA_R_32F
+#define PRECISION_MODE PRECISION_FP32
 
 
 
@@ -372,7 +379,11 @@ class LogExprAST : public ExprAST {
     }
 };
 
-
+class LossBackwardExprAST : public ExprAST {
+  public:
+    LossBackwardExprAST() {}
+    Value *codegen() override;
+};
 
 
 /// UnaryExprAST - Expression class for a unary operator.
@@ -563,16 +574,34 @@ static int get_tokenPrecedence() {
 
 /// LogError* - These are little helper functions for error handling.
 //std::unique_ptr<ExprAST> LogError(const char *Str) {
-std::unique_ptr<ExprAST> LogError(std::string Str) {
+std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
   //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
   if (Str!=" ")
     std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0m " << Str << "\n\n";
-  while(CurTok!=tok_space && CurTok!=tok_tab && CurTok!=';' && CurTok!=',' && CurTok!=')')
+  
+  
+  return nullptr;
+}
+
+std::unique_ptr<ExprAST> LogError(std::string Str) {
+  //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
+  LogErrorS(Str);
+
+  while(CurTok!=tok_space && CurTok!=';' && CurTok!=',' && CurTok!=')')
     getNextToken();
   
   return nullptr;
 }
 
+std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
+  //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
+  LogErrorS(Str);
+
+  while(CurTok!=tok_space && CurTok!=';')
+    getNextToken();
+  
+  return nullptr;
+}
 
 
 void LogWarning(const char *Str) {
@@ -591,7 +620,7 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
 
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
   LogError(Str);
-  while(CurTok!=tok_space && CurTok!=tok_tab && CurTok!=';')
+  while(CurTok!=tok_space && CurTok!=';')
     getNextToken();
   return nullptr;
 }
@@ -599,7 +628,7 @@ std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
 
 std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str) {
   LogError(Str);
-  while(CurTok!=tok_space && CurTok!=tok_tab && CurTok!=';' && CurTok!=',' && CurTok!=')')
+  while(CurTok!=tok_space && CurTok!=';' && CurTok!=',' && CurTok!=')')
   {
     std::cout << "LogErrorP: " << IdentifierStr << "\n";
     
@@ -905,12 +934,24 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     getNextToken(); // eat object or self token.
   
   //std::cout << "post: " << IdentifierStr << " token: " << CurTok << "\n";
-  //std::cout << "Pre-dot: " << pre_dot << "\n";
+  std::cout << "Pre-dot: " << pre_dot << " Post-dot: " << IdentifierStr  << "\n";
 
 
   std::string IdName = IdentifierStr;
 
   getNextToken(); // eat identifier.
+
+  
+  if (pre_dot=="loss" and IdName=="backward")
+  {
+    if (CurTok != '(')
+      LogErrorBreakLine("Precisa do '(' na chamada do backward");
+    getNextToken();
+    if (CurTok != ')')
+      LogErrorBreakLine("Precisa do ')' na chamada do backward");
+    getNextToken();
+    return std::make_unique<LossBackwardExprAST>();
+  }
 
   if (CurTok != '(') // Simple variable ref.
   {
@@ -1710,6 +1751,94 @@ extern "C" float PrintTensor(char* tensorName){
   return 0;
 }
 
+float PrintTensorF(float *cuda_tensor, int d1, int d2){
+  
+
+  std::vector<float> dims;
+  dims.push_back(d1);
+  dims.push_back(d2);
+
+  int arr_size = dimsProd(dims);
+
+
+  float *tensor = new float[arr_size];
+  //std::cout << "Printing Tensor " << arr_size << "\n";
+  
+  cudaDeviceSynchronize();
+  cudaCheck(cudaMemcpy(tensor, cuda_tensor, arr_size*sizeof(float), cudaMemcpyDeviceToHost));
+
+
+  
+  PrintDims(dims);
+  std::cout << "\n";
+  std::vector<float> ends;
+
+
+  for (int i = 0; i < dims.size(); i++) {
+    int prod=1;
+    for (int j = 0; j <= i; j++)
+      prod = prod*dims[dims.size()-1-j];
+    ends.push_back(prod);
+  }
+
+
+  int line = 1;
+  bool line_changed = true;
+  for (int i = 0; i < arr_size; i++) {
+
+    int to_prints = 0;
+
+    for (int e = 0; e < ends.size(); e++)
+    {
+      if (fmod((arr_size-i),(int)ends[e]) == 0.0f)
+        to_prints+=1;
+    }
+
+    if(to_prints>0)
+    {
+      for (int j=0; j<(dims.size()-to_prints); j++)
+        std::cout << " ";
+        
+      for (int j=0; j<to_prints; j++)
+        std::cout << "[";
+    }
+    
+
+    //std::cout << "LAST SIZE " << dims[dims.size()-1] << " Mod: " << fmod(i, 1+dims[dims.size()-1]) << "\n";
+    int precision;
+    if (tensor[i]>=0)
+      precision=4;
+    else
+      precision=3;
+    std::cout << std::fixed  << std::setprecision(precision) << tensor[i];
+
+
+    for (int e = 0; e < ends.size(); e++)
+      if (fmod((i+1),(int)ends[e]) == 0.0f)
+        std::cout << "]";
+    
+
+    if (i!=(arr_size-1))
+    {
+      if (fmod(i+1, dims[dims.size()-1]) == 0.0f)
+      {
+        line+=1;
+        line_changed=true;
+        std::cout << "\n";
+      }
+      else
+        std::cout << "  ";
+    }
+
+    if(fmod(i+1, ends[1]) == 0.0f)
+      std::cout << "\n";
+
+
+  }
+  std::cout << "\n";
+
+  return 0;
+}
 
 
 
@@ -2223,7 +2352,42 @@ void matmul_forward2(float* out,
     */
 }
 
-extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda) {
+void matmul_backward(float *out,
+                     float *inp,  float *weight,
+                     int B, int C, int OC,
+                     float *dout,
+                     float *dinp, float *dw)
+{
+  std::cout << "matmul_backward. B: " << B << " C: " << C << " OC: " << OC << "\n";
+
+  float one = 1.0f, zero = 0.0f;
+  // backward to input
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
+                             weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
+                             dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                             inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
+                             dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+
+  cudaCheck(cudaGetLastError());
+  
+  std::cout << "\nd inp:\n";
+  PrintTensorF(dinp, B, C);
+  std::cout << "\n";
+
+  std::cout << "d w:\n";
+  PrintTensorF(dw, C, OC);
+  std::cout << "\n\n";
+}
+
+
+
+using backward_tuple = std::tuple<int, int, int, float *, float *, float *, std::string>;
+std::vector<backward_tuple> todo_backwards;
+std::vector<float *> gradients;
+
+extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func) {
   
   float * device_x;
   float * device_w;
@@ -2243,14 +2407,16 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda) 
 
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(currentDims);
-  int kDataLen = resultingDimsProdOnMult(linear_layer_dims, Rdims);
+  int input_dims_prod = dimsProd(linear_layer_dims);
+  //int resultingDimsProd = (int)linear_layer_dims[0]*Rdims[0];
+  int resultingDimsProd = resultingDimsProdOnMult(linear_layer_dims, Rdims);
 
 
   float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  cudaCheck(cudaMalloc(&device_y, resultingDimsProd * sizeof(float)));
 
-  //if(currentDims.size()<3)
-  //  LogError("Tensor de entrada da multiplicação de tensors precisa ter 3 dimensões.");
+  if (currentDims.size()<2)
+    LogErrorS("Tensor de entrada da multiplicação de tensors precisa ter ao menos 2 dimensões.");
 
 
   matmul_forward2(device_y, device_x, device_w,
@@ -2263,12 +2429,78 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda) 
   currentCudaResult = device_y;
   currentDims = newDimsOnMult(currentDims, Rdims);
 
+  //std::cout << "is_forward_func: " << is_forward_func << "\n";
+  if (is_forward_func)
+  {
+    float *inp, *out;
 
+    cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
+    cudaMemcpy(inp, device_x, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, device_y, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
+
+    todo_backwards.push_back(std::make_tuple(linear_layer_dims[0], linear_layer_dims[1],
+                                           Rdims[0], inp, device_w, out,
+                                           "matmul"));
+  }
   return 0;
 }
 
 
+extern "C" float Backpropagation()
+{
+  std::cout << "\n Called Loss Backward \n\n";
+  std::cout << "Todo Backwards size: " << todo_backwards.size() << "\n";
 
+
+  //float * loss_gradient = ;
+
+  while(todo_backwards.size()>0)
+  {
+    backward_tuple bt = std::move(todo_backwards.back());
+    todo_backwards.pop_back();
+
+
+    int B, C, OC;
+    float *inp, *w, *out;
+    std::string op;
+    B = std::get<0>(bt);
+    C = std::get<1>(bt);
+    OC = std::get<2>(bt);
+    inp = std::get<3>(bt);
+    w = std::get<4>(bt);
+    out = std::get<5>(bt);
+    op = std::get<6>(bt);
+
+    float *dinp, *device_dinp, *dw, *device_dw, *dout, *device_dout;
+    dinp = make_zeros_float(B*C);
+    dw = make_zeros_float(OC*C);
+    dout = make_random_float(B*OC);  //TODO: dout from next layer
+
+    cudaMalloc(&device_dinp, B*C*sizeof(float));
+    cudaMalloc(&device_dw, OC*C*sizeof(float));
+    cudaMalloc(&device_dout, B*OC*sizeof(float));
+
+    cudaMemcpy(device_dinp, dinp, B*C*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_dw, dw, OC*C*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_dout, dout, B*OC*sizeof(float), cudaMemcpyHostToDevice);
+
+    std::cout << "B: " << B << "\n";
+    std::cout << "C: " << C << "\n";
+    std::cout << "OC: " << OC << "\n";
+    std::cout << "Op: " << op << "\n";
+
+
+    // No switch case for std::string
+    if(op=="matmul")
+      matmul_backward(out, inp, w, B, C, OC, device_dout, device_dinp, device_dw);
+    else
+      LogErrorS("A operação não possui implementação do backward.");
+    
+  }
+
+  return 0;
+}
 
 
 Value *BinaryTensorTensorExprAST::codegen() {
@@ -2302,7 +2534,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
   if (Op == '=') {
     seen_var_attr=true;
-    std::cout << "attr binary codegen\n";
+
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
     if (!LHSE)
       return LogErrorV("Destino do '=' deve ser uma variável.");
@@ -2330,10 +2562,19 @@ Value *BinaryTensorTensorExprAST::codegen() {
     return Val;
   }
 
-  std::cout << "pre value codegen\n";
+
   Value *L = LHS->codegen();
   Value *R = RHS->codegen();
-  std::cout << "post value codegen\n";
+  
+
+  std::string functionName = Builder->GetInsertBlock()->getParent()->getName().str();
+  std::cout << "Tensor Tensor for function: " << functionName << "\n";
+  int forward_func = 0;
+  if(ends_with(functionName, "forward"))
+    forward_func = 1;
+  forward_func = 1;
+
+
   
   if (!L || !R)
     return nullptr;
@@ -2344,17 +2585,18 @@ Value *BinaryTensorTensorExprAST::codegen() {
     
 
     Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
+    Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
     used_cuda = 1;
 
   switch (Op)
   {
   case '@':
     CudaFn = TheModule->getFunction("CudaMult");
-    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func},
                                "cudamult");
   case '*':
     CudaFn = TheModule->getFunction("CudaMult");
-    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func},
                                "cudamult");
   case '/':
     CudaFn = TheModule->getFunction("CudaDiv");
@@ -2385,6 +2627,12 @@ Value *BinaryTensorTensorExprAST::codegen() {
   return Builder->CreateCall(F, Ops, "binop");
 }
 
+
+Value *LossBackwardExprAST::codegen()
+{
+  return Builder->CreateCall(TheModule->getFunction("Backpropagation"),
+                             {}, "backprop");
+}
 
 Value *LogExprAST::codegen() {
   
@@ -3240,7 +3488,7 @@ static void InitializeModule() {
   // char *, char *, int
   FunctionType *CudaMultTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext)}, 
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false // Not vararg
   );
 
@@ -3251,6 +3499,25 @@ static void InitializeModule() {
     TheModule.get() // Module to which the function belongs
   );
 
+
+
+  //===----------------------------------------------------------------------===//
+  // Backward Tensor Tensor CUDA Ops
+  //===----------------------------------------------------------------------===//
+
+  // char *, char *, int
+  FunctionType *BackpropagationTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    BackpropagationTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "Backpropagation", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
 
   //===----------------------------------------------------------------------===//
   // Unary CUDA Ops
@@ -3569,6 +3836,7 @@ static void MainLoop() {
   }
 }
 
+
 //===----------------------------------------------------------------------===//
 // "Library" functions that can be "extern'd" from user code.
 //===----------------------------------------------------------------------===//
@@ -3640,3 +3908,5 @@ int main() {
 
   return 0;
 }
+
+
