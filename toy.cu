@@ -1,3 +1,4 @@
+// JIT
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -12,6 +13,10 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
+
+#include "include/KaleidoscopeJIT.h"
+
+
 #include <algorithm>
 #include <cstdarg>
 #include <cassert>
@@ -31,8 +36,10 @@
 #include <math.h>
 #include <fenv.h>
 #include <tuple>
+#include <glob.h>
 
 
+// Cuda
 #include <stdio.h>
 #include <stdlib.h>
 #include <cublas_v2.h>
@@ -40,9 +47,12 @@
 #include <cublasLt.h>
 #include <omp.h>
 
-
-#include "include/KaleidoscopeJIT.h"
 #include "include/cu_commons.h"
+
+
+// Files
+#define STB_IMAGE_IMPLEMENTATION
+#include "include/stb/stb_image.h"
 
 
 static cublasHandle_t cublas_handle;
@@ -76,6 +86,9 @@ using namespace llvm::orc;
 // \033[31m red
 // \033[33m yellow
 // \033[95m purple
+
+
+std::vector<std::string> tensor_methods = {"view", "permute", "onehot"};
 
 
 //===----------------------------------------------------------------------===//
@@ -212,6 +225,8 @@ static int get_token() {
       return tok_var;
     if (IdentifierStr == "log")
       return tok_log;
+    if (IdentifierStr == "glob")
+      IdentifierStr = "_glob_b_";
     
     return tok_identifier;
   }
@@ -235,7 +250,7 @@ static int get_token() {
     // Comment until end of line.
     do
       LastChar = getchar();
-    while (LastChar != EOF && LastChar != '\n' && LastChar != '\r');
+    while (LastChar != EOF && LastChar != '\n' && LastChar != tok_space && LastChar != '\r');
 
     if (LastChar != EOF)
       return get_token();
@@ -664,7 +679,7 @@ static std::unique_ptr<ExprAST> ParseNumberExpr(int tabcount=0) {
 
 static std::unique_ptr<ExprAST> ParseStringExpr(int tabcount=0) {
   auto Result = std::make_unique<StringExprAST>(IdentifierStr);
-  getNextToken(); // consume the number
+  getNextToken(); // consume the "
   return std::move(Result);
 }
 
@@ -1003,7 +1018,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
   // Eat the ')'.
   getNextToken();
 
-  
+  std::cout << "Parsed Call Expr\n";
   return std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot);
 }
 
@@ -1207,8 +1222,6 @@ static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
 
 /// binoprhs
 ///   ::= ('+' unary)*
-
-
 static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
                                               std::unique_ptr<ExprAST> LHS,
                                               int tabcount=0) {
@@ -1358,10 +1371,21 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
                                                       std::move(LHS), std::move(RHS));
         
       }
-      else if (L_cuda==0 && R_cuda==1)
+      else if (L_cuda==0 && R_cuda==1 )
       {
         std::cout << "Reverse LHS and RHS\n";
         //std::cout << "Bin op: " << BinOp << "\n";
+
+        /*
+        if (BinOp==tok_space)
+        {
+          std::cout << "Changing BinOp\n";
+          BinOp = ':';
+        }
+        if (BinOp==':')
+          BinOp = tok_space;
+        */
+
         if (BinOp==47)
           return std::make_tuple(LogError("Divisão de escalar por tensor."),0);
 
@@ -1374,9 +1398,15 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
                                                     
           LHS = std::make_unique<BinaryTensorScalarExprAST>(43,
                                                     std::move(RHS), std::move(LHS));
-        } else
-          LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
+        } else {
+          if (BinOp!=tok_space && BinOp!=':') // Avoid codegen reversing
+            LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(RHS), std::move(LHS));
+          else
+            LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
+                                                    std::move(LHS), std::move(RHS));
+        }
+          
         L_cuda=1;
         R_cuda=0;
       }
@@ -1568,12 +1598,25 @@ static std::map<std::string, float> StoredValues;
 static std::map<std::string, float *> NamedTensors;
 static std::map<std::string, std::vector<float>> NamedDims;
 
+// Current Cuda Result
+float *currentCudaResult;
+std::vector<float> currentDims;
+int used_cuda = 0;
+
+// Cuda Parallellism
+constexpr int num_parallel_streams = 2;
+cudaStream_t parallel_streams[num_parallel_streams];
+cudaEvent_t parallel_events[num_parallel_streams];
 
 // Optimizer
 static std::map<std::string, float *> NamedParamGrads;
-static std::map<std::string, float *> NamedV;
-static std::map<std::string, float *> NamedM;
-int optimizer_timestep = 0;
+
+
+// File Handling
+std::vector<char *> glob_str_files;
+unsigned char* current_data_attr;
+std::vector<float> current_data_attr_dims;
+
 
 
 
@@ -1632,6 +1675,21 @@ static std::unique_ptr<ExprAST> ParseClass() {
   return nullptr;
 }
 
+std::vector<std::string> split(const std::string& str, char delimiter) {
+  std::vector<std::string> tokens;
+  std::string token;
+  std::istringstream stream(str);
+
+  while (std::getline(stream, token, delimiter)) {
+    tokens.push_back(token);
+  }
+
+  return tokens;
+}
+
+bool in_str(std::string str, std::vector<std::string> list) {
+    return std::find(list.begin(), list.end(), str) != list.end();
+}
 
 
 
@@ -1696,6 +1754,7 @@ void PrintDims(std::vector<float> dims)
 }
 
 extern "C" float PrintTensor(char* tensorName){
+  std::cout << "Called print tensor\n";
   
 
   std::vector<float> dims = NamedDims[tensorName];
@@ -1910,6 +1969,207 @@ Value *StringExprAST::codegen() {
 
 
 //===----------------------------------------------------------------------===//
+// File Handling
+//===----------------------------------------------------------------------===//
+
+extern "C" float load_img(char *img_name)
+{
+  int width, height, channels;
+  
+  unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
+
+  if (image_data) {
+    
+    current_data_attr_dims.clear();
+    current_data_attr_dims.push_back((float)width);
+    current_data_attr_dims.push_back((float)height);
+    current_data_attr_dims.push_back((float)channels);
+
+    /*
+    std::cout << "Width: " << width << " pixels\n";
+    std::cout << "Height: " << height << " pixels\n";
+    std::cout << "Channels: " << channels << "\n";
+    */
+
+    //stbi_image_free(image_data);
+    current_data_attr = image_data;
+  } else {
+    std::string img_n = img_name;
+    std::string _error = "Falha ao abrir a imagem: " + img_n + ".";
+    LogErrorS(_error);
+  }
+
+  return 0;
+}
+
+float *preprocess_image(unsigned char* image_data, std::vector<float> dims)
+{
+  int width    = (int)dims[0];
+  int height   = (int)dims[1];
+  int channels = (int)dims[2];
+  float *image_data_float = new float[width * height * channels];
+  
+
+  // Loop through each pixel and convert to float between 0.0 and 1.0
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      for (int c = 0; c < channels; ++c) {
+        // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
+        image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+      }
+    }
+  }
+
+  return image_data_float;
+}
+
+extern "C" float _glob_b_(char *pattern) {
+    // TODO: make var of type string vector to hold this result.
+
+    glob_t glob_result;
+    //std::vector<char *> glob_str_files;
+
+    if (glob(pattern, GLOB_TILDE, NULL, &glob_result) == 0) {
+        for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
+            glob_str_files.push_back(strdup(glob_result.gl_pathv[i]));
+        }
+        globfree(&glob_result);
+    }
+
+    int i=0;
+
+    std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
+
+    /*
+    for (const char *file : glob_str_files) {
+        std::cout << file << std::endl;
+        i+=1;
+        if (i>1500)
+          break;
+    }
+    */
+
+
+    return 0;
+}
+
+
+
+int yield_pointer = 0;
+float *current_data;
+float *current_labels;
+
+
+extern "C" float init_dataset(float batch_size)
+{
+  load_img(glob_str_files[0]);
+
+  
+  int dims_prod = dimsProd(current_data_attr_dims);
+
+  current_data = new float[batch_size*dims_prod];
+  current_labels = new float[batch_size];
+
+  // Using CUDA CPU pinned memory for faster PCI Express transfers to GPU
+  // See: https://developer.nvidia.com/blog/how-optimize-data-transfers-cuda-cc/
+  cudaCheck(cudaMallocHost(&current_data, batch_size*dims_prod*sizeof(float)));
+  cudaCheck(cudaMallocHost(&current_labels, batch_size*sizeof(float)));
+  return 0;
+}
+
+extern "C" float yield(char *x_name, char *y_name, float batch_size)
+{
+  // TODO Make this on the coding language instead.
+
+  int i=0;
+
+  int dims_prod;
+
+  float *cur_float_img;
+  while(i<batch_size)
+  {
+    load_img(glob_str_files[yield_pointer]);
+    
+    cur_float_img = preprocess_image(current_data_attr, current_data_attr_dims);
+    dims_prod = dimsProd(current_data_attr_dims);
+
+    for (int j = 0; j < dims_prod; ++j)
+      current_data[i * dims_prod + j] = cur_float_img[j];
+    
+    std::vector<std::string> splitted = split(glob_str_files[yield_pointer],'/');
+    //std::cout << "File: " << glob_str_files[yield_pointer] << "\n";
+    //std::cout << "Label: " << splitted[splitted.size()-2] << "\n";
+    current_labels[i] = std::stof(splitted[splitted.size()-2]);
+
+    yield_pointer+=1;
+    i+=1;
+    // Drop last batch
+    if(yield_pointer>(glob_str_files.size()-batch_size-batch_size))
+    { 
+      std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
+      yield_pointer=0;
+    }
+  }
+
+  float *x, *y;
+  cudaMalloc(&x, batch_size*dims_prod*sizeof(float));
+  cudaMalloc(&y, batch_size*sizeof(float));
+
+  // todo - inputs is copied on default stream so this synchronises CPU/GPU for now
+  /*
+  cudaMemcpyAsync(x, current_data, batch_size*dims_prod*sizeof(float), cudaMemcpyHostToDevice,0);
+  // memcpy targets in parallel then wait for them before fused_classifier
+  cudaMemcpyAsync(y, current_labels, batch_size*sizeof(float), cudaMemcpyHostToDevice, parallel_streams[0]);
+  cudaEventRecord(parallel_events[0], parallel_streams[0]);
+  */
+  
+  cudaMemcpy(x, current_data, batch_size*dims_prod*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(y, current_labels, batch_size*sizeof(float), cudaMemcpyHostToDevice);
+
+  std::vector<float> dims_x, dims_y;
+  dims_x.push_back(batch_size);
+  dims_y.push_back(batch_size);
+  for(int i=0; i<current_data_attr_dims.size(); i++)
+    dims_x.push_back(current_data_attr_dims[i]);
+
+  NamedTensors[x_name] = x;
+  NamedDims[x_name] = dims_x;
+  NamedTensors[y_name] = y;
+  NamedDims[y_name] = dims_y;
+
+  return 0;
+}
+
+
+
+extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
+{
+  load_img(img_name); 
+    
+  float *cur_float_img = preprocess_image(current_data_attr, current_data_attr_dims);
+  int dims_prod = dimsProd(current_data_attr_dims);
+
+
+  current_data = new float[dims_prod];
+  cudaCheck(cudaMallocHost(&current_data, dims_prod*sizeof(float)));
+
+
+  for (int j = 0; j < dims_prod; ++j)
+    current_data[j] = cur_float_img[j];
+
+
+  float *x;
+  cudaMalloc(&x, dims_prod*sizeof(float));
+  cudaCheck(cudaMemcpy(x, current_data, dims_prod*sizeof(float), cudaMemcpyHostToDevice));
+
+  NamedTensors[tensor_name] = x;
+  NamedDims[tensor_name] = current_data_attr_dims;
+
+  return 0;
+}
+
+
+//===----------------------------------------------------------------------===//
 // Tensor Functionalities
 //===----------------------------------------------------------------------===//
 
@@ -1955,6 +2215,7 @@ extern "C" float view(float first_dim, ...)
   }
 
   NamedDims[tensor_name] = new_dims;
+  used_cuda=1;
 
   return  0;
 }
@@ -1982,10 +2243,7 @@ __global__ void vec_log(float* x, float* y) {
   y[threadIdx.x] = logf(x[threadIdx.x]);
 }
 
-//float currentCudaResult[100];
-float *currentCudaResult;
-std::vector<float> currentDims;
-int used_cuda = 0;
+
 
 
 extern "C" float CudaScalarMult(char *tensorName, float R, int _used_cuda) {
@@ -2257,7 +2515,7 @@ Value *VariableExprAST::codegen() {
 
     if (!seen_var_attr)
     {
-
+      std::cout << "Parsed tensor print\n";
       Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
     }
     
@@ -2359,11 +2617,12 @@ Value *BinaryTensorScalarExprAST::codegen() {
 
   Function *CudaFn;
 
+  /*
   std::cout << "\nTensorScalar, LHS is self: " << LHS->GetSelf() << "\n";
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
   std::cout << "Fname: " << functionName << "\n\n";
-  
+  */
   
 
   Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
@@ -2543,6 +2802,62 @@ __device__ float warpReduceSum(float val) {
     return val;
 }
 
+
+// Parallelizes over B, C
+__global__ void onehot_kernel(const float* tensor,
+                           float* probs,
+                           int B, int C) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    //int i = threadIdx.x;
+    
+    
+    if (i < B * C) {
+        int b = i / (C);
+        int v = i % C;
+
+        float* probs_bt = probs + b * C;
+        //const float* probs_bt = probs + b * C;
+
+        int ix = tensor[b];
+
+        //float p = probs_bt[v];
+
+        float indicator = (v==ix) ? 1.0f : 0.0f;
+
+        probs_bt[v] += indicator;
+        
+    }
+}
+
+extern "C" float onehot(float num_classes)
+{
+  std::string tensor_name = FirstArg;
+
+  float * tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+  
+  int B = dimsProd(dims);
+  int C = (int)num_classes;
+
+  int grid_size = B;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+
+  float *probs;
+  cudaMalloc(&probs, B*C*sizeof(float));
+
+  onehot_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, probs, B, C);
+
+  dims.push_back(C);
+  NamedDims[tensor_name] = dims;
+
+  NamedTensors[tensor_name] = probs;
+
+  return 0;
+}
+
 __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int C) {
     // out is (N, C) just like inp. Each row of inp will get softmaxed.
     // same as kernel3, but can handle any block size (multiple of 32)
@@ -2634,40 +2949,14 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
 
 
 
-__global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
-                           const float* probs, const float* targets,
-                           int B, int C) {
-
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    //int i = threadIdx.x;
-    
-    // Parallelizes over block_size blocks, each of size B*C
-    if (i < B * C) {
-        int b = i / (C);
-        int v = i % C;
-
-        float* dlogits_bt = dlogits + b * C;
-        const float* probs_bt = probs + b * C;
-
-        int ix = targets[b];
-
-        float p = probs_bt[v];
-
-        //float indicator = (v==ix) ? 1.0f : 0.0f; // TODO : change this to the line below
-        float indicator = ix;
-
-        dlogits_bt[v] += (p - indicator) / B;
-        
-    }
-}
-
-
 extern "C" float softmax(char * tensor_name)
 {
 
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
+  
   dims =  format_LinearLayer_Dims(dims);
+
   int B = dims[0];
   int C = dims[1];
 
@@ -2686,6 +2975,36 @@ extern "C" float softmax(char * tensor_name)
 
   return 0;
 }
+
+
+// Parallelizes over B, C
+__global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
+                           const float* probs, const float* targets,
+                           int B, int C) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    //int i = threadIdx.x;
+    
+    
+    if (i < B * C) {
+        int b = i / (C);
+        int v = i % C;
+
+        float* dlogits_bt = dlogits + b * C;
+        const float* probs_bt = probs + b * C;
+
+        float ix = targets[v];
+
+        float p = probs_bt[v];
+
+        //float indicator = (v==ix) ? 1.0f : 0.0f;
+        float indicator = ix;
+
+        dlogits_bt[v] += (p - indicator) / B;
+        
+    }
+}
+
 
 void CrossEntropyBackward(float *y_hat,
                           float *y,
@@ -3516,6 +3835,8 @@ extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self,
     tensor_cpu = make_zeros_float(product);
   else if (std::strcmp(init, "ones") == 0)
     tensor_cpu = make_ones_float(product);
+  else if (std::strcmp(init, "xavu") == 0)
+    tensor_cpu = make_xavier_uniform_float(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
 
   
 
@@ -3642,7 +3963,7 @@ Value *CallExprAST::codegen() {
   int args_removal = 0;
   if(Class!="None")
   {
-    if (tgt_function!="view") // TODO: create in function for such comparisons
+    if (!in_str(tgt_function, tensor_methods))
       tgt_function = Class+tgt_function;
     Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
                                                   {Builder->CreateGlobalString(Pre_dot),
@@ -3660,7 +3981,7 @@ Value *CallExprAST::codegen() {
   tgt_function_name = CalleeF->getName().str();
 
   // If argument mismatch error.
-  if ((CalleeF->arg_size()-args_removal) != Args.size() && tgt_function_name!="view")
+  if ((CalleeF->arg_size()-args_removal) != Args.size() && !in_str(tgt_function_name, tensor_methods))
     return LogErrorV("Parâmetros passados incorretos.");
 
   std::vector<Value *> ArgsV;
@@ -4036,7 +4357,7 @@ static void InitializeModule() {
   FunctionType *softmaxTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
-      false // Not vararg
+      false
   );
   Function::Create(
     softmaxTy,
@@ -4045,8 +4366,21 @@ static void InitializeModule() {
     TheModule.get()
   );
 
+  // 
+  FunctionType *onehotTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  Function::Create(
+    onehotTy,
+    Function::ExternalLinkage,
+    "onehot",
+    TheModule.get()
+  );
+
   
-  // char *, floats
+  // char *, floats, Vararg
   FunctionType *viewTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
@@ -4078,6 +4412,75 @@ static void InitializeModule() {
     TheModule.get() // Module to which the function belongs
   );
 
+  //===----------------------------------------------------------------------===//
+  // File Handling
+  //===----------------------------------------------------------------------===//
+
+
+  // char *
+  FunctionType *load_imgTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false // Not vararg
+  );
+  Function::Create(
+    load_imgTy,
+    Function::ExternalLinkage,
+    "load_img",
+    TheModule.get()
+  );
+
+  // char *
+  FunctionType *globTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false // Not vararg
+  );
+  Function::Create(
+    globTy,
+    Function::ExternalLinkage,
+    "_glob_b_",
+    TheModule.get()
+  );
+
+  // char *, char *, float
+  FunctionType *yieldTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),Type::getFloatTy(*TheContext)},
+      false // Not vararg
+  );
+  Function::Create(
+    yieldTy,
+    Function::ExternalLinkage,
+    "yield",
+    TheModule.get()
+  );
+
+  // float
+  FunctionType *init_datasetTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false // Not vararg
+  );
+  Function::Create(
+    init_datasetTy,
+    Function::ExternalLinkage,
+    "init_dataset",
+    TheModule.get()
+  );
+
+  // char *
+  FunctionType *load_preprocess_imgTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false // Not vararg
+  );
+  Function::Create(
+    load_preprocess_imgTy,
+    Function::ExternalLinkage,
+    "load_preprocess_img",
+    TheModule.get()
+  );
 
   //===----------------------------------------------------------------------===//
   // Other Ops
