@@ -3004,7 +3004,7 @@ __global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
         //float indicator = (v==ix) ? 1.0f : 0.0f;
         float indicator = ix;
 
-        dlogits_bt[v] += (p - indicator) / B;
+        dlogits_bt[v] += (p - indicator) / B / C;
         
     }
 }
