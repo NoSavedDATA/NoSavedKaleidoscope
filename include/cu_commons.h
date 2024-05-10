@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <cmath>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
@@ -75,6 +76,17 @@ float* make_ones_float(size_t N) {
     }
     return arr;
 }
+
+float* make_xavier_uniform_float(size_t N, float fan_in, float fan_out) {
+    float xavier_scale = sqrt(6/(fan_in+fan_out));
+
+    float* arr = (float*)malloc(N * sizeof(float));
+    for (size_t i = 0; i < N; i++) {
+        arr[i] = xavier_scale*(((float)rand() / RAND_MAX) * 2.0 - 1.0); // range -1..1
+    }
+    return arr;
+}
+
 
 // ----------------------------------------------------------------------------
 // testing and benchmarking utils
