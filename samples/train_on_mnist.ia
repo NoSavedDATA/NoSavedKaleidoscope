@@ -1,0 +1,45 @@
+class Model
+	def __init__(f hiddens, f num_classes)
+		tensor[hiddens, 784, xavu] self.w1
+		tensor[hiddens, hiddens, xavu] self.w2
+		tensor[num_classes, hiddens, xavu] self.w3
+		0;
+	
+	def forward(t x)
+		x = x@self.w1
+		x = x@self.w2
+		x = x@self.w3;
+
+Model model;
+model.__init__(768, 10);
+
+glob("/home/nosaveddata/mnist/testing/*/*.png");
+init_dataset(32);
+
+tensor[32,28,28,1] x
+tensor[32,10] y
+0;
+
+for i=0, i<1000 :
+	tensor[1] x
+	tensor[1] y
+	yield(x, y, 32)
+	x.view(32, 784)
+	y.onehot(10)
+	model.forward(x)
+	CrossEntropy(x, y)
+	loss.backward()
+	AdamW(0.0001, 0.9, 0.999, 0.01);
+
+
+x;
+
+tensor[1,28,28,1] x
+0;
+
+load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/8535.png");
+x.view(1,784);
+model.forward(x);
+
+x;
+softmax(x);
