@@ -2132,6 +2132,9 @@ extern "C" float yield(char *x_name, char *y_name, float batch_size)
   for(int i=0; i<current_data_attr_dims.size(); i++)
     dims_x.push_back(current_data_attr_dims[i]);
 
+  cudaFree(NamedTensors[x_name]);
+  cudaFree(NamedTensors[y_name]);
+
   NamedTensors[x_name] = x;
   NamedDims[x_name] = dims_x;
   NamedTensors[y_name] = y;
@@ -2853,6 +2856,7 @@ extern "C" float onehot(float num_classes)
   dims.push_back(C);
   NamedDims[tensor_name] = dims;
 
+  cudaFree(NamedTensors[tensor_name]);
   NamedTensors[tensor_name] = probs;
 
   return 0;
@@ -3091,6 +3095,7 @@ extern "C" float Backpropagation()
 
     float *new_grad_ptr;
     
+    
     if (NamedParamGrads[param_name]==nullptr)
     {
       NamedParamGrads[param_name] = new_grad_ptr;
@@ -3099,9 +3104,10 @@ extern "C" float Backpropagation()
     } 
     
     device_dw = NamedParamGrads[param_name];
+    
 
     cudaMalloc(&device_dinp, B*C*sizeof(float));
-    //cudaCheck(cudaMalloc(&device_dw, OC*C*sizeof(float)));
+    //cudaMalloc(&device_dw, OC*C*sizeof(float));
     
     
     cudaMemcpy(device_dinp, dinp, B*C*sizeof(float), cudaMemcpyHostToDevice);
@@ -3151,7 +3157,8 @@ public:
 
   int timestep = 1;
   float lr = 0.0f;
-  float eps = 1.5e-4;
+  //float eps = 1.5e-4;
+  float eps = 1e-8;
     
   virtual void init_states(std::string param_name, float params_count) {}
   virtual void step(float *param, float *grad, std::vector<float> dims, std::string param_name) {}
@@ -3253,6 +3260,7 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
   adamw_kernel<<<num_blocks, block_size>>>(param, grad, m, v, params_count,
                                            lr, beta1, beta2, beta1_correction, beta2_correction,
                                            eps, weight_decay);
+
 
   /*
   std::cout << "\n\nparam post: \n";
