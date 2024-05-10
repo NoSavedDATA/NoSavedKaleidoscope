@@ -3068,12 +3068,13 @@ extern "C" float Backpropagation()
   float *dinp, *device_dinp, *dw, *device_dw, *dout, *device_dout;
 
   std::string op, param_name;
+  
 
   while(todo_backwards.size()>0)
   {
     backward_tuple bt = std::move(todo_backwards.back());
     todo_backwards.pop_back();
-
+    // TODO: remove loss dw grad and dinp grad at the end of backprop
 
     
     B = std::get<0>(bt);
@@ -3087,14 +3088,24 @@ extern "C" float Backpropagation()
 
     dinp = make_zeros_float(B*C);
     dw = make_zeros_float(OC*C);
+
+    float *new_grad_ptr;
     
+    if (NamedParamGrads[param_name]==nullptr)
+    {
+      NamedParamGrads[param_name] = new_grad_ptr;
+      cudaCheck(cudaMalloc(&new_grad_ptr, OC*C*sizeof(float)));
+      NamedParamGrads[param_name] = new_grad_ptr;
+    } 
+    
+    device_dw = NamedParamGrads[param_name];
 
     cudaMalloc(&device_dinp, B*C*sizeof(float));
-    cudaMalloc(&device_dw, OC*C*sizeof(float));
+    //cudaCheck(cudaMalloc(&device_dw, OC*C*sizeof(float)));
     
-
+    
     cudaMemcpy(device_dinp, dinp, B*C*sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_dw, dw, OC*C*sizeof(float), cudaMemcpyHostToDevice);
+    cudaCheck(cudaMemcpy(device_dw, dw, OC*C*sizeof(float), cudaMemcpyHostToDevice));
     
     /*
     std::cout << "B: " << B << "\n";
@@ -3121,11 +3132,14 @@ extern "C" float Backpropagation()
     PrintTensorF(device_dw, OC, C);
     std::cout << "\n\n";
     */
+    NamedParamGrads[param_name] = device_dw;
 
-    device_dout = device_dinp;
 
-    NamedParamGrads[param_name] = std::move(device_dw);
+    cudaCheck(cudaFree(out));
+    device_dout = device_dinp; // backpropagate gradient
+
   }
+  cudaCheck(cudaFree(inp));
 
   return 0;
 }
