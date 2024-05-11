@@ -656,7 +656,7 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mErro: \033[0m%s\n", buf);
-  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0mtoken " << IdentifierStr << " inesperado.\n\n";
+  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0mtoken " << IdentifierStr << " inesperado. Esperava-se uma expressão.\n\n";
   return nullptr;
 }
 
@@ -748,7 +748,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
     auto aux = std::make_unique<VariableExprAST>(IdName);
     if (std::find(tensorVars.begin(), tensorVars.end(), IdentifierStr) != tensorVars.end())
       aux->SetType("tensor");
-    std::cout << "identifier type: " << aux->GetType() <<  "\n";
+    //std::cout << "call arg identifier type: " << aux->GetType() <<  "\n";
     return aux;
   }
 
@@ -1104,16 +1104,8 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
     tensorVars.push_back(IdentifierStr);
     getNextToken(); // eat identifier.
 
-    // Read the optional initializer.
+    
     std::unique_ptr<ExprAST> Init = nullptr;
-    if (CurTok == '=') {
-      getNextToken(); // eat the '='.
-
-      Init = ParseExpression();
-      if (!Init)
-        return nullptr;
-    }
-
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
 
     // End of var list, exit loop.
@@ -1125,13 +1117,20 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
       return LogError("Esperado um ou mais identificadores após var.");
   }
 
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
+
+  std::unique_ptr<ExprAST> Body;
+  if (CurTok==';')
+    Body = std::make_unique<NumberExprAST>(0.0f);
+  else {  
+    Body = ParseExpression();
+    if (!Body)
+      return nullptr;
+  }
 
   auto aux = std::make_unique<TensorExprAST>(std::move(VarNames), std::move(Body), "tensor",
                                              std::move(dims), init);
   aux->SetSelf(pre_dot);
+  
   return aux;
 }
 
@@ -1176,7 +1175,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     getNextToken();
   switch (CurTok) {
   default:
-    //std::cout << CurTok << " token atual de erro esperando expressão\n";
+    std::cout << CurTok << " token atual de erro esperando expressão\n";
     return LogErrorT(CurTok);
   case tok_identifier:
     return ParseIdentifierExpr(tabcount);
@@ -1215,7 +1214,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
 ///   ::= primary
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
-  
+  //std::cout <<"Parse unary\n";
   while((CurTok==tok_tab)||(CurTok==tok_space))
     getNextToken();
   // If the current token is not an operator, it must be a primary expr.
@@ -1231,6 +1230,7 @@ static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
   // If this is a unary operator, read it.
   int Opc = CurTok;
   
+  //std::cout << "Unary expr\n";
   getNextToken();
   if (auto Operand = ParseUnary(tabcount))
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
@@ -1447,7 +1447,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 ///
 static std::unique_ptr<ExprAST> ParseExpression(int tabcount) {
   //std::cout << "Parse Expression tabcount " << tabcount << "\n";
-  //std::cout << "Parse Expression\n";
+  std::cout << "Parse Expression\n";
   
   auto LHS = ParseUnary(tabcount);
   if (!LHS)
@@ -3675,9 +3675,9 @@ Value *UnaryExprAST::codegen() {
     return nullptr;
 
   
-  // todo: Adjust this for tensors
-  std::cout << "unary: " << used_cuda << "\n";
-  std::cout << "Operand type" << Operand->GetType();
+  
+  //std::cout << "unary used_cuda: " << used_cuda << "\n";
+  //std::cout << "Operand type: " << Operand->GetType();
   if (Opcode=='-')
   {
     if (Operand->GetType()=="tensor")
@@ -3692,6 +3692,12 @@ Value *UnaryExprAST::codegen() {
     return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
                               OperandV, "multmp");
   }
+
+  //std::cout << "Opcode: " << Opcode << "\n";
+
+  if (Opcode=';')
+    return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
+  
 
   Function *F = getFunction(std::string("unary") + Opcode);
   if (!F)
