@@ -87,8 +87,25 @@ using namespace llvm::orc;
 // \033[33m yellow
 // \033[95m purple
 
+std::vector<std::string> split(const std::string& str, char delimiter) {
+  std::vector<std::string> tokens;
+  std::string token;
+  std::istringstream stream(str);
 
-std::vector<std::string> tensor_methods = {"view", "permute", "onehot"};
+  while (std::getline(stream, token, delimiter)) {
+    tokens.push_back(token);
+  }
+
+  return tokens;
+}
+
+bool in_str(std::string str, std::vector<std::string> list) {
+    return std::find(list.begin(), list.end(), str) != list.end();
+}
+
+
+std::vector<std::string> tensor_methods = {"view", "permute", "onehot", "mean", "sum", "max", "min"};
+std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavn"};
 
 
 //===----------------------------------------------------------------------===//
@@ -1018,7 +1035,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
   // Eat the ')'.
   getNextToken();
 
-  std::cout << "Parsed Call Expr\n";
+
   return std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot);
 }
 
@@ -1044,7 +1061,7 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
       dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
       getNextToken();
     } else if (CurTok==tok_identifier)
-      if (IdentifierStr=="zeros" || IdentifierStr=="xavu" || IdentifierStr=="xavn" || IdentifierStr=="ones")
+      if (in_str(IdentifierStr, tensor_inits))
       {
         init = IdentifierStr;
         getNextToken();
@@ -1675,24 +1692,6 @@ static std::unique_ptr<ExprAST> ParseClass() {
   return nullptr;
 }
 
-std::vector<std::string> split(const std::string& str, char delimiter) {
-  std::vector<std::string> tokens;
-  std::string token;
-  std::istringstream stream(str);
-
-  while (std::getline(stream, token, delimiter)) {
-    tokens.push_back(token);
-  }
-
-  return tokens;
-}
-
-bool in_str(std::string str, std::vector<std::string> list) {
-    return std::find(list.begin(), list.end(), str) != list.end();
-}
-
-
-
 
 
 int dimsProd(std::vector<float> dims)
@@ -1704,14 +1703,6 @@ int dimsProd(std::vector<float> dims)
 }
 
 
-int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
-{
-  float aux=1;
-  for (int i = 0; i < Ldims.size()-1; i++)
-    aux = aux * Ldims[i];
-  aux = aux * Rdims[0];
-  return (int)aux;
-}
 
 std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 {
@@ -1724,20 +1715,6 @@ std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
   return new_dims;
 }
 
-std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
-{
-  std::vector<float> new_dims;
-  if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
-  {
-    LogError("A última dimensão dos tensors multiplicados precisa ser igual.");
-    return new_dims; 
-  }
-  for (int i = 0; i < Ldims.size()-1; i++)
-    new_dims.push_back(Ldims[i]);
-  new_dims.push_back(Rdims[0]);
-  
-  return new_dims;
-}
 
 void PrintDims(std::vector<float> dims)
 {
@@ -1752,6 +1729,36 @@ void PrintDims(std::vector<float> dims)
   }
   std::cout  << "\n";
 }
+
+int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
+{
+  float aux=1;
+  for (int i = 0; i < Ldims.size()-1; i++)
+    aux = aux * Ldims[i];
+  aux = aux * Rdims[0];
+  return (int)aux;
+}
+
+
+std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
+{
+  std::vector<float> new_dims;
+  if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
+  {
+    LogError("A última dimensão dos tensors multiplicados precisa ser igual.");
+    std::cout << "Dim LHS: ";
+    PrintDims(Ldims);
+    std::cout << "Dim RHS: ";
+    PrintDims(Rdims);
+    return new_dims; 
+  }
+  for (int i = 0; i < Ldims.size()-1; i++)
+    new_dims.push_back(Ldims[i]);
+  new_dims.push_back(Rdims[0]);
+  
+  return new_dims;
+}
+
 
 extern "C" float PrintTensor(char* tensorName){
   std::cout << "Called print tensor\n";
@@ -1836,6 +1843,8 @@ extern "C" float PrintTensor(char* tensorName){
 
 
   }
+  std::cout << "\n";
+  PrintDims(dims);
   std::cout << "\n";
 
   return 0;
@@ -1974,6 +1983,7 @@ Value *StringExprAST::codegen() {
 
 extern "C" float load_img(char *img_name)
 {
+  used_cuda=0;
   int width, height, channels;
   
   unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
@@ -2037,6 +2047,9 @@ extern "C" float _glob_b_(char *pattern) {
     }
 
     int i=0;
+
+    if (glob_str_files.size()<1)
+      LogErrorS("Glob falhou ao encontrar arquivos.");
 
     std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
 
@@ -2267,10 +2280,13 @@ extern "C" float CudaScalarMult(char *tensorName, float R, int _used_cuda) {
 
   float* device_y;
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  
 
 
-  // Launch the kernel.
-  vec_mult<<<1, kDataLen>>>(R, device_x, device_y);
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, device_x, device_y);
 
   currentCudaResult = device_y;
 
@@ -2518,7 +2534,6 @@ Value *VariableExprAST::codegen() {
 
     if (!seen_var_attr)
     {
-      std::cout << "Parsed tensor print\n";
       Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
     }
     
@@ -2728,6 +2743,7 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
   float * device_w;
   
 
+  /*
   if (_used_cuda==1)
     device_x = currentCudaResult;
   else
@@ -2735,9 +2751,11 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
     device_x = NamedTensors[LtensorName];
     currentDims = NamedDims[LtensorName];
   }
-
-  //std::cout << "Left tensor dims:\n";
-  //PrintDims(currentDims);
+  */
+  
+  device_x = NamedTensors[LtensorName];
+  currentDims = NamedDims[LtensorName];
+  
 
   device_w = NamedTensors[RtensorName];
 
@@ -2758,6 +2776,12 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
     LogErrorS("Tensor de entrada da multiplicação de tensors precisa ter ao menos 2 dimensões.");
 
 
+
+  
+  //if(currentDims[1]==784)
+  //PrintTensorF(device_x, currentDims[0], currentDims[1]);
+  //PrintTensorF(device_w, Rdims[0], Rdims[1]);
+
   matmul_forward2(device_y, device_x, device_w,
                   linear_layer_dims[0], linear_layer_dims[1],
                   Rdims[0]);
@@ -2766,13 +2790,16 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
 
 
   currentCudaResult = device_y;
+  //std::cout << "L tensor: " << LtensorName << " R tensor: " << RtensorName << "\n";
   currentDims = newDimsOnMult(currentDims, Rdims);
 
-  //std::cout << "is_forward_func: " << is_forward_func << "\n";
+  
   if (is_forward_func)
   {
     float *inp, *out;
 
+
+    //oom
     cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
     cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
     cudaMemcpy(inp, device_x, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -2819,16 +2846,15 @@ __global__ void onehot_kernel(const float* tensor,
         int b = i / (C);
         int v = i % C;
 
-        float* probs_bt = probs + b * C;
-        //const float* probs_bt = probs + b * C;
+        float* probs_b = probs + b * C;
 
         int ix = tensor[b];
 
-        //float p = probs_bt[v];
+        //float p = probs_b[v];
 
         float indicator = (v==ix) ? 1.0f : 0.0f;
 
-        probs_bt[v] += indicator;
+        probs_b[v] = indicator;
         
     }
 }
@@ -2843,15 +2869,22 @@ extern "C" float onehot(float num_classes)
   int B = dimsProd(dims);
   int C = (int)num_classes;
 
+  float *probs_cpu, *probs;
+  probs_cpu = new float[B*C];
+
+  cudaMalloc(&probs, B*C*sizeof(float));
+  //cudaMemcpy(probs, probs_cpu, B*C*sizeof(float), cudaMemcpyHostToDevice);
+
+
   int grid_size = B;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
 
-  float *probs;
-  cudaMalloc(&probs, B*C*sizeof(float));
-
+  
   onehot_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, probs, B, C);
+  //grid_size = ceil_div(B*C, block_size);
+  //onehot_kernel<<<grid_size, block_size>>>(tensor, probs, B, C);
 
   dims.push_back(C);
   NamedDims[tensor_name] = dims;
@@ -2859,8 +2892,89 @@ extern "C" float onehot(float num_classes)
   cudaFree(NamedTensors[tensor_name]);
   NamedTensors[tensor_name] = probs;
 
+  used_cuda=1;
+
   return 0;
 }
+
+
+//TODO: mean, sum, max at CUDA
+extern "C" float mean() 
+{
+  std::string tensor_name = FirstArg;
+
+  float * tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+  
+  int B = dimsProd(dims);
+
+
+  float *meaned = new float[B];
+
+  cudaMemcpy(meaned, tensor, B*sizeof(float), cudaMemcpyDeviceToHost);
+  
+  float tensor_mean=0;
+  for(int i=0; i<B; i++)
+    tensor_mean += meaned[i];
+  tensor_mean = tensor_mean/B;
+
+  std::cout << "Mean: " << tensor_mean << "\n";
+
+  return 0;
+}
+
+extern "C" float sum()
+{
+  std::string tensor_name = FirstArg;
+
+  float * tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+  
+  int B = dimsProd(dims);
+
+
+  float *summed = new float[B];
+
+  cudaMemcpy(summed, tensor, B*sizeof(float), cudaMemcpyDeviceToHost);
+  
+  float tensor_sum=0;
+  for(int i=0; i<B; i++)
+    tensor_sum += summed[i];
+  tensor_sum = tensor_sum;
+
+  std::cout << "Sum: " << tensor_sum << "\n";
+
+  return 0;
+}
+
+extern "C" float max()
+{
+  std::string tensor_name = FirstArg;
+
+  float * tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+  
+  int B = dimsProd(dims);
+
+
+
+  float max=-999;
+  float *summed = new float[B];
+
+  cudaMemcpy(summed, tensor, B*sizeof(float), cudaMemcpyDeviceToHost);
+  
+  float tensor_sum=0;
+  for(int i=0; i<B; i++)
+  {
+    if(summed[i]>max)
+      max = summed[i];
+  }
+
+  std::cout << "Max: " << max << "\n";
+
+  return 0;
+}
+
 
 __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int C) {
     // out is (N, C) just like inp. Each row of inp will get softmaxed.
@@ -2994,17 +3108,17 @@ __global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
         int b = i / (C);
         int v = i % C;
 
-        float* dlogits_bt = dlogits + b * C;
-        const float* probs_bt = probs + b * C;
+        float* dlogits_b = dlogits + b * C;
+        const float* probs_b = probs + b * C;
 
-        float ix = targets[v];
-
-        float p = probs_bt[v];
+        //float ix = targets[v];
+        float ix = targets[b * C + v];
+        float p = probs_b[v];
 
         //float indicator = (v==ix) ? 1.0f : 0.0f;
         float indicator = ix;
 
-        dlogits_bt[v] += (p - indicator) / B / C;
+        dlogits_b[v] += (p - indicator) / B;
         
     }
 }
@@ -3027,13 +3141,14 @@ void CrossEntropyBackward(float *y_hat,
 
   grid_size = ceil_div(B*C, block_size);
   crossentropy_softmax_backward_kernel1<<<grid_size, block_size>>>(dloss, probs, y, B, C);
+  cudaFree(probs);
 
   cudaCheck(cudaGetLastError());
 }
 
 
 
-extern "C" float CrossEntropy(char *y_hat, char *y)
+extern "C" float cross_entropy(char *y_hat, char *y)
 {
   
 
@@ -3068,11 +3183,12 @@ extern "C" float Backpropagation()
   //float * loss_gradient = ;
   
   int B, C, OC;
-  float *inp, *w, *out;
+  float *inp, *w, *out, *last_inp;
   float *dinp, *device_dinp, *dw, *device_dw, *dout, *device_dout;
 
   std::string op, param_name;
   
+  bool first=true;
 
   while(todo_backwards.size()>0)
   {
@@ -3141,10 +3257,19 @@ extern "C" float Backpropagation()
     NamedParamGrads[param_name] = device_dw;
 
 
+    // Garbage Collector on all lines below
     cudaCheck(cudaFree(out));
+    if (!first)
+    {
+      cudaCheck(cudaFree(last_inp));
+      cudaCheck(cudaFree(device_dout));
+    }
     device_dout = device_dinp; // backpropagate gradient
+    last_inp = inp;
 
+    first = false;
   }
+  cudaCheck(cudaFree(device_dinp));
   cudaCheck(cudaFree(inp));
 
   return 0;
@@ -3859,6 +3984,9 @@ extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self,
     tensor_cpu = make_ones_float(product);
   else if (std::strcmp(init, "xavu") == 0)
     tensor_cpu = make_xavier_uniform_float(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
+  else if (std::strcmp(init, "randint") == 0)
+    tensor_cpu = make_random_int(product, 10);
+  
 
   
 
@@ -4223,6 +4351,7 @@ Value *ClassAST::codegen() {
 //===----------------------------------------------------------------------===//
 
 static void InitializeModule() {
+  used_cuda=0;
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
@@ -4401,6 +4530,45 @@ static void InitializeModule() {
     TheModule.get()
   );
 
+  // 
+  FunctionType *sumTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {},
+      false
+  );
+  Function::Create(
+    sumTy,
+    Function::ExternalLinkage,
+    "sum",
+    TheModule.get()
+  );
+
+  // 
+  FunctionType *meanTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {},
+      false
+  );
+  Function::Create(
+    meanTy,
+    Function::ExternalLinkage,
+    "mean",
+    TheModule.get()
+  );
+
+  // 
+  FunctionType *maxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {},
+      false
+  );
+  Function::Create(
+    maxTy,
+    Function::ExternalLinkage,
+    "max",
+    TheModule.get()
+  );
+
   
   // char *, floats, Vararg
   FunctionType *viewTy = FunctionType::get(
@@ -4422,15 +4590,15 @@ static void InitializeModule() {
 
 
   // char *, char *
-  FunctionType *CrossEntropyTy = FunctionType::get(
+  FunctionType *cross_entropyTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
       false // Not vararg
   );
   Function::Create(
-    CrossEntropyTy,
+    cross_entropyTy,
     Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "CrossEntropy", // Function name
+    "cross_entropy", // Function name
     TheModule.get() // Module to which the function belongs
   );
 
@@ -4889,4 +5057,3 @@ cublasSgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &alpha, weight, C
 //backward to weight
 cublasSgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, , &alpha, inp,    C, dout, OC, &beta, dweight,  C)
 */
-
