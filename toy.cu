@@ -149,8 +149,9 @@ enum Token {
   // var definition
   tok_var = -15,
   tok_tensor = -16,
-  tok_attr_var = -17,
-  tok_attr_tensor = -18,
+  tok_var_str = -17,
+  tok_attr_var = -18,
+  tok_attr_tensor = -19,
 
   // function ops
   tok_log = -30
@@ -244,6 +245,8 @@ static int get_token() {
       return tok_log;
     if (IdentifierStr == "glob")
       IdentifierStr = "_glob_b_";
+    if (IdentifierStr == "str")
+      return tok_var_str;
     
     return tok_identifier;
   }
@@ -385,6 +388,21 @@ class VarExprAST : public ExprAST {
     std::unique_ptr<ExprAST> Body;
     std::string Type;
     VarExprAST(
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+        std::unique_ptr<ExprAST> Body,
+        std::string Type)
+        : VarNames(std::move(VarNames)), Body(std::move(Body)), Type(Type) {}
+
+  Value *codegen() override;
+};
+
+class StrExprAST : public ExprAST {
+
+  public:
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+    std::unique_ptr<ExprAST> Body;
+    std::string Type;
+    StrExprAST(
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
         std::unique_ptr<ExprAST> Body,
         std::string Type)
@@ -948,6 +966,53 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
 }
 
 
+static std::unique_ptr<ExprAST> ParseStrExpr() {
+  getNextToken(); // eat the var.
+  
+
+  // mem2reg is alloca-driven: it looks for allocas and if it can handle them, it promotes them. It DOES NOT APPLY TO GLOBAL variables or heap allocations.
+  // mem2reg only promotes allocas whose uses are direct loads and stores. If the address of the stack object is passed to a function,
+  //or if any funny pointer arithmetic is involved, the alloca will not be promoted.
+
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+
+  // At least one variable name is required.
+  if (CurTok != tok_identifier)
+    return LogError("Esperado identificador após var.");
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    getNextToken(); // eat identifier.
+
+    // Read the optional initializer.
+    std::unique_ptr<ExprAST> Init = nullptr;
+    if (CurTok == '=') {
+      getNextToken(); // eat the '='.
+
+      Init = ParseStringExpr();
+      if (!Init)
+        return nullptr;
+    }
+
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Esperado um ou mais identificadores após var.");
+  }
+
+  auto Body = ParseExpression();
+  if (!Body)
+    return nullptr;
+
+  return std::make_unique<StrExprAST>(std::move(VarNames), std::move(Body), "var");
+}
+
+
 static std::unique_ptr<ExprAST> ParseSelfExpr() {
 
   std::string pre_dot = IdentifierStr;
@@ -1187,6 +1252,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     return ParseNumberExpr(tabcount);
   case tok_str:
     return ParseStringExpr();
+  case tok_var_str:
+    return ParseStrExpr();
   case '(':
     return ParseParenExpr();
   case tok_if:
@@ -1607,6 +1674,7 @@ static ExitOnError ExitOnErr;
 
 // Vars
 static std::map<std::string, AllocaInst *> NamedValues;
+static std::map<std::string, AllocaInst *> NamedStrs;
 static std::map<std::string, Value *> NamedClassValues;
 static std::map<std::string, float> StoredValues;
 
@@ -1759,6 +1827,11 @@ std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
   return new_dims;
 }
 
+extern "C" float PrintStr(char* value){
+
+  std::cout << value << "\n";
+  return 0;
+}
 
 extern "C" float PrintTensor(char* tensorName){
   std::cout << "Called print tensor\n";
@@ -2528,7 +2601,7 @@ Value *VariableExprAST::codegen() {
 
     return Builder->CreateLoad(Type::getFloatTy(*GlobalContext), V, Name.c_str());
 
-  } else {
+  } else if (NamedTensors.count(Name)>0)  {
     //std::cout << "Load Tensor " << Name << " Codegen.\n";
   
 
@@ -2538,6 +2611,16 @@ Value *VariableExprAST::codegen() {
     }
     
     // float_to_value
+    return ret;
+  } else if (NamedStrs.count(Name)>0)  {
+    Value *V = NamedStrs[Name];
+    
+    if (!seen_var_attr)
+    {
+      Builder->CreateCall(TheModule->getFunction("PrintStr"),
+                      {Builder->CreateLoad(PointerType::get(Type::getInt8Ty(*TheContext), 0), V, Name.c_str())});
+    }
+
     return ret;
   }
 }
@@ -3589,9 +3672,6 @@ Value *BinaryExprAST::codegen() {
     if (NamedValues.count(LHSE->getName()) != 0) {
       
       Value *Variable = NamedValues[LHSE->getName()];
-      
-      if (!Variable)
-        return LogErrorV("O nome da variável é desconhecido.");
 
 
       if(LHS->GetSelf()=="true")
@@ -3616,7 +3696,13 @@ Value *BinaryExprAST::codegen() {
         
       used_cuda=0;
       
+    } else if (NamedStrs.count(LHSE->getName()) != 0 ) {
+      Value *Variable = NamedStrs[LHSE->getName()];
+      Builder->CreateStore(Val, Variable);
+    } else {
+      return LogErrorV("O nome da variável é desconhecido.");
     }
+
     seen_var_attr=false;
     return Val;
   }
@@ -3955,6 +4041,65 @@ Value *VarExprAST::codegen() {
   // Return the body computation.
   return BodyVal;
 }
+
+
+
+
+
+Value *StrExprAST::codegen() {
+  std::vector<AllocaInst *> OldBindings;
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+    // Emit the initializer before adding the variable to scope, this prevents
+    // the initializer from referencing the variable itself, and permits stuff
+    // like this:
+    //  var a = 1 in
+    //    var a = a in ...   # refers to outer 'a'.
+    Value *InitVal;
+    if (Init) {
+      InitVal = Init->codegen();
+      if (!InitVal)
+        return nullptr;
+    } else { // If not specified, use 0.0.
+      InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
+    }
+
+
+    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+    Builder->CreateStore(InitVal, Alloca);
+      
+    // Remember the old variable binding so that we can restore the binding when
+    // we unrecurse.
+    OldBindings.push_back(NamedStrs[VarName]);
+
+    // Remember this binding.
+    NamedStrs[VarName] = Alloca;
+    
+  }
+
+  // Codegen the body that is contained by the in expression
+  Value *BodyVal = Body->codegen();
+  if (!BodyVal)
+    return nullptr;
+
+  // Pop all our variables from scope.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
+    NamedStrs[VarNames[i].first] = OldBindings[i];
+
+  // Return the body computation.
+  return BodyVal;
+}
+
+
+
+
 
 
 std::vector<float> cur_dim;
@@ -4677,6 +4822,27 @@ static void InitializeModule() {
     "load_preprocess_img",
     TheModule.get()
   );
+
+
+
+  //===----------------------------------------------------------------------===//
+  // Str Ops
+  //===----------------------------------------------------------------------===//
+
+
+  // char *
+  FunctionType *PrintStrTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      false 
+  );
+  Function::Create(
+    PrintStrTy,
+    Function::ExternalLinkage, 
+    "PrintStr", 
+    TheModule.get() 
+  );
+
 
   //===----------------------------------------------------------------------===//
   // Other Ops
