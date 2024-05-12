@@ -87,7 +87,8 @@ using namespace llvm::orc;
 // \033[33m yellow
 // \033[95m purple
 
-std::vector<std::string> split(const std::string& str, char delimiter) {
+
+std::vector<std::string> split_str(const std::string& str, char delimiter) {
   std::vector<std::string> tokens;
   std::string token;
   std::istringstream stream(str);
@@ -98,6 +99,20 @@ std::vector<std::string> split(const std::string& str, char delimiter) {
 
   return tokens;
 }
+
+std::vector<std::string> split(const char* input, const std::string& delimiter) {
+    std::vector<std::string> tokens;
+    size_t start = 0, end = 0;
+    while ((end = std::string(input + start).find(delimiter)) != std::string::npos) {
+        tokens.push_back(std::string(input + start, end));
+        start += end + delimiter.length();
+    }
+    tokens.push_back(std::string(input + start));
+    return tokens;
+}
+
+
+
 
 bool in_str(std::string str, std::vector<std::string> list) {
     return std::find(list.begin(), list.end(), str) != list.end();
@@ -1009,7 +1024,7 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
   if (!Body)
     return nullptr;
 
-  return std::make_unique<StrExprAST>(std::move(VarNames), std::move(Body), "var");
+  return std::make_unique<StrExprAST>(std::move(VarNames), std::move(Body), "str");
 }
 
 
@@ -1514,7 +1529,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 ///
 static std::unique_ptr<ExprAST> ParseExpression(int tabcount) {
   //std::cout << "Parse Expression tabcount " << tabcount << "\n";
-  std::cout << "Parse Expression\n";
+  //std::cout << "Parse Expression\n";
   
   auto LHS = ParseUnary(tabcount);
   if (!LHS)
@@ -1828,10 +1843,35 @@ std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
 }
 
 extern "C" float PrintStr(char* value){
-
-  std::cout << value << "\n";
+  
+  std::cout << "Str: " << value << "\n";
   return 0;
 }
+
+extern "C" char * shuffle_str(char *string_list)
+{
+
+  std::string result = "";
+  std::vector<std::string> splitted = split(string_list, "|||");
+
+
+  std::random_shuffle(splitted.begin(), splitted.end());
+
+  for (int i=0; i<splitted.size(); i++)
+  {
+    result = result + "|||" + splitted[i];
+  }
+
+
+  char * cstr = new char [result.length()+1];
+  std::strcpy (cstr, result.c_str());
+    
+  return cstr;
+}
+
+
+
+
 
 extern "C" float PrintTensor(char* tensorName){
   std::cout << "Called print tensor\n";
@@ -2106,14 +2146,18 @@ float *preprocess_image(unsigned char* image_data, std::vector<float> dims)
   return image_data_float;
 }
 
-extern "C" float _glob_b_(char *pattern) {
+extern "C" char * _glob_b_(char *pattern) {
     // TODO: make var of type string vector to hold this result.
 
     glob_t glob_result;
     //std::vector<char *> glob_str_files;
 
+    std::string result = "";
+
     if (glob(pattern, GLOB_TILDE, NULL, &glob_result) == 0) {
         for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
+
+            result = result + "|||" + glob_result.gl_pathv[i];
             glob_str_files.push_back(strdup(glob_result.gl_pathv[i]));
         }
         globfree(&glob_result);
@@ -2124,19 +2168,13 @@ extern "C" float _glob_b_(char *pattern) {
     if (glob_str_files.size()<1)
       LogErrorS("Glob falhou ao encontrar arquivos.");
 
-    std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
+    
+    //std::cout << result << "\n";
 
-    /*
-    for (const char *file : glob_str_files) {
-        std::cout << file << std::endl;
-        i+=1;
-        if (i>1500)
-          break;
-    }
-    */
-
-
-    return 0;
+    char * cstr = new char [result.length()+1];
+    std::strcpy (cstr, result.c_str());
+    
+    return cstr;
 }
 
 
@@ -2148,6 +2186,7 @@ float *current_labels;
 
 extern "C" float init_dataset(float batch_size)
 {
+  std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
   load_img(glob_str_files[0]);
 
   
@@ -2182,7 +2221,8 @@ extern "C" float yield(char *x_name, char *y_name, float batch_size)
     for (int j = 0; j < dims_prod; ++j)
       current_data[i * dims_prod + j] = cur_float_img[j];
     
-    std::vector<std::string> splitted = split(glob_str_files[yield_pointer],'/');
+    std::vector<std::string> splitted = split_str(glob_str_files[yield_pointer],'/');
+    
     //std::cout << "File: " << glob_str_files[yield_pointer] << "\n";
     //std::cout << "Label: " << splitted[splitted.size()-2] << "\n";
     current_labels[i] = std::stof(splitted[splitted.size()-2]);
@@ -2541,6 +2581,16 @@ extern "C" float StoreOnDemand(char *object_var_name, float value){
 }
 
 
+extern "C" float StoreStrOnDemand(char *object_var_name, char * value){
+  
+
+  
+  //NamedClassValues[FirstArg + object_var_name] = ConstantFP::get(*GlobalContext, APFloat(value));
+  NamedClassValues[FirstArg + object_var_name] = Builder->CreateGlobalString(value);
+  return 0;
+}
+
+
 extern "C" float LoadOnDemand(char *object_var_name) {
   //std::cout << "LoadOnDemand var to load: " << object_var_name << "\n";
     
@@ -2601,7 +2651,7 @@ Value *VariableExprAST::codegen() {
 
     return Builder->CreateLoad(Type::getFloatTy(*GlobalContext), V, Name.c_str());
 
-  } else if (NamedTensors.count(Name)>0)  {
+  } else if (NamedTensors.count(Name)>0) {
     //std::cout << "Load Tensor " << Name << " Codegen.\n";
   
 
@@ -2610,18 +2660,25 @@ Value *VariableExprAST::codegen() {
       Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
     }
     
-    // float_to_value
     return ret;
-  } else if (NamedStrs.count(Name)>0)  {
+  } else if (NamedStrs.count(Name)>0) {
+    for (const auto &entry : NamedTensors)
+      if (ends_with(entry.first, Name))
+        return ret;
+
     Value *V = NamedStrs[Name];
     
+    V = Builder->CreateLoad(PointerType::get(Type::getInt8Ty(*TheContext), 0), V, Name.c_str());
     if (!seen_var_attr)
     {
+      std::cout << "Print str call for: " << Name << "\n";
       Builder->CreateCall(TheModule->getFunction("PrintStr"),
-                      {Builder->CreateLoad(PointerType::get(Type::getInt8Ty(*TheContext), 0), V, Name.c_str())});
+                      {V});
     }
 
-    return ret;
+    //std::cout << "RETURNING STRING: " << Name << "\n";
+    //std::cout << "NamedStrs count:" << NamedStrs.count(Name) << "\n";
+    return V;
   }
 }
 
@@ -3697,9 +3754,18 @@ Value *BinaryExprAST::codegen() {
       used_cuda=0;
       
     } else if (NamedStrs.count(LHSE->getName()) != 0 ) {
+      //std::cout << "ATTRIBUTTING TO STRING: " << LHSE->getName() << "\n";
       Value *Variable = NamedStrs[LHSE->getName()];
-      Builder->CreateStore(Val, Variable);
+      
+      if(LHS->GetSelf()=="true")
+        Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
+                                                  {Builder->CreateGlobalString(LHSE->getName()),
+                                                   Val});
+      else
+        Builder->CreateStore(Val, Variable);
+
     } else {
+
       return LogErrorV("O nome da variável é desconhecido.");
     }
 
@@ -4077,8 +4143,10 @@ Value *StrExprAST::codegen() {
       
     // Remember the old variable binding so that we can restore the binding when
     // we unrecurse.
+    //std::cout << "STRING CODEGEN FOR " << VarName << "\n";
     OldBindings.push_back(NamedStrs[VarName]);
 
+    
     // Remember this binding.
     NamedStrs[VarName] = Alloca;
     
@@ -4293,6 +4361,7 @@ Value *CallExprAST::codegen() {
   
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     //std::cout << "\n\nCallExprAST::codegen for argument n°: " << i << ".\n";
+
     Value * arg;
     if (Args[i]->GetType()=="tensor")
       arg = Builder->CreateGlobalString(Args[i]->GetName());
@@ -4771,18 +4840,6 @@ static void InitializeModule() {
     TheModule.get()
   );
 
-  // char *
-  FunctionType *globTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
-      false // Not vararg
-  );
-  Function::Create(
-    globTy,
-    Function::ExternalLinkage,
-    "_glob_b_",
-    TheModule.get()
-  );
 
   // char *, char *, float
   FunctionType *yieldTy = FunctionType::get(
@@ -4831,6 +4888,20 @@ static void InitializeModule() {
 
 
   // char *
+  FunctionType *globTy = FunctionType::get(
+      PointerType::get(Type::getInt8Ty(*TheContext), 0),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false // Not vararg
+  );
+  Function::Create(
+    globTy,
+    Function::ExternalLinkage,
+    "_glob_b_",
+    TheModule.get()
+  );
+
+
+  // char *
   FunctionType *PrintStrTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
@@ -4840,6 +4911,20 @@ static void InitializeModule() {
     PrintStrTy,
     Function::ExternalLinkage, 
     "PrintStr", 
+    TheModule.get() 
+  );
+
+
+  // char *
+  FunctionType *shuffle_strTy = FunctionType::get(
+      PointerType::get(Type::getInt8Ty(*TheContext), 0),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      false 
+  );
+  Function::Create(
+    shuffle_strTy,
+    Function::ExternalLinkage, 
+    "shuffle_str", 
     TheModule.get() 
   );
 
@@ -4923,6 +5008,21 @@ static void InitializeModule() {
     "StoreOnDemand",
     TheModule.get()
   );
+
+
+    // char *, float
+  FunctionType *StoreStrOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false // Not vararg
+  );
+  Function::Create(
+    StoreStrOnDemandTy,
+    Function::ExternalLinkage,
+    "StoreStrOnDemand",
+    TheModule.get()
+  );
+
 
   // char *
   FunctionType *LoadOnDemandTy = FunctionType::get(
