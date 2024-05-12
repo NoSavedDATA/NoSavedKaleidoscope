@@ -1,0 +1,38 @@
+class Model
+	def __init__(f hiddens, f num_classes)
+		tensor[hiddens, 2, xavu] self.w1
+		tensor[num_classes, hiddens, xavu] self.w2;
+	
+	def forward(t x)
+		x = x@self.w1
+		x = x@self.w2;
+
+
+Model model;
+model.__init__(2, 5);
+
+tensor[32,28,28,1] x
+tensor[32,10] y;
+
+for i=0, i<10000 :
+	tensor[4,2,ones] x
+	tensor[4,ones] y
+	y=y*2
+	y.onehot(5)
+	model.forward(x)
+	cross_entropy(x, y)
+	loss.backward()
+	AdamW(0.1, 0.9, 0.999, 0.01);
+
+model.w2.mean();
+model.w2.sum();
+model.w2.max();
+
+
+tensor[1,2,ones] x;
+
+model.forward(x);
+
+x;
+softmax(x);
+
