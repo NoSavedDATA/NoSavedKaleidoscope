@@ -1862,7 +1862,8 @@ extern "C" float PrintStr(char* value){
 extern "C" char * shuffle_str(char *string_list)
 {
 
-  std::string result = "";
+  std::ostringstream oss;
+
   std::vector<std::string> splitted = split(string_list, "|||");
 
 
@@ -1870,9 +1871,12 @@ extern "C" char * shuffle_str(char *string_list)
 
   for (int i=0; i<splitted.size(); i++)
   {
-    result = result + "|||" + splitted[i];
+    if (i>0)
+      oss << "|||";
+    oss << splitted[i];
   }
 
+  std::string result = oss.str();
 
   char * cstr = new char [result.length()+1];
   std::strcpy (cstr, result.c_str());
@@ -2179,12 +2183,16 @@ extern "C" char * _glob_b_(char *pattern) {
     glob_t glob_result;
     //std::vector<char *> glob_str_files;
 
-    std::string result = "";
+    std::ostringstream  oss;
+    oss << "";
 
     if (glob(pattern, GLOB_TILDE, NULL, &glob_result) == 0) {
         for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
+            //result = result + "|||" + glob_result.gl_pathv[i];
+            if (i>0)
+              oss << "|||";
+            oss << glob_result.gl_pathv[i];
 
-            result = result + "|||" + glob_result.gl_pathv[i];
             glob_str_files.push_back(strdup(glob_result.gl_pathv[i]));
         }
         globfree(&glob_result);
@@ -2194,8 +2202,9 @@ extern "C" char * _glob_b_(char *pattern) {
 
     if (glob_str_files.size()<1)
       LogErrorS("Glob falhou ao encontrar arquivos.");
-
     
+    
+    std::string result = oss.str();
     //std::cout << result << "\n";
 
     char * cstr = new char [result.length()+1];
@@ -2261,7 +2270,6 @@ extern "C" float yield(float batch_size, char * x_name, ...)
   while(i<batch_size)
   {
 
-    
     cur_float_img = load_img(glob_str_files[yield_pointer]);
     //dims_prod = dimsProd(current_data_attr_dims);
     dims_prod = 28*28;
@@ -2270,7 +2278,6 @@ extern "C" float yield(float batch_size, char * x_name, ...)
       current_data[i * dims_prod + j] = cur_float_img[j];
     
     
-
     std::vector<std::string> splitted = split_str(glob_str_files[yield_pointer],'/');
     
     //std::cout << "File: " << glob_str_files[yield_pointer] << "\n";
