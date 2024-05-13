@@ -2105,7 +2105,7 @@ Value *StringExprAST::codegen() {
 // File Handling
 //===----------------------------------------------------------------------===//
 
-extern "C" float load_img(char *img_name)
+extern "C" float * load_img(char *img_name)
 {
   used_cuda=0;
   int width, height, channels;
@@ -2126,16 +2126,30 @@ extern "C" float load_img(char *img_name)
     */
 
     //stbi_image_free(image_data);
+
+    float *image_data_float = new float[width * height * channels];
+  
+    // Loop through each pixel and convert to float between 0.0 and 1.0
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        for (int c = 0; c < channels; ++c) {
+          // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
+          image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+        }
+      }
+    }
+
+    return image_data_float;
     
-    current_data_attr = image_data;
   } else {
     std::string img_n = img_name;
     std::string _error = "Falha ao abrir a imagem: " + img_n + ".";
     LogErrorS(_error);
   }
 
-  return 0;
+  return nullptr;
 }
+
 
 
 float *preprocess_image(unsigned char* image_data, std::vector<float> dims)
@@ -2246,14 +2260,17 @@ extern "C" float yield(float batch_size, char * x_name, ...)
   float *cur_float_img;
   while(i<batch_size)
   {
-    load_img(glob_str_files[yield_pointer]);
+
     
-    cur_float_img = preprocess_image(current_data_attr, current_data_attr_dims);
-    dims_prod = dimsProd(current_data_attr_dims);
+    cur_float_img = load_img(glob_str_files[yield_pointer]);
+    //dims_prod = dimsProd(current_data_attr_dims);
+    dims_prod = 28*28;
 
     for (int j = 0; j < dims_prod; ++j)
       current_data[i * dims_prod + j] = cur_float_img[j];
     
+    
+
     std::vector<std::string> splitted = split_str(glob_str_files[yield_pointer],'/');
     
     //std::cout << "File: " << glob_str_files[yield_pointer] << "\n";
@@ -2306,10 +2323,11 @@ extern "C" float yield(float batch_size, char * x_name, ...)
 
 extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 {
-  load_img(img_name); 
+  float *img;
+  img = load_img(img_name); 
     
-  float *cur_float_img = preprocess_image(current_data_attr, current_data_attr_dims);
-  int dims_prod = dimsProd(current_data_attr_dims);
+  
+  int dims_prod = 28*28;
 
 
   current_data = new float[dims_prod];
@@ -2317,7 +2335,7 @@ extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 
 
   for (int j = 0; j < dims_prod; ++j)
-    current_data[j] = cur_float_img[j];
+    current_data[j] = img[j];
 
 
   float *x;
@@ -4859,11 +4877,11 @@ static void InitializeModule() {
   // File Handling
   //===----------------------------------------------------------------------===//
 
-
+  
   // char *
   FunctionType *load_imgTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      PointerType::get(Type::getFloatTy(*GlobalContext), 0),
+      {PointerType::get(Type::getInt8Ty(*GlobalContext), 0)},
       false // Not vararg
   );
   Function::Create(
@@ -4872,12 +4890,14 @@ static void InitializeModule() {
     "load_img",
     TheModule.get()
   );
+  
+
 
 
   // char *, char *, float
   FunctionType *yieldTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0)},
       true // vararg
   );
   Function::Create(
