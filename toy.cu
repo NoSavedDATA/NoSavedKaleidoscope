@@ -88,6 +88,15 @@ using namespace llvm::orc;
 // \033[95m purple
 
 
+bool ends_with(std::string str_input, std::string str_end)
+{
+  return str_input.size() >= str_end.size() && str_input.compare(str_input.size() - str_end.size(), str_end.size(), str_end) == 0;
+}
+
+bool starts_with(const char* str, const char* sub) {
+  return strncmp(str, sub, strlen(sub)) == 0;
+}
+
 std::vector<std::string> split_str(const std::string& str, char delimiter) {
   std::vector<std::string> tokens;
   std::string token;
@@ -119,7 +128,7 @@ bool in_str(std::string str, std::vector<std::string> list) {
 }
 
 
-std::vector<std::string> tensor_methods = {"view", "permute", "onehot", "mean", "sum", "max", "min"};
+std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min", "yield"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavn"};
 
 
@@ -807,6 +816,9 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
       getNextToken();
     }
   }
+
+  if (IdName=="yield")
+    Args.push_back(std::make_unique<StringExprAST>("-2"));
 
   // Eat the ')'.
   getNextToken();
@@ -1724,10 +1736,9 @@ std::vector<float> current_data_attr_dims;
 std::string FirstArg;
 
 
-bool ends_with(std::string str_input, std::string str_end)
-{
-  return str_input.size() >= str_end.size() && str_input.compare(str_input.size() - str_end.size(), str_end.size(), str_end) == 0;
-}
+
+
+
 
 static std::unique_ptr<ExprAST> ParseClass() {
   getNextToken(); // eat class.
@@ -2115,6 +2126,7 @@ extern "C" float load_img(char *img_name)
     */
 
     //stbi_image_free(image_data);
+    
     current_data_attr = image_data;
   } else {
     std::string img_n = img_name;
@@ -2124,6 +2136,7 @@ extern "C" float load_img(char *img_name)
 
   return 0;
 }
+
 
 float *preprocess_image(unsigned char* image_data, std::vector<float> dims)
 {
@@ -2202,10 +2215,30 @@ extern "C" float init_dataset(float batch_size)
   return 0;
 }
 
-extern "C" float yield(char *x_name, char *y_name, float batch_size)
+extern "C" float yield(float batch_size, char * x_name, ...)
 {
-  // TODO Make this on the coding language instead.
+  std::vector<char *> tensor_names;
+  tensor_names.push_back(x_name);
 
+
+  va_list args;
+  va_start(args, x_name);
+
+  for (int i=0; i<10; i++)
+  {
+    char * name = va_arg(args, char *);
+    
+    if (starts_with(name, "-2"))
+      break;
+
+    tensor_names.push_back(name);
+  }
+  va_end(args);
+
+  char * y_name = tensor_names[1];
+
+
+  // TODO Make this on the coding language instead.
   int i=0;
 
   int dims_prod;
@@ -4844,8 +4877,8 @@ static void InitializeModule() {
   // char *, char *, float
   FunctionType *yieldTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),Type::getFloatTy(*TheContext)},
-      false // Not vararg
+      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      true // vararg
   );
   Function::Create(
     yieldTy,
@@ -4858,7 +4891,7 @@ static void InitializeModule() {
   FunctionType *init_datasetTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
-      false // Not vararg
+      false
   );
   Function::Create(
     init_datasetTy,
