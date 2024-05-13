@@ -1,44 +1,51 @@
 class Model
 	def __init__(f hiddens, f num_classes)
 		tensor[hiddens, 784, xavu] self.w1
-		tensor[hiddens, hiddens, xavu] self.w2
-		tensor[num_classes, hiddens, xavu] self.w3
-		0;
+		tensor[num_classes, hiddens, xavu] self.w2;
 	
 	def forward(t x)
 		x = x@self.w1
-		x = x@self.w2
-		x = x@self.w3;
+		x = x@self.w2;
+
+0;
 
 Model model;
 model.__init__(768, 10);
 
-glob("/home/nosaveddata/mnist/testing/*/*.png");
+
+glob("/home/nosaveddata/mnist/training/*/*.png");
 init_dataset(32);
 
 tensor[32,28,28,1] x
-tensor[32,10] y
-0;
+tensor[32,10] y;
+
+
 
 for i=0, i<1000 :
 	tensor[1] x
 	tensor[1] y
-	yield(x, y, 32)
+	yield(32, x, y)
 	x.view(32, 784)
 	y.onehot(10)
 	model.forward(x)
-	CrossEntropy(x, y)
+	cross_entropy(x, y)
 	loss.backward()
 	AdamW(0.0001, 0.9, 0.999, 0.01);
 
+model.w2.mean();
+model.w2.sum();
+model.w2.max();
 
-x;
 
 tensor[1,28,28,1] x
 0;
 
-load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/8535.png");
+load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/3.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/1/489.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/2/35.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/4/27.png");
 x.view(1,784);
+
 model.forward(x);
 
 x;
