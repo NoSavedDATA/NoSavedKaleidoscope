@@ -1041,6 +1041,78 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
 }
 
 
+
+
+int used_cuda = 0;
+unsigned char* current_data_attr;
+std::vector<float> current_data_attr_dims;
+
+
+extern "C" float * load_img(char *img_name)
+{
+  used_cuda=0;
+  int width, height, channels;
+  
+  unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
+
+  if (image_data) {
+    
+    current_data_attr_dims.clear();
+    current_data_attr_dims.push_back((float)width);
+    current_data_attr_dims.push_back((float)height);
+    current_data_attr_dims.push_back((float)channels);
+
+    /*
+    std::cout << "Width: " << width << " pixels\n";
+    std::cout << "Height: " << height << " pixels\n";
+    std::cout << "Channels: " << channels << "\n";
+    */
+
+    //stbi_image_free(image_data);
+
+    float *image_data_float = new float[width * height * channels];
+  
+    // Loop through each pixel and convert to float between 0.0 and 1.0
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        for (int c = 0; c < channels; ++c) {
+          // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
+          image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+        }
+      }
+    }
+
+    return image_data_float;
+    
+  } else {
+    std::string img_n = img_name;
+    std::string _error = "Falha ao abrir a imagem: " + img_n + ".";
+    LogErrorS(_error);
+  }
+
+  return nullptr;
+}
+
+
+extern "C" float * split_str_to_float(char *in_string)
+{
+  std::cout << "split_str_to_float CALLED\n";
+  std::vector<std::string> splitted = split_str(in_string,'/');
+
+  float * ret = new float[1];
+  ret[0] = std::stof(splitted[splitted.size()-2]);
+  std::cout << "Split retrieval: " << ret[0] << "\n";
+  return ret;
+}
+
+
+
+
+std::map<std::string, std::function<float *(char*)>> preprocessings;
+
+
+
+
 static std::unique_ptr<ExprAST> ParseSelfExpr() {
 
   std::string pre_dot = IdentifierStr;
@@ -1100,6 +1172,30 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
       aux->SetSelf(pre_dot);
     if (pre_dot=="self")
       aux->SetSelf("true");
+    
+    if (starts_with(IdName.c_str(), "preprocess_") && pre_dot=="self")
+    {
+      getNextToken(); // eat =
+      std::cout << "\nPARSED PREPROCESS: " << IdName << "\n\n";
+      
+      std::vector<std::string> preprocessings_vec = split_str(IdentifierStr, ',');
+      for (int i=0; i<preprocessings_vec.size(); i++)
+      {
+        std::cout << "Cur identifier:" << IdentifierStr << "\n";
+        if (IdentifierStr=="load_img")
+        {
+          preprocessings[IdName] = load_img;
+        }
+        if (starts_with(IdentifierStr.c_str(), "split_str_to_float"))
+        {
+          std::cout << "SPLIT\n";
+          preprocessings[IdName] = split_str_to_float;
+        }
+      }
+
+      getNextToken();
+    }
+    
     return aux;
   }
 
@@ -1716,7 +1812,6 @@ static std::map<std::string, std::vector<float>> NamedDims;
 // Current Cuda Result
 float *currentCudaResult;
 std::vector<float> currentDims;
-int used_cuda = 0;
 
 // Cuda Parallellism
 constexpr int num_parallel_streams = 2;
@@ -1729,8 +1824,6 @@ static std::map<std::string, float *> NamedParamGrads;
 
 // File Handling
 std::vector<char *> glob_str_files;
-unsigned char* current_data_attr;
-std::vector<float> current_data_attr_dims;
 
 
 
@@ -2108,53 +2201,8 @@ Value *StringExprAST::codegen() {
 
 
 //===----------------------------------------------------------------------===//
-// File Handling
+// Dataset
 //===----------------------------------------------------------------------===//
-
-extern "C" float * load_img(char *img_name)
-{
-  used_cuda=0;
-  int width, height, channels;
-  
-  unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
-
-  if (image_data) {
-    
-    current_data_attr_dims.clear();
-    current_data_attr_dims.push_back((float)width);
-    current_data_attr_dims.push_back((float)height);
-    current_data_attr_dims.push_back((float)channels);
-
-    /*
-    std::cout << "Width: " << width << " pixels\n";
-    std::cout << "Height: " << height << " pixels\n";
-    std::cout << "Channels: " << channels << "\n";
-    */
-
-    //stbi_image_free(image_data);
-
-    float *image_data_float = new float[width * height * channels];
-  
-    // Loop through each pixel and convert to float between 0.0 and 1.0
-    for (int y = 0; y < height; ++y) {
-      for (int x = 0; x < width; ++x) {
-        for (int c = 0; c < channels; ++c) {
-          // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
-          image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
-        }
-      }
-    }
-
-    return image_data_float;
-    
-  } else {
-    std::string img_n = img_name;
-    std::string _error = "Falha ao abrir a imagem: " + img_n + ".";
-    LogErrorS(_error);
-  }
-
-  return nullptr;
-}
 
 
 
@@ -2227,6 +2275,8 @@ extern "C" float Datasetgetitem_1(float idx, char *tensor_name)
 extern "C" float* Datasetgetitem_2(float idx);
 
 
+
+
 int yield_pointer = 0;
 extern "C" float Datasetyield(float batch_size, char * x_name, ...)
 {
@@ -2261,28 +2311,37 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
   
   int b=0;
 
-  int dims_prod;
+  int dims_prod, y_dims_prod;
 
-  float *cur_float_img;
+  float *cur_float_img, *y_aux;
+
   while (b < batch_size)
   {
 
-    cur_float_img = load_img(glob_str_files[yield_pointer]);
-    //cur_float_img = (*TheModule->getFunction("Datasetgetitem_1"))((float)yield_pointer);
-    //ret = Datasetgetitem_1((float)yield_pointer, x_name);
+    std::cout << "\n";
+    //cur_float_img = load_img(glob_str_files[yield_pointer]);
 
-    
+    std::string preprocessing = "preprocess_";
+    preprocessing += (const char *)x_name;
+    std::cout << "Preprocessing: " << preprocessing << "\n";
 
+    cur_float_img = preprocessings[preprocessing](glob_str_files[yield_pointer]);
     //dims_prod = dimsProd(current_data_attr_dims);
     dims_prod = 28*28;
-
     for (int j = 0; j < dims_prod; ++j)
       current_data[b * dims_prod + j] = cur_float_img[j];
     
     
-    std::vector<std::string> splitted = split_str(glob_str_files[yield_pointer],'/');
+    //std::vector<std::string> splitted = split_str(glob_str_files[yield_pointer],'/');
+    preprocessing = "preprocess_";
+    preprocessing += (const char *)y_name;
+    std::cout << "Preprocessing: " << preprocessing << "\n";
+    y_aux = preprocessings[preprocessing](glob_str_files[yield_pointer]);
+    y_dims_prod=1;
+    for (int j = 0; j < y_dims_prod; ++j)
+      current_labels[b * y_dims_prod + j] = y_aux[j];
+
     
-    current_labels[b] = std::stof(splitted[splitted.size()-2]);
 
     
     b+=1;
