@@ -1,3 +1,12 @@
+class Dataset
+	def __init__(f batch_size)
+		self.batch_size = batch_size;
+
+	def getitem(f path, t x)
+		load_img("/home/nosaveddata/mnist/testing/0/3.png")
+		0;
+0;
+
 class Model
 	def __init__(f hiddens, f num_classes)
 		tensor[hiddens, 784, xavu] self.w1
@@ -6,25 +15,34 @@ class Model
 	def forward(t x)
 		x = x@self.w1
 		x = x@self.w2;
-
 0;
 
 Model model;
 model.__init__(768, 10);
 
 
+Dataset dataset;
+dataset.__init__(32);
+
+dataset.getitem(8, x);
+
+
+tensor[28,28,1] x
+tensor[10] y;
+
 glob("/home/nosaveddata/mnist/training/*/*.png");
-init_dataset(32);
 
-tensor[32,28,28,1] x
-tensor[32,10] y;
+dataset.init_dataset(32);
 
+tensor[28,28,1] x
+tensor[10] y;
 
+dataset.yield(32, x, y);
 
 for i=0, i<1000 :
-	tensor[1] x
-	tensor[1] y
-	yield(32, x, y)
+	tensor[28,28,1] x
+	tensor[10] y
+	dataset.yield(32, x, y)
 	x.view(32, 784)
 	y.onehot(10)
 	model.forward(x)
@@ -37,13 +55,12 @@ model.w2.sum();
 model.w2.max();
 
 
-tensor[1,28,28,1] x
-0;
+tensor[1,28,28,1] x;
 
-load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/3.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/3.png");
 #load_preprocess_img(x, "/home/nosaveddata/mnist/testing/1/489.png");
 #load_preprocess_img(x, "/home/nosaveddata/mnist/testing/2/35.png");
-#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/4/27.png");
+load_preprocess_img(x, "/home/nosaveddata/mnist/testing/4/27.png");
 x.view(1,784);
 
 model.forward(x);
