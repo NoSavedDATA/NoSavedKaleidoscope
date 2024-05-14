@@ -128,7 +128,8 @@ bool in_str(std::string str, std::vector<std::string> list) {
 }
 
 
-std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min", "yield"};
+std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
+std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavn"};
 
 
@@ -817,8 +818,8 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
     }
   }
 
-  if (IdName=="yield")
-    Args.push_back(std::make_unique<StringExprAST>("-2"));
+  
+  
 
   // Eat the ')'.
   getNextToken();
@@ -1123,6 +1124,8 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
 
   if (IdName=="view")
     Args.push_back(std::make_unique<NumberExprAST>(-2.0f));
+  if (ends_with(IdName, "yield"))
+    Args.push_back(std::make_unique<StringExprAST>("-2"));
 
   // Eat the ')'.
   getNextToken();
@@ -1602,13 +1605,13 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
   getNextToken();
 
   bool is_tensor=false;
-  std::vector<std::string> ArgNames, ArgTypes;
+  std::vector<std::string> ArgNames, Types;
   while (CurTok != ')')
   {
-    ArgTypes.push_back(IdentifierStr);
+    Types.push_back(IdentifierStr);
     if (IdentifierStr=="t")
       is_tensor=true;
-    if (IdentifierStr!="t" && IdentifierStr!="f")
+    if (IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="s")
       LogErrorP_to_comma("Tipo da variável no protótipo precisa ser t ou f.");
     else {
       getNextToken();
@@ -1640,7 +1643,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
   if (Kind && ArgNames.size() != Kind)
     return LogErrorP("Número inválido de operandos para o operador");
 
-  return std::make_unique<PrototypeAST>(FnName, ArgNames, ArgTypes, Kind != 0,
+  return std::make_unique<PrototypeAST>(FnName, ArgNames, Types, Kind != 0,
                                          BinaryPrecedence);
 }
 
@@ -1734,7 +1737,6 @@ std::vector<float> current_data_attr_dims;
 
 // Handle Class self with phantom argument
 std::string FirstArg;
-
 
 
 
@@ -2156,27 +2158,6 @@ extern "C" float * load_img(char *img_name)
 
 
 
-float *preprocess_image(unsigned char* image_data, std::vector<float> dims)
-{
-  int width    = (int)dims[0];
-  int height   = (int)dims[1];
-  int channels = (int)dims[2];
-  float *image_data_float = new float[width * height * channels];
-  
-
-  // Loop through each pixel and convert to float between 0.0 and 1.0
-  for (int y = 0; y < height; ++y) {
-    for (int x = 0; x < width; ++x) {
-      for (int c = 0; c < channels; ++c) {
-        // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
-        image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
-      }
-    }
-  }
-
-  return image_data_float;
-}
-
 extern "C" char * _glob_b_(char *pattern) {
     // TODO: make var of type string vector to hold this result.
 
@@ -2215,13 +2196,12 @@ extern "C" char * _glob_b_(char *pattern) {
 
 
 
-int yield_pointer = 0;
 float *current_data;
 float *current_labels;
-
-
-extern "C" float init_dataset(float batch_size)
+extern "C" float Datasetinit_dataset(float batch_size)
 {
+  std::cout << "Executing init dataset\n";
+  std::cout << "Fist arg: " << FirstArg << "\n";
   std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
   load_img(glob_str_files[0]);
 
@@ -2238,18 +2218,34 @@ extern "C" float init_dataset(float batch_size)
   return 0;
 }
 
-extern "C" float yield(float batch_size, char * x_name, ...)
+extern "C" float Datasetgetitem_1(float idx, char *tensor_name)
 {
+  //std::cout << "EXECUTING GETITEM\n";
+  return 12321;
+}
+
+extern "C" float* Datasetgetitem_2(float idx);
+
+
+int yield_pointer = 0;
+extern "C" float Datasetyield(float batch_size, char * x_name, ...)
+{
+  //std::cout << "Executing yield\n";
+  //std::cout << "Fist arg: " << FirstArg << "\n";
+
   std::vector<char *> tensor_names;
   tensor_names.push_back(x_name);
 
 
+  //std::cout << "X name: " << x_name << "\n";
   va_list args;
   va_start(args, x_name);
 
   for (int i=0; i<10; i++)
   {
+    //std::cout << "Vararg for: " << i << "\n";
     char * name = va_arg(args, char *);
+    //std::cout << "Name: " << name << "\n\n";
     
     if (starts_with(name, "-2"))
       break;
@@ -2260,33 +2256,39 @@ extern "C" float yield(float batch_size, char * x_name, ...)
 
   char * y_name = tensor_names[1];
 
+  //std::cout << "Finished vararg\n";
 
-  // TODO Make this on the coding language instead.
-  int i=0;
+  
+  int b=0;
 
   int dims_prod;
 
   float *cur_float_img;
-  while(i<batch_size)
+  while (b < batch_size)
   {
 
     cur_float_img = load_img(glob_str_files[yield_pointer]);
+    //cur_float_img = (*TheModule->getFunction("Datasetgetitem_1"))((float)yield_pointer);
+    //ret = Datasetgetitem_1((float)yield_pointer, x_name);
+
+    
+
     //dims_prod = dimsProd(current_data_attr_dims);
     dims_prod = 28*28;
 
     for (int j = 0; j < dims_prod; ++j)
-      current_data[i * dims_prod + j] = cur_float_img[j];
+      current_data[b * dims_prod + j] = cur_float_img[j];
     
     
     std::vector<std::string> splitted = split_str(glob_str_files[yield_pointer],'/');
     
-    //std::cout << "File: " << glob_str_files[yield_pointer] << "\n";
-    //std::cout << "Label: " << splitted[splitted.size()-2] << "\n";
-    current_labels[i] = std::stof(splitted[splitted.size()-2]);
+    current_labels[b] = std::stof(splitted[splitted.size()-2]);
 
+    
+    b+=1;
+    
     yield_pointer+=1;
-    i+=1;
-    // Drop last batch
+    // Drop last batch and reset idx
     if(yield_pointer>(glob_str_files.size()-batch_size-batch_size))
     { 
       std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
@@ -2729,7 +2731,7 @@ Value *VariableExprAST::codegen() {
     V = Builder->CreateLoad(PointerType::get(Type::getInt8Ty(*TheContext), 0), V, Name.c_str());
     if (!seen_var_attr)
     {
-      std::cout << "Print str call for: " << Name << "\n";
+      //std::cout << "Print str call for: " << Name << "\n";
       Builder->CreateCall(TheModule->getFunction("PrintStr"),
                       {V});
     }
@@ -4408,7 +4410,7 @@ Value *CallExprAST::codegen() {
   tgt_function_name = CalleeF->getName().str();
 
   // If argument mismatch error.
-  if ((CalleeF->arg_size()-args_removal) != Args.size() && !in_str(tgt_function_name, tensor_methods))
+  if ((CalleeF->arg_size()-args_removal) != Args.size() && !in_str(tgt_function_name, vararg_methods))
     return LogErrorV("Parâmetros passados incorretos.");
 
   std::vector<Value *> ArgsV;
@@ -4451,7 +4453,16 @@ Value *CallExprAST::codegen() {
 Function *PrototypeAST::codegen() {
   // Make the function type:  float(float,float) etc.
 
-  std::vector<Type *> Floats(Args.size(), Type::getFloatTy(*TheContext));
+  std::vector<Type *> types;
+  for (auto &type : Types)
+  {
+    if (type=="s")
+      types.push_back(PointerType::get(Type::getInt8Ty(*TheContext), 0));
+    else
+      types.push_back(Type::getFloatTy(*TheContext));
+  }
+
+  //std::vector<Type *> Floats(Args.size(), Type::getFloatTy(*TheContext));
   
   /*
   if (Args.size()>0)
@@ -4459,7 +4470,7 @@ Function *PrototypeAST::codegen() {
       Floats[0] = PointerType::get(Type::getInt8Ty(*TheContext), 0);
   */
 
-  FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), Floats, false);
+  FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
   
 
   Function *F =
@@ -4487,6 +4498,9 @@ Function *FunctionAST::codegen() {
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
   // reference to it for use below.
   auto &P = *Proto;
+
+    
+
   FunctionProtos[Proto->getName()] = std::move(Proto);
   Function *TheFunction = getFunction(P.getName());
   if (!TheFunction)
@@ -4501,6 +4515,8 @@ Function *FunctionAST::codegen() {
   Builder->SetInsertPoint(BB);
 
 
+  
+
 
   // Record the function arguments in the NamedValues map.
 
@@ -4513,19 +4529,16 @@ Function *FunctionAST::codegen() {
   int i = 0;
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
-
     
     //std::cout << "Create Function alloca for: " << Arg.getName().str() << "\n";
-    if (Arg.getName()!="self")
-    {
-      AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
+    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
 
-      // Store the initial value into the alloca.
-      Builder->CreateStore(&Arg, Alloca);
+    // Store the initial value into the alloca.
+    Builder->CreateStore(&Arg, Alloca);
 
-      // Add arguments to variable symbol table.
-      NamedValues[std::string(Arg.getName())] = Alloca;
-    }
+    // Add arguments to variable symbol table.
+    NamedValues[std::string(Arg.getName())] = Alloca;
+    
   }
   //std::cout << "\n\n";
 
@@ -4536,6 +4549,7 @@ Function *FunctionAST::codegen() {
 
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
+
 
     return TheFunction;
   }
@@ -4901,7 +4915,7 @@ static void InitializeModule() {
 
 
 
-  // char *, char *, float
+  // float, char *, ... 
   FunctionType *yieldTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0)},
@@ -4910,11 +4924,11 @@ static void InitializeModule() {
   Function::Create(
     yieldTy,
     Function::ExternalLinkage,
-    "yield",
+    "Datasetyield",
     TheModule.get()
   );
 
-  // float
+  // float, char *, ... 
   FunctionType *init_datasetTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
@@ -4923,15 +4937,32 @@ static void InitializeModule() {
   Function::Create(
     init_datasetTy,
     Function::ExternalLinkage,
-    "init_dataset",
+    "Datasetinit_dataset",
     TheModule.get()
   );
+
+
+  
+  // char *
+  FunctionType *Datasetgetitem_1Ty = FunctionType::get(
+      //PointerType::get(Type::getFloatTy(*TheContext), 0),
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false
+  );
+  Function::Create(
+    Datasetgetitem_1Ty,
+    Function::ExternalLinkage,
+    "Datasetgetitem_1",
+    TheModule.get()
+  );
+
 
   // char *
   FunctionType *load_preprocess_imgTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
-      false // Not vararg
+      false
   );
   Function::Create(
     load_preprocess_imgTy,
