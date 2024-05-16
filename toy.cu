@@ -130,6 +130,7 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
+std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavn"};
 
 
@@ -177,6 +178,7 @@ enum Token {
   tok_var_str = -17,
   tok_attr_var = -18,
   tok_attr_tensor = -19,
+  tok_preprocessing = -20,
 
   // function ops
   tok_log = -30
@@ -272,6 +274,8 @@ static int get_token() {
       IdentifierStr = "_glob_b_";
     if (IdentifierStr == "str")
       return tok_var_str;
+    if (in_str(IdentifierStr,preprocessing_names))
+      return tok_preprocessing;
     
     return tok_identifier;
   }
@@ -1094,23 +1098,143 @@ extern "C" float * load_img(char *img_name)
 }
 
 
-extern "C" float * split_str_to_float(char *in_string)
+extern "C" float * split_str_to_float(char *in_string, int gather_position)
 {
-  std::cout << "split_str_to_float CALLED\n";
   std::vector<std::string> splitted = split_str(in_string,'/');
 
   float * ret = new float[1];
-  ret[0] = std::stof(splitted[splitted.size()-2]);
-  std::cout << "Split retrieval: " << ret[0] << "\n";
+
+  if(gather_position<0)
+    gather_position = splitted.size()+gather_position;
+
+  ret[0] = std::stof(splitted[gather_position]);
+
   return ret;
 }
 
 
+class PreprocessingsInterface {
+public:
+  virtual ~PreprocessingsInterface() = default;
+  std::vector<float> Dims = {-1.0f};
+  std::string Type = "None";
+  std::string Name = "Unnamed";
+  std::string isSelf = "false";
+
+  virtual float * Preprocess(char *, ...) {}
+  virtual void SetType(std::string Type) {
+    this->Type=Type;
+  }
+};
 
 
-std::map<std::string, std::function<float *(char*)>> preprocessings;
+class LoadImg : public PreprocessingsInterface
+{
+
+  public:
+   LoadImg() {}
+
+    virtual float * Preprocess(char *, ...) override;
+};
 
 
+class SplitStrToFloat : public PreprocessingsInterface
+{
+  std::vector<int> Args;
+
+  public:
+   SplitStrToFloat(std::vector<int> Args)
+    : Args(std::move(Args)) {}
+
+    virtual float * Preprocess(char *, ...) override;
+};
+
+
+float * LoadImg::Preprocess(char *file_name, ...)
+{
+  va_list args;
+  va_end(args);
+
+  return load_img(file_name);
+}
+
+float * SplitStrToFloat::Preprocess(char *file_name, ...)
+{
+  va_list args;
+  va_end(args);
+
+  int gather_position = Args[0];
+
+
+  return split_str_to_float(file_name, gather_position);
+}
+
+
+
+std::map<std::string, std::unique_ptr<PreprocessingsInterface>> preprocessings;
+
+
+
+static std::unique_ptr<ExprAST> ParsePreprocessing(std::string preprocess_var_name) {
+
+  if (CurTok!=tok_preprocessing)
+    LogError("Pré-processamento desconhecido.");
+
+  while (CurTok==tok_preprocessing)
+  {
+    
+    std::string preprocess_name = IdentifierStr;
+    
+    
+    getNextToken();
+
+    std::vector<int> Args;
+    if (CurTok=='(')
+    {
+      getNextToken();
+      
+      while(CurTok!=')')
+      {
+        int is_minus=1;
+
+        if (CurTok=='-')
+        {
+          is_minus=-1;
+          getNextToken();
+        }
+
+        
+        if (auto Arg = ParseNumberExpr())
+          Args.push_back(is_minus*NumVal);
+        else
+          return nullptr;
+
+        if (CurTok == ')')
+        {
+          std::cout << "Broke\n";
+          break;
+        }
+        if (CurTok != ',')
+          return LogError("Esperado ')' ou ',' na lista de argumentos");
+        getNextToken();
+      }
+      getNextToken();
+    } 
+
+    if (preprocess_name=="load_img")
+      preprocessings[preprocess_var_name] = std::make_unique<LoadImg>();
+
+    if (preprocess_name=="split_str_to_float")
+      preprocessings[preprocess_var_name] = std::make_unique<SplitStrToFloat>(std::move(Args));
+
+
+    if (CurTok==tok_space)
+      break;
+    if (CurTok!=',')
+      LogError("Esperava-se ',' ou quebra de linha após pré-processamento.");
+  }
+  return nullptr;
+}
 
 
 static std::unique_ptr<ExprAST> ParseSelfExpr() {
@@ -1176,24 +1300,9 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     if (starts_with(IdName.c_str(), "preprocess_") && pre_dot=="self")
     {
       getNextToken(); // eat =
-      std::cout << "\nPARSED PREPROCESS: " << IdName << "\n\n";
-      
-      std::vector<std::string> preprocessings_vec = split_str(IdentifierStr, ',');
-      for (int i=0; i<preprocessings_vec.size(); i++)
-      {
-        std::cout << "Cur identifier:" << IdentifierStr << "\n";
-        if (IdentifierStr=="load_img")
-        {
-          preprocessings[IdName] = load_img;
-        }
-        if (starts_with(IdentifierStr.c_str(), "split_str_to_float"))
-        {
-          std::cout << "SPLIT\n";
-          preprocessings[IdName] = split_str_to_float;
-        }
-      }
 
-      getNextToken();
+      ParsePreprocessing(IdName);
+
     }
     
     return aux;
@@ -1881,7 +1990,19 @@ static std::unique_ptr<ExprAST> ParseClass() {
   return nullptr;
 }
 
+std::vector<float> BatchLessDims(std::vector<float> dims)
+{
+  // Removes first dim (batch dim).
+  if (dims.size()<=1)
+    LogError("Remover dimensão do batch requer uma entrada com mais de uma dimensão.");
 
+  std::vector<float> new_dims;
+
+  for (int i=0; i<dims.size()-1;i++)
+    new_dims.push_back(dims[i+1]);
+
+  return new_dims;
+}
 
 int dimsProd(std::vector<float> dims)
 {
@@ -2318,31 +2439,24 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
   while (b < batch_size)
   {
 
-    std::cout << "\n";
-    //cur_float_img = load_img(glob_str_files[yield_pointer]);
 
-    std::string preprocessing = "preprocess_";
+    //for (char *preprocess:tensor_names)
+    
+
     preprocessing += (const char *)x_name;
-    std::cout << "Preprocessing: " << preprocessing << "\n";
-
-    cur_float_img = preprocessings[preprocessing](glob_str_files[yield_pointer]);
-    //dims_prod = dimsProd(current_data_attr_dims);
-    dims_prod = 28*28;
+    cur_float_img = preprocessings[preprocessing]->Preprocess(glob_str_files[yield_pointer]);
+    dims_prod = dimsProd(BatchLessDims(NamedDims[x_name]));
     for (int j = 0; j < dims_prod; ++j)
       current_data[b * dims_prod + j] = cur_float_img[j];
     
     
-    //std::vector<std::string> splitted = split_str(glob_str_files[yield_pointer],'/');
-    preprocessing = "preprocess_";
     preprocessing += (const char *)y_name;
-    std::cout << "Preprocessing: " << preprocessing << "\n";
-    y_aux = preprocessings[preprocessing](glob_str_files[yield_pointer]);
+    y_aux = preprocessings[preprocessing]->Preprocess(glob_str_files[yield_pointer]);
     y_dims_prod=1;
     for (int j = 0; j < y_dims_prod; ++j)
       current_labels[b * y_dims_prod + j] = y_aux[j];
 
     
-
     
     b+=1;
     
@@ -2356,8 +2470,10 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
   }
 
   float *x, *y;
-  cudaMalloc(&x, batch_size*dims_prod*sizeof(float));
-  cudaMalloc(&y, batch_size*sizeof(float));
+  
+  x = NamedTensors[x_name];
+  y = NamedTensors[y_name];
+
 
   // todo - inputs is copied on default stream so this synchronises CPU/GPU for now
   /*
@@ -2376,12 +2492,9 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
   for(int i=0; i<current_data_attr_dims.size(); i++)
     dims_x.push_back(current_data_attr_dims[i]);
 
-  cudaFree(NamedTensors[x_name]);
-  cudaFree(NamedTensors[y_name]);
 
-  NamedTensors[x_name] = x;
+
   NamedDims[x_name] = dims_x;
-  NamedTensors[y_name] = y;
   NamedDims[y_name] = dims_y;
 
   return 0;
@@ -4189,7 +4302,6 @@ Value *VarExprAST::codegen() {
     // the initializer from referencing the variable itself, and permits stuff
     // like this:
     //  var a = 1 in
-    //    var a = a in ...   # refers to outer 'a'.
     Value *InitVal;
     if (Init) {
       InitVal = Init->codegen();
@@ -4246,7 +4358,6 @@ Value *StrExprAST::codegen() {
     // the initializer from referencing the variable itself, and permits stuff
     // like this:
     //  var a = 1 in
-    //    var a = a in ...   # refers to outer 'a'.
     Value *InitVal;
     if (Init) {
       InitVal = Init->codegen();
@@ -4359,7 +4470,6 @@ Value *TensorExprAST::codegen() {
     // the initializer from referencing the variable itself, and permits stuff
     // like this:
     //  var a = 1 in
-    //    var a = a in ...   # refers to outer 'a'.
     Value *InitVal;
     if (Init) {
       InitVal = Init->codegen();
@@ -4954,24 +5064,8 @@ static void InitializeModule() {
   );
 
   //===----------------------------------------------------------------------===//
-  // File Handling
+  // DATASET
   //===----------------------------------------------------------------------===//
-
-  
-  // char *
-  FunctionType *load_imgTy = FunctionType::get(
-      PointerType::get(Type::getFloatTy(*GlobalContext), 0),
-      {PointerType::get(Type::getInt8Ty(*GlobalContext), 0)},
-      false // Not vararg
-  );
-  Function::Create(
-    load_imgTy,
-    Function::ExternalLinkage,
-    "load_img",
-    TheModule.get()
-  );
-  
-
 
 
   // float, char *, ... 
@@ -5001,21 +5095,25 @@ static void InitializeModule() {
   );
 
 
+  //===----------------------------------------------------------------------===//
+  // File Handling
+  //===----------------------------------------------------------------------===//
+  
+
   
   // char *
-  FunctionType *Datasetgetitem_1Ty = FunctionType::get(
-      //PointerType::get(Type::getFloatTy(*TheContext), 0),
-      Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
-      false
+  FunctionType *load_imgTy = FunctionType::get(
+      PointerType::get(Type::getFloatTy(*GlobalContext), 0),
+      {PointerType::get(Type::getInt8Ty(*GlobalContext), 0)},
+      false // Not vararg
   );
   Function::Create(
-    Datasetgetitem_1Ty,
+    load_imgTy,
     Function::ExternalLinkage,
-    "Datasetgetitem_1",
+    "load_img",
     TheModule.get()
   );
-
+  
 
   // char *
   FunctionType *load_preprocess_imgTy = FunctionType::get(
@@ -5464,6 +5562,11 @@ int main() {
   InitializeModule();
 
   // Run the main "interpreter loop" now.
+
+  //preprocessings["load_img"] = LoadImg;
+  //preprocessings["split_str_to_float"] = LoadImg;
+  //preprocessings["split_str_to_float"] = split_str_to_float;
+
   MainLoop();
 
   return 0;
