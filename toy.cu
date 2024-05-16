@@ -13,6 +13,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
+
 #include "include/KaleidoscopeJIT.h"
 
 
@@ -2398,6 +2399,7 @@ extern "C" float* Datasetgetitem_2(float idx);
 
 
 int yield_pointer = 0;
+bool has_dataset_started=false;
 extern "C" float Datasetyield(float batch_size, char * x_name, ...)
 {
   //std::cout << "Executing yield\n";
@@ -2426,12 +2428,22 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
 
   char * y_name = tensor_names[1];
 
-  //std::cout << "Finished vararg\n";
+  int dims_prod, y_dims_prod;
 
+
+  /*
+  if(!has_dataset_started)
+  {
+    for (char *preprocess : tensor_names)
+    {
+      std::cout << "Tensor name: " << preprocess << "\n";
+
+    }
+  }
+  */
   
   int b=0;
 
-  int dims_prod, y_dims_prod;
 
   float *cur_float_img, *y_aux;
 
@@ -2440,15 +2452,15 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
 
 
     //for (char *preprocess:tensor_names)
-    
-
+    std::string preprocessing = "preprocess_";
     preprocessing += (const char *)x_name;
+    //std::cout << "Preprocessing for: " << preprocessing << "\n";
     cur_float_img = preprocessings[preprocessing]->Preprocess(glob_str_files[yield_pointer]);
     dims_prod = dimsProd(BatchLessDims(NamedDims[x_name]));
     for (int j = 0; j < dims_prod; ++j)
       current_data[b * dims_prod + j] = cur_float_img[j];
     
-    
+    preprocessing = "preprocess_";
     preprocessing += (const char *)y_name;
     y_aux = preprocessings[preprocessing]->Preprocess(glob_str_files[yield_pointer]);
     y_dims_prod=1;
