@@ -1,0 +1,27 @@
+class Dataset
+	def __init__(f batch_size, s preprocess_x, s preprocess_y)
+		self.batch_size = batch_size
+		self.preprocess_x = load_img
+		self.preprocess_y = split_str_to_float(-2)
+		0;
+0;
+
+
+Dataset dataset;
+dataset.__init__(32, "a", "b");
+
+dataset.batch_size;
+
+tensor[28,28,1] x
+tensor[10] y;
+
+glob("/home/nosaveddata/mnist/training/*/*.png");
+
+dataset.init_dataset(32);
+
+tensor[32,28,28,1] x
+tensor[32,1] y;
+
+dataset.yield(32, x, y);
+
+y;
