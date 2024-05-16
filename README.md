@@ -24,6 +24,12 @@ sudo apt-get install llvm clang zlib1g-dev libzstd-dev
 ./alias.sh
 ```
 
+- Update submodules:
+
+```bash
+./update_submodules.sh
+```
+
 - Test using `culang`, type `1+1;`, it should return `2.00`.
 
 ---
