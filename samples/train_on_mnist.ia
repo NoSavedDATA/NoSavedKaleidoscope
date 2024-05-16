@@ -1,0 +1,72 @@
+class Dataset
+	def __init__(f batch_size, s preprocess_x, s preprocess_y)
+		self.batch_size = batch_size
+		self.preprocess_x = "load_img"
+		self.preprocess_y = "split_str_to_float"
+		0;
+
+	def getitem(f path, t x)
+		load_img("/home/nosaveddata/mnist/testing/0/3.png")
+		0;
+0;
+
+class Model
+	def __init__(f hiddens, f num_classes)
+		tensor[hiddens, 784, xavu] self.w1
+		tensor[num_classes, hiddens, xavu] self.w2;
+	
+	def forward(t x)
+		x = x@self.w1
+		x = x@self.w2;
+0;
+
+Model model;
+model.__init__(768, 10);
+
+
+Dataset dataset;
+dataset.__init__(32, "a", "b");
+
+dataset.getitem(8, x);
+
+
+tensor[28,28,1] x
+tensor[10] y;
+
+glob("/home/nosaveddata/mnist/training/*/*.png");
+
+dataset.init_dataset(32);
+
+tensor[28,28,1] x
+tensor[10] y;
+
+dataset.yield(32, x, y);
+
+for i=0, i<1000 :
+	tensor[28,28,1] x
+	tensor[10] y
+	dataset.yield(32, x, y)
+	x.view(32, 784)
+	y.onehot(10)
+	model.forward(x)
+	cross_entropy(x, y)
+	loss.backward()
+	AdamW(0.0001, 0.9, 0.999, 0.01);
+
+model.w2.mean();
+model.w2.sum();
+model.w2.max();
+
+
+tensor[1,28,28,1] x;
+
+load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/3.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/1/489.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/2/35.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/4/27.png");
+x.view(1,784);
+
+model.forward(x);
+
+x;
+softmax(x);
