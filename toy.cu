@@ -15,8 +15,6 @@
 #include "llvm/Target/TargetMachine.h"
 #include "include/KaleidoscopeJIT.h"
 
-#include "include/KaleidoscopeJIT.h"
-
 
 #include <algorithm>
 #include <cstdarg>
