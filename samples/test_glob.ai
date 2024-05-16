@@ -1,0 +1,10 @@
+
+str a
+a = glob("/home/nosaveddata/mnist/training/*/*.png")
+a;
+
+str a
+a = glob("/home/nosaveddata/mnist/training/*/*.png")
+a = shuffle_str(a)
+a;
+
