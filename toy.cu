@@ -49,6 +49,8 @@
 
 #include "include/cu_commons.h"
 
+#define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
+
 
 // Files
 #define STB_IMAGE_IMPLEMENTATION
@@ -130,6 +132,8 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
+std::vector<std::string> other_methods = {"gelu"};
+
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavn"};
 
@@ -2937,11 +2941,13 @@ extern "C" float toStoredValues(float Val, char * name_to_store)
 extern "C" float temporaryCudaResult_Attr(char *tensorName)
 {
   //std::cout << "Attributing to tensor: " << tensorName << "\n";
+  
   cudaCheck(cudaFree(NamedTensors[tensorName]));
 
-  float * tensor = new float[4];
-  cudaMemcpy(tensor, currentCudaResult, 4, cudaMemcpyDeviceToHost);
+  //float * tensor = new float[4];
+  //cudaMemcpy(tensor, currentCudaResult, 4, cudaMemcpyDeviceToHost);
 
+  cudaCheck(cudaGetLastError());
   NamedTensors[tensorName] = currentCudaResult;
   NamedDims[tensorName] = currentDims;
 
@@ -2995,13 +3001,12 @@ Value *BinaryTensorScalarExprAST::codegen() {
       return LogErrorV("O nome do tensor/variável é desconhecido.");
     */
     
-    if (used_cuda)
-    {
-      Function *temporaryCudaResult_AttrFn = TheModule->getFunction("temporaryCudaResult_Attr");
-      Builder->CreateCall(temporaryCudaResult_AttrFn, {tensorName});        
+    
+    Function *temporaryCudaResult_AttrFn = TheModule->getFunction("temporaryCudaResult_Attr");
+    Builder->CreateCall(temporaryCudaResult_AttrFn, {tensorName});        
       
-      used_cuda=0;
-    }
+    used_cuda=0;
+    
       
     
     seen_var_attr=false;
@@ -3358,6 +3363,84 @@ extern "C" float max()
   return 0;
 }
 
+__global__ void gelu_forward_kernel1(const float* inp, float* out, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        float xi = inp[i];
+        float cube = 0.044715f * xi * xi * xi;
+        out[i] = 0.5f * xi * (1.0f + tanhf(GELU_SCALING_FACTOR * (xi + cube)));
+    }
+}
+
+extern "C" float gelu(char * tensor_name) {
+
+  float *tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+
+  float dims_prod = dimsProd(dims);
+  float block_size = 32;
+
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
+  
+
+  float *device_y;
+  cudaMalloc(&device_y, dims_prod*sizeof(float));
+
+  const int grid_size = ceil_div(dims_prod, block_size);
+  gelu_forward_kernel1<<<grid_size, block_size>>>(tensor, device_y, dims_prod);
+  cudaCheck(cudaGetLastError());
+
+  
+  int is_forward_func=1;
+  if (is_forward_func)
+  {
+    float *inp, *out;
+
+
+    //oom
+    cudaCheck(cudaMalloc(&inp, dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, dims_prod * sizeof(float)));
+    cudaMemcpy(inp, tensor, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, device_y, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+
+    todo_backwards.push_back(std::make_tuple(linear_layer_dims[0], linear_layer_dims[1],
+                                           linear_layer_dims[1], inp, nullptr, out,
+                                           "gelu", "none"));
+  }
+
+  //cudaCheck(cudaFree(currentCudaResult));
+  currentCudaResult = device_y;
+  currentDims = dims;
+
+  used_cuda=1;
+
+  return 0;
+}
+
+__global__ void gelu_backward1(float* dinp, const float* inp, const float* dout, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        float x = (float)inp[i];
+        float cube = 0.044715f * x * x * x;
+        float tanh_arg = GELU_SCALING_FACTOR * (x + cube);
+        float tanh_out = tanhf(tanh_arg);
+        float coshf_out = coshf(tanh_arg);
+        float sech_out = 1.0f / (coshf_out * coshf_out);
+        float local_grad = 0.5f * (1.0f + tanh_out) + x * 0.5f * sech_out * GELU_SCALING_FACTOR * (1.0f + 3.0f * 0.044715f * x * x);
+        dinp[i] = (float)(local_grad * (float)dout[i]);
+    }
+}
+
+void gelu_backward(const float* inp, float B, float C, float* dinp, const float* dout) {
+
+  float N = B * C;
+  float block_size = 32;
+
+  const int grid_size = ceil_div(N, block_size);
+  gelu_backward1<<<grid_size, block_size>>>(dinp, inp, dout, N);
+  cudaCheck(cudaGetLastError());
+}
+
 
 __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int C) {
     // out is (N, C) just like inp. Each row of inp will get softmaxed.
@@ -3594,24 +3677,26 @@ extern "C" float Backpropagation()
 
     float *new_grad_ptr;
     
-    
-    if (NamedParamGrads[param_name]==nullptr)
+   
+    if (w!=nullptr)
     {
-      NamedParamGrads[param_name] = new_grad_ptr;
-      cudaCheck(cudaMalloc(&new_grad_ptr, OC*C*sizeof(float)));
-      NamedParamGrads[param_name] = new_grad_ptr;
-    } 
-    
-    device_dw = NamedParamGrads[param_name];
-    
+      
+      if (NamedParamGrads[param_name]==nullptr)
+      {
+        NamedParamGrads[param_name] = new_grad_ptr;
+        cudaCheck(cudaMalloc(&new_grad_ptr, OC*C*sizeof(float)));
+        NamedParamGrads[param_name] = new_grad_ptr;
+      } 
+      
+      device_dw = NamedParamGrads[param_name];
+      cudaCheck(cudaMemcpy(device_dw, dw, OC*C*sizeof(float), cudaMemcpyHostToDevice));
+    }
+
 
     cudaMalloc(&device_dinp, B*C*sizeof(float));
-    //cudaMalloc(&device_dw, OC*C*sizeof(float));
-    
-    
     cudaMemcpy(device_dinp, dinp, B*C*sizeof(float), cudaMemcpyHostToDevice);
-    cudaCheck(cudaMemcpy(device_dw, dw, OC*C*sizeof(float), cudaMemcpyHostToDevice));
-    
+
+
     /*
     std::cout << "B: " << B << "\n";
     std::cout << "C: " << C << "\n";
@@ -3623,6 +3708,8 @@ extern "C" float Backpropagation()
     // No switch case for std::string
     if (op=="matmul")
       matmul_backward(inp, w, B, C, OC, device_dinp, device_dw, device_dout);
+    else if (op=="gelu")
+      gelu_backward(inp, B, C, device_dinp, device_dout);
     else if (op=="cross_entropy")
       CrossEntropyBackward(inp, out, B, C, OC, device_dinp);
     else
@@ -3637,7 +3724,8 @@ extern "C" float Backpropagation()
     PrintTensorF(device_dw, OC, C);
     std::cout << "\n\n";
     */
-    NamedParamGrads[param_name] = device_dw;
+    if (w!=nullptr)
+      NamedParamGrads[param_name] = device_dw;
 
 
     // Garbage Collector on all lines below
@@ -4989,6 +5077,18 @@ static void InitializeModule() {
     TheModule.get()
   );
 
+  FunctionType *geluTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false
+  );
+  Function::Create(
+    geluTy,
+    Function::ExternalLinkage,
+    "gelu",
+    TheModule.get()
+  );
+
   // 
   FunctionType *onehotTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -5582,6 +5682,7 @@ int main() {
 
   return 0;
 }
+
 
 
 /*
