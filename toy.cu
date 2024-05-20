@@ -3383,11 +3383,11 @@ extern "C" float gelu(char * tensor_name) {
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
 
-  float *device_y;
-  cudaMalloc(&device_y, dims_prod*sizeof(float));
+  float *y;
+  cudaMalloc(&y, dims_prod*sizeof(float));
 
   const int grid_size = ceil_div(dims_prod, block_size);
-  gelu_forward_kernel1<<<grid_size, block_size>>>(tensor, device_y, dims_prod);
+  gelu_forward_kernel1<<<grid_size, block_size>>>(tensor, y, dims_prod);
   cudaCheck(cudaGetLastError());
 
   
@@ -3401,7 +3401,7 @@ extern "C" float gelu(char * tensor_name) {
     cudaCheck(cudaMalloc(&inp, dims_prod * sizeof(float)));
     cudaCheck(cudaMalloc(&out, dims_prod * sizeof(float)));
     cudaMemcpy(inp, tensor, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
-    cudaMemcpy(out, device_y, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, y, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
 
     todo_backwards.push_back(std::make_tuple(linear_layer_dims[0], linear_layer_dims[1],
                                            linear_layer_dims[1], inp, nullptr, out,
@@ -3409,7 +3409,7 @@ extern "C" float gelu(char * tensor_name) {
   }
 
   //cudaCheck(cudaFree(currentCudaResult));
-  currentCudaResult = device_y;
+  currentCudaResult = y;
   currentDims = dims;
 
   used_cuda=1;
@@ -3438,6 +3438,80 @@ void gelu_backward(const float* inp, float B, float C, float* dinp, const float*
 
   const int grid_size = ceil_div(N, block_size);
   gelu_backward1<<<grid_size, block_size>>>(dinp, inp, dout, N);
+  cudaCheck(cudaGetLastError());
+}
+
+
+
+__global__ void relu_forward(float* Z, float* A,
+                                      float N) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index < N) {
+        A[index] = fmaxf(Z[index], 0);
+    }
+}
+
+extern "C" float relu(char *tensor_name)
+{
+  float * tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
+
+  float N = dimsProd(dims);
+  float block_size = 32;
+
+  float *y;
+  cudaMalloc(&y, N*sizeof(float));
+
+  const int grid_size = ceil_div(N, block_size);
+  relu_forward<<<grid_size, block_size>>>(tensor, y, N);
+
+  int is_forward_func=1;
+  if (is_forward_func)
+  {
+    float *inp, *out;
+
+
+    //oom
+    cudaCheck(cudaMalloc(&inp, N * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, N * sizeof(float)));
+    cudaMemcpy(inp, tensor, N * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, y, N * sizeof(float), cudaMemcpyDeviceToDevice);
+
+    todo_backwards.push_back(std::make_tuple(linear_layer_dims[0], linear_layer_dims[1],
+                                           linear_layer_dims[1], inp, nullptr, out,
+                                           "relu", "none"));
+  }
+
+  //cudaCheck(cudaFree(currentCudaResult));
+  currentCudaResult = y;
+  currentDims = dims;
+
+  return 0;
+}
+
+__global__ void relu_backward1(float* Z, float* dZ, float* dA,
+                                       float N) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index < N) {
+        if (Z[index] > 0) {
+            dZ[index] = dA[index];
+        }
+        else {
+            dZ[index] = 0;
+        }
+    }
+}
+
+void relu_backward(float* inp, float B, float C, float* dinp, float* dout) {
+
+  float N = B * C;
+  float block_size = 32;
+
+  const int grid_size = ceil_div(N, block_size);
+  relu_backward1<<<grid_size, block_size>>>(inp, dinp, dout, N);
   cudaCheck(cudaGetLastError());
 }
 
@@ -3708,6 +3782,8 @@ extern "C" float Backpropagation()
     // No switch case for std::string
     if (op=="matmul")
       matmul_backward(inp, w, B, C, OC, device_dinp, device_dw, device_dout);
+    else if (op=="relu")
+      relu_backward(inp, B, C, device_dinp, device_dout);
     else if (op=="gelu")
       gelu_backward(inp, B, C, device_dinp, device_dout);
     else if (op=="cross_entropy")
@@ -5074,6 +5150,18 @@ static void InitializeModule() {
     softmaxTy,
     Function::ExternalLinkage,
     "softmax",
+    TheModule.get()
+  );
+
+  FunctionType *reluTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      false
+  );
+  Function::Create(
+    reluTy,
+    Function::ExternalLinkage,
+    "relu",
     TheModule.get()
   );
 
