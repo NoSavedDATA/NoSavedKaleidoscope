@@ -17,6 +17,8 @@
 #include "include/KaleidoscopeJIT.h"
 
 
+
+#include <cudnn.h>
 #include <algorithm>
 #include <cstdarg>
 #include <cassert>
@@ -59,6 +61,7 @@
 
 static cublasHandle_t cublas_handle;
 static cublasLtHandle_t cublaslt_handle;
+cudnnHandle_t cudnn;
 
 // cuBLAS workspace. Hardcoding to 32MiB but only Hopper needs 32, for others 4 is OK
 static size_t cublaslt_workspace_size = 32 * 1024 * 1024; // 32 MB
@@ -81,6 +84,16 @@ using namespace llvm::orc;
 #else
 #define MAX_1024_THREADS_BLOCKS 1
 #endif
+
+#define checkCUDNN(expression)                               \
+  {                                                          \
+    cudnnStatus_t status = (expression);                     \
+    if (status != CUDNN_STATUS_SUCCESS) {                    \
+      std::cerr << "Error on line " << __LINE__ << ": "      \
+                << cudnnGetErrorString(status) << std::endl; \
+      std::exit(EXIT_FAILURE);                               \
+    }                                                        \
+  }
 
 // Error Colors
 
@@ -135,7 +148,7 @@ std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
 std::vector<std::string> other_methods = {"gelu"};
 
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
-std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavn"};
+std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
 
 
 //===----------------------------------------------------------------------===//
@@ -2118,7 +2131,7 @@ extern "C" float PrintTensor(char* tensorName){
 
   float *tensor_cuda = NamedTensors[tensorName];
   float *tensor = new float[arr_size];
-  //std::cout << "Printing Tensor " << arr_size << "\n";
+  std::cout << "Printing Tensor " << arr_size << "\n";
   
   cudaDeviceSynchronize();
   cudaCheck(cudaMemcpy(tensor, tensor_cuda, arr_size*sizeof(float), cudaMemcpyDeviceToHost));
@@ -3495,6 +3508,7 @@ __global__ void relu_backward1(float* Z, float* dZ, float* dA,
                                        float N) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
+    
     if (index < N) {
         if (Z[index] > 0) {
             dZ[index] = dA[index];
@@ -3633,6 +3647,144 @@ extern "C" float softmax(char * tensor_name)
 
   return 0;
 }
+
+
+
+extern "C" float Conv2d(char *tensor_name, float C, float OC, float ks, float stride, float padding)
+{
+
+  float *tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+
+  float H, W;
+  H = dims[dims.size()-3];
+  W = dims[dims.size()-2];
+
+  std::cout << "C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << " H " << H << " W " << W << "\n";
+  
+
+  int out_H = std::floor((H - ks + 2 * padding) / stride) + 1;
+  int out_W = std::floor((W - ks + 2 * padding) / stride) + 1;
+  std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
+
+
+  int B = (int)dims[0];
+
+  // Initialize input tensor descriptor
+  cudnnTensorDescriptor_t input_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+
+  // Initialize filter descriptor
+  cudnnFilterDescriptor_t filter_desc;
+  checkCUDNN(cudnnCreateFilterDescriptor(&filter_desc));
+  checkCUDNN(cudnnSetFilter4dDescriptor(filter_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, OC, C, ks, ks));
+
+  // Initialize convolution descriptor
+  cudnnConvolutionDescriptor_t conv_desc;
+  checkCUDNN(cudnnCreateConvolutionDescriptor(&conv_desc));
+  checkCUDNN(cudnnSetConvolution2dDescriptor(conv_desc, padding, padding, stride, stride, 1, 1,
+                                           CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+
+  // Initialize output tensor descriptor
+  cudnnTensorDescriptor_t output_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, OC, out_H, out_W));
+
+
+  cudnnConvolutionFwdAlgo_t fwd_algo;
+  int requested_algo_count;
+  int algo_count;
+
+  checkCUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(cudnn, &requested_algo_count));
+  std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(requested_algo_count);
+  checkCUDNN(cudnnFindConvolutionForwardAlgorithm(
+        cudnn,
+        input_desc,
+        filter_desc,
+        conv_desc,
+        output_desc,
+        requested_algo_count,
+        &algo_count,
+        perf_results.data()
+  ));
+
+  fwd_algo = perf_results.front().algo;
+
+  std::size_t workspace_size = 0;
+  checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(
+        cudnn,
+        input_desc,
+        filter_desc,
+        conv_desc,
+        output_desc,
+        fwd_algo,
+        &workspace_size
+  ));
+
+  void* d_workspace = nullptr;
+  cudaCheck(cudaMalloc(&d_workspace, workspace_size));
+
+
+
+
+  
+
+  /*
+  const std::vector<float> filter = {
+        0.0625, 0.125, 0.0625,
+        0.125, 0.25, 0.125,
+        0.0625, 0.125, 0.0625
+    };
+  */
+
+  std::vector<float> h_filter;
+  for (std::size_t idx = 0; idx < C * OC; ++idx) {
+    float *filter = make_xavier_uniform_float_relu(ks*ks, ks*ks*C, ks*ks*OC);
+    for (int i=0; i < ks*ks; i++)
+      h_filter.emplace_back(filter[i]);
+
+    //for (const auto& val : filter) 
+    //  h_filter.emplace_back(val);
+  }
+    
+  float* d_filter = nullptr;
+  const std::size_t filter_size = h_filter.size();
+  cudaCheck(cudaMalloc(&d_filter, filter_size * sizeof(float)));
+  cudaCheck(cudaMemcpy(d_filter, h_filter.data(), filter_size * sizeof(float), cudaMemcpyDefault));
+    
+  float* d_output = nullptr;
+  cudaCheck(cudaMalloc(&d_output, B * out_H * out_W * OC * sizeof(float)));
+
+  constexpr float alpha = 1.0f;
+  constexpr float beta = 0.0f;
+
+  checkCUDNN(cudnnConvolutionForward(
+        cudnn,
+        &alpha,
+        input_desc,
+        tensor,
+        filter_desc,
+        d_filter,
+        conv_desc,
+        fwd_algo,
+        d_workspace,
+        workspace_size,
+        &beta,
+        output_desc,
+        d_output
+    ));
+
+
+  currentCudaResult = d_output;
+
+  std::vector<float> new_dims = {(float)B, (float)out_H, (float)out_W, OC};
+  currentDims = new_dims;
+
+  return 0;
+}
+
+
 
 
 // Parallelizes over B, C
@@ -4608,6 +4760,8 @@ extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self,
     tensor_cpu = make_ones_float(product);
   else if (std::strcmp(init, "xavu") == 0)
     tensor_cpu = make_xavier_uniform_float(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
+  else if (std::strcmp(init, "xavu_relu") == 0)
+    tensor_cpu = make_xavier_uniform_float_relu(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
   else if (std::strcmp(init, "randint") == 0)
     tensor_cpu = make_random_int(product, 10);
   
@@ -5153,6 +5307,7 @@ static void InitializeModule() {
     TheModule.get()
   );
 
+  //char *
   FunctionType *reluTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
@@ -5165,6 +5320,7 @@ static void InitializeModule() {
     TheModule.get()
   );
 
+  //char *
   FunctionType *geluTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
@@ -5177,7 +5333,21 @@ static void InitializeModule() {
     TheModule.get()
   );
 
-  // 
+  
+  //char *
+  FunctionType *conv2dTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),},
+      false
+  );
+  Function::Create(
+    conv2dTy,
+    Function::ExternalLinkage,
+    "Conv2d",
+    TheModule.get()
+  );
+
+  // float
   FunctionType *onehotTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
@@ -5734,6 +5904,13 @@ int main() {
   cublasCheck(cublasSetMathMode(cublas_handle, cublas_math_mode));
   // setup the (global) cuBLASLt workspace
   cudaCheck(cudaMalloc(&cublaslt_workspace, cublaslt_workspace_size));
+
+
+
+  
+  cudnnCreate(&cudnn);
+
+
 
   InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
