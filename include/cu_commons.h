@@ -55,10 +55,10 @@ float* make_random_float(size_t N) {
     return arr;
 }
 
-int* make_random_int(size_t N, int V) {
-    int* arr = (int*)malloc(N * sizeof(int));
+float* make_random_int(size_t N, int V) {
+    float* arr = (float*)malloc(N * sizeof(float));
     for (size_t i = 0; i < N; i++) {
-        arr[i] = rand() % V; // range 0..V-1
+        arr[i] = (float)((int)(rand() % V)); // range 0..V-1
     }
     return arr;
 }
@@ -78,7 +78,17 @@ float* make_ones_float(size_t N) {
 }
 
 float* make_xavier_uniform_float(size_t N, float fan_in, float fan_out) {
-    float xavier_scale = sqrt(6/(fan_in+fan_out));
+    float xavier_scale = 1.4142*sqrt(6/(fan_in+fan_out));
+
+    float* arr = (float*)malloc(N * sizeof(float));
+    for (size_t i = 0; i < N; i++) {
+        arr[i] = xavier_scale*(((float)rand() / RAND_MAX) * 2.0 - 1.0); // range -1..1
+    }
+    return arr;
+}
+
+float* make_xavier_uniform_float_relu(size_t N, float fan_in, float fan_out) {
+    float xavier_scale = 1.4142*sqrt(6/(fan_in+fan_out));
 
     float* arr = (float*)malloc(N * sizeof(float));
     for (size_t i = 0; i < N; i++) {
