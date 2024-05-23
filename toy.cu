@@ -196,6 +196,7 @@ enum Token {
   tok_attr_var = -18,
   tok_attr_tensor = -19,
   tok_preprocessing = -20,
+  tok_conv2d = -21,
 
   // function ops
   tok_log = -30
@@ -253,6 +254,11 @@ static int get_token() {
       {
         LastChar = getchar();
         return tok_tensor;
+      }
+      if (IdentifierStr == "Conv2d" && LastChar=='[')
+      {
+        LastChar = getchar();
+        return tok_conv2d;
       }
       if (LastChar=='.')
       {
@@ -470,6 +476,26 @@ class TensorExprAST : public VarExprAST {
       const std::string &TensorInit)
       : VarExprAST(std::move(VarNames), std::move(Body), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
+
+  Value *codegen() override;
+};
+
+class Conv2dExprAST : public VarExprAST {
+  public:
+    std::unique_ptr<ExprAST> C, OC, Ks, Stride, Padding;
+    std::string TensorInit;
+
+    Conv2dExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::unique_ptr<ExprAST> Body,
+      std::string Type,
+      std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC, std::unique_ptr<ExprAST> Ks,
+      std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding,
+      const std::string &TensorInit)
+      : VarExprAST(std::move(VarNames), std::move(Body), std::move(Type)),
+                   C(std::move(C)), OC(std::move(OC)), Ks(std::move(Ks)),
+                   Stride(std::move(Stride)), Padding(std::move(Padding)),
+                   TensorInit(TensorInit) {}
 
   Value *codegen() override;
 };
@@ -1358,7 +1384,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
 
 
 static std::unique_ptr<ExprAST> ParseTensorExpr() {
-  // TODO: Allow finishing line with ";"
+  
   getNextToken(); // eat the tensor.
   
   std::vector<std::unique_ptr<ExprAST>> dims;
@@ -1452,6 +1478,110 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
 }
 
 
+//
+static std::unique_ptr<ExprAST> ParseConv2dExpr() {
+  
+  getNextToken(); // eat the Conv2d.
+  
+  std::vector<std::unique_ptr<ExprAST>> dims;
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::string init = "randu";
+  //std::make_unique<NumberExprAST>(NumVal)
+  
+  while (true) {
+    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      return LogError("Esperado número da dimensão do tensor.");
+    
+    if (CurTok==tok_number)
+    {
+      if (std::fmod(NumVal, 1.0) != 0)
+        LogWarning("A dimensão do tensor precisa ser int. Não pode ser float ou double.");
+    
+      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      getNextToken();
+    } else if (CurTok==tok_identifier)
+      if (in_str(IdentifierStr, tensor_inits))
+      {
+        init = IdentifierStr;
+        getNextToken();
+      } else
+        dims.push_back(std::move(ParseIdentifierExpr()));
+    else {
+      dims.push_back(std::move(ParseSelfExpr()));
+    }
+
+    
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+  }
+
+  
+
+  if (CurTok != ']')
+    return LogError("Faltou fechar ].");
+    getNextToken();
+
+  if (dims.size()<5)
+    return LogError("Convolução requer argumentos canais, canais de saída, kernel size, stride e padding.");
+
+
+  std::string pre_dot = "false";
+  if (CurTok == tok_self)
+  {
+    pre_dot = "true";
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr tensor: " << pre_dot << "\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Esperado identificador após var.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    tensorVars.push_back(IdentifierStr);
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Esperado um ou mais identificadores após var.");
+  }
+
+
+  std::unique_ptr<ExprAST> Body;
+  if (CurTok==';')
+    Body = std::make_unique<NumberExprAST>(0.0f);
+  else {  
+    Body = ParseExpression();
+    if (!Body)
+      return nullptr;
+  }
+
+
+  auto aux = std::make_unique<Conv2dExprAST>(std::move(VarNames), std::move(Body), "conv2d",
+                                             std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
+                                             std::move(dims[3]), std::move(dims[4]),
+                                             init);
+  aux->SetSelf(pre_dot);
+  
+  return aux;
+}
+
 
 static std::unique_ptr<ExprAST> ParseLogExpr() {
   getNextToken(); // eat the log.
@@ -1518,6 +1648,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     return ParseVarExpr();
   case tok_tensor:
     return ParseTensorExpr();
+  case tok_conv2d:
+    return ParseConv2dExpr();
   case tok_log:
     return ParseLogExpr();
   case tok_tab:
@@ -3299,7 +3431,7 @@ extern "C" float onehot(float num_classes)
 }
 
 
-//TODO: mean, sum, max at CUDA
+//TODO: mean, sum, max over axis
 extern "C" float mean() 
 {
   std::string tensor_name = FirstArg;
@@ -3650,7 +3782,7 @@ extern "C" float softmax(char * tensor_name)
 
 
 
-extern "C" float Conv2d(char *tensor_name, float C, float OC, float ks, float stride, float padding)
+extern "C" float Conv_2d(char *tensor_name, float C, float OC, float ks, float stride, float padding)
 {
 
   float *tensor = NamedTensors[tensor_name];
@@ -3886,7 +4018,7 @@ extern "C" float Backpropagation()
   {
     backward_tuple bt = std::move(todo_backwards.back());
     todo_backwards.pop_back();
-    // TODO: remove loss dw grad and dinp grad at the end of backprop
+    
 
     
     B = std::get<0>(bt);
@@ -4784,6 +4916,98 @@ extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self,
   return 0;
 }
 
+
+class Conv2d
+{
+  cudnnTensorDescriptor_t input_desc;
+  cudnnFilterDescriptor_t filter_desc;
+  cudnnConvolutionDescriptor_t conv_desc;
+  cudnnTensorDescriptor_t output_desc;
+  cudnnConvolutionFwdAlgo_t fwd_algo;
+  void* d_workspace;
+  float* d_filter=nullptr;
+
+  public:
+    int C, OC, ks, stride, padding, out_H, out_W;
+    int H = 0;
+    int W = 0;
+
+    Conv2d(int C, int OC, int ks, int stride, int padding) 
+        : C(C), OC(OC), ks(ks), stride(stride), padding(padding) {}
+
+  
+
+
+  void SetDescriptors(int, int);
+
+  float * Forward(float *, int, int);
+
+};
+
+static std::map<std::string, Conv2d> NamedConv2d;
+
+void Conv2d::SetDescriptors(int H, int W)
+{
+  std::cout << "C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << " H " << H << " W " << W << "\n";
+
+  std::cout << "Conv2d Set Descriptors\n";
+
+
+}
+
+float *Conv2d::Forward(float *tensor, int H, int W)
+{
+  std::cout << "Conv2d Forward\n";
+  if (H != this->H || W != this->W)
+    this->SetDescriptors(H, W);
+}
+
+
+extern "C" float CreateConv2dOnDemand(char *tensorName, int is_obj_attr_or_self, char *init,
+                                      float C, float OC, float ks, float stride, float padding, float H, float W)
+{
+  
+  std::string objectTensorName = tensorName;
+  if (is_obj_attr_or_self)
+    objectTensorName = FirstArg + tensorName;
+
+
+  char * cObjectTensorName = new char[objectTensorName.length() + 1];
+  std::strcpy(cObjectTensorName, objectTensorName.c_str());
+  //NamedConv2d[cObjectTensorName] = tensor;
+
+
+  std::cout << "C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << "\n";
+
+
+
+  /*
+  if (std::strcmp(init, "randu") == 0)
+    tensor_cpu = make_random_float(product);
+  else if (std::strcmp(init, "zeros") == 0)
+    tensor_cpu = make_zeros_float(product);
+  else if (std::strcmp(init, "ones") == 0)
+    tensor_cpu = make_ones_float(product);
+  else if (std::strcmp(init, "xavu") == 0)
+    tensor_cpu = make_xavier_uniform_float(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
+  else if (std::strcmp(init, "xavu_relu") == 0)
+    tensor_cpu = make_xavier_uniform_float_relu(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
+  else if (std::strcmp(init, "randint") == 0)
+    tensor_cpu = make_random_int(product, 10);
+  */
+
+  Conv2d conv = Conv2d((int)C, (int)OC, (int)ks, (int)stride, (int)padding);
+
+
+
+  
+
+
+  return 0;
+}
+
+
+
 Value *TensorExprAST::codegen() {
   std::vector<AllocaInst *> OldBindings;
 
@@ -4834,27 +5058,63 @@ Value *TensorExprAST::codegen() {
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
                                                Builder->CreateGlobalString(TensorInit)});
 
-    /*
-    //SetDims(dims);
+ 
+  }
 
-    int product = dimsProd(Dims);
-    float * tensor_cpu = make_random_float(product);
-    float * tensor;
+  // Codegen the body that is contained by the in expression
 
-    cudaMalloc(&tensor, product*sizeof(float));
-    cudaCheck(cudaMemcpy(tensor, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
+  Value *BodyVal = Body->codegen();
+  if (!BodyVal)
+    return nullptr;
 
-    NamedTensors[VarName] = tensor;
-    NamedDims[VarName] = Dims;
 
+
+  // Return the body computation.
+  return BodyVal;
+}
+
+
+
+
+
+Value *Conv2dExprAST::codegen() {
+  std::vector<AllocaInst *> OldBindings;
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+    // Emit the initializer before adding the variable to scope, this prevents
+    // the initializer from referencing the variable itself, and permits stuff
+    // like this:
+    //  var a = 1 in
+    Value *InitVal;
+    if (Init) {
+      InitVal = Init->codegen();
+      if (!InitVal)
+        return nullptr;
+    } else { // If not specified, use 0.0.
+      InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
+    }
 
 
     
+    int is_obj_attr_or_self = 0;
+    if (GetSelf()!="false")
+      is_obj_attr_or_self=1;
     
-    Builder->CreateCall(TheModule->getFunction("PrintTensor"),
-                        {Builder->CreateGlobalString(VarName)});
-    */
-     
+    Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
+                                              {Builder->CreateGlobalString(VarName),
+                                               ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
+                                               Builder->CreateGlobalString(TensorInit),
+                                               C->codegen(), OC->codegen(), Ks->codegen(), Stride->codegen(),
+                                               Padding->codegen()});
+
+
   }
 
   // Codegen the body that is contained by the in expression
@@ -5343,7 +5603,7 @@ static void InitializeModule() {
   Function::Create(
     conv2dTy,
     Function::ExternalLinkage,
-    "Conv2d",
+    "Conv_2d",
     TheModule.get()
   );
 
@@ -5673,7 +5933,7 @@ static void InitializeModule() {
   );
 
 
-  // char *, int
+  // char *, int, char *
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
@@ -5686,6 +5946,30 @@ static void InitializeModule() {
     CreateTensorOnDemandTy,
     Function::ExternalLinkage,
     "CreateTensorOnDemand",
+    TheModule.get()
+  );
+
+
+// char *, int, char *, int, int, int, int, int
+  FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
+      //PointerType::get(Type::getVoidTy(*TheContext), 0),
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0),
+       Type::getInt32Ty(*TheContext),
+       PointerType::get(Type::getInt8Ty(*TheContext), 0),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext)},
+      false // Not vararg
+  );
+  Function::Create(
+    CreateConv2dOnDemandTy,
+    Function::ExternalLinkage,
+    "CreateConv2dOnDemand",
     TheModule.get()
   );
 
