@@ -52,3 +52,8 @@ clang++ -g -O3 -rdynamic toy.cu `llvm-config --cxxflags --ldflags --system-libs 
 ```bash
 clang++ test.cu --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/local/cuda-12/lib64" -lcudart_static -lcublas -lcublasLt -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -w
 ```
+
+
+## Todos:
+
+- Map var names to hash function.
