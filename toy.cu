@@ -3840,7 +3840,6 @@ extern "C" float softmax(char * tensor_name)
 
 
 
-using conv2d_result = std::tuple<float *, float *, int, int, int, int, int>;
 class Conv2d
 {
   // Forward
@@ -3889,7 +3888,7 @@ class Conv2d
 
   void SetDescriptors(int, int, int);
   void InitFilters();
-  conv2d_result Forward(float *, int, int, int);
+  float *Forward(float *, int, int, int);
   void Backward(float *, float *, float *, float *);
 
 };
@@ -4103,7 +4102,7 @@ void Conv2d::InitFilters()
 
 
 
-conv2d_result Conv2d::Forward(float *tensor, int H, int W, int B)
+float *Conv2d::Forward(float *tensor, int H, int W, int B)
 {
   // Initialize descriptors.
   //std::cout << "\nConv2d Forward with H: " << H << " W: " << W << "\n";
@@ -4154,7 +4153,7 @@ conv2d_result Conv2d::Forward(float *tensor, int H, int W, int B)
   PrintTensorF(d_filter_g, OC * C, ks * ks);
   */
 
-  return std::make_tuple(d_output, d_filter, OC, out_H, out_W, ks, ks);
+  return d_output;
 }
 
 
@@ -4262,20 +4261,15 @@ extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_a
     return 0;
   }
 
-  conv2d_result conv2d_output = conv->Forward(tensor, dims[dims.size()-3], dims[dims.size()-2], dims[0]);
+  output = conv->Forward(tensor, dims[dims.size()-3], dims[dims.size()-2], dims[0]);
 
-  output = std::get<0>(conv2d_output);
-  d_filter = std::get<1>(conv2d_output);
-  int OC = std::get<2>(conv2d_output);
-  int out_H = std::get<3>(conv2d_output);
-  int out_W = std::get<4>(conv2d_output);
-  int ks_H = std::get<5>(conv2d_output);
-  int ks_W = std::get<6>(conv2d_output);
+  int ks_H = conv->ks;
+  int ks_W = conv->ks;
 
 
   
   currentCudaResult = output;
-  float resultingDimsProd = B * (float)OC * (float)out_W * (float)out_W;
+  float resultingDimsProd = B * (float)conv->OC * (float)conv->out_W * (float)conv->out_W;
 
   int is_forward_func = 1;
   if (is_forward_func)
@@ -4289,8 +4283,8 @@ extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_a
     cudaMemcpy(inp, tensor, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
     cudaMemcpy(out, output, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
 
-    todo_backwards.push_back(std::make_tuple(B, C, OC, input_dims_prod, C*OC*ks_H*ks_W,
-                                             inp, d_filter, out,
+    todo_backwards.push_back(std::make_tuple(B, C, conv->OC, input_dims_prod, C*conv->OC*ks_H*ks_W,
+                                             inp, conv->d_filter, out,
                                              "conv2d", conv_name));
     
   }
@@ -4300,7 +4294,7 @@ extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_a
   currentDims = new_dims;
 
   
-  NamedTensors[conv_name] = d_filter;
+  NamedTensors[conv_name] = conv->d_filter;
   NamedDims[conv_name] = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks};
 
   
