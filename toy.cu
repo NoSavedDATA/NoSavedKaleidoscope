@@ -579,16 +579,22 @@ class CallExprAST : public ExprAST {
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Class;
   std::string Pre_dot;
+  bool IsVarForward;
+  std::string CalleeOverride;
 
   public:
     CallExprAST(const std::string &Callee,
                 std::vector<std::unique_ptr<ExprAST>> Args,
                 const std::string &Class,
-                const std::string &Pre_dot)
-        : Callee(Callee), Args(std::move(Args)), Class(Class), Pre_dot(Pre_dot) {}
+                const std::string &Pre_dot,
+                bool IsVarForward,
+                const std::string &CalleeOverride)
+        : Callee(Callee), Args(std::move(Args)), Class(Class), Pre_dot(Pre_dot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {}
 
   Value *codegen() override;
 };
+
+
 
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
@@ -677,6 +683,7 @@ class ClassAST : public ExprAST {
 //===----------------------------------------------------------------------===//
 // Parser
 //===----------------------------------------------------------------------===//
+//global
 
 /// CurTok/getNextToken - Provide a simple token buffer.  CurTok is the current
 /// token the parser is looking at.  getNextToken reads another token from the
@@ -805,10 +812,12 @@ static std::unique_ptr<ExprAST> ParseParenExpr() {
   return V;
 }
 
+//global
 std::vector<std::string> tensorVars;
+std::map<std::string, std::string> functionVars;
 
 
-
+//global
 static std::vector<std::string> Classes;
 static std::map<std::string, std::string> Object_toClass;
 
@@ -819,7 +828,7 @@ static std::map<std::string, std::string> Object_toClass;
 static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
   
   for(int i=0; i<Classes.size(); i++)
-    if(IdentifierStr==Classes[i]) 
+    if(IdentifierStr==Classes[i])  // Object object
     {
       getNextToken();
       std::cout << "Object name: " << IdentifierStr << " and Class: " << Classes[i]<< "\n";
@@ -830,6 +839,9 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
     }
 
   std::string IdName = IdentifierStr;
+  
+  
+  
 
   getNextToken(); // eat identifier.
   
@@ -871,8 +883,18 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
   // Eat the ')'.
   getNextToken();
 
-  return std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None");
+  bool is_var_forward = false;
+  std::string callee_override = "none";
+  if (functionVars.find(IdName) != functionVars.end())
+  {
+    is_var_forward = true;
+    callee_override = functionVars[IdName];
+  }
+  
+  return std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
 }
+
+
 
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
 static std::unique_ptr<ExprAST> ParseIfExpr(int tabcount=1) {
@@ -1213,7 +1235,7 @@ float * SplitStrToFloat::Preprocess(char *file_name, ...)
 }
 
 
-
+//global
 std::map<std::string, std::unique_ptr<PreprocessingsInterface>> preprocessings;
 
 
@@ -1335,6 +1357,8 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     auto aux = std::make_unique<VariableExprAST>(IdName);
     if (std::find(tensorVars.begin(), tensorVars.end(), IdentifierStr) != tensorVars.end())
       aux->SetType("tensor");
+    if (functionVars.find(IdName) != functionVars.end())
+      aux->SetType("function");
     if (is_class_attr)
       aux->SetSelf(pre_dot);
     if (pre_dot=="self")
@@ -1379,7 +1403,15 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
   getNextToken();
 
 
-  return std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot);
+  bool is_var_forward = false;
+  std::string callee_override = "none";
+  if (functionVars.find(IdName) != functionVars.end())
+  {
+    is_var_forward = true;
+    callee_override = functionVars[IdName];
+  }
+  
+  return std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 }
 
 
@@ -1546,12 +1578,13 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
 
   while (true) {
     std::string Name = IdentifierStr;
-    tensorVars.push_back(IdentifierStr);
+    
     getNextToken(); // eat identifier.
 
     
     std::unique_ptr<ExprAST> Init = nullptr;
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    functionVars[Name] = "Conv2d";
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -1571,6 +1604,9 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
     if (!Body)
       return nullptr;
   }
+
+
+
 
 
   auto aux = std::make_unique<Conv2dExprAST>(std::move(VarNames), std::move(Body), "conv2d",
@@ -1958,25 +1994,29 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
 
   getNextToken();
 
-  bool is_tensor=false;
+  std::string is_tensor="no";
   std::vector<std::string> ArgNames, Types;
   while (CurTok != ')')
   {
     Types.push_back(IdentifierStr);
     if (IdentifierStr=="t")
-      is_tensor=true;
-    if (IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="s")
+      is_tensor="tensor";
+    if (IdentifierStr=="c")
+      is_tensor="function";
+    if (IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="s" && IdentifierStr!="c")
       LogErrorP_to_comma("Tipo da variável no protótipo precisa ser t ou f.");
     else {
       getNextToken();
 
       ArgNames.push_back(IdentifierStr);
-      if (is_tensor)
+      if (is_tensor=="tensor")
         tensorVars.push_back(IdentifierStr);
+      if (is_tensor=="function")
+        functionVars[IdentifierStr] = "Conv2d";
       
       getNextToken();
     }
-    is_tensor=false;
+    is_tensor="no";
 
 
     if (CurTok == ')')
@@ -2043,6 +2083,7 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 // Code Generation
 //===----------------------------------------------------------------------===//
 
+//global
 static std::unique_ptr<KaleidoscopeJIT> TheJIT;
 static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<LLVMContext> GlobalContext = std::make_unique<LLVMContext>();
@@ -3012,7 +3053,7 @@ Value *VariableExprAST::codegen() {
   var_name = Builder->CreateGlobalString(Name);
   
   
-      
+
   std::string pre_dot = GetSelf();
   if (pre_dot!="false")
   {
@@ -4921,63 +4962,340 @@ class Conv2d
 {
   cudnnTensorDescriptor_t input_desc;
   cudnnFilterDescriptor_t filter_desc;
+  cudnnFilterDescriptor_t filter_desc_g;
   cudnnConvolutionDescriptor_t conv_desc;
   cudnnTensorDescriptor_t output_desc;
+  cudnnTensorDescriptor_t dy_desc;
+
   cudnnConvolutionFwdAlgo_t fwd_algo;
+  std::size_t workspace_size;
   void* d_workspace;
+
+  cudnnConvolutionBwdFilterAlgo_t bwd_algo;
+  std::size_t workspace_size_back;
+  void* d_workspace_back;
+
   float* d_filter=nullptr;
+  float* d_filter_g=nullptr;
+  std::string Init;
 
   public:
     int C, OC, ks, stride, padding, out_H, out_W;
+    int B = 0;
     int H = 0;
     int W = 0;
 
-    Conv2d(int C, int OC, int ks, int stride, int padding) 
-        : C(C), OC(OC), ks(ks), stride(stride), padding(padding) {}
+    Conv2d(int C, int OC, int ks, int stride, int padding, std::string Init) 
+        : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init) {}
 
   
 
 
-  void SetDescriptors(int, int);
-
-  float * Forward(float *, int, int);
+  void SetDescriptors(int, int, int);
+  void InitFilters();
+  float * Forward(float *, int, int, int);
 
 };
 
-static std::map<std::string, Conv2d> NamedConv2d;
+//global
+static std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
 
-void Conv2d::SetDescriptors(int H, int W)
+void Conv2d::SetDescriptors(int H, int W, int B)
 {
+  this->H = H;
+  this->W = W;
+  this->B = B;
+
   std::cout << "C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << " H " << H << " W " << W << "\n";
 
-  std::cout << "Conv2d Set Descriptors\n";
+  std::cout << "\nConv2d Set Descriptors\n\n";
 
+  out_H = std::floor((H - ks + 2 * padding) / stride) + 1;
+  out_W = std::floor((W - ks + 2 * padding) / stride) + 1;
+  std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
+
+
+
+  // Initialize input tensor descriptor
+  cudnnTensorDescriptor_t input_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+  this->input_desc = input_desc;
+
+  // Initialize filter descriptor
+  cudnnFilterDescriptor_t filter_desc;
+  checkCUDNN(cudnnCreateFilterDescriptor(&filter_desc));
+  checkCUDNN(cudnnSetFilter4dDescriptor(filter_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, OC, C, ks, ks));
+  this->filter_desc = filter_desc;
+
+  // Initialize convolution descriptor
+  cudnnConvolutionDescriptor_t conv_desc;
+  checkCUDNN(cudnnCreateConvolutionDescriptor(&conv_desc));
+  checkCUDNN(cudnnSetConvolution2dDescriptor(conv_desc, padding, padding, stride, stride, 1, 1,
+                                           CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+  this->conv_desc = conv_desc;
+
+  // Initialize output tensor descriptor
+  cudnnTensorDescriptor_t output_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, OC, out_H, out_W));
+  this->output_desc = output_desc;
+
+  // Initialize output tensor descriptor
+  cudnnTensorDescriptor_t dy_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&dy_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(dy_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, OC, out_H, out_W));
+  this->dy_desc = dy_desc;
+
+  
+  int requested_algo_count;
+  int algo_count;
+
+
+  checkCUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(cudnn, &requested_algo_count));
+  std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(requested_algo_count);
+  checkCUDNN(cudnnFindConvolutionForwardAlgorithm(
+        cudnn,
+        input_desc,
+        filter_desc,
+        conv_desc,
+        output_desc,
+        requested_algo_count,
+        &algo_count,
+        perf_results.data()
+  ));
+
+  this->fwd_algo = perf_results.front().algo;
+
+
+  std::size_t workspace_size = 0;
+  checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(
+        cudnn,
+        input_desc,
+        filter_desc,
+        conv_desc,
+        output_desc,
+        fwd_algo,
+        &workspace_size
+  ));
+
+  void* d_workspace = nullptr;
+  cudaCheck(cudaMalloc(&d_workspace, workspace_size));
+  this->workspace_size = workspace_size;
+  this->d_workspace = d_workspace;
+
+
+
+
+  checkCUDNN(cudnnGetConvolutionBackwardFilterAlgorithmMaxCount(cudnn, &requested_algo_count));
+  std::vector<cudnnConvolutionBwdFilterAlgoPerf_t> perf_results_back(requested_algo_count);
+  checkCUDNN(cudnnFindConvolutionBackwardFilterAlgorithm(
+        cudnn,
+        input_desc,
+        dy_desc,
+        conv_desc,
+        filter_desc,
+        requested_algo_count,
+        &algo_count,
+        perf_results_back.data()
+  ));
+
+  this->bwd_algo = perf_results_back.front().algo;
+
+
+  std::size_t workspace_size_back = 0;
+  checkCUDNN(cudnnGetConvolutionBackwardFilterWorkspaceSize(
+        cudnn,
+        input_desc,
+        dy_desc,
+        conv_desc,
+        filter_desc,
+        bwd_algo,
+        &workspace_size_back
+  ));
+
+  void* d_workspace_back = nullptr;
+  cudaCheck(cudaMalloc(&d_workspace_back, workspace_size_back));
+  this->workspace_size_back = workspace_size_back;
+  this->d_workspace_back = d_workspace_back;
+
+
+
+  std::cout << "Set descriptors finished\n";
 
 }
 
-float *Conv2d::Forward(float *tensor, int H, int W)
+
+void Conv2d::InitFilters()
 {
-  std::cout << "Conv2d Forward\n";
-  if (H != this->H || W != this->W)
-    this->SetDescriptors(H, W);
+  std::vector<float> h_filter;
+  float *filter;
+  for (std::size_t idx = 0; idx < C * OC; ++idx) {
+
+    if (Init=="xavu_relu")
+      filter = make_xavier_uniform_float_relu(ks*ks, ks*ks*C, ks*ks*OC);
+    if (Init=="xavu")
+      filter = make_xavier_uniform_float(ks*ks, ks*ks*C, ks*ks*OC);
+    if (Init=="zeros")
+      filter = make_zeros_float(ks*ks);
+    if (Init=="ones")
+      filter = make_ones_float(ks*ks);
+    if (Init=="randu")
+      filter = make_random_float(ks*ks);
+
+
+    for (int i=0; i < ks*ks; i++)
+      h_filter.emplace_back(filter[i]);
+
+    //for (const auto& val : filter) 
+    //  h_filter.emplace_back(val);
+  }
+    
+  float* d_filter = nullptr;
+  const std::size_t filter_size = h_filter.size();
+  cudaCheck(cudaMalloc(&d_filter, filter_size * sizeof(float)));
+  cudaCheck(cudaMemcpy(d_filter, h_filter.data(), filter_size * sizeof(float), cudaMemcpyDefault));
+  this->d_filter = d_filter;
+  std::cout << "Filters initialized.\n";
 }
 
 
-extern "C" float CreateConv2dOnDemand(char *tensorName, int is_obj_attr_or_self, char *init,
+float *Conv2d::Forward(float *tensor, int H, int W, int B)
+{
+  // Initialize descriptors.
+  std::cout << "\nConv2d Forward with H: " << H << " W: " << W << "\n";
+  if (H != this->H || W != this->W || B != this->B)
+    this->SetDescriptors(H, W, B);
+
+  // Initialize weights.
+  if (d_filter==nullptr)
+    this->InitFilters();
+
+
+  
+  // Forward
+  float *d_output, *dy;
+  cudaCheck(cudaMalloc(&d_output, B * out_H * out_W * OC * sizeof(float)));
+
+  constexpr float alpha = 1.0f;
+  constexpr float beta = 0.0f;
+
+  checkCUDNN(cudnnConvolutionForward(
+        cudnn,
+        &alpha,
+        input_desc,
+        tensor,
+        filter_desc,
+        d_filter,
+        conv_desc,
+        fwd_algo,
+        d_workspace,
+        workspace_size,
+        &beta,
+        output_desc,
+        d_output
+    ));
+  
+  
+  cudaCheck(cudaMalloc(&dy, B * out_H * out_W * OC * sizeof(float)));
+  cudaCheck(cudaMalloc(&d_filter_g, OC * C * ks * ks * sizeof(float)));
+  cudaMemcpy(dy, make_ones_float(B * out_H * out_W * OC),
+              B * out_H * out_W * OC * sizeof(float), cudaMemcpyHostToDevice);
+
+  //PrintTensorF(dy, B, out_H * out_W * OC);
+  
+  checkCUDNN(cudnnConvolutionBackwardFilter(
+    cudnn,
+    &alpha, //Set to 1.0
+    input_desc, //The input tensor descriptor
+    tensor,
+    dy_desc, //The output tensor descriptor
+    dy,
+    conv_desc, //The convolution descriptor
+    bwd_algo, //Obtained with getConvolutionBackwardDataAlgorithm
+    d_workspace_back, 
+    workspace_size_back, //Obtained with getConvolutionBackwardDataWorkspaceSize
+    &beta, //Set to 0.0
+    filter_desc, //Filter descriptor
+    d_filter_g
+  ));
+
+
+  //PrintTensorF(d_filter_g, OC, C * ks * ks);
+
+
+  return d_output;
+}
+
+
+extern "C" float ConvForward2d(char *tensor_name, char *conv_name)
+{
+  std::cout << "Conv forward for tensor: " << tensor_name << " and conv: " << conv_name <<"\n";
+
+  float *tensor, *output;
+  tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+
+  std::unique_ptr<Conv2d> conv = std::move(NamedConv2d[conv_name]);
+
+  if (dims[dims.size()-1]!=conv->C)
+  {
+    std::string error = "O número de canais do tensor é " + std::to_string((int)dims[dims.size()-1]) + ", enquanto a entrada esperada da convolução tem canais " + std::to_string(conv->C);
+    LogError(error);
+    currentCudaResult = tensor;
+    currentDims = dims;
+    NamedConv2d[conv_name] = std::move(conv);
+    return 0;
+  }
+
+  output = conv->Forward(tensor, dims[dims.size()-3], dims[dims.size()-2], dims[0]);
+
+
+  
+  currentCudaResult = output;
+
+  int is_forward_func = 1;
+  if (is_forward_func)
+  {
+    float *inp, *out;
+    /*
+
+    //oom
+    cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
+    cudaMemcpy(inp, device_x, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, device_y, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
+
+    todo_backwards.push_back(std::make_tuple(linear_layer_dims[0], linear_layer_dims[1],
+                                           Rdims[0], inp, device_w, out,
+                                           "conv2d", RtensorName));
+    */
+  }
+
+
+  std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)conv->OC};
+  currentDims = new_dims;
+
+  NamedConv2d[conv_name] = std::move(conv);
+
+  return 0;
+}
+
+extern "C" float CreateConv2dOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init,
                                       float C, float OC, float ks, float stride, float padding, float H, float W)
 {
   
-  std::string objectTensorName = tensorName;
+  std::string objectTensorName = tensor_name;
   if (is_obj_attr_or_self)
-    objectTensorName = FirstArg + tensorName;
+    objectTensorName = FirstArg + tensor_name;
 
 
   char * cObjectTensorName = new char[objectTensorName.length() + 1];
   std::strcpy(cObjectTensorName, objectTensorName.c_str());
-  //NamedConv2d[cObjectTensorName] = tensor;
+  
 
 
-  std::cout << "C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << "\n";
+  std::cout << "\nCreate conv on demand:\n   C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << "\n";
 
 
 
@@ -4996,10 +5314,11 @@ extern "C" float CreateConv2dOnDemand(char *tensorName, int is_obj_attr_or_self,
     tensor_cpu = make_random_int(product, 10);
   */
 
-  Conv2d conv = Conv2d((int)C, (int)OC, (int)ks, (int)stride, (int)padding);
+  auto conv = std::make_unique<Conv2d>((int)C, (int)OC, (int)ks, (int)stride, (int)padding, init);
 
 
-
+  std::cout << "Adding " << tensor_name << " to NamedConv2d dict\n";
+  NamedConv2d[cObjectTensorName] = std::move(conv);
   
 
 
@@ -5107,6 +5426,8 @@ Value *Conv2dExprAST::codegen() {
     if (GetSelf()!="false")
       is_obj_attr_or_self=1;
     
+    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+
     Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
                                               {Builder->CreateGlobalString(VarName),
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
@@ -5147,7 +5468,7 @@ Value *CallExprAST::codegen() {
   else
     nested_function=1;
 
-  int args_removal = 0;
+  
   if(Class!="None")
   {
     if (!in_str(tgt_function, tensor_methods))
@@ -5155,30 +5476,32 @@ Value *CallExprAST::codegen() {
     Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
                                                   {Builder->CreateGlobalString(Pre_dot),
                                                    ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)});
-    //args_removal=1;
+    
   }
 
-  Function *CalleeF = getFunction(tgt_function);
-  if (!CalleeF)
+  Function *CalleeF;
+  if (!IsVarForward)
   {
-    std::string _error = "Função referenciada, "+ tgt_function +", ainda não foi declarada";
-    return LogErrorV(_error);
+    CalleeF = getFunction(tgt_function);
+    if (!CalleeF)
+    {
+      std::string _error = "Função referenciada, "+ tgt_function +", ainda não foi declarada";
+      return LogErrorV(_error);
+    }
+
+    tgt_function_name = CalleeF->getName().str();
+
+
+    // If argument mismatch error.
+    if ((CalleeF->arg_size()) != Args.size() && !in_str(tgt_function_name, vararg_methods))
+      return LogErrorV("Parâmetros passados incorretos.");
   }
 
-  tgt_function_name = CalleeF->getName().str();
 
-  // If argument mismatch error.
-  if ((CalleeF->arg_size()-args_removal) != Args.size() && !in_str(tgt_function_name, vararg_methods))
-    return LogErrorV("Parâmetros passados incorretos.");
-
-  std::vector<Value *> ArgsV;
-  
-  //if(Class!="None")
-  //  ArgsV.push_back(ConstantFP::get(Type::getFloatTy(*TheContext), APFloat(0.0f)));
-
-  
+  std::vector<Value *> ArgsV;  
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
-    //std::cout << "\n\nCallExprAST::codegen for argument n°: " << i << ".\n";
+
+    std::cout << "\n\nCallExprAST::codegen for argument n°: " << i << ".\n";
 
     Value * arg;
     if (Args[i]->GetType()=="tensor")
@@ -5186,7 +5509,7 @@ Value *CallExprAST::codegen() {
     else
       arg = Args[i]->codegen();
 
-    //std::cout << "Args[i]: " << Args[i]->GetName() << "\n";
+    std::cout << "Args[i]: " << Args[i]->GetName() << "\n";
 
 
     ArgsV.push_back(arg);
@@ -5196,9 +5519,23 @@ Value *CallExprAST::codegen() {
       return nullptr;
   }
   
-  //std::cout << "\n\n";
+  
+  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  if (!IsVarForward)
+    ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  else
+  {
+    std::cout << "Override: " << CalleeOverride << "\n";
+    if (CalleeOverride=="Conv2d")
+    {
+      CalleeF = getFunction("ConvForward2d");
+      ArgsV.push_back(Builder->CreateGlobalString(tgt_function));
+      Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+    }
+  
 
-  Value * ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  }
+    
   if(Class!="None")
     Builder->CreateCall(TheModule->getFunction("DimnishFirstArgOnDemand"),
                                                   {Builder->CreateGlobalString(Pre_dot),
@@ -5597,13 +5934,26 @@ static void InitializeModule() {
   //char *
   FunctionType *conv2dTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),},
+      {PointerType::get(Type::getInt8Ty(*TheContext),0), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),},
       false
   );
   Function::Create(
     conv2dTy,
     Function::ExternalLinkage,
     "Conv_2d",
+    TheModule.get()
+  );
+
+  //char *, char *
+  FunctionType *conv2dForwardTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {PointerType::get(Type::getInt8Ty(*TheContext),0), PointerType::get(Type::getInt8Ty(*TheContext),0)},
+      false
+  );
+  Function::Create(
+    conv2dForwardTy,
+    Function::ExternalLinkage,
+    "ConvForward2d",
     TheModule.get()
   );
 
