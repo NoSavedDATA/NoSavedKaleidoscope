@@ -2295,7 +2295,7 @@ extern "C" char * shuffle_str(char *string_list)
 
 
 extern "C" float PrintTensor(char* tensorName){
-  std::cout << "Called print tensor\n";
+  //std::cout << "Called print tensor\n";
   
 
   std::vector<float> dims = NamedDims[tensorName];
@@ -2304,7 +2304,7 @@ extern "C" float PrintTensor(char* tensorName){
 
   float *tensor_cuda = NamedTensors[tensorName];
   float *tensor = new float[arr_size];
-  std::cout << "Printing Tensor " << tensorName << "\n";
+  //std::cout << "Printing Tensor " << tensorName << "\n";
   
   cudaDeviceSynchronize();
   cudaCheck(cudaMemcpy(tensor, tensor_cuda, arr_size*sizeof(float), cudaMemcpyDeviceToHost));
@@ -2380,6 +2380,8 @@ extern "C" float PrintTensor(char* tensorName){
   std::cout << "\n";
   PrintDims(dims);
   std::cout << "\n";
+
+  delete[] tensor;
 
   return 0;
 }
@@ -2469,6 +2471,8 @@ float PrintTensorF(float *cuda_tensor, int d1, int d2){
 
   }
   std::cout << "\n";
+  
+  delete[] tensor;
 
   return 0;
 }
@@ -2657,14 +2661,15 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
     for (int j = 0; j < y_dims_prod; ++j)
       current_labels[b * y_dims_prod + j] = y_aux[j];
 
-    
+    delete[] cur_float_img;
+    delete[] y_aux;
     
     b+=1;
     
     yield_pointer+=1;
     // Drop last batch and reset idx
     if(yield_pointer>(glob_str_files.size()-batch_size-batch_size))
-    { 
+    {
       std::random_shuffle(glob_str_files.begin(), glob_str_files.end());
       yield_pointer=0;
     }
@@ -2694,7 +2699,6 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
     dims_x.push_back(current_data_attr_dims[i]);
 
 
-
   NamedDims[x_name] = dims_x;
   NamedDims[y_name] = dims_y;
 
@@ -2707,22 +2711,25 @@ extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 {
   float *img;
   img = load_img(img_name); 
-    
   
-  int dims_prod = 28*28;
+  std::vector<float> dims = NamedDims[tensor_name];
+
+  
+  int img_dims_prod = dims[dims.size()-1]*dims[dims.size()-2]*dims[dims.size()-3];
 
 
-  current_data = new float[dims_prod];
-  cudaCheck(cudaMallocHost(&current_data, dims_prod*sizeof(float)));
+  current_data = new float[img_dims_prod];
+  cudaCheck(cudaMallocHost(&current_data, img_dims_prod*sizeof(float)));
 
 
-  for (int j = 0; j < dims_prod; ++j)
+  for (int j = 0; j < img_dims_prod; ++j)
     current_data[j] = img[j];
+  delete[] img;
 
 
   float *x;
-  cudaMalloc(&x, dims_prod*sizeof(float));
-  cudaCheck(cudaMemcpy(x, current_data, dims_prod*sizeof(float), cudaMemcpyHostToDevice));
+  cudaMalloc(&x, img_dims_prod*sizeof(float));
+  cudaCheck(cudaMemcpy(x, current_data, img_dims_prod*sizeof(float), cudaMemcpyHostToDevice));
 
   NamedTensors[tensor_name] = x;
   NamedDims[tensor_name] = current_data_attr_dims;
@@ -2741,12 +2748,20 @@ extern "C" float view(float first_dim, ...)
   
   
   std::string tensor_name = LastPreDot;
-  std::vector<float> new_dims, current_dims;
+  std::vector<float> new_dims, new_dims_no_minus, current_dims;
+  bool has_minus = false;
   current_dims = NamedDims[tensor_name];
 
   
   va_list args;
   va_start(args, first_dim);
+
+  if (first_dim!=-1)
+    new_dims_no_minus.push_back(first_dim);
+  else
+    has_minus=true;
+  
+    
   new_dims.push_back(first_dim);
 
   for (int i=0; i<10; i++)
@@ -2761,21 +2776,47 @@ extern "C" float view(float first_dim, ...)
     if (dim==-2)
       break;
     new_dims.push_back(dim);
+
+    if (dim!=-1)
+      new_dims_no_minus.push_back(dim);
+    else
+      has_minus=true;
   }
   va_end(args);
+
+
+  
 
 
   int current_dims_prod = DimsProd(current_dims);
   int new_dims_prod = DimsProd(new_dims);
 
-  if (current_dims_prod != new_dims_prod)
+
+  if (has_minus)
   {
-    LogErrorS("view das dimensões não é compatível");
-    PrintDims(current_dims);
-    std::cout << "Produto das dimensões atuais: " << current_dims_prod  << "\n";
-    PrintDims(new_dims);
-    std::cout << "Produto das novas dimensões: " << new_dims_prod  << "\n";
-    return 0;
+    float hidden_dim = (float)current_dims_prod / (float)DimsProd(new_dims_no_minus);
+
+    if ((float)((int)hidden_dim) != hidden_dim)
+    {
+      LogErrorS("view das dimensões não é compatível");
+      return 0;
+    }
+    
+    for (int i=0; i<new_dims.size(); i++)
+      if (new_dims[i]==-1)
+        new_dims[i] = hidden_dim;
+    
+
+  } else {
+    if (current_dims_prod != new_dims_prod)
+    {
+      LogErrorS("view das dimensões não é compatível");
+      PrintDims(current_dims);
+      std::cout << "Produto das dimensões atuais: " << current_dims_prod  << "\n";
+      PrintDims(new_dims);
+      std::cout << "Produto das novas dimensões: " << new_dims_prod  << "\n";
+      return 0;
+    }
   }
 
   NamedDims[tensor_name] = new_dims;
@@ -3136,9 +3177,8 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name)
   //std::cout << "Attributing to tensor: " << tensorName << "\n";
   
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
+  
 
-  //float * tensor = new float[4];
-  //cudaMemcpy(tensor, currentCudaResult, 4, cudaMemcpyDeviceToHost);
 
   cudaCheck(cudaGetLastError());
   NamedTensors[tensor_name] = currentCudaResult;
@@ -3454,11 +3494,10 @@ extern "C" float onehot(float num_classes)
   int B = DimsProd(dims);
   int C = (int)num_classes;
 
-  float *probs_cpu, *probs;
-  probs_cpu = new float[B*C];
+  float *probs;
 
   cudaMalloc(&probs, B*C*sizeof(float));
-  //cudaMemcpy(probs, probs_cpu, B*C*sizeof(float), cudaMemcpyHostToDevice);
+  
 
 
   int grid_size = B;
@@ -3910,7 +3949,7 @@ void Conv2d::SetDescriptors(int H, int W, int B)
 
   out_H = std::floor((H - ks + 2 * padding) / stride) + 1;
   out_W = std::floor((W - ks + 2 * padding) / stride) + 1;
-  std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
+  //std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
 
 
 
@@ -4086,6 +4125,7 @@ void Conv2d::InitFilters()
     for (int i=0; i < ks*ks; i++)
       h_filter.emplace_back(filter[i]);
 
+    delete[] filter;
     //for (const auto& val : filter) 
     //  h_filter.emplace_back(val);
   }
@@ -4298,8 +4338,8 @@ extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_a
   NamedDims[conv_name] = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks};
 
   
-  if (conv_name=="modelconv1")
-    PrintTensorF(conv->d_filter, 1, conv->ks*conv->ks);
+  //if (conv_name=="modelconv1")
+  //  PrintTensorF(conv->d_filter, 1, conv->ks*conv->ks);
 
   NamedConv2d[conv_name] = std::move(conv);
 
@@ -4473,14 +4513,13 @@ extern "C" float Backpropagation()
     op = std::get<8>(bt);
     param_name = std::get<9>(bt);
 
-    dinp = make_zeros_float(x_size);
-    dw = make_zeros_float(w_size);
-
-    float *new_grad_ptr;
     
-   
+    
+    // weight gradient
+    float *new_grad_ptr;
     if (w!=nullptr)
     {
+      dw = make_zeros_float(w_size);
       
       if (NamedParamGrads[param_name]==nullptr)
       {
@@ -4491,11 +4530,14 @@ extern "C" float Backpropagation()
       
       device_dw = NamedParamGrads[param_name];
       cudaCheck(cudaMemcpy(device_dw, dw, w_size*sizeof(float), cudaMemcpyHostToDevice));
+      delete[] dw;
     }
 
-
+    // input gradient
+    dinp = make_zeros_float(x_size);
     cudaMalloc(&device_dx, x_size*sizeof(float));
     cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice);
+    delete[] dinp;
 
 
     /*
@@ -4632,6 +4674,9 @@ void AdamW_optim::init_states(std::string param_name, float params_count)
     cudaMemcpy(device_v, v, params_count*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(device_m, m, params_count*sizeof(float), cudaMemcpyHostToDevice);
 
+    delete[] v;
+    delete[] m;
+
     NamedV[param_name] = device_v; 
     NamedM[param_name] = device_m;
   }
@@ -4668,11 +4713,6 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
                                            eps, weight_decay);
 
 
-  /*
-  std::cout << "\n\nparam post: \n";
-  PrintTensorF(param, dims[0], dims[1]);
-  std::cout << "\n\n";
-  */
 }
 
 
@@ -5319,7 +5359,6 @@ extern "C" float StoreDimsOnDemand(float d)
 
 extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self, char *init)
 {
-  
   std::string objectTensorName = tensorName;
   if (is_obj_attr_or_self)
     objectTensorName = FirstArg + tensorName;
@@ -5353,6 +5392,12 @@ extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self,
   cudaMalloc(&tensor, product*sizeof(float));
   cudaCheck(cudaMemcpy(tensor, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
   
+
+  
+  delete[] tensor_cpu;
+
+  //if (NamedTensors.find(cObjectTensorName) != NamedTensors.end() && tensorName!="y")
+  //  cudaCheck(cudaFree(NamedTensors[cObjectTensorName]));
 
   NamedTensors[cObjectTensorName] = tensor;
   NamedDims[cObjectTensorName] = cur_dim;
