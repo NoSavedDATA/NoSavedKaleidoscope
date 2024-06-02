@@ -1,0 +1,83 @@
+class Dataset
+	def __init__(f batch_size, s preprocess_x, s preprocess_y)
+		self.batch_size = batch_size
+		self.preprocess_x = load_img
+		self.preprocess_y = split_str_to_float(-2)
+		0;
+0;
+
+class Model
+	def __init__()
+		Conv2d[3,32,3,1,0,xavu_relu] self.conv1
+		Conv2d[32,32,3,1,0,xavu_relu] self.conv2
+		Conv2d[32,64,3,2,0,xavu_relu] self.conv3
+		Conv2d[64,64,3,1,0,xavu_relu] self.conv4
+		Conv2d[64,64,3,2,0,xavu_relu] self.conv5
+		tensor[512, 1600, xavu_relu] self.w1
+		tensor[10, 512, xavu] self.w2
+		0;
+
+	def forward(t x)
+		x = self.conv1(x)
+		x = relu(x)
+		x = self.conv2(x)
+		x = relu(x)
+		x = self.conv3(x)
+		x = relu(x)
+		x = self.conv4(x)
+		x = relu(x)
+		x = self.conv5(x)
+		x = relu(x)
+		x.view(-1,1600)
+		x = x@self.w1
+		x = relu(x)
+		x = x@self.w2;
+
+		
+0;
+
+Model model;
+model.__init__();
+
+
+Dataset dataset;
+dataset.__init__(32, "a", "b");
+
+
+
+tensor[32,32,3] x
+tensor[10] y;
+
+glob("/home/nosaveddata/cifar10/train/*/*.png");
+
+dataset.init_dataset(32);
+
+
+
+tensor[1,zeros] counter;
+
+for i=0, i<1000 :
+	tensor[32,32,32,3] x
+	tensor[32,1] y
+	dataset.yield(32, x, y)
+	y.onehot(10)
+	model.forward(x)
+	cross_entropy(x, y)
+	loss.backward()
+	AdamW(0.0001, 0.9, 0.999, 0.01);
+
+
+tensor[1,32,32,3] x;
+
+#load_preprocess_img(x, "/home/nosaveddata/cifar10/test/0/0001.png");
+#load_preprocess_img(x, "/home/nosaveddata/cifar10/test/1/0001.png");
+#load_preprocess_img(x, "/home/nosaveddata/cifar10/test/2/0001.png");
+#load_preprocess_img(x, "/home/nosaveddata/cifar10/test/3/0001.png");
+load_preprocess_img(x, "/home/nosaveddata/cifar10/test/4/0001.png");
+
+x.view(1,32,32,3);
+
+model.forward(x);
+
+x;
+softmax(x);
