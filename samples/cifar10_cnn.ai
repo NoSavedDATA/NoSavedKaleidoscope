@@ -56,7 +56,7 @@ dataset.init_dataset(32);
 
 tensor[1,zeros] counter;
 
-for i=0, i<1000 :
+for i=0, i<12000 :
 	tensor[32,32,32,3] x
 	tensor[32,1] y
 	dataset.yield(32, x, y)
