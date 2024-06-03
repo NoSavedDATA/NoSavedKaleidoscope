@@ -14,6 +14,8 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 
+
+
 #include "include/KaleidoscopeJIT.h"
 
 
@@ -31,7 +33,6 @@
 #include <string>
 #include <iostream>
 #include <numeric>
-#include <string>
 #include <utility>
 #include <vector>
 #include <iomanip>
@@ -39,7 +40,9 @@
 #include <fenv.h>
 #include <tuple>
 #include <glob.h>
-
+#include <chrono>
+#include <thread>
+#include <random>
 
 // Cuda
 #include <stdio.h>
@@ -179,6 +182,7 @@ enum Token {
   tok_else = -8,
   tok_for = -9,
   tok_while = -10,
+  tok_async = -22,
   tok_tab = 9,
 
   // operators
@@ -285,6 +289,8 @@ static int get_token() {
       return tok_for;
     if (IdentifierStr == "while")
       return tok_while;
+    if (IdentifierStr == "async")
+      return tok_async;
     if (IdentifierStr == "binary")
       return tok_binary;
     if (IdentifierStr == "unary")
@@ -635,6 +641,18 @@ class WhileExprAST : public ExprAST {
 };
 
 
+/// AsyncExprAST - Expression class for async.
+class AsyncExprAST : public ExprAST {
+	std::unique_ptr<ExprAST> Body;
+
+  public:
+    AsyncExprAST(std::unique_ptr<ExprAST> Body)
+      : Body(std::move(Body)) {}
+
+	Value* codegen() override;
+};
+
+
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes), as well as if it is an operator.
@@ -667,18 +685,6 @@ class PrototypeAST {
 };
 
 
-class ClassAST : public ExprAST {
-  std::vector<std::unique_ptr<FunctionAST>> Functions;
-
-  public:
-    ClassAST(std::vector<std::unique_ptr<FunctionAST>> Functions)
-        : Functions(std::move(Functions)) {}
-  
-  const PrototypeAST& getProto(int i) const;
-  const std::string& getName(int i) const;
-  
-  Value *codegen();
-};
 
 //===----------------------------------------------------------------------===//
 // Parser
@@ -1011,6 +1017,17 @@ static std::unique_ptr<ExprAST> ParseWhileExpr() {
     return nullptr;
 
   return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body));
+}
+
+static std::unique_ptr<ExprAST> ParseAsyncExpr() {
+  getNextToken(); // eat the async.
+
+  std::cout << "Parsing async" <<  "\n";
+  
+  auto Body = ParseExpression();
+  
+
+  return std::make_unique<AsyncExprAST>(std::move(Body));
 }
 
 
@@ -1680,6 +1697,15 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     return ParseForExpr();
   case tok_while:
     return ParseWhileExpr();
+  case tok_async:
+    /*
+    {
+      std::thread parsingThread(ParseAsyncExpr);
+      //parsingThread.join();
+    }
+    return std::make_unique<NumberExprAST>(0.0f);
+    */
+    return ParseAsyncExpr();
   case tok_var:
     return ParseVarExpr();
   case tok_tensor:
@@ -2042,6 +2068,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
 }
 
 
+
 /// definition ::= 'def' prototype expression
 static std::unique_ptr<FunctionAST> ParseDefinition(std::string ClassName="") {
   getNextToken(); // eat def.
@@ -2054,6 +2081,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition(std::string ClassName="") {
   return nullptr;
 }
 
+
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   //std::cout << "Top Level Expression\n";
@@ -2062,17 +2090,19 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
     auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
                                                 std::vector<std::string>(),
                                                 std::vector<std::string>());
+    
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
   return nullptr;
 }
+
+
 
 /// external ::= 'extern' prototype
 static std::unique_ptr<PrototypeAST> ParseExtern() {
   getNextToken(); // eat extern.
   return ParsePrototype();
 }
-
 
 
 
@@ -2091,6 +2121,7 @@ static std::unique_ptr<LLVMContext> GlobalContext = std::make_unique<LLVMContext
 
 static std::unique_ptr<IRBuilder<>> Builder;
 static std::unique_ptr<Module> TheModule;
+static std::unique_ptr<Module> GlobalModule;
 
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
@@ -2175,10 +2206,32 @@ static std::unique_ptr<ExprAST> ParseClass() {
 
     i+=1;
   }
-  //if (auto E = ParseExpression())
-  //  return std::make_unique<ClassAST>(std::move(Proto), std::move(E));
+  
   return nullptr;
 }
+
+
+
+extern "C" float sleep(float id)
+{
+  std::cout << "\n\nSleep " << id << " begin" << "\n";
+  std::random_device rd;
+  std::mt19937 gen(rd());
+
+  std::uniform_int_distribution<> dis(3, 7); // Generate between 1 and 100
+  int random_number = dis(gen);
+
+  //std::this_thread::sleep_for(std::chrono::seconds(random_number));
+  std::this_thread::sleep_for(std::chrono::seconds((int)id));
+
+  std::cout << "Sleep " << id << " finish" << "\n";
+
+  return 0;
+}
+
+
+
+
 
 std::vector<float> BatchLessDims(std::vector<float> dims)
 {
@@ -5116,44 +5169,6 @@ Value *IfExprAST::codegen() {
 //   store nextvar -> var
 //   br endcond, loop, endloop
 // outloop:
-Value *WhileExprAST::codegen() {
-	Function* TheFunction = Builder->GetInsertBlock()->getParent();
-
-	BasicBlock *entryBB = BasicBlock::Create(*TheContext, "entry_while", TheFunction);
-	BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop_while", TheFunction);
-	BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "end_while", TheFunction);
-
-	
-	Builder->CreateBr(entryBB);
-
-	// Handle Cond
-
-	Builder->SetInsertPoint(entryBB);
-	Value* condVal = Cond->codegen();
-	if (! condVal)
-    return nullptr;
-
-	condVal = Builder->CreateFCmpONE(condVal, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
-	Builder->CreateCondBr(condVal, LoopBB, AfterBB);
-	entryBB = Builder->GetInsertBlock();
-
-
-	// Handle Loop Body
-	
-  Builder->SetInsertPoint(LoopBB);
-	Value* bodyVal = Body->codegen();
-	if (! bodyVal)
-    return nullptr;
-	Builder->CreateBr(entryBB);
-
-
-	// Handle Loop End
-	
-	Builder->SetInsertPoint(AfterBB);
-
-	return Constant::getNullValue(Type::getFloatTy(*TheContext));
-}
-
 
 Value *ForExprAST::codegen() {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -5233,6 +5248,155 @@ Value *ForExprAST::codegen() {
   // for expr always returns 0.0.
   return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
+
+
+
+Value *WhileExprAST::codegen() {
+	Function* TheFunction = Builder->GetInsertBlock()->getParent();
+
+	BasicBlock *EntryBB = BasicBlock::Create(*TheContext, "entry_while", TheFunction);
+	BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop_while", TheFunction);
+	BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "end_while", TheFunction);
+
+	
+	Builder->CreateBr(EntryBB);
+
+	// Handle Cond
+
+	Builder->SetInsertPoint(EntryBB);
+	Value* condVal = Cond->codegen();
+	if (! condVal)
+    return nullptr;
+
+	condVal = Builder->CreateFCmpONE(condVal, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
+	Builder->CreateCondBr(condVal, LoopBB, AfterBB);
+	EntryBB = Builder->GetInsertBlock();
+
+
+	// Handle Loop Body
+	
+  Builder->SetInsertPoint(LoopBB);
+	Value* bodyVal = Body->codegen();
+	if (! bodyVal)
+    return nullptr;
+	Builder->CreateBr(EntryBB);
+
+
+	// Handle Loop End
+	
+	Builder->SetInsertPoint(AfterBB);
+
+	return Constant::getNullValue(Type::getFloatTy(*TheContext));
+}
+
+
+Function *codegenAsyncFunction(std::unique_ptr<ExprAST> asyncBody) {
+  
+
+  // find unique function name (_async 0, _async1, _async2 etc)
+  int fnIndex = 0;
+  while (TheModule->getFunction("__async_" + std::to_string(fnIndex))) {
+    std::cout << "Function __async_ found" << "\n";
+    fnIndex++;
+  }
+  
+  // Create function for this async function
+  llvm::Type *voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+
+  FunctionType *asyncFunTy = FunctionType::get(
+                                            voidPtrTy,
+                                            {voidPtrTy},
+                                            false);
+                                            
+  std::string functionName = "__async_" + std::to_string(fnIndex);
+  Function *asyncFun =
+      Function::Create(asyncFunTy,
+                             Function::ExternalLinkage,
+                             functionName,
+                             TheModule.get());
+
+
+  
+  // emit EntryBB value
+  BasicBlock *EntryBB = BasicBlock::Create(*TheContext, "entry", asyncFun);
+  Builder->SetInsertPoint(EntryBB);
+  
+
+  // define body of function
+  auto *FnIR = asyncBody->codegen();
+  
+  fprintf(stderr, "Read top-level expression:");
+  FnIR->print(errs());
+  fprintf(stderr, "\n");
+
+  //Builder->CreateRet(ConstantFP::get(*TheContext, APFloat(0.0f)));
+  Builder->CreateRet(Constant::getNullValue(voidPtrTy));
+  verifyFunction(*asyncFun);
+  
+
+  return asyncFun;
+}
+
+
+
+Value *AsyncExprAST::codegen() {
+
+  
+  // Create/Spawn Threads
+
+  BasicBlock *CurrentBB = Builder->GetInsertBlock();
+
+  Function *asyncFun = codegenAsyncFunction(std::move(Body));
+
+  Builder->SetInsertPoint(CurrentBB);
+
+  
+  Function *pthread_create = TheModule->getFunction("pthread_create");
+
+  PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr, Twine("pthread"));
+  Builder->CreateStore(ConstantInt::get(Type::getInt8Ty(*TheContext), 0), pthreadPtr);
+  
+
+  Value *voidPtrNull = Constant::getNullValue(
+      Type::getInt8Ty(*TheContext)->getPointerTo());
+
+
+  
+  Builder->CreateCall(pthread_create,
+    {pthreadPtr,
+     voidPtrNull,
+     asyncFun,
+     voidPtrNull}
+  );
+  
+  
+
+   /*
+  // Join Threads
+  Function *pthread_join =  TheModule->getFunction("pthread_join");
+
+  auto voidPtrPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo()->getPointerTo();
+  
+
+  Builder->CreateCall(pthread_join,
+                      {pthreadPtr, Constant::getNullValue(voidPtrPtrTy)});
+  std::cout << "Join thread codegen" << "\n";
+  */
+
+  //Body->codegen();
+
+  /*
+  for (auto &pthreadPtr : pthreadPtrs) {
+    Value *pthread = builder->CreateLoad(pthreadPtr);
+    builder->CreateCall(pthread_join,
+                        {pthread, Constant::getNullValue(voidPtrPtrTy)});  
+  */
+
+
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
 
 
 // Create Var
@@ -5566,7 +5730,7 @@ Value *CallExprAST::codegen() {
     
   }
 
-  std::cout << "\nCalling function: " << tgt_function <<"\n\n";
+  //std::cout << "\nCalling function: " << tgt_function <<"\n\n";
 
   Function *CalleeF;
   if (!IsVarForward)
@@ -5610,11 +5774,13 @@ Value *CallExprAST::codegen() {
   
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  
+  //std::cout << "\nCreate call: "  << tgt_function_name << " from parent: " << functionName << "\n\n";
   if (CalleeOverride=="none")
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
   else
   {
-    std::cout << "Override: " << CalleeOverride << "\n";
+    //std::cout << "Override: " << CalleeOverride << "\n";
     if (CalleeOverride=="Conv2d")
     {
       CalleeF = getFunction("ConvForward2d");
@@ -5630,6 +5796,7 @@ Value *CallExprAST::codegen() {
     Builder->CreateCall(TheModule->getFunction("DimnishFirstArgOnDemand"),
                                                   {Builder->CreateGlobalString(PreDot),
                                                    ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)});
+                                            
   return ret;
 }
 
@@ -5752,82 +5919,14 @@ Function *FunctionAST::codegen() {
 
 
 
-const PrototypeAST& ClassAST::getProto(int i) const {
-  return Functions[i]->getProto(); 
-}
-
-const std::string& ClassAST::getName(int i) const {
-  return Functions[i]->getProto().getName();
-}
-
-Value *ClassAST::codegen() {
-  /*
-  // Transfer ownership of the prototype to the FunctionProtos map, but keep a
-  // reference to it for use below.
-  auto &P = *Proto;
-  FunctionProtos[Proto->getName()] = std::move(Proto);
-  Function *TheFunction = getFunction(P.getName());
-  if (!TheFunction)
-    return nullptr;
-
-  // If this is an operator, install it.
-  if (P.isBinaryOp())
-    BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
-
-  // Create a new basic block to start insertion into.
-  BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
-  Builder->SetInsertPoint(BB);
-
-
-
-  // Record the function arguments in the NamedValues map.
-  NamedValues.clear();
-  float val;
-  int i = 0;
-  for (auto &Arg : TheFunction->args()) {
-    // Create an alloca for this variable.
-    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
-
-    // Store the initial value into the alloca.
-    Builder->CreateStore(&Arg, Alloca);
-
-    // Add arguments to variable symbol table.
-    NamedValues[std::string(Arg.getName())] = Alloca;
-
-    
-  }
-
-
-  if (Value *RetVal = Body->codegen()) {
-    // Finish off the function.
-    Builder->CreateRet(RetVal);
-
-    // Validate the generated code, checking for consistency.
-    verifyFunction(*TheFunction);
-
-    return TheFunction;
-  }
-
-
-  // Error reading body, remove function.
-  TheFunction->eraseFromParent();
-
-  
-  if (P.isBinaryOp())
-    BinopPrecedence.erase(P.getOperatorName());
-  */
-  return nullptr;
-}
-
-
-
-
-
 //===----------------------------------------------------------------------===//
 // Top-Level parsing and JIT Driver
 //===----------------------------------------------------------------------===//
 
+
 static void InitializeModule() {
+  //std::cout << "\nINITIALIZING A NEW MODULE"  << "\n";
+
   used_cuda=0;
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
@@ -6133,11 +6232,11 @@ static void InitializeModule() {
   );
 
   //===----------------------------------------------------------------------===//
-  // DATASET
+  // DATASET Ops
   //===----------------------------------------------------------------------===//
 
 
-  // float, char *, ... 
+  // float, chars *, ... 
   FunctionType *yieldTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0)},
@@ -6165,7 +6264,7 @@ static void InitializeModule() {
 
 
   //===----------------------------------------------------------------------===//
-  // File Handling
+  // File Handling Ops
   //===----------------------------------------------------------------------===//
   
 
@@ -6197,6 +6296,73 @@ static void InitializeModule() {
     TheModule.get()
   );
 
+
+  //===----------------------------------------------------------------------===//
+  // Parallel Ops
+  //===----------------------------------------------------------------------===//
+
+
+  //  
+  FunctionType *sleepTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  Function::Create(
+    sleepTy,
+    Function::ExternalLinkage,
+    "sleep",
+    TheModule.get()
+  );
+
+
+
+  auto voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  auto pthreadPtr = Type::getInt8Ty(*TheContext)->getPointerTo();
+  auto pthreadPtrTy = pthreadPtr->getPointerTo();
+
+  // (void *) fn (void * arg)
+  FunctionType *funVoidPtrVoidPtrTy = FunctionType::get(
+    voidPtrTy, {voidPtrTy},
+    false);
+  // int pthread_create(pthread_t * thread, const pthread_attr_t * attr,
+  //                  void * (*start_routine)(void *), void * arg)
+  // using void * in place of pthread_attr_t *
+  FunctionType *pthreadCreateTy = FunctionType::get(
+                                      Type::getInt32Ty(*TheContext),
+                                      {pthreadPtrTy,
+                                       voidPtrTy,
+                                       (funVoidPtrVoidPtrTy)->getPointerTo(),
+                                       voidPtrTy},
+                                      false
+                                    );
+  /*                                  
+  Function::Create(
+    pthreadCreateTy,
+    Function::ExternalLinkage,
+    "pthread_create",
+    TheModule.get()
+  );
+  */
+  
+  TheModule->getOrInsertFunction("pthread_create", pthreadCreateTy);
+
+
+  // int pthread_join(pthread_t thread, void **value_ptr)
+  FunctionType *pthreadJoinTy = FunctionType::get(
+    Type::getInt32Ty(*TheContext),
+    {pthreadPtr, voidPtrTy->getPointerTo()},
+    false);
+  
+  /*
+  Function::Create(
+    pthreadJoinTy,
+    Function::ExternalLinkage,
+    "pthread_join",
+    TheModule.get()
+  );
+  */ 
+  TheModule->getOrInsertFunction("pthread_join", pthreadJoinTy);
 
 
   //===----------------------------------------------------------------------===//
@@ -6472,17 +6638,6 @@ ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
     report_fatal_error("Não foi possível compilar a função JIT de forma lazy");
 }
 
-ThreadSafeModule irgenAndTakeOwnershipClass(ClassAST &FnAST,
-                                       const std::string &Suffix) {
-  if (auto *F = FnAST.codegen()) {
-    F->setName(F->getName() + Suffix);
-    auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
-    // Start a new module.
-    InitializeModule();
-    return TSM;
-  } else
-    report_fatal_error("Não foi possível compilar a função JIT de forma lazy");
-}
 
 
 
@@ -6519,34 +6674,71 @@ static void HandleExtern() {
   }
 }
 
-static void HandleTopLevelExpression() {
-  // Evaluate a top-level expression into an anonymous function.
-  if (auto FnAST = ParseTopLevelExpr()) {
-    if (FnAST->codegen()) {
-      // Create a ResourceTracker for memory managment
-      // anonymous expression -- that way we can free it after executing.
-      auto RT = TheJIT->getMainJITDylib().createResourceTracker();
+std::vector<std::thread> all_threads;
 
-      auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
-      ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
-      // Add IR module
+static void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
 
-      InitializeModule();
+    auto *FnIR =  FnAST->codegen();
 
-      // Points __anon_expr
-      auto Sym = ExitOnErr(TheJIT->lookup("__anon_expr"));
+    fprintf(stderr, "Read top-level expression:");
+    FnIR->print(errs());
+    fprintf(stderr, "\n");
 
-      // Get the symbol's address and cast it to the right type (takes no
-      // arguments, returns a float) so we can call it as a native function.
-      auto *FP = Sym.getAddress().toPtr<float (*)()>();
-      auto fp = FP();
+    // Create a ResourceTracker for memory managment
+    // anonymous expression -- that way we can free it after executing.
+    auto RT = TheJIT->getMainJITDylib().createResourceTracker();
+
+    auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
+    ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
+    // Add IR module
+
+
+    InitializeModule();
+    //std::cout << "Finished new module." << "\n\n";
+
+    // Points __anon_expr
+    auto Sym = ExitOnErr(TheJIT->lookup("__anon_expr"));
+    //assert(Sym && "Function not found");
       
-      //std::cout << "\nResult times 5 is " << fp*5 << "\n";
-      fprintf(stderr, "%.2f\n", fp);
+    std::cout << "Jit lookup" << "\n";
 
-      // Delete the anonymous expression module from the JIT.
-      ExitOnErr(RT->remove());
+    // Get the symbol's address and cast it to the right type (takes no
+    // arguments, returns a float) so we can call it as a native function.
+    auto *FP = Sym.getAddress().toPtr<float (*)()>();
+    auto fp = FP();
+    std::cout << "Jit print" << "\n";
+      
+    //std::cout << "\nResult times 5 is " << fp*5 << "\n";
+    fprintf(stderr, "%.2f\n", fp);
+
+    // Delete the anonymous expression module from the JIT.
+    ExitOnErr(RT->remove());    
+}
+
+static void JoinThreads()
+{
+  for (int i=0; i<all_threads.size(); i++) {
+    std::cout << "JOINING THREAD: " << i << ".\n";
+    all_threads[i].join();
+  }
+  all_threads.clear();
+}
+
+
+static void HandleTopLevelExpression(bool async) {
+  // Evaluate a top-level expression into an anonymous function.
+  
+  if (std::unique_ptr<FunctionAST> FnAST = ParseTopLevelExpr()) {
+    if (async)
+    {
+      std::thread parsingThread(CodegenTopLevelExpression, std::ref(FnAST));
+      all_threads.push_back(std::move(parsingThread));
+      
     }
+    else
+      CodegenTopLevelExpression(std::ref(FnAST));
+
+  
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -6556,33 +6748,40 @@ static void HandleTopLevelExpression() {
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
   while (true) {
-    //if (CurTok!=tok_space)
-    //  std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
+    if (CurTok!=tok_space)
+      std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
+    //JoinThreads();
+
     switch (CurTok) {
-    case tok_eof:
-      return;
-    case ';': // ignore top-level semicolons.
-      getNextToken();
-      break;
-    case tok_space:
-      getNextToken();
-      break;
-    case tok_tab:
-      LogError("Tab inesperado encontrado\n");
-      break;
-    case tok_def:
-      HandleDefinition();
-      break;
-    case tok_class:
-      HandleClass();
-      break;
-    case tok_extern:
-      HandleExtern();
-      break;
-    //case (tok_space || 59):
-    default:
-      HandleTopLevelExpression();
-      break;
+      case tok_eof:
+        return;
+      case ';': // ignore top-level semicolons.
+        getNextToken();
+        break;
+      case tok_space:
+        getNextToken();
+        break;
+      case tok_tab:
+        LogError("Tab inesperado encontrado\n");
+        break;
+      case tok_def:
+        HandleDefinition();
+        break;
+      case tok_class:
+        HandleClass();
+        break;
+      case tok_extern:
+        HandleExtern();
+        break;
+      /*
+      case tok_async:
+        getNextToken();
+        HandleTopLevelExpression(true);
+        break;
+      */
+      default:
+        HandleTopLevelExpression(false);
+        break;
     }
   }
 }
@@ -6662,24 +6861,10 @@ int main() {
   InitializeModule();
 
   // Run the main "interpreter loop" now.
-
-  //preprocessings["load_img"] = LoadImg;
-  //preprocessings["split_str_to_float"] = LoadImg;
-  //preprocessings["split_str_to_float"] = split_str_to_float;
+  
 
   MainLoop();
 
   return 0;
 }
 
-
-
-/*
-//forward
-cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp,  C,  &beta, out,     OC);
-
-//backward to input
-cublasSgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &alpha, weight, C, dout, OC, &beta, dinp,     C)
-//backward to weight
-cublasSgemm(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, , &alpha, inp,    C, dout, OC, &beta, dweight,  C)
-*/
