@@ -183,6 +183,7 @@ enum Token {
   tok_for = -9,
   tok_while = -10,
   tok_async = -22,
+  tok_async_finish = -23,
   tok_tab = 9,
 
   // operators
@@ -210,6 +211,8 @@ static std::string IdentifierStr; // Filled in if tok_identifier
 static float NumVal;             // Filled in if tok_number
 int LineCounter;
 
+int SeenTabs = 0;
+
 /// get_token - Return the next token from standard input.
 static int get_token() {
   static int LastChar = ' ';
@@ -217,7 +220,11 @@ static int get_token() {
   // Skip any whitespace and backspace.
   //while (LastChar==32 || LastChar==tok_tab)
   while (LastChar==32 || LastChar==tok_tab)
+  {
+    if (LastChar==tok_tab)
+      SeenTabs+=1;
     LastChar = getchar();
+  }
   //while (isspace(LastChar))
     
   if (LastChar=='"')
@@ -291,6 +298,8 @@ static int get_token() {
       return tok_while;
     if (IdentifierStr == "async")
       return tok_async;
+    if (IdentifierStr == "finish")
+      return tok_async_finish;
     if (IdentifierStr == "binary")
       return tok_binary;
     if (IdentifierStr == "unary")
@@ -348,6 +357,7 @@ static int get_token() {
   if(ThisChar==10)
   {
     LineCounter += 1;
+    SeenTabs = 0;
     return tok_space;
   }
 
@@ -648,6 +658,18 @@ class AsyncExprAST : public ExprAST {
   public:
     AsyncExprAST(std::unique_ptr<ExprAST> Body)
       : Body(std::move(Body)) {}
+
+	Value* codegen() override;
+};
+
+
+/// FinishExprAST - Expression class for finish/async.
+class FinishExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Asyncs;
+
+  public:
+    FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Asyncs)
+            : Asyncs(std::move(Asyncs)) {}
 
 	Value* codegen() override;
 };
@@ -1026,8 +1048,50 @@ static std::unique_ptr<ExprAST> ParseAsyncExpr() {
   
   auto Body = ParseExpression();
   
+  std::cout << "Post async: " << CurTok << "\n";
 
   return std::make_unique<AsyncExprAST>(std::move(Body));
+}
+
+
+static std::unique_ptr<ExprAST> ParseFinishExpr() {
+  getNextToken(); // eat the finish.
+
+  std::cout << "\nParsing finish" <<  "\n";
+
+  std::vector<std::unique_ptr<ExprAST>> Asyncs;
+
+
+  int last_seen_tabs;
+  last_seen_tabs = 0;
+
+  while(CurTok != ';')
+  {
+    while(CurTok == tok_space)
+    {
+      getNextToken();
+      std::cout << "Seen tabs: " << SeenTabs << "\n"; 
+      if (SeenTabs == 0 && last_seen_tabs == 0)
+        return LogError("Expressão finish requer identação por tabulação.");
+      
+      if (SeenTabs < last_seen_tabs)
+      {
+        std::cout << "Return from finish\n";
+        return std::make_unique<FinishExprAST>(std::move(Asyncs));
+      }
+
+      last_seen_tabs = SeenTabs;
+    }
+
+    if (CurTok == tok_async)
+      Asyncs.push_back(std::move(ParseAsyncExpr()));
+
+    else
+      ParseExpression();
+  }
+
+
+  return std::make_unique<FinishExprAST>(std::move(Asyncs));
 }
 
 
@@ -1697,15 +1761,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     return ParseForExpr();
   case tok_while:
     return ParseWhileExpr();
-  case tok_async:
-    /*
-    {
-      std::thread parsingThread(ParseAsyncExpr);
-      //parsingThread.join();
-    }
-    return std::make_unique<NumberExprAST>(0.0f);
-    */
-    return ParseAsyncExpr();
+  case tok_async_finish:
+    return ParseFinishExpr();
   case tok_var:
     return ParseVarExpr();
   case tok_tensor:
@@ -2226,7 +2283,7 @@ extern "C" float sleep(float id)
 
   std::cout << "Sleep " << id << " finish" << "\n";
 
-  return 0;
+  return id;
 }
 
 
@@ -5290,15 +5347,13 @@ Value *WhileExprAST::codegen() {
 }
 
 
-Function *codegenAsyncFunction(std::unique_ptr<ExprAST> asyncBody) {
+Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
   
 
   // find unique function name (_async 0, _async1, _async2 etc)
   int fnIndex = 0;
-  while (TheModule->getFunction("__async_" + std::to_string(fnIndex))) {
-    std::cout << "Function __async_ found" << "\n";
+  while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
     fnIndex++;
-  }
   
   // Create function for this async function
   llvm::Type *voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
@@ -5323,19 +5378,55 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> asyncBody) {
   
 
   // define body of function
-  auto *FnIR = asyncBody->codegen();
-  
-  fprintf(stderr, "\nRead top-level expression:");
-  FnIR->print(errs());
-  fprintf(stderr, "\n\n");
+  if (auto *FnIR = asyncBody->codegen())
+  {
+    /*
+    fprintf(stderr, "\nRead top-level expression:");
+    FnIR->print(errs());
+    fprintf(stderr, "\n\n");
+    */
 
-  //Builder->CreateRet(ConstantFP::get(*TheContext, APFloat(0.0f)));
-  Builder->CreateRet(Constant::getNullValue(voidPtrTy));
-  verifyFunction(*asyncFun);
+    //Builder->CreateRet(ConstantFP::get(*TheContext, APFloat(0.0f)));
+    Builder->CreateRet(Constant::getNullValue(voidPtrTy));
+    verifyFunction(*asyncFun);
+    return asyncFun;
+  }
   
+  asyncFun->eraseFromParent();
 
-  return asyncFun;
+  return nullptr;
 }
+
+
+//int pthread_create(pthread_t *thread, pthread_attr_t *attr,
+//                   void *(*start_routine) (void *arg), void *arg);
+
+
+
+extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
+                   void *(*start_routine) (void *arg), void *arg)
+{
+  pthread_t t;
+  t=0;
+  
+  pthread_create(thread, attr, start_routine, arg);
+  //pthread_create(&t, attr, start_routine, arg);
+
+  //pthread_join(t, nullptr);
+
+  //std::cout << "Join\n";
+}
+
+
+extern "C" void pthread_join_aux(pthread_t thread)
+{
+  void **value_ptr;
+  value_ptr = nullptr;
+
+  pthread_join(thread, value_ptr);  
+}
+
+
 
 
 
@@ -5349,16 +5440,17 @@ Value *AsyncExprAST::codegen() {
   BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
   Builder->CreateBr(CurrentBB);
 
-  Function *asyncFun = codegenAsyncFunction(std::move(Body));
+  Function *asyncFun = codegenAsyncFunction(std::ref(Body));
 
   Builder->SetInsertPoint(CurrentBB);
 
   
-  Function *pthread_create = TheModule->getFunction("pthread_create");
+  Function *pthread_create = TheModule->getFunction("pthread_create_aux");
 
-  PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-  Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr, Twine("pthread"));
-  Builder->CreateStore(ConstantInt::get(Type::getInt8Ty(*TheContext), 0), pthreadPtr);
+  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
+  //Builder->CreateStore(ConstantInt::get(Type::getInt8Ty(*GlobalContext), 0), pthreadPtr);
+  
   
 
   Value *voidPtrNull = Constant::getNullValue(
@@ -5372,30 +5464,40 @@ Value *AsyncExprAST::codegen() {
      asyncFun,
      voidPtrNull}
   );
+
+
+  return pthreadPtr;
+}
+
+
+
+Value *FinishExprAST::codegen() {
+
+  std::vector<Value *> thread_pointers;
   
+  for (auto &expr : Asyncs)
+  {
+    thread_pointers.push_back(expr->codegen());
+  }
+
+
+  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+
+  Function *pthread_join = TheModule->getFunction("pthread_join_aux");
+
+
+  int i=0;
+  for (Value *pthreadPtr : thread_pointers)
+  {
+    Value *pthread = Builder->CreateLoad(pthreadTy, pthreadPtr);
+
+    Builder->CreateCall(pthread_join,
+                        {pthread});
+    
+    i+=1;
+  }
   
-
-   /*
-  // Join Threads
-  Function *pthread_join =  TheModule->getFunction("pthread_join");
-
-  auto voidPtrPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo()->getPointerTo();
-  
-
-  Builder->CreateCall(pthread_join,
-                      {pthreadPtr, Constant::getNullValue(voidPtrPtrTy)});
-  std::cout << "Join thread codegen" << "\n";
-  */
-
-  //Body->codegen();
-
-  /*
-  for (auto &pthreadPtr : pthreadPtrs) {
-    Value *pthread = builder->CreateLoad(pthreadPtr);
-    builder->CreateCall(pthread_join,
-                        {pthread, Constant::getNullValue(voidPtrPtrTy)});  
-  */
-
+  thread_pointers.clear();
 
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
@@ -6319,9 +6421,22 @@ static void InitializeModule() {
   );
 
 
+  FunctionType *PrintVoidTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      false
+  );
+  Function::Create(
+    PrintVoidTy,
+    Function::ExternalLinkage,
+    "PrintVoid",
+    TheModule.get()
+  );
+
+
 
   auto voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-  auto pthreadPtr = Type::getInt8Ty(*TheContext)->getPointerTo();
+  auto pthreadPtr = Type::getInt8Ty(*GlobalContext)->getPointerTo();
   auto pthreadPtrTy = pthreadPtr->getPointerTo();
 
   // (void *) fn (void * arg)
@@ -6332,7 +6447,7 @@ static void InitializeModule() {
   //                  void * (*start_routine)(void *), void * arg)
   // using void * in place of pthread_attr_t *
   FunctionType *pthreadCreateTy = FunctionType::get(
-                                      Type::getInt32Ty(*TheContext),
+                                      Type::getVoidTy(*TheContext),
                                       {pthreadPtrTy,
                                        voidPtrTy,
                                        (funVoidPtrVoidPtrTy)->getPointerTo(),
@@ -6348,13 +6463,13 @@ static void InitializeModule() {
   );
   */
   
-  TheModule->getOrInsertFunction("pthread_create", pthreadCreateTy);
+  TheModule->getOrInsertFunction("pthread_create_aux", pthreadCreateTy);
 
 
   // int pthread_join(pthread_t thread, void **value_ptr)
   FunctionType *pthreadJoinTy = FunctionType::get(
-    Type::getInt32Ty(*TheContext),
-    {pthreadPtr, voidPtrTy->getPointerTo()},
+    Type::getVoidTy(*TheContext),
+    {pthreadPtr},
     false);
   
   /*
@@ -6365,7 +6480,7 @@ static void InitializeModule() {
     TheModule.get()
   );
   */ 
-  TheModule->getOrInsertFunction("pthread_join", pthreadJoinTy);
+  TheModule->getOrInsertFunction("pthread_join_aux", pthreadJoinTy);
 
 
   //===----------------------------------------------------------------------===//
@@ -6705,13 +6820,13 @@ static void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
     auto Sym = ExitOnErr(TheJIT->lookup("__anon_expr"));
     //assert(Sym && "Function not found");
       
-    std::cout << "Jit lookup" << "\n";
+    //std::cout << "Jit lookup" << "\n";
 
     // Get the symbol's address and cast it to the right type (takes no
     // arguments, returns a float) so we can call it as a native function.
     auto *FP = Sym.getAddress().toPtr<float (*)()>();
     auto fp = FP();
-    std::cout << "Jit print" << "\n";
+    //std::cout << "Jit print" << "\n";
       
     //std::cout << "\nResult times 5 is " << fp*5 << "\n";
     fprintf(stderr, "%.2f\n", fp);
@@ -6753,8 +6868,8 @@ static void HandleTopLevelExpression(bool async) {
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
   while (true) {
-    if (CurTok!=tok_space)
-      std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
+    //if (CurTok!=tok_space)
+    //  std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
     //JoinThreads();
 
     switch (CurTok) {
