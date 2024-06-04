@@ -665,11 +665,14 @@ class AsyncExprAST : public ExprAST {
 
 /// FinishExprAST - Expression class for finish/async.
 class FinishExprAST : public ExprAST {
-  std::vector<std::unique_ptr<ExprAST>> Asyncs;
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::vector<bool> IsAsync;
 
   public:
-    FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Asyncs)
-            : Asyncs(std::move(Asyncs)) {}
+    FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
+                  std::vector<bool> IsAsync)
+            : Bodies(std::move(Bodies)), IsAsync(std::move(IsAsync)) {}
+
 
 	Value* codegen() override;
 };
@@ -1059,7 +1062,8 @@ static std::unique_ptr<ExprAST> ParseFinishExpr() {
 
   std::cout << "\nParsing finish" <<  "\n";
 
-  std::vector<std::unique_ptr<ExprAST>> Asyncs;
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::vector<bool> IsAsync;
 
 
   int last_seen_tabs;
@@ -1077,21 +1081,28 @@ static std::unique_ptr<ExprAST> ParseFinishExpr() {
       if (SeenTabs < last_seen_tabs)
       {
         std::cout << "Return from finish\n";
-        return std::make_unique<FinishExprAST>(std::move(Asyncs));
+        return std::make_unique<FinishExprAST>(std::move(Bodies),
+                                               std::move(IsAsync));
       }
 
       last_seen_tabs = SeenTabs;
     }
 
     if (CurTok == tok_async)
-      Asyncs.push_back(std::move(ParseAsyncExpr()));
-
+    {
+      Bodies.push_back(std::move(ParseAsyncExpr()));
+      IsAsync.push_back(true);
+    }
     else
-      ParseExpression();
+    {
+      Bodies.push_back(std::move(ParseExpression()));
+      IsAsync.push_back(false);
+    }
   }
 
 
-  return std::make_unique<FinishExprAST>(std::move(Asyncs));
+  return std::make_unique<FinishExprAST>(std::move(Bodies),
+                                         std::move(IsAsync));
 }
 
 
@@ -1099,7 +1110,7 @@ static std::unique_ptr<ExprAST> ParseFinishExpr() {
 //                    (',' identifier ('=' expression)?)* 'in' expression
 static std::unique_ptr<ExprAST> ParseVarExpr() {
   getNextToken(); // eat the var.
-  
+  std::cout << "Parsing var expr\n";
 
   // mem2reg is alloca-driven: it looks for allocas and if it can handle them, it promotes them. It DOES NOT APPLY TO GLOBAL variables or heap allocations.
   // mem2reg only promotes allocas whose uses are direct loads and stores. If the address of the stack object is passed to a function,
@@ -5475,9 +5486,13 @@ Value *FinishExprAST::codegen() {
 
   std::vector<Value *> thread_pointers;
   
-  for (auto &expr : Asyncs)
+
+  for (int i=0; i < Bodies.size(); i++)
   {
-    thread_pointers.push_back(expr->codegen());
+    if (IsAsync[i])
+      thread_pointers.push_back(Bodies[i]->codegen());
+    else
+      Bodies[i]->codegen();
   }
 
 
