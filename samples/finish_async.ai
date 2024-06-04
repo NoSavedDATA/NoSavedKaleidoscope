@@ -1,0 +1,7 @@
+finish
+	async sleep(10)
+	async sleep(3)
+	async sleep(8)
+	async sleep(5)
+	async sleep(2)
+	async sleep(4);
