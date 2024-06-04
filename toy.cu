@@ -5325,9 +5325,9 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> asyncBody) {
   // define body of function
   auto *FnIR = asyncBody->codegen();
   
-  fprintf(stderr, "Read top-level expression:");
+  fprintf(stderr, "\nRead top-level expression:");
   FnIR->print(errs());
-  fprintf(stderr, "\n");
+  fprintf(stderr, "\n\n");
 
   //Builder->CreateRet(ConstantFP::get(*TheContext, APFloat(0.0f)));
   Builder->CreateRet(Constant::getNullValue(voidPtrTy));
@@ -5344,7 +5344,10 @@ Value *AsyncExprAST::codegen() {
   
   // Create/Spawn Threads
 
-  BasicBlock *CurrentBB = Builder->GetInsertBlock();
+  //BasicBlock *CurrentBB = Builder->GetInsertBlock();
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
+  Builder->CreateBr(CurrentBB);
 
   Function *asyncFun = codegenAsyncFunction(std::move(Body));
 
@@ -6680,9 +6683,11 @@ static void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
 
     auto *FnIR =  FnAST->codegen();
 
-    fprintf(stderr, "Read top-level expression:");
+    /*
+    fprintf(stderr, "\nRead top-level expression:");
     FnIR->print(errs());
-    fprintf(stderr, "\n");
+    fprintf(stderr, "\n\n");
+    */
 
     // Create a ResourceTracker for memory managment
     // anonymous expression -- that way we can free it after executing.
@@ -6867,4 +6872,3 @@ int main() {
 
   return 0;
 }
-
