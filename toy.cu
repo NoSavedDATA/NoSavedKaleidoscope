@@ -6864,28 +6864,13 @@ static void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
     ExitOnErr(RT->remove());    
 }
 
-static void JoinThreads()
-{
-  for (int i=0; i<all_threads.size(); i++) {
-    std::cout << "JOINING THREAD: " << i << ".\n";
-    all_threads[i].join();
-  }
-  all_threads.clear();
-}
 
 
-static void HandleTopLevelExpression(bool async) {
+static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   
   if (std::unique_ptr<FunctionAST> FnAST = ParseTopLevelExpr()) {
-    if (async)
-    {
-      std::thread parsingThread(CodegenTopLevelExpression, std::ref(FnAST));
-      all_threads.push_back(std::move(parsingThread));
-      
-    }
-    else
-      CodegenTopLevelExpression(std::ref(FnAST));
+    CodegenTopLevelExpression(std::ref(FnAST));
 
   
   } else {
@@ -6899,7 +6884,7 @@ static void MainLoop() {
   while (true) {
     //if (CurTok!=tok_space)
     //  std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
-    //JoinThreads();
+    
 
     switch (CurTok) {
       case tok_eof:
@@ -6922,14 +6907,8 @@ static void MainLoop() {
       case tok_extern:
         HandleExtern();
         break;
-      /*
-      case tok_async:
-        getNextToken();
-        HandleTopLevelExpression(true);
-        break;
-      */
       default:
-        HandleTopLevelExpression(false);
+        HandleTopLevelExpression();
         break;
     }
   }
