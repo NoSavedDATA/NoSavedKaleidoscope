@@ -3480,10 +3480,16 @@ std::vector<backward_tuple> todo_backwards;
 
 
 
-extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func) {
+extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func,
+                          std::vector<float> aux_dims) {
   
   float * device_x;
   float * device_w;
+  
+
+  //std::cout << "Aux dims:\n";
+  //PrintDims(aux_dims);
+
   
 
   /*
@@ -3497,16 +3503,15 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
   */
   
   device_x = NamedTensors[LtensorName];
-  currentDims = NamedDims[LtensorName];
   
-
   device_w = NamedTensors[RtensorName];
 
+  std::vector<float> Ldims = NamedDims[LtensorName];
   std::vector<float> Rdims = NamedDims[RtensorName];
   
 
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(currentDims);
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
   int input_dims_prod = DimsProd(linear_layer_dims);
   //int resultingDimsProd = (int)linear_layer_dims[0]*Rdims[0];
   int resultingDimsProd = resultingDimsProdOnMult(linear_layer_dims, Rdims);
@@ -3515,7 +3520,7 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
   float* device_y;
   cudaCheck(cudaMalloc(&device_y, resultingDimsProd * sizeof(float)));
 
-  if (currentDims.size()<2)
+  if (Ldims.size()<2)
     LogErrorS("Tensor de entrada da multiplicação de tensors precisa ter ao menos 2 dimensões.");
 
 
@@ -3534,7 +3539,7 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
 
   currentCudaResult = device_y;
   //std::cout << "L tensor: " << LtensorName << " R tensor: " << RtensorName << "\n";
-  currentDims = newDimsOnMult(currentDims, Rdims);
+  currentDims = newDimsOnMult(Ldims, Rdims);
 
   
   if (is_forward_func)
@@ -4953,15 +4958,24 @@ Value *BinaryTensorTensorExprAST::codegen() {
     Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
     used_cuda = 1;
 
+
+  void *vec = &NamedDims[LHS->GetName()];
+  auto vecTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
+  LLVMValue = Builder->CreateIntToPtr(LLVMValue, vecTy);
+
+
+  
+
   switch (Op)
   {
   case '@':
     CudaFn = TheModule->getFunction("CudaMult");
-    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func},
+    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func, LLVMValue},
                                "cudamult");
   case '*':
     CudaFn = TheModule->getFunction("CudaMult");
-    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func},
+    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func, LLVMValue},
                                "cudamult");
   case '/':
     CudaFn = TheModule->getFunction("CudaDiv");
@@ -6136,7 +6150,7 @@ static void InitializeModule() {
   // char *, char *, int
   FunctionType *CudaMultTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false // Not vararg
   );
 
