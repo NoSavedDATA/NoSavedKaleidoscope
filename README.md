@@ -3,8 +3,9 @@
 
 Culang is a language created using LLVM and CUDA :)
 
+
 <div align="center">
-  <img src="assets/Screenshot_2.jpg" alt="Logo" width="350" height="350">
+  <img src="assets/Logo1.jpg" alt="Logo" width="350" height="350">
 </div>
 
 ## Install
@@ -70,3 +71,9 @@ clang++ test.cu --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/l
 ## Todos:
 
 - Map var names to hash function.
+
+## Awards:
+
+<div align="center">
+  <img src="assets/Screenshot_2.jpg" alt="Logo" width="350" height="350">
+</div>
