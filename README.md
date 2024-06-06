@@ -5,7 +5,7 @@ Culang is a language created using LLVM and CUDA :)
 
 
 <div align="center">
-  <img src="assets/Logo1.jpg" alt="Logo" width="350" height="350">
+  <img src="assets/Logo1.jpg" alt="Logo" width="320" height="320">
 </div>
 
 ## Install
