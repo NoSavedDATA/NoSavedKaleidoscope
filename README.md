@@ -1,5 +1,7 @@
 # Culang
 
+![Alt text](assets/Screenshot_2.jpg)
+
 Culang is a language created using LLVM and CUDA :)
 
 ## Install
