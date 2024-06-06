@@ -14,8 +14,14 @@ Culang is a language created using LLVM and CUDA :)
 
 - Install [cuDNN](https://developer.nvidia.com/cudnn-downloads) 9.1.1;
 
-- Install LLVM dependencies:
+- Install OpenCV:
+  
+```bash
+sudo apt install libopencv-dev
+```
 
+- Install LLVM dependencies:
+  
 ```bash
 chmod +x *.sh
 sudo ./llvm.sh 19 all
