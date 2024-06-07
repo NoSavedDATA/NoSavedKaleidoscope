@@ -4496,8 +4496,9 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
+extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
 {
+  std::cout << "\n\nCONV FORWARD\n\n\n";
   std::string conv_name = conv_namec;
   if (is_obj_attr_or_self)
     conv_name = FirstArg + conv_name;
@@ -4572,7 +4573,7 @@ extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_a
 
   NamedConv2d[conv_name] = std::move(conv);
 
-  return 0;
+  return output;
 }
 
 
@@ -6537,7 +6538,7 @@ static void InitializeModule() {
 
   //char *, char *, int
   FunctionType *conv2dForwardTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      floatPtrTy,
       {PointerType::get(Type::getInt8Ty(*TheContext),0), PointerType::get(Type::getInt8Ty(*TheContext),0), Type::getInt32Ty(*TheContext)},
       false
   );
