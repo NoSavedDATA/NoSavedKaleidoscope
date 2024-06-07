@@ -148,7 +148,8 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
-std::vector<std::string> tensor_resulting_methods = {"gelu"};
+std::vector<std::string> tensor_resulting_methods = {"gelu", "relu", "softmax"};
+std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
@@ -934,8 +935,11 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
   }
   
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
-  if (in_str(IdName, tensor_resulting_methods))
+
+  
+  if (in_str(IdName, tensor_resulting_methods) || is_var_forward)
     aux->SetType("tensor");
+  
   return aux;
 }
 
@@ -1464,7 +1468,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     if (std::find(tensorVars.begin(), tensorVars.end(), IdentifierStr) != tensorVars.end())
       aux->SetType("tensor");
     if (functionVars.find(IdName) != functionVars.end())
-      aux->SetType("function");
+      aux->SetType("tensor");
     if (is_class_attr)
       aux->SetSelf(pre_dot);
     if (pre_dot=="self")
@@ -1516,8 +1520,13 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     is_var_forward = true;
     callee_override = functionVars[IdName];
   }
+
+  auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
+
+  if (in_str(IdName, tensor_resulting_methods) || is_var_forward)
+    aux->SetType("tensor");
   
-  return std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
+  return aux;
 }
 
 
@@ -2220,6 +2229,7 @@ static std::map<std::string, float> StoredValues;
 // Tensors
 static std::map<std::string, float *> NamedTensors;
 static std::map<std::string, std::vector<float>> NamedDims;
+static std::map<std::string, std::vector<float>> NamedDimsConv;
 
 // Current Cuda Result
 float *currentCudaResult;
@@ -2472,6 +2482,18 @@ extern "C" float * LoadTensor(char* tensor_name){
 extern "C" void *LoadDims(char* tensor_name)
 {
   return &NamedDims[tensor_name];
+}
+
+extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self)
+{
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = FirstArg + conv_name;
+
+  
+  std::cout << "\n\n\n\n\n\nLOADING DIMS FOR: " << conv_name<< "\n\n\n\n\n\n\n";
+
+  return &NamedDimsConv[conv_name];
 }
 
 
@@ -3355,7 +3377,7 @@ Value *VariableExprAST::codegen() {
     
     
     Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {var_name});
-    DimsPtr = Builder->CreateAlloca(Type::getInt8Ty(*TheContext)->getPointerTo());
+    DimsPtr = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(dims_ptr, DimsPtr);
     
     
@@ -3817,12 +3839,9 @@ __global__ void gelu_forward_kernel1(const float* inp, float* out, int N) {
 
 extern "C" float *gelu(char * tensor_name) {
 
-  std::cout << "Gelu for: " << tensor_name << "\n";
-  PrintTensor(tensor_name);
-
   float *tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
-  PrintDims(dims);
+  
 
   float dims_prod = DimsProd(dims);
   float block_size = 32;
@@ -3900,7 +3919,7 @@ __global__ void relu_forward(float* Z, float* A,
     }
 }
 
-extern "C" float relu(char *tensor_name)
+extern "C" float *relu(char *tensor_name)
 {
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
@@ -3935,10 +3954,9 @@ extern "C" float relu(char *tensor_name)
   }
 
   //cudaCheck(cudaFree(currentCudaResult));
-  currentCudaResult = y;
-  currentDims = dims;
+  
 
-  return 0;
+  return y;
 }
 
 __global__ void relu_backward1(float* Z, float* dZ, float* dA,
@@ -4058,7 +4076,7 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
 
 
 
-extern "C" float softmax(char * tensor_name)
+extern "C" float *softmax(char * tensor_name)
 {
 
   float * tensor = NamedTensors[tensor_name];
@@ -4079,10 +4097,9 @@ extern "C" float softmax(char * tensor_name)
 
   softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size>>>(tensor, probs, B, C);
 
-  std::cout << "\n\nPROBS ARE:\n\n";
-  PrintTensorF(probs, B, C);
+  
 
-  return 0;
+  return probs;
 }
 
 
@@ -4540,13 +4557,16 @@ extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_a
 
 
   std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)conv->OC};
-  currentDims = new_dims;
-
   
   NamedTensors[conv_name] = conv->d_filter;
-  NamedDims[conv_name] = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks};
 
+  //for backprop:
+  NamedDims[conv_name] = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks}; 
+
+  //for forward resulting dims:
+  NamedDimsConv[conv_name] = new_dims;
   
+
   //if (conv_name=="modelconv1")
   //  PrintTensorF(conv->d_filter, 1, conv->ks*conv->ks);
 
@@ -6048,12 +6068,31 @@ Value *CallExprAST::codegen() {
     if (CalleeOverride=="Conv2d")
     {
       CalleeF = getFunction("ConvForward2d");
-      ArgsV.push_back(Builder->CreateGlobalString(tgt_function));
-      ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(PreDot=="self")));
-      Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-    }
-  
+      Value *conv_name = Builder->CreateGlobalString(tgt_function);
+      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(PreDot=="self"));
+      ArgsV.push_back(conv_name);
+      ArgsV.push_back(is_attr);
+      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
 
+
+      std::cout << "Load dims for conv: " << tgt_function << "\n";
+      
+      Value *dims_ptr = Builder->CreateCall(getFunction("LoadDimsConv"), 
+                          {conv_name, is_attr});
+      DimsPtr = Builder->CreateAlloca(int8PtrTy);
+      Builder->CreateStore(dims_ptr, DimsPtr);
+
+      Builder->CreateCall(getFunction("PrintDims"), 
+                          {dims_ptr});
+    }
+  }
+
+  if (in_str(tgt_function_name, activation_functions))
+  {
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"),
+                                          {Builder->CreateGlobalString(Args[0]->GetName())});
+    DimsPtr = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(dims_ptr, DimsPtr);
   }
     
   if(Class!="None")
@@ -6333,19 +6372,35 @@ static void InitializeModule() {
   );
 
 
+
   FunctionType *LoadDimsTy = FunctionType::get(
-      Type::getInt8Ty(*TheContext)->getPointerTo(),
-      //Type::getVoidTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
-      false // Not vararg
+      int8PtrTy,
+      {int8PtrTy},
+      false
   );
 
   Function::Create(
     LoadDimsTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "LoadDims", // Function name
-    TheModule.get() // Module to which the function belongs
+    Function::ExternalLinkage,
+    "LoadDims",
+    TheModule.get()
   );
+
+
+  FunctionType *LoadDimsConvTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy,
+       Type::getInt32Ty(*TheContext)}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    LoadDimsConvTy,
+    Function::ExternalLinkage, 
+    "LoadDimsConv", 
+    TheModule.get() 
+  );
+
 
   FunctionType *PrintDimsTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
@@ -6429,8 +6484,8 @@ static void InitializeModule() {
 
   // char *
   FunctionType *softmaxTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      floatPtrTy,
+      {int8PtrTy},
       false
   );
   Function::Create(
@@ -6442,8 +6497,8 @@ static void InitializeModule() {
 
   //char *
   FunctionType *reluTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      floatPtrTy,
+      {int8PtrTy},
       false
   );
   Function::Create(
