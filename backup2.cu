@@ -148,10 +148,12 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
-std::vector<std::string> other_methods = {"gelu"};
+std::vector<std::string> tensor_resulting_methods = {"gelu"};
 
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
+
+PointerType *floatPtrTy, *int8PtrTy;
 
 
 //===----------------------------------------------------------------------===//
@@ -380,9 +382,8 @@ public:
   std::string Type = "None";
   std::string Name = "Unnamed";
   std::string isSelf = "false";
-  bool leaf = true;
 
-  Value *TensorPtr;
+  Value *TensorPtr, *DimsPtr;
 
 
   virtual Value *codegen() = 0;
@@ -413,8 +414,8 @@ public:
   virtual Value *GetTensorPtr() {
     return TensorPtr;
   }
-  virtual bool IsLeaf() {
-    return leaf;
+  virtual Value *GetDimsPtr() {
+    return DimsPtr;
   }
 };
 
@@ -932,7 +933,10 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
     callee_override = functionVars[IdName];
   }
   
-  return std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
+  auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
+  if (in_str(IdName, tensor_resulting_methods))
+    aux->SetType("tensor");
+  return aux;
 }
 
 
@@ -2329,6 +2333,7 @@ extern "C" float sleep(float id)
 
 
 
+
 std::vector<float> BatchLessDims(std::vector<float> dims)
 {
   // Removes first dim (batch dim).
@@ -2365,7 +2370,7 @@ std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 }
 
 
-void PrintDims(std::vector<float> dims)
+extern "C" void PrintDims(std::vector<float> dims)
 {
   std::cout << "dims: [";
   for (int i=0; i<dims.size();i++)
@@ -2388,9 +2393,25 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
   return (int)aux;
 }
 
+std::string RandomString(size_t length) {
+  const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  std::random_device rd;
+  std::mt19937 generator(rd());
+  std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
 
-std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
+  std::string random_string;
+  for (size_t i = 0; i < length; ++i) {
+    int random_index = distribution(generator);
+    random_string += charset[random_index];
+  }
+
+  return random_string;
+}
+
+extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 {
+  
+
   std::vector<float> new_dims;
   if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
   {
@@ -2399,13 +2420,17 @@ std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
     PrintDims(Ldims);
     std::cout << "Dim RHS: ";
     PrintDims(Rdims);
-    return new_dims; 
+    return nullptr; 
   }
   for (int i = 0; i < Ldims.size()-1; i++)
     new_dims.push_back(Ldims[i]);
   new_dims.push_back(Rdims[0]);
+
+
+  std::string random_str = RandomString(15); 
+  NamedDims[random_str] = new_dims; // Deal with new_dims being deleted after scope finished.
   
-  return new_dims;
+  return &NamedDims[random_str];
 }
 
 extern "C" float PrintStr(char* value){
@@ -2440,6 +2465,14 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
+extern "C" float * LoadTensor(char* tensor_name){
+  return NamedTensors[tensor_name];
+}
+
+extern "C" void *LoadDims(char* tensor_name)
+{
+  return &NamedDims[tensor_name];
+}
 
 
 
@@ -2526,6 +2559,7 @@ extern "C" float PrintTensor(char* tensorName){
 
 
   }
+  
   std::cout << "\n";
   PrintDims(dims);
   std::cout << "\n";
@@ -3244,12 +3278,22 @@ Value *VariableExprAST::codegen() {
   std::string functionName = TheFunction->getName().str();
   
   
+  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+
 
   Value *var_name, *object_name, *object_var_name;
-  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   var_name = Builder->CreateGlobalString(Name);
   
-  
+
+  std::cout << "\nVARIABLE EXPR CODEGEN: " << Name << "\n";
+
+
+  for (const auto &entry : NamedStrs)
+    std::cout << "NamedStr: " << entry.first << "\n";
+  for (const auto &entry : NamedValues)
+    std::cout << "NamedValues: " << entry.first << "\n";
+  for (const auto &entry : NamedTensors)
+    std::cout << "NamedTensors: " << entry.first << "\n";
 
   std::string pre_dot = GetSelf();
   if (pre_dot!="false")
@@ -3274,6 +3318,7 @@ Value *VariableExprAST::codegen() {
 
   if (NamedValues.count(Name)>0) 
   {
+    std::cout << "Variable Float " << Name << " Codegen.\n";
 
     Value *V = NamedValues[Name];
     
@@ -3281,24 +3326,8 @@ Value *VariableExprAST::codegen() {
 
     return Builder->CreateLoad(Type::getFloatTy(*GlobalContext), V, Name.c_str());
 
-  } else if (NamedTensors.count(Name)>0) {
-    std::cout << "Variable Tensor " << Name << " Codegen.\n";
-  
-
-    if (!seen_var_attr)
-    {
-      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
-    }
-    
-    TensorPtr = Builder->CreateAlloca(Type::getFloatTy(*TheContext)->getPointerTo(),
-                                      nullptr);
-    Builder->CreateStore(FloatPtr_toValue(NamedTensors[Name]), TensorPtr);
-
-    //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
-
-    return FloatPtr_toValue(NamedTensors[Name]);
-    
   } else if (NamedStrs.count(Name)>0) {
+    std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n\n";
     for (const auto &entry : NamedTensors)
       if (ends_with(entry.first, Name))
         return ret;
@@ -3316,6 +3345,29 @@ Value *VariableExprAST::codegen() {
     //std::cout << "RETURNING STRING: " << Name << "\n";
     //std::cout << "NamedStrs count:" << NamedStrs.count(Name) << "\n";
     return V;
+  } else if (NamedTensors.count(Name)>0) {
+    std::cout << "Variable Tensor " << Name << " Codegen.\n";
+  
+
+    if (!seen_var_attr)
+      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+    
+    
+    
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {var_name});
+    DimsPtr = Builder->CreateAlloca(Type::getInt8Ty(*TheContext)->getPointerTo());
+    Builder->CreateStore(dims_ptr, DimsPtr);
+    
+    
+    /*
+    TensorPtr = Builder->CreateAlloca(Type::getFloatTy(*TheContext)->getPointerTo(),
+                                      nullptr);
+    Builder->CreateStore(FloatPtr_toValue(NamedTensors[Name]), TensorPtr);
+    */
+
+    //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+
+    return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   }
 }
 
@@ -3328,7 +3380,7 @@ extern "C" float toStoredValues(float Val, char * name_to_store)
 }
 
 
-extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor)
+extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
 
@@ -3341,7 +3393,7 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor)
   cudaCheck(cudaGetLastError());
   //NamedTensors[tensor_name] = currentCudaResult;
   NamedTensors[tensor_name] = tensor;
-  NamedDims[tensor_name] = currentDims;
+  NamedDims[tensor_name] = new_dims;
   
 
   return 0;
@@ -3520,33 +3572,12 @@ std::vector<backward_tuple> todo_backwards;
 
 extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func,
                           float *device_x, float *device_w,
-                          std::vector<float> aux_dims) {
+                          std::vector<float> Ldims, std::vector<float> Rdims) {
   
-  std::cout << "cuda mult called\n";
-  std::cout << "L " << LtensorName << "\nR " << RtensorName << "\n";
-  
-
-  //std::cout << "Aux dims:\n";
-  //PrintDims(aux_dims);
-
-  /*
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[LtensorName];
-    currentDims = NamedDims[LtensorName];
-  }
-  */
-
-
+  //std::cout << "cuda mult called\n";
+  //std::cout << "L " << LtensorName << "\nR " << RtensorName << "\n";
   
 
-  //device_x = NamedTensors[LtensorName];
-  //device_w = NamedTensors[RtensorName];
-
-  std::vector<float> Ldims = NamedDims["c"];
-  std::vector<float> Rdims = NamedDims[RtensorName];
   
 
 
@@ -3585,7 +3616,7 @@ extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int _used_cuda,
 
   currentCudaResult = device_y;
   //std::cout << "L tensor: " << LtensorName << " R tensor: " << RtensorName << "\n";
-  currentDims = newDimsOnMult(Ldims, Rdims);
+  
 
   
   if (is_forward_func)
@@ -3784,10 +3815,14 @@ __global__ void gelu_forward_kernel1(const float* inp, float* out, int N) {
     }
 }
 
-extern "C" float gelu(char * tensor_name) {
+extern "C" float *gelu(char * tensor_name) {
+
+  std::cout << "Gelu for: " << tensor_name << "\n";
+  PrintTensor(tensor_name);
 
   float *tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
+  PrintDims(dims);
 
   float dims_prod = DimsProd(dims);
   float block_size = 32;
@@ -3824,12 +3859,10 @@ extern "C" float gelu(char * tensor_name) {
   }
 
   //cudaCheck(cudaFree(currentCudaResult));
-  currentCudaResult = y;
-  currentDims = dims;
-
+  
   used_cuda=1;
 
-  return 0;
+  return y;
 }
 
 __global__ void gelu_backward1(float* dinp, const float* inp, const float* dout, int N) {
@@ -4928,10 +4961,10 @@ Value *BinaryTensorTensorExprAST::codegen() {
   Value *RtensorName = Builder->CreateGlobalString(RHS->GetName());
   Value *object_name;
 
-  auto floatPtrTy = Type::getFloatTy(*TheContext)->getPointerTo();
 
-  TensorPtr = Builder->CreateAlloca(floatPtrTy, nullptr);
-  Builder->CreateStore(FloatPtr_toValue(NamedTensors[Name]), TensorPtr);
+  //TensorPtr = Builder->CreateAlloca(floatPtrTy, nullptr);
+  //Builder->CreateStore(FloatPtr_toValue(NamedTensors[Name]), TensorPtr);
+  DimsPtr = Builder->CreateAlloca(int8PtrTy);
 
 
   // Concat self or obj name to tensor name
@@ -4980,8 +5013,14 @@ Value *BinaryTensorTensorExprAST::codegen() {
     //  return LogErrorV("O nome do tensor/variável é desconhecido.");
 
     
+    std::cout << "Pre dims\n";
+    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+    std::cout << "Post dims\n";
+
     Builder->CreateCall(TheModule->getFunction("temporaryCudaResult_Attr"),
-                        {LtensorName, RtensorPtr});
+                        {LtensorName, RtensorPtr,
+                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
+    std::cout << "Post attr call\n";
 
 
     used_cuda=0;
@@ -4994,11 +5033,6 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
 
 
-  Value *L = LHS->codegen();
-  Value *R = RHS->codegen();
-
-  Value *LtensorPtr = Builder->CreateLoad(floatPtrTy, LHS->GetTensorPtr());
-  Value *RtensorPtr = Builder->CreateLoad(floatPtrTy, RHS->GetTensorPtr());
 
   
 
@@ -5009,6 +5043,23 @@ Value *BinaryTensorTensorExprAST::codegen() {
   if(ends_with(functionName, "forward"))
     forward_func = 1;
   forward_func = 1; // TODO: Remove this line
+
+
+
+  
+  Value *LtensorPtr = LHS->codegen();
+  Value *RtensorPtr = RHS->codegen();
+
+  std::cout << "Create load for dims\n";
+
+  Value *LdimsPtr = Builder->CreateLoad(int8PtrTy, LHS->GetDimsPtr());
+  Value *RdimsPtr = Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+
+  std::cout << "Load created\n";
+
+
+  //Builder->CreateCall(TheModule->getFunction("PrintDims"),
+  //                    {LdimsPtr});
 
 
   if (!LtensorPtr || !RtensorPtr)
@@ -5023,32 +5074,39 @@ Value *BinaryTensorTensorExprAST::codegen() {
   Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
   used_cuda = 1;
 
-
+  /*
   void *vec = &NamedDims[LHS->GetName()];
-  auto vecTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
-  LLVMValue = Builder->CreateIntToPtr(LLVMValue, vecTy);
-
+  LLVMValue = Builder->CreateIntToPtr(LLVMValue, int8PtrTy);
+  */
 
   
+  Value *new_dims;
 
   switch (Op)
   {
   case '@':
   {
-    std::cout << "Create call\n";
-    Value *ret = Builder->CreateCall(TheModule->getFunction("CudaMult"),
+    std::cout << "Create store dims at cuda mult\n";
+    new_dims = Builder->CreateCall(TheModule->getFunction("NewDimsOnMult"),
+                                    {LdimsPtr, RdimsPtr});
+    
+    Builder->CreateStore(new_dims, DimsPtr);
+
+
+    std::cout << "Create call for mult\n";
+    return Builder->CreateCall(TheModule->getFunction("CudaMult"),
                                     {LtensorName, RtensorName, used_cuda_aux, is_forward_func,
                                      LtensorPtr, RtensorPtr,
-                                     LLVMValue},
+                                     LdimsPtr, RdimsPtr},
                                      "cudamult");
-    Builder->CreateStore(ret, TensorPtr);
-    return ret;
   }
+  /*
   case '*':
     CudaFn = TheModule->getFunction("CudaMult");
     return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func, LLVMValue},
                                "cudamult");
+  */
   case '/':
     CudaFn = TheModule->getFunction("CudaDiv");
     return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
@@ -5453,11 +5511,11 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
     fnIndex++;
   
   // Create function for this async function
-  llvm::Type *voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
 
   FunctionType *asyncFunTy = FunctionType::get(
-                                            voidPtrTy,
-                                            {voidPtrTy},
+                                            int8PtrTy,
+                                            {int8PtrTy},
                                             false);
                                             
   std::string functionName = "__async_" + std::to_string(fnIndex);
@@ -5484,7 +5542,7 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
     */
 
     //Builder->CreateRet(ConstantFP::get(*TheContext, APFloat(0.0f)));
-    Builder->CreateRet(Constant::getNullValue(voidPtrTy));
+    Builder->CreateRet(Constant::getNullValue(int8PtrTy));
     verifyFunction(*asyncFun);
     return asyncFun;
   }
@@ -6015,7 +6073,7 @@ Function *PrototypeAST::codegen() {
   for (auto &type : Types)
   {
     if (type=="s")
-      types.push_back(Type::getInt8Ty(*TheContext)->getPointerTo());
+      types.push_back(int8PtrTy);
     else
       types.push_back(Type::getFloatTy(*TheContext));
   }
@@ -6088,14 +6146,16 @@ Function *FunctionAST::codegen() {
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
     
-    //std::cout << "Create Function alloca for: " << Arg.getName().str() << "\n";
-    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
+    if (!in_str(Arg.getName().str(), tensorVars))
+    {
+      AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
 
-    // Store the initial value into the alloca.
-    Builder->CreateStore(&Arg, Alloca);
+      // Store the initial value into the alloca.
+      Builder->CreateStore(&Arg, Alloca);
 
-    // Add arguments to variable symbol table.
-    NamedValues[std::string(Arg.getName())] = Alloca;
+      // Add arguments to variable symbol table.
+      NamedValues[std::string(Arg.getName())] = Alloca;
+    }
     
   }
   //std::cout << "\n\n";
@@ -6145,7 +6205,8 @@ static void InitializeModule() {
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
 
-  Type *floatPtrType = PointerType::get(Type::getFloatTy(*TheContext), 0);
+  floatPtrTy = Type::getFloatTy(*TheContext)->getPointerTo();
+  int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
 
   //===----------------------------------------------------------------------===//
   // Tensor -- Scalar   Operations
@@ -6226,9 +6287,10 @@ static void InitializeModule() {
        Type::getInt8Ty(*TheContext)->getPointerTo(),
        Type::getInt32Ty(*TheContext),
        Type::getInt32Ty(*TheContext),
-       floatPtrType,
-       floatPtrType,
-       Type::getInt8Ty(*TheContext)->getPointerTo()}, 
+       floatPtrTy,
+       floatPtrTy,
+       int8PtrTy,
+       int8PtrTy}, 
       false // Not vararg
   );
 
@@ -6241,11 +6303,23 @@ static void InitializeModule() {
 
 
 
+  FunctionType *LoadTensorTy = FunctionType::get(
+      int8PtrTy,
+      {floatPtrTy}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    LoadTensorTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "LoadTensor", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
   
 
   FunctionType *PrintTensorFTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext)->getPointerTo(),
+      {floatPtrTy,
        Type::getInt32Ty(*TheContext),
        Type::getInt32Ty(*TheContext),}, 
       false // Not vararg
@@ -6255,6 +6329,50 @@ static void InitializeModule() {
     PrintTensorFTy,
     Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
     "PrintTensorF", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
+
+
+  FunctionType *LoadDimsTy = FunctionType::get(
+      Type::getInt8Ty(*TheContext)->getPointerTo(),
+      //Type::getVoidTy(*TheContext),
+      {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    LoadDimsTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "LoadDims", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
+
+  FunctionType *PrintDimsTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    PrintDimsTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "PrintDims", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
+
+  
+
+  FunctionType *NewDimsOnMultTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy,
+       int8PtrTy}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    NewDimsOnMultTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "NewDimsOnMult", // Function name
     TheModule.get() // Module to which the function belongs
   );
 
@@ -6337,8 +6455,8 @@ static void InitializeModule() {
 
   //char *
   FunctionType *geluTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      floatPtrTy,
+      {int8PtrTy},
       false
   );
   Function::Create(
@@ -6559,13 +6677,13 @@ static void InitializeModule() {
 
 
 
-  auto voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  auto int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   auto pthreadPtr = Type::getInt8Ty(*GlobalContext)->getPointerTo();
   auto pthreadPtrTy = pthreadPtr->getPointerTo();
 
   // (void *) fn (void * arg)
-  FunctionType *funVoidPtrVoidPtrTy = FunctionType::get(
-    voidPtrTy, {voidPtrTy},
+  FunctionType *funVoidPtrint8PtrTy = FunctionType::get(
+    int8PtrTy, {int8PtrTy},
     false);
   // int pthread_create(pthread_t * thread, const pthread_attr_t * attr,
   //                  void * (*start_routine)(void *), void * arg)
@@ -6573,9 +6691,9 @@ static void InitializeModule() {
   FunctionType *pthreadCreateTy = FunctionType::get(
                                       Type::getVoidTy(*TheContext),
                                       {pthreadPtrTy,
-                                       voidPtrTy,
-                                       (funVoidPtrVoidPtrTy)->getPointerTo(),
-                                       voidPtrTy},
+                                       int8PtrTy,
+                                       (funVoidPtrint8PtrTy)->getPointerTo(),
+                                       int8PtrTy},
                                       false
                                     );
   /*                                  
@@ -6841,8 +6959,9 @@ static void InitializeModule() {
   // char *
   FunctionType *temporaryCudaResult_AttrTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(),
-       Type::getFloatTy(*TheContext)->getPointerTo()}, 
+      {int8PtrTy,
+       floatPtrTy,
+       int8PtrTy}, 
       false 
   );
   Function::Create(
