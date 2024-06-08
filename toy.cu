@@ -148,10 +148,13 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
-std::vector<std::string> other_methods = {"gelu"};
+std::vector<std::string> tensor_resulting_methods = {"gelu", "relu", "softmax"};
+std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
+
+PointerType *floatPtrTy, *int8PtrTy;
 
 
 //===----------------------------------------------------------------------===//
@@ -381,6 +384,9 @@ public:
   std::string Name = "Unnamed";
   std::string isSelf = "false";
 
+  Value *TensorPtr, *DimsPtr;
+
+
   virtual Value *codegen() = 0;
   virtual void SetType(std::string Type) {
     this->Type=Type;
@@ -405,6 +411,12 @@ public:
   }
   virtual void SetDims(std::vector<float> Dims) {
     this->Dims=Dims;
+  }
+  virtual Value *GetTensorPtr() {
+    return TensorPtr;
+  }
+  virtual Value *GetDimsPtr() {
+    return DimsPtr;
   }
 };
 
@@ -922,7 +934,13 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
     callee_override = functionVars[IdName];
   }
   
-  return std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
+  auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
+
+  
+  if (in_str(IdName, tensor_resulting_methods) || is_var_forward)
+    aux->SetType("tensor");
+  
+  return aux;
 }
 
 
@@ -1450,7 +1468,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     if (std::find(tensorVars.begin(), tensorVars.end(), IdentifierStr) != tensorVars.end())
       aux->SetType("tensor");
     if (functionVars.find(IdName) != functionVars.end())
-      aux->SetType("function");
+      aux->SetType("tensor");
     if (is_class_attr)
       aux->SetSelf(pre_dot);
     if (pre_dot=="self")
@@ -1502,8 +1520,13 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     is_var_forward = true;
     callee_override = functionVars[IdName];
   }
+
+  auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
+
+  if (in_str(IdName, tensor_resulting_methods) || is_var_forward)
+    aux->SetType("tensor");
   
-  return std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
+  return aux;
 }
 
 
@@ -2206,6 +2229,7 @@ static std::map<std::string, float> StoredValues;
 // Tensors
 static std::map<std::string, float *> NamedTensors;
 static std::map<std::string, std::vector<float>> NamedDims;
+static std::map<std::string, std::vector<float>> NamedDimsConv;
 
 // Current Cuda Result
 float *currentCudaResult;
@@ -2230,6 +2254,24 @@ std::vector<char *> glob_str_files;
 std::string FirstArg, LastPreDot;
 
 
+Value * VoidPtr_toValue(void *vec)
+{
+  auto void_ptr_ty = Type::getInt8Ty(*TheContext)->getPointerTo();
+  Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
+  return Builder->CreateIntToPtr(LLVMValue, void_ptr_ty);
+}
+
+Value* FloatPtr_toValue(float* vec)
+{
+    // Get the type for float*
+    auto float_ptr_ty = Type::getFloatTy(*TheContext)->getPointerTo();
+    
+    // Convert the float* to uint64_t and create a constant integer value
+    Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
+    
+    // Cast the integer value to float*
+    return Builder->CreateIntToPtr(LLVMValue, float_ptr_ty);
+}
 
 
 
@@ -2301,6 +2343,7 @@ extern "C" float sleep(float id)
 
 
 
+
 std::vector<float> BatchLessDims(std::vector<float> dims)
 {
   // Removes first dim (batch dim).
@@ -2337,7 +2380,7 @@ std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 }
 
 
-void PrintDims(std::vector<float> dims)
+extern "C" void PrintDims(std::vector<float> dims)
 {
   std::cout << "dims: [";
   for (int i=0; i<dims.size();i++)
@@ -2360,9 +2403,25 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
   return (int)aux;
 }
 
+std::string RandomString(size_t length) {
+  const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  std::random_device rd;
+  std::mt19937 generator(rd());
+  std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
 
-std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
+  std::string random_string;
+  for (size_t i = 0; i < length; ++i) {
+    int random_index = distribution(generator);
+    random_string += charset[random_index];
+  }
+
+  return random_string;
+}
+
+extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 {
+  
+
   std::vector<float> new_dims;
   if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
   {
@@ -2371,13 +2430,24 @@ std::vector<float> newDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
     PrintDims(Ldims);
     std::cout << "Dim RHS: ";
     PrintDims(Rdims);
-    return new_dims; 
+    return nullptr; 
   }
   for (int i = 0; i < Ldims.size()-1; i++)
     new_dims.push_back(Ldims[i]);
   new_dims.push_back(Rdims[0]);
+
+
+  std::string random_str = RandomString(15); 
+  NamedDims[random_str] = new_dims; // Deal with new_dims being deleted after scope finished.
+
+  //TODO: This can lead to out of memory errors.
+  return &NamedDims[random_str];
+}
+
+extern "C" void PrintFloat(float value){
   
-  return new_dims;
+  std::cout << value << "\n";
+  
 }
 
 extern "C" float PrintStr(char* value){
@@ -2412,6 +2482,23 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
+extern "C" float * LoadTensor(char* tensor_name){
+  return NamedTensors[tensor_name];
+}
+
+extern "C" void *LoadDims(char* tensor_name)
+{
+  return &NamedDims[tensor_name];
+}
+
+extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self)
+{
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = FirstArg + conv_name;
+  
+  return &NamedDimsConv[conv_name];
+}
 
 
 
@@ -2498,6 +2585,7 @@ extern "C" float PrintTensor(char* tensorName){
 
 
   }
+  
   std::cout << "\n";
   PrintDims(dims);
   std::cout << "\n";
@@ -2507,7 +2595,7 @@ extern "C" float PrintTensor(char* tensorName){
   return 0;
 }
 
-float PrintTensorF(float *cuda_tensor, int d1, int d2){
+extern "C" float PrintTensorF(float *cuda_tensor, int d1, int d2){
   
 
   std::vector<float> dims;
@@ -2867,7 +2955,6 @@ extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 extern "C" float view(float first_dim, ...)
 {
   
-  
   std::string tensor_name = LastPreDot;
   std::vector<float> new_dims, new_dims_no_minus, current_dims;
   bool has_minus = false;
@@ -3216,12 +3303,22 @@ Value *VariableExprAST::codegen() {
   std::string functionName = TheFunction->getName().str();
   
   
+  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+
 
   Value *var_name, *object_name, *object_var_name;
-  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   var_name = Builder->CreateGlobalString(Name);
   
-  
+
+  /*
+  std::cout << "\nVARIABLE EXPR CODEGEN: " << Name << "\n";
+  for (const auto &entry : NamedStrs)
+    std::cout << "NamedStr: " << entry.first << "\n";
+  for (const auto &entry : NamedValues)
+    std::cout << "NamedValues: " << entry.first << "\n";
+  for (const auto &entry : NamedTensors)
+    std::cout << "NamedTensors: " << entry.first << "\n";
+  */
 
   std::string pre_dot = GetSelf();
   if (pre_dot!="false")
@@ -3246,41 +3343,49 @@ Value *VariableExprAST::codegen() {
 
   if (NamedValues.count(Name)>0) 
   {
+    std::cout << "Variable Float " << Name << " Codegen.\n";
 
     Value *V = NamedValues[Name];
-    
-    
 
-    return Builder->CreateLoad(Type::getFloatTy(*GlobalContext), V, Name.c_str());
-
-  } else if (NamedTensors.count(Name)>0) {
-    //std::cout << "Load Tensor " << Name << " Codegen.\n";
-  
-
-    if (!seen_var_attr)
-    {
-      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
-    }
+    V = Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
     
-    return ret;
+    //if (!seen_var_attr)
+    //  Builder->CreateCall(TheModule->getFunction("PrintFloat"), {V});
+
+    return V;
+
   } else if (NamedStrs.count(Name)>0) {
+    std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n\n";
     for (const auto &entry : NamedTensors)
       if (ends_with(entry.first, Name))
         return ret;
 
     Value *V = NamedStrs[Name];
     
-    V = Builder->CreateLoad(PointerType::get(Type::getInt8Ty(*TheContext), 0), V, Name.c_str());
+    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
     if (!seen_var_attr)
-    {
-      //std::cout << "Print str call for: " << Name << "\n";
-      Builder->CreateCall(TheModule->getFunction("PrintStr"),
-                      {V});
-    }
+      Builder->CreateCall(TheModule->getFunction("PrintStr"), {V});
 
     //std::cout << "RETURNING STRING: " << Name << "\n";
     //std::cout << "NamedStrs count:" << NamedStrs.count(Name) << "\n";
     return V;
+  } else if (NamedTensors.count(Name)>0) {
+    //std::cout << "Variable Tensor " << Name << " Codegen.\n";
+  
+
+    if (!seen_var_attr)
+      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+    
+    
+    
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {var_name});
+    DimsPtr = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(dims_ptr, DimsPtr);
+    
+
+    //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+
+    return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   }
 }
 
@@ -3293,17 +3398,20 @@ extern "C" float toStoredValues(float Val, char * name_to_store)
 }
 
 
-extern "C" float temporaryCudaResult_Attr(char *tensor_name)
+extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
-  //std::cout << "Attributing to tensor: " << tensorName << "\n";
-  
+  //std::cout << "Attributing to tensor: " << tensor_name << "\n";
+
+  //PrintDims(currentDims);
+
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
   
 
 
   cudaCheck(cudaGetLastError());
-  NamedTensors[tensor_name] = currentCudaResult;
-  NamedDims[tensor_name] = currentDims;
+  
+  NamedTensors[tensor_name] = tensor;
+  NamedDims[tensor_name] = new_dims;
   
 
   return 0;
@@ -3316,6 +3424,8 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name)
 Value *BinaryTensorScalarExprAST::codegen() {
 
   Value *tensor_name = Builder->CreateGlobalString(LHS->GetName());
+
+  DimsPtr = Builder->CreateAlloca(int8PtrTy);
 
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
@@ -3369,9 +3479,15 @@ Value *BinaryTensorScalarExprAST::codegen() {
   }
 
 
+  std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
   Value *L = LHS->codegen();
   Value *R = RHS->codegen();
+  std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
+
   
+  Value *LdimsPtr = Builder->CreateLoad(int8PtrTy, LHS->GetDimsPtr());
+  Builder->CreateStore(LdimsPtr, DimsPtr);
+
   if (!L || !R)
     return nullptr;
 
@@ -3480,34 +3596,14 @@ std::vector<backward_tuple> todo_backwards;
 
 
 
-extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func,
-                          std::vector<float> aux_dims) {
+extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func,
+                          float *device_x, float *device_w,
+                          std::vector<float> Ldims, std::vector<float> Rdims) {
   
-  float * device_x;
-  float * device_w;
-  
-
-  //std::cout << "Aux dims:\n";
-  //PrintDims(aux_dims);
-
+  //std::cout << "cuda mult called\n";
+  //std::cout << "L " << LtensorName << "\nR " << RtensorName << "\n";
   
 
-  /*
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[LtensorName];
-    currentDims = NamedDims[LtensorName];
-  }
-  */
-  
-  device_x = NamedTensors[LtensorName];
-  
-  device_w = NamedTensors[RtensorName];
-
-  std::vector<float> Ldims = NamedDims[LtensorName];
-  std::vector<float> Rdims = NamedDims[RtensorName];
   
 
 
@@ -3515,6 +3611,13 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
   int input_dims_prod = DimsProd(linear_layer_dims);
   //int resultingDimsProd = (int)linear_layer_dims[0]*Rdims[0];
   int resultingDimsProd = resultingDimsProdOnMult(linear_layer_dims, Rdims);
+
+  /*
+  std::cout << "At cuda mult:\n";
+  PrintTensorF(device_x, linear_layer_dims[0], linear_layer_dims[1]);
+
+  PrintTensorF(device_w, 2, 2);
+  */
 
 
   float* device_y;
@@ -3539,7 +3642,7 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
 
   currentCudaResult = device_y;
   //std::cout << "L tensor: " << LtensorName << " R tensor: " << RtensorName << "\n";
-  currentDims = newDimsOnMult(Ldims, Rdims);
+  
 
   
   if (is_forward_func)
@@ -3560,7 +3663,11 @@ extern "C" float CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, 
                                              B*C, C*OC, inp, device_w, out,
                                             "matmul", RtensorName));
   }
-  return 0;
+
+
+  //PrintTensorF(device_y, 2, 2);
+
+  return device_y;
 }
 
 int num_classes=5;
@@ -3734,10 +3841,11 @@ __global__ void gelu_forward_kernel1(const float* inp, float* out, int N) {
     }
 }
 
-extern "C" float gelu(char * tensor_name) {
+extern "C" float *gelu(char * tensor_name) {
 
   float *tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
+  
 
   float dims_prod = DimsProd(dims);
   float block_size = 32;
@@ -3774,12 +3882,10 @@ extern "C" float gelu(char * tensor_name) {
   }
 
   //cudaCheck(cudaFree(currentCudaResult));
-  currentCudaResult = y;
-  currentDims = dims;
-
+  
   used_cuda=1;
 
-  return 0;
+  return y;
 }
 
 __global__ void gelu_backward1(float* dinp, const float* inp, const float* dout, int N) {
@@ -3817,7 +3923,7 @@ __global__ void relu_forward(float* Z, float* A,
     }
 }
 
-extern "C" float relu(char *tensor_name)
+extern "C" float *relu(char *tensor_name)
 {
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
@@ -3852,10 +3958,9 @@ extern "C" float relu(char *tensor_name)
   }
 
   //cudaCheck(cudaFree(currentCudaResult));
-  currentCudaResult = y;
-  currentDims = dims;
+  
 
-  return 0;
+  return y;
 }
 
 __global__ void relu_backward1(float* Z, float* dZ, float* dA,
@@ -3975,7 +4080,7 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
 
 
 
-extern "C" float softmax(char * tensor_name)
+extern "C" float *softmax(char * tensor_name)
 {
 
   float * tensor = NamedTensors[tensor_name];
@@ -3996,10 +4101,9 @@ extern "C" float softmax(char * tensor_name)
 
   softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size>>>(tensor, probs, B, C);
 
-  std::cout << "\n\nPROBS ARE:\n\n";
-  PrintTensorF(probs, B, C);
+  
 
-  return 0;
+  return probs;
 }
 
 
@@ -4396,8 +4500,9 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
+extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
 {
+  
   std::string conv_name = conv_namec;
   if (is_obj_attr_or_self)
     conv_name = FirstArg + conv_name;
@@ -4457,19 +4562,22 @@ extern "C" float ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_a
 
 
   std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)conv->OC};
-  currentDims = new_dims;
-
   
   NamedTensors[conv_name] = conv->d_filter;
-  NamedDims[conv_name] = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks};
 
+  //for backprop:
+  NamedDims[conv_name] = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks}; 
+
+  //for forward resulting dims:
+  NamedDimsConv[conv_name] = new_dims;
   
+
   //if (conv_name=="modelconv1")
   //  PrintTensorF(conv->d_filter, 1, conv->ks*conv->ks);
 
   NamedConv2d[conv_name] = std::move(conv);
 
-  return 0;
+  return output;
 }
 
 
@@ -4876,8 +4984,15 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
 Value *BinaryTensorTensorExprAST::codegen() {
   Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
   Value *RtensorName = Builder->CreateGlobalString(RHS->GetName());
-  Value * object_name;
+  Value *object_name;
 
+
+  //TensorPtr = Builder->CreateAlloca(floatPtrTy, nullptr);
+  //Builder->CreateStore(FloatPtr_toValue(NamedTensors[Name]), TensorPtr);
+  DimsPtr = Builder->CreateAlloca(int8PtrTy);
+
+
+  // Concat self or obj name to tensor name
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
@@ -4902,81 +5017,121 @@ Value *BinaryTensorTensorExprAST::codegen() {
   }
 
 
+  
+
+
+  // if is attribution
   if (Op == '=') {
+  
     seen_var_attr=true;
 
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
     if (!LHSE)
       return LogErrorV("Destino do '=' deve ser uma variável.");
     
-    
-    Value *Val = RHS->codegen();
+    Value *RtensorPtr = RHS->codegen();
     std::cout << "1 1 attr\n";
-    if (!Val)
-      return nullptr;
+    
 
     //float *Variable = NamedTensors[LHSE->getName()];
     //if (!Variable)
     //  return LogErrorV("O nome do tensor/variável é desconhecido.");
 
     
-    Function *temporaryCudaResult_AttrFn = TheModule->getFunction("temporaryCudaResult_Attr");
-    Builder->CreateCall(temporaryCudaResult_AttrFn, {LtensorName});
+    std::cout << "Pre dims\n";
+    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+    std::cout << "Post dims\n";
+
+    Builder->CreateCall(TheModule->getFunction("temporaryCudaResult_Attr"),
+                        {LtensorName, RtensorPtr,
+                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
+    std::cout << "Post attr call\n";
 
 
     used_cuda=0;
       
-      
+    
     
     seen_var_attr=false;
-    return Val;
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   }
 
 
-  Value *L = LHS->codegen();
-  Value *R = RHS->codegen();
+
+
   
 
+
   std::string functionName = Builder->GetInsertBlock()->getParent()->getName().str();
-  std::cout << "Tensor Tensor for function: " << functionName << "\n";
+  std::cout << "\nTensor Tensor for function: " << functionName << "\n";
   int forward_func = 0;
   if(ends_with(functionName, "forward"))
     forward_func = 1;
   forward_func = 1; // TODO: Remove this line
 
 
+
   
-  if (!L || !R)
+  Value *LtensorPtr = LHS->codegen();
+  Value *RtensorPtr = RHS->codegen();
+
+  std::cout << "Create load for dims\n";
+
+  Value *LdimsPtr = Builder->CreateLoad(int8PtrTy, LHS->GetDimsPtr());
+  Value *RdimsPtr = Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+
+  std::cout << "Load created\n";
+
+
+  //Builder->CreateCall(TheModule->getFunction("PrintDims"),
+  //                    {LdimsPtr});
+
+
+  if (!LtensorPtr || !RtensorPtr)
     return nullptr;
 
-    Function *CudaFn;
+  Function *CudaFn;
 
-    std::cout << "Tensor tensor: " << LHS->GetName() << " " << RHS->GetName() << "\n";
+  std::cout << "Tensor tensor: " << LHS->GetName() << ", " << RHS->GetName() << "\n";
     
 
-    Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
-    Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
-    used_cuda = 1;
+  Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
+  Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
+  used_cuda = 1;
 
-
+  /*
   void *vec = &NamedDims[LHS->GetName()];
-  auto vecTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
-  LLVMValue = Builder->CreateIntToPtr(LLVMValue, vecTy);
-
+  LLVMValue = Builder->CreateIntToPtr(LLVMValue, int8PtrTy);
+  */
 
   
+  Value *new_dims;
 
   switch (Op)
   {
   case '@':
-    CudaFn = TheModule->getFunction("CudaMult");
-    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func, LLVMValue},
-                               "cudamult");
+  {
+    std::cout << "Create store dims at cuda mult\n";
+    new_dims = Builder->CreateCall(TheModule->getFunction("NewDimsOnMult"),
+                                    {LdimsPtr, RdimsPtr});
+    
+    Builder->CreateStore(new_dims, DimsPtr);
+
+
+    std::cout << "Create call for mult\n";
+    return Builder->CreateCall(TheModule->getFunction("CudaMult"),
+                                    {LtensorName, RtensorName, used_cuda_aux, is_forward_func,
+                                     LtensorPtr, RtensorPtr,
+                                     LdimsPtr, RdimsPtr},
+                                     "cudamult");
+  }
+  /*
   case '*':
     CudaFn = TheModule->getFunction("CudaMult");
     return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func, LLVMValue},
                                "cudamult");
+  */
   case '/':
     CudaFn = TheModule->getFunction("CudaDiv");
     return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
@@ -4990,9 +5145,10 @@ Value *BinaryTensorTensorExprAST::codegen() {
     return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
                                "cudasub");
   case ':':
-    return L;
+    return LtensorPtr;
   case tok_space:
-    return R;
+    std::cout << "Returning tok space" << "\n";
+    return RtensorPtr;
   default:
     break;
   }
@@ -5002,7 +5158,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
   Function *F = getFunction(std::string("binary") + Op);
   assert(F && "Operator not found.");
 
-  Value *Ops[] = {L, R};
+  Value *Ops[] = {LtensorName, RtensorName};
   return Builder->CreateCall(F, Ops, "binop");
 }
 
@@ -5055,20 +5211,6 @@ Value *BinaryExprAST::codegen() {
         Builder->CreateStore(Val, Variable);
       
     
-    } else if (NamedTensors.count(LHSE->getName()) != 0 ) {
-      /*
-      float *Variable = NamedTensors[LHSE->getName()];
-      if (!Variable)
-        return LogErrorV("O nome do tensor/variável é desconhecido.");
-      */
-      std::cout << "Atribuíndo em 0 0\n";
-      
-      Value *valStr = Builder->CreateGlobalString(LHSE->getName());
-      Function *temporaryCudaResult_AttrFn = TheModule->getFunction("temporaryCudaResult_Attr");
-      Builder->CreateCall(temporaryCudaResult_AttrFn, {valStr});
-        
-      used_cuda=0;
-      
     } else if (NamedStrs.count(LHSE->getName()) != 0 ) {
       //std::cout << "ATTRIBUTTING TO STRING: " << LHSE->getName() << "\n";
       Value *Variable = NamedStrs[LHSE->getName()];
@@ -5141,7 +5283,7 @@ Value *UnaryExprAST::codegen() {
   Value *OperandV = Operand->codegen();
   if (!OperandV)
     return nullptr;
-
+  
   
   
   //std::cout << "unary used_cuda: " << used_cuda << "\n";
@@ -5381,11 +5523,11 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
     fnIndex++;
   
   // Create function for this async function
-  llvm::Type *voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
 
   FunctionType *asyncFunTy = FunctionType::get(
-                                            voidPtrTy,
-                                            {voidPtrTy},
+                                            int8PtrTy,
+                                            {int8PtrTy},
                                             false);
                                             
   std::string functionName = "__async_" + std::to_string(fnIndex);
@@ -5412,7 +5554,7 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
     */
 
     //Builder->CreateRet(ConstantFP::get(*TheContext, APFloat(0.0f)));
-    Builder->CreateRet(Constant::getNullValue(voidPtrTy));
+    Builder->CreateRet(Constant::getNullValue(int8PtrTy));
     verifyFunction(*asyncFun);
     return asyncFun;
   }
@@ -5918,12 +6060,30 @@ Value *CallExprAST::codegen() {
     if (CalleeOverride=="Conv2d")
     {
       CalleeF = getFunction("ConvForward2d");
-      ArgsV.push_back(Builder->CreateGlobalString(tgt_function));
-      ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(PreDot=="self")));
-      Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-    }
-  
+      Value *conv_name = Builder->CreateGlobalString(tgt_function);
+      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(PreDot=="self"));
+      ArgsV.push_back(conv_name);
+      ArgsV.push_back(is_attr);
+      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
 
+
+      std::cout << "Load dims for conv: " << tgt_function << "\n";
+      
+      Value *dims_ptr = Builder->CreateCall(getFunction("LoadDimsConv"), 
+                          {conv_name, is_attr});
+      DimsPtr = Builder->CreateAlloca(int8PtrTy);
+      Builder->CreateStore(dims_ptr, DimsPtr);
+
+
+    }
+  }
+
+  if (in_str(tgt_function_name, activation_functions))
+  {
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"),
+                                          {Builder->CreateGlobalString(Args[0]->GetName())});
+    DimsPtr = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(dims_ptr, DimsPtr);
   }
     
   if(Class!="None")
@@ -5943,7 +6103,7 @@ Function *PrototypeAST::codegen() {
   for (auto &type : Types)
   {
     if (type=="s")
-      types.push_back(PointerType::get(Type::getInt8Ty(*TheContext), 0));
+      types.push_back(int8PtrTy);
     else
       types.push_back(Type::getFloatTy(*TheContext));
   }
@@ -5953,7 +6113,7 @@ Function *PrototypeAST::codegen() {
   /*
   if (Args.size()>0)
     if (Args[0]=="self")
-      Floats[0] = PointerType::get(Type::getInt8Ty(*TheContext), 0);
+      Floats[0] = Type::getInt8Ty(*TheContext)->getPointerTo();
   */
 
   FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
@@ -6016,14 +6176,16 @@ Function *FunctionAST::codegen() {
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
     
-    //std::cout << "Create Function alloca for: " << Arg.getName().str() << "\n";
-    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
+    if (!in_str(Arg.getName().str(), tensorVars))
+    {
+      AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
 
-    // Store the initial value into the alloca.
-    Builder->CreateStore(&Arg, Alloca);
+      // Store the initial value into the alloca.
+      Builder->CreateStore(&Arg, Alloca);
 
-    // Add arguments to variable symbol table.
-    NamedValues[std::string(Arg.getName())] = Alloca;
+      // Add arguments to variable symbol table.
+      NamedValues[std::string(Arg.getName())] = Alloca;
+    }
     
   }
   //std::cout << "\n\n";
@@ -6073,7 +6235,8 @@ static void InitializeModule() {
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
 
-  Type *floatPtrType = PointerType::get(Type::getFloatTy(*TheContext), 0);
+  floatPtrTy = Type::getFloatTy(*TheContext)->getPointerTo();
+  int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
 
   //===----------------------------------------------------------------------===//
   // Tensor -- Scalar   Operations
@@ -6082,7 +6245,7 @@ static void InitializeModule() {
   // char *, float, int
   FunctionType *CudaScalarMultTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6098,7 +6261,7 @@ static void InitializeModule() {
   // char *, float, int
   FunctionType *CudaScalarDivTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6114,7 +6277,7 @@ static void InitializeModule() {
   // char *, float, int
   FunctionType *CudaScalarAddTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6130,7 +6293,7 @@ static void InitializeModule() {
   // char *, float, int
   FunctionType *CudaScalarSubTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6149,8 +6312,15 @@ static void InitializeModule() {
 
   // char *, char *, int
   FunctionType *CudaMultTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
+      Type::getFloatTy(*TheContext)->getPointerTo(),
+      {Type::getInt8Ty(*TheContext)->getPointerTo(),
+       Type::getInt8Ty(*TheContext)->getPointerTo(),
+       Type::getInt32Ty(*TheContext),
+       Type::getInt32Ty(*TheContext),
+       floatPtrTy,
+       floatPtrTy,
+       int8PtrTy,
+       int8PtrTy}, 
       false // Not vararg
   );
 
@@ -6162,6 +6332,95 @@ static void InitializeModule() {
   );
 
 
+
+  FunctionType *LoadTensorTy = FunctionType::get(
+      int8PtrTy,
+      {floatPtrTy}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    LoadTensorTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "LoadTensor", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
+  
+
+  FunctionType *PrintTensorFTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {floatPtrTy,
+       Type::getInt32Ty(*TheContext),
+       Type::getInt32Ty(*TheContext),}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    PrintTensorFTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "PrintTensorF", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
+
+
+
+  FunctionType *LoadDimsTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+
+  Function::Create(
+    LoadDimsTy,
+    Function::ExternalLinkage,
+    "LoadDims",
+    TheModule.get()
+  );
+
+
+  FunctionType *LoadDimsConvTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy,
+       Type::getInt32Ty(*TheContext)}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    LoadDimsConvTy,
+    Function::ExternalLinkage, 
+    "LoadDimsConv", 
+    TheModule.get() 
+  );
+
+
+  FunctionType *PrintDimsTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    PrintDimsTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "PrintDims", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
+
+  
+
+  FunctionType *NewDimsOnMultTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy,
+       int8PtrTy}, 
+      false // Not vararg
+  );
+
+  Function::Create(
+    NewDimsOnMultTy,
+    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
+    "NewDimsOnMult", // Function name
+    TheModule.get() // Module to which the function belongs
+  );
 
   //===----------------------------------------------------------------------===//
   // Backward and Optimizers CUDA Ops
@@ -6203,7 +6462,7 @@ static void InitializeModule() {
   // char *, int
   FunctionType *CudaLogTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
   Function::Create(
@@ -6216,8 +6475,8 @@ static void InitializeModule() {
 
   // char *
   FunctionType *softmaxTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      floatPtrTy,
+      {int8PtrTy},
       false
   );
   Function::Create(
@@ -6229,8 +6488,8 @@ static void InitializeModule() {
 
   //char *
   FunctionType *reluTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      floatPtrTy,
+      {int8PtrTy},
       false
   );
   Function::Create(
@@ -6242,8 +6501,8 @@ static void InitializeModule() {
 
   //char *
   FunctionType *geluTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      floatPtrTy,
+      {int8PtrTy},
       false
   );
   Function::Create(
@@ -6269,7 +6528,7 @@ static void InitializeModule() {
 
   //char *, char *, int
   FunctionType *conv2dForwardTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      floatPtrTy,
       {PointerType::get(Type::getInt8Ty(*TheContext),0), PointerType::get(Type::getInt8Ty(*TheContext),0), Type::getInt32Ty(*TheContext)},
       false
   );
@@ -6336,7 +6595,7 @@ static void InitializeModule() {
   // char *, floats, Vararg
   FunctionType *viewTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // Vararg
   );
   Function::Create(
@@ -6355,7 +6614,7 @@ static void InitializeModule() {
   // char *, char *
   FunctionType *cross_entropyTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false // Not vararg
   );
   Function::Create(
@@ -6373,7 +6632,7 @@ static void InitializeModule() {
   // float, chars *, ... 
   FunctionType *yieldTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0),PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      {Type::getFloatTy(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo()},
       true // vararg
   );
   Function::Create(
@@ -6420,7 +6679,7 @@ static void InitializeModule() {
   // char *
   FunctionType *load_preprocess_imgTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
       false
   );
   Function::Create(
@@ -6464,13 +6723,13 @@ static void InitializeModule() {
 
 
 
-  auto voidPtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  auto int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   auto pthreadPtr = Type::getInt8Ty(*GlobalContext)->getPointerTo();
   auto pthreadPtrTy = pthreadPtr->getPointerTo();
 
   // (void *) fn (void * arg)
-  FunctionType *funVoidPtrVoidPtrTy = FunctionType::get(
-    voidPtrTy, {voidPtrTy},
+  FunctionType *funVoidPtrint8PtrTy = FunctionType::get(
+    int8PtrTy, {int8PtrTy},
     false);
   // int pthread_create(pthread_t * thread, const pthread_attr_t * attr,
   //                  void * (*start_routine)(void *), void * arg)
@@ -6478,9 +6737,9 @@ static void InitializeModule() {
   FunctionType *pthreadCreateTy = FunctionType::get(
                                       Type::getVoidTy(*TheContext),
                                       {pthreadPtrTy,
-                                       voidPtrTy,
-                                       (funVoidPtrVoidPtrTy)->getPointerTo(),
-                                       voidPtrTy},
+                                       int8PtrTy,
+                                       (funVoidPtrint8PtrTy)->getPointerTo(),
+                                       int8PtrTy},
                                       false
                                     );
   /*                                  
@@ -6519,8 +6778,8 @@ static void InitializeModule() {
 
   // char *
   FunctionType *globTy = FunctionType::get(
-      PointerType::get(Type::getInt8Ty(*TheContext), 0),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      Type::getInt8Ty(*TheContext)->getPointerTo(),
+      {Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6531,10 +6790,22 @@ static void InitializeModule() {
   );
 
 
+  FunctionType *PrintFloatTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false 
+  );
+  Function::Create(
+    PrintFloatTy,
+    Function::ExternalLinkage, 
+    "PrintFloat", 
+    TheModule.get() 
+  );
+
   // char *
   FunctionType *PrintStrTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
   Function::Create(
@@ -6547,8 +6818,8 @@ static void InitializeModule() {
 
   // char *
   FunctionType *shuffle_strTy = FunctionType::get(
-      PointerType::get(Type::getInt8Ty(*TheContext), 0),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      Type::getInt8Ty(*TheContext)->getPointerTo(),
+      {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
   Function::Create(
@@ -6568,7 +6839,7 @@ static void InitializeModule() {
   FunctionType *FirstArgOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
   Function::Create(
@@ -6585,7 +6856,7 @@ static void InitializeModule() {
   FunctionType *DimnishFirstArgOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getInt32Ty(*TheContext)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
   Function::Create(
@@ -6599,8 +6870,8 @@ static void InitializeModule() {
   // char *, char *
   FunctionType * ConcatStrTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
-      PointerType::get(Type::getInt8Ty(*TheContext), 0),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      Type::getInt8Ty(*TheContext)->getPointerTo(),
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6613,9 +6884,9 @@ static void InitializeModule() {
 
   // char *, char *
   FunctionType *ConcatFirstArgToVarNameTy = FunctionType::get(
-      PointerType::get(Type::getInt8Ty(*TheContext), 0),
-      //{PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      Type::getInt8Ty(*TheContext)->getPointerTo(),
+      //{Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
+      {Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6629,7 +6900,7 @@ static void InitializeModule() {
   // char *, float
   FunctionType *StoreOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), Type::getFloatTy(*TheContext)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext)},
       false // Not vararg
   );
   Function::Create(
@@ -6643,7 +6914,7 @@ static void InitializeModule() {
     // char *, float
   FunctionType *StoreStrOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0), PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6658,7 +6929,7 @@ static void InitializeModule() {
   FunctionType *LoadOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6675,7 +6946,7 @@ static void InitializeModule() {
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
-      //{PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      //{Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6690,9 +6961,9 @@ static void InitializeModule() {
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0),
+      {Type::getInt8Ty(*TheContext)->getPointerTo(),
        Type::getInt32Ty(*TheContext),
-       PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+       Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6707,9 +6978,9 @@ static void InitializeModule() {
   FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0),
+      {Type::getInt8Ty(*TheContext)->getPointerTo(),
        Type::getInt32Ty(*TheContext),
-       PointerType::get(Type::getInt8Ty(*TheContext), 0),
+       Type::getInt8Ty(*TheContext)->getPointerTo(),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
@@ -6732,7 +7003,7 @@ static void InitializeModule() {
   // float, char *
   FunctionType *CallToStoredValuesTy = FunctionType::get(
       PointerType::get(Type::getFloatTy(*TheContext), 0),
-      {Type::getFloatTy(*TheContext), PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      {Type::getFloatTy(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
   Function::Create(
@@ -6746,7 +7017,9 @@ static void InitializeModule() {
   // char *
   FunctionType *temporaryCudaResult_AttrTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      {int8PtrTy,
+       floatPtrTy,
+       int8PtrTy}, 
       false 
   );
   Function::Create(
@@ -6760,7 +7033,7 @@ static void InitializeModule() {
   // char *
   FunctionType *printTTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)}, 
+      {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
   Function::Create(
