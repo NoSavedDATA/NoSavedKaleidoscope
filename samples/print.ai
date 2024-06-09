@@ -1,0 +1,6 @@
+str augusto = "augusto "
+
+str ehFoda = "é foda"
+
+augusto
+ehFoda
