@@ -1221,15 +1221,12 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
 
 
 
-
-int used_cuda = 0;
 unsigned char* current_data_attr;
 std::vector<float> current_data_attr_dims;
 
 
 extern "C" float * load_img(char *img_name)
 {
-  used_cuda=0;
   int width, height, channels;
   
   unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
@@ -1841,6 +1838,7 @@ static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
   return nullptr;
 }
 
+
 /// binoprhs
 ///   ::= ('+' unary)*
 static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
@@ -2232,7 +2230,7 @@ static std::map<std::string, std::vector<float>> NamedDims;
 static std::map<std::string, std::vector<float>> NamedDimsConv;
 
 // Current Cuda Result
-float *currentCudaResult;
+
 std::vector<float> currentDims;
 
 // Cuda Parallellism
@@ -2444,14 +2442,16 @@ extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdim
   return &NamedDims[random_str];
 }
 
+extern "C" float Add(float value, float v2)
+{
+  return value + v2; 
+}
+
 extern "C" void PrintFloat(float value){
-  
   std::cout << value << "\n";
-  
 }
 
 extern "C" float PrintStr(char* value){
-  
   std::cout << "Str: " << value << "\n";
   return 0;
 }
@@ -3028,7 +3028,7 @@ extern "C" float view(float first_dim, ...)
   }
 
   NamedDims[tensor_name] = new_dims;
-  used_cuda=1;
+  
 
   return  0;
 }
@@ -3040,39 +3040,28 @@ extern "C" float view(float first_dim, ...)
 //===----------------------------------------------------------------------===//
 
 
-__global__ void vec_mult(float a, float* x, float* y) {
+__global__ void vec_mult(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] * a;
 }
-__global__ void vec_div(float a, float* x, float* y) {
+__global__ void vec_div(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] / a;
 }
-__global__ void vec_add(float a, float* x, float* y) {
+__global__ void vec_add(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] + a;
 }
-__global__ void vec_sub(float a, float* x, float* y) {
+__global__ void vec_sub(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] - a;
 }
-__global__ void vec_log(float* x, float* y) {
+__global__ void vec_log(const float* x, float* y) {
   y[threadIdx.x] = logf(x[threadIdx.x]);
 }
 
 
 
 
-extern "C" float CudaScalarMult(char *tensorName, float R, int _used_cuda) {
-  
-  float * device_x;
-  
+extern "C" float *CudaScalarMult(float *tensor, std::vector<float> dims, float R) {
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
@@ -3083,28 +3072,16 @@ extern "C" float CudaScalarMult(char *tensorName, float R, int _used_cuda) {
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, device_x, device_y);
+  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
 
-  currentCudaResult = device_y;
-
-  return 0;
+  
+  return device_y;
 }
 
 
-extern "C" float CudaScalarDiv(char *tensorName, float R, int _used_cuda) {
-  
-  float * device_x;
-  
+extern "C" float *CudaScalarDiv(float *tensor, std::vector<float> dims, float R) {
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
@@ -3112,56 +3089,30 @@ extern "C" float CudaScalarDiv(char *tensorName, float R, int _used_cuda) {
 
 
   // Launch the kernel.
-  vec_div<<<1, kDataLen>>>(R, device_x, device_y);
-
-  currentCudaResult = device_y;
-
-  return 0;
-}
-
-extern "C" float CudaScalarAdd(char *tensorName, float R, int _used_cuda) {
-  float * device_x;
+  vec_div<<<1, kDataLen>>>(R, tensor, device_y);
 
   
+  return device_y;
+}
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+extern "C" float *CudaScalarAdd(float *tensor, std::vector<float> dims, float R) {
+  
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
   
   // Launch the kernel.
-  vec_add<<<1, kDataLen>>>(R, device_x, device_y);
   
-  currentCudaResult = device_y;
+  vec_add<<<1, kDataLen>>>(R, tensor, device_y);
 
-
-  return 0;
+  return device_y;
 }
 
-extern "C" float CudaScalarSub(char *tensorName, float R, int _used_cuda) {
-  
-  float * device_x;
+extern "C" float *CudaScalarSub(float *tensor, std::vector<float> dims, float R) {
 
-  
-
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
@@ -3169,25 +3120,22 @@ extern "C" float CudaScalarSub(char *tensorName, float R, int _used_cuda) {
 
 
   // Launch the kernel.
-  vec_sub<<<1, kDataLen>>>(R, device_x, device_y);
+  vec_sub<<<1, kDataLen>>>(R, tensor, device_y);
 
-  currentCudaResult = device_y;
 
-  return 0;
+
+  return device_y;
 }
 
 
-extern "C" float logE(char *tensorName, int _used_cuda) {
+extern "C" float *logE(char *tensorName) {
   
   float * device_x;
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
+  
+  device_x = NamedTensors[tensorName];
+  currentDims = NamedDims[tensorName];
+  
 
   int kDataLen = DimsProd(currentDims);
 
@@ -3199,9 +3147,9 @@ extern "C" float logE(char *tensorName, int _used_cuda) {
   // Launch the kernel.
   vec_log<<<1, kDataLen>>>(device_x, device_y);
 
-  currentCudaResult = device_y;
 
-  return 0;
+
+  return device_y;
 }
 
 
@@ -3350,7 +3298,7 @@ Value *VariableExprAST::codegen() {
     V = Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
     
     //if (!seen_var_attr)
-    //  Builder->CreateCall(TheModule->getFunction("PrintFloat"), {V});
+    //  Builder->CreateCall(TheModule->getFunction("PrintFloat"), {V}, "printfloat");
 
     return V;
 
@@ -3467,10 +3415,9 @@ Value *BinaryTensorScalarExprAST::codegen() {
     */
     
     
-    Function *temporaryCudaResult_AttrFn = TheModule->getFunction("temporaryCudaResult_Attr");
-    Builder->CreateCall(temporaryCudaResult_AttrFn, {tensor_name});        
+    Builder->CreateCall(TheModule->getFunction("temporaryCudaResult_Attr"),
+                            {tensor_name});        
       
-    used_cuda=0;
     
       
     
@@ -3480,19 +3427,23 @@ Value *BinaryTensorScalarExprAST::codegen() {
 
 
   std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
-  Value *L = LHS->codegen();
+  Value *LtensorPtr = LHS->codegen();
   Value *R = RHS->codegen();
   std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
+
+
 
   
   Value *LdimsPtr = Builder->CreateLoad(int8PtrTy, LHS->GetDimsPtr());
   Builder->CreateStore(LdimsPtr, DimsPtr);
 
-  if (!L || !R)
+  //Builder->CreateCall(TheModule->getFunction("PrintDims"),
+  //                    {LdimsPtr});
+
+  if (!LtensorPtr || !R)
     return nullptr;
 
 
-  Function *CudaFn;
 
   /*
   std::cout << "\nTensorScalar, LHS is self: " << LHS->GetSelf() << "\n";
@@ -3502,25 +3453,24 @@ Value *BinaryTensorScalarExprAST::codegen() {
   */
   
 
-  Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
-  used_cuda = 1;
+
 
   switch (Op)
   {
   case '*':
-    CudaFn = TheModule->getFunction("CudaScalarMult");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalarmult");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarmult");
   case '/':
-    CudaFn = TheModule->getFunction("CudaScalarDiv");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalardiv");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalardiv");
   case '+':
-    CudaFn = TheModule->getFunction("CudaScalarAdd");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalaradd");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalaradd");
   case '-':
-    CudaFn = TheModule->getFunction("CudaScalarSub");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalarsub");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarsub");
   case ':':
-    return L;
+    return LtensorPtr;
   case tok_space:
     return R;
   default:
@@ -3533,7 +3483,7 @@ Value *BinaryTensorScalarExprAST::codegen() {
   Function *F = getFunction(std::string("binary") + Op);
   assert(F && "Operator not found.");
 
-  Value *Ops[] = {L, R};
+  Value *Ops[] = {LtensorPtr, R};
   return Builder->CreateCall(F, Ops, "binop");
 }
 
@@ -3596,7 +3546,7 @@ std::vector<backward_tuple> todo_backwards;
 
 
 
-extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func,
+extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int is_forward_func,
                           float *device_x, float *device_w,
                           std::vector<float> Ldims, std::vector<float> Rdims) {
   
@@ -3640,7 +3590,7 @@ extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int _used_cuda,
                   //);
 
 
-  currentCudaResult = device_y;
+
   //std::cout << "L tensor: " << LtensorName << " R tensor: " << RtensorName << "\n";
   
 
@@ -3717,7 +3667,7 @@ __global__ void onehot_kernel(const float* tensor,
     }
 }
 
-extern "C" float onehot(float num_classes)
+extern "C" float *onehot(float num_classes)
 {
   std::string tensor_name = FirstArg;
 
@@ -3749,9 +3699,8 @@ extern "C" float onehot(float num_classes)
   cudaFree(NamedTensors[tensor_name]);
   NamedTensors[tensor_name] = probs;
 
-  used_cuda=1;
 
-  return 0;
+  return probs;
 }
 
 
@@ -3881,9 +3830,8 @@ extern "C" float *gelu(char * tensor_name) {
                                            "gelu", "none"));
   }
 
-  //cudaCheck(cudaFree(currentCudaResult));
+
   
-  used_cuda=1;
 
   return y;
 }
@@ -3957,7 +3905,7 @@ extern "C" float *relu(char *tensor_name)
                                            "relu", "none"));
   }
 
-  //cudaCheck(cudaFree(currentCudaResult));
+
   
 
   return y;
@@ -4526,10 +4474,10 @@ extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_
   {
     std::string error = "O número de canais do tensor é " + std::to_string((int)dims[dims.size()-1]) + ", enquanto a entrada esperada da convolução tem canais " + std::to_string(conv->C);
     LogError(error);
-    currentCudaResult = tensor;
+    
     currentDims = dims;
     NamedConv2d[conv_name] = std::move(conv);
-    return 0;
+    return nullptr;
   }
 
   output = conv->Forward(tensor, dims[dims.size()-3], dims[dims.size()-2], dims[0]);
@@ -4539,7 +4487,7 @@ extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_
 
 
   
-  currentCudaResult = output;
+  
   float resultingDimsProd = B * (float)conv->OC * (float)conv->out_W * (float)conv->out_W;
 
   int is_forward_func = 1;
@@ -4973,7 +4921,7 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
   }
   optimizer->count_step();
 
-  used_cuda=0;
+
 
   return 0;
 }
@@ -5048,10 +4996,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
     std::cout << "Post attr call\n";
 
 
-    used_cuda=0;
-      
-    
-    
+
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   }
@@ -5095,10 +5040,9 @@ Value *BinaryTensorTensorExprAST::codegen() {
   std::cout << "Tensor tensor: " << LHS->GetName() << ", " << RHS->GetName() << "\n";
     
 
-  Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
-  Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
-  used_cuda = 1;
 
+  Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
+  
   /*
   void *vec = &NamedDims[LHS->GetName()];
   Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
@@ -5121,7 +5065,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
     std::cout << "Create call for mult\n";
     return Builder->CreateCall(TheModule->getFunction("CudaMult"),
-                                    {LtensorName, RtensorName, used_cuda_aux, is_forward_func,
+                                    {LtensorName, RtensorName, is_forward_func,
                                      LtensorPtr, RtensorPtr,
                                      LdimsPtr, RdimsPtr},
                                      "cudamult");
@@ -5129,20 +5073,20 @@ Value *BinaryTensorTensorExprAST::codegen() {
   /*
   case '*':
     CudaFn = TheModule->getFunction("CudaMult");
-    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func, LLVMValue},
+    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, is_forward_func, LLVMValue},
                                "cudamult");
   */
   case '/':
     CudaFn = TheModule->getFunction("CudaDiv");
-    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
                                "cudadiv");
   case '+':
     CudaFn = TheModule->getFunction("CudaAdd");
-    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
                                "cudaadd");
   case '-':
     CudaFn = TheModule->getFunction("CudaSub");
-    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
                                "cudasub");
   case ':':
     return LtensorPtr;
@@ -5171,11 +5115,9 @@ Value *LossBackwardExprAST::codegen()
 
 Value *LogExprAST::codegen() {
   
-  Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
-  used_cuda=1;
-
+  
   return Builder->CreateCall(TheModule->getFunction("logE"),
-                             {Builder->CreateGlobalString(Name), used_cuda_aux}, "cudalog");
+                             {Builder->CreateGlobalString(Name)}, "cudalog");
 }
 
 
@@ -5286,18 +5228,23 @@ Value *UnaryExprAST::codegen() {
   
   
   
-  //std::cout << "unary used_cuda: " << used_cuda << "\n";
   //std::cout << "Operand type: " << Operand->GetType();
   if (Opcode=='-')
   {
     if (Operand->GetType()=="tensor")
     {
-      Value *tensorName = Builder->CreateGlobalString(Operand->GetName());
-      Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
+      Value *tensor_name = Builder->CreateGlobalString(Operand->GetName());
+      Value *LtensorPtr = Builder->CreateCall(TheModule->getFunction("LoadTensor"),
+                                              {tensor_name});
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
-      used_cuda=1;
+
+      DimsPtr = Builder->CreateAlloca(int8PtrTy);
+      Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"),
+                                              {tensor_name});
+      Builder->CreateStore(dims_ptr, DimsPtr);
+      
       return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                                {tensorName, R, used_cuda_aux}, "cudascalarmult");
+                                {LtensorPtr, dims_ptr, R}, "cudascalarmult");
     }
     return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
                               OperandV, "multmp");
@@ -5501,7 +5448,7 @@ Value *WhileExprAST::codegen() {
 	
   Builder->SetInsertPoint(LoopBB);
 	Value* bodyVal = Body->codegen();
-	if (! bodyVal)
+	if (!bodyVal)
     return nullptr;
 	Builder->CreateBr(EntryBB);
 
@@ -6223,7 +6170,6 @@ Function *FunctionAST::codegen() {
 static void InitializeModule() {
   //std::cout << "\nINITIALIZING A NEW MODULE"  << "\n";
 
-  used_cuda=0;
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
@@ -6244,8 +6190,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarMultTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6260,8 +6206,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarDivTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6276,8 +6222,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarAddTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6292,8 +6238,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarSubTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6312,10 +6258,9 @@ static void InitializeModule() {
 
   // char *, char *, int
   FunctionType *CudaMultTy = FunctionType::get(
-      Type::getFloatTy(*TheContext)->getPointerTo(),
+      floatPtrTy,
       {Type::getInt8Ty(*TheContext)->getPointerTo(),
        Type::getInt8Ty(*TheContext)->getPointerTo(),
-       Type::getInt32Ty(*TheContext),
        Type::getInt32Ty(*TheContext),
        floatPtrTy,
        floatPtrTy,
@@ -6462,7 +6407,7 @@ static void InitializeModule() {
   // char *, int
   FunctionType *CudaLogTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt32Ty(*TheContext)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6541,7 +6486,7 @@ static void InitializeModule() {
 
   // float
   FunctionType *onehotTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      floatPtrTy,
       {Type::getFloatTy(*TheContext)},
       false
   );
@@ -6790,17 +6735,13 @@ static void InitializeModule() {
   );
 
 
+
   FunctionType *PrintFloatTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
       false 
   );
-  Function::Create(
-    PrintFloatTy,
-    Function::ExternalLinkage, 
-    "PrintFloat", 
-    TheModule.get() 
-  );
+  TheModule->getOrInsertFunction("PrintFloat", PrintFloatTy);
 
   // char *
   FunctionType *PrintStrTy = FunctionType::get(
@@ -6808,12 +6749,7 @@ static void InitializeModule() {
       {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
-  Function::Create(
-    PrintStrTy,
-    Function::ExternalLinkage, 
-    "PrintStr", 
-    TheModule.get() 
-  );
+  TheModule->getOrInsertFunction("PrintStr", PrintStrTy);
 
 
   // char *
