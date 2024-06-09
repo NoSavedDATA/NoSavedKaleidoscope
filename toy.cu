@@ -14,11 +14,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 
-
-
 #include "include/KaleidoscopeJIT.h"
-
-
 
 #include <cudnn.h>
 #include <algorithm>

@@ -1,0 +1,33 @@
+# class Pessoa
+#     def __init__(s nome, f idade)
+#         self.nome = nome
+#         self.idade = idade
+#         0;
+
+#     def to_string()
+#         self.nome
+#         self.idade
+
+
+# Pessoa pessoa;
+# pessoa.__init__("Joao", 20.0);
+
+# pessoa.to_string();
+
+
+class Quadrado
+    def __init__(f lado)
+        self.lado = lado
+        0;
+        
+    def area()
+        self.lado * self.lado
+
+    def perimetro()
+        self.lado * 4
+
+Quadrado quadrado;
+quadrado.__init__(5.0);
+
+quadrado.area();
+quadrado.perimetro();
