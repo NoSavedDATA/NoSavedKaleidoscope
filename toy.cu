@@ -162,6 +162,10 @@ PointerType *floatPtrTy, *int8PtrTy;
 //===----------------------------------------------------------------------===//
 
 
+
+
+
+
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
 // of these for known things.
 enum Token {
@@ -210,26 +214,147 @@ enum Token {
   tok_log = -30
 };
 
+std::map<int, std::string> token_to_string = {
+  { tok_eof, "eof" },
+
+  // functions/classes
+  { tok_def, "def" },
+  { tok_class, "class" },
+  { tok_self, "self" },
+  { tok_class_attr, "class attr" },
+  { tok_extern, "extern" },
+
+  // primary
+  { tok_identifier, "tok identifier" },
+  { tok_number, "tok number" },
+  { tok_str, "tok str" },
+
+  // control
+  { tok_if, "if" },
+  { tok_then, "then" },
+  { tok_else, "else" },
+  { tok_for, "for" },
+  { tok_while, "while" },
+  { tok_async, "async" },
+  { tok_async_finish, "finish" },
+  { tok_tab, "tok tab" },
+
+  // operators
+  { tok_binary, "tok binary" },
+  { tok_unary,"tok unary" },
+
+
+  { tok_space, "tok_space" },
+
+  
+  // var definition
+  { tok_var, "var" },
+  { tok_tensor, "tensor" },
+  { tok_var_str, "var str" },
+  { tok_attr_var, "tok attr var" },
+  { tok_attr_tensor, "tok attr tensor" },
+  { tok_preprocessing, "tok preprocessing" },
+  { tok_conv2d, "Conv2d" },
+
+  { 10, "tok space"},
+
+  { 42, "*" },
+  { 43, "+" },
+  { 44, "," },
+  { 45, "-" },
+  { 47, "/" },
+
+  { 48, "0" },
+  { 49, "1" },
+  { 50, "2" },
+  { 51, "3" },
+  { 52, "4" },
+  { 53, "5" },
+  { 54, "6" },
+  { 55, "7" },
+  { 56, "8" },
+  { 57, "9" },
+  { 58, ":" },
+  { 59, ";" },
+  { 60, "<" },
+  { 61, "=" },
+  { 62, ">" },
+  { 64, "@" },
+
+
+  { static_cast<int>('a'), "a" },
+  { static_cast<int>('b'), "b" },
+  { static_cast<int>('c'), "c" },
+  { static_cast<int>('d'), "d" },
+  { static_cast<int>('e'), "e" },
+  { static_cast<int>('f'), "f" },
+  { static_cast<int>('g'), "g" },
+  { static_cast<int>('h'), "h" },
+  { static_cast<int>('i'), "i" },
+  { static_cast<int>('j'), "j" },
+  { static_cast<int>('k'), "k" },
+  { static_cast<int>('l'), "l" },
+  { static_cast<int>('m'), "m" },
+  { static_cast<int>('n'), "n" },
+  { static_cast<int>('o'), "o" },
+  { static_cast<int>('p'), "p" },
+  { static_cast<int>('q'), "q" },
+  { static_cast<int>('r'), "r" },
+  { static_cast<int>('s'), "s" },
+  { static_cast<int>('t'), "t" },
+  { static_cast<int>('u'), "u" },
+  { static_cast<int>('v'), "v" },
+  { static_cast<int>('w'), "w" },
+  { static_cast<int>('x'), "x" },
+  { static_cast<int>('y'), "y" },
+  { static_cast<int>('z'), "z" },
+
+};
+
+
+
 static std::string IdentifierStr; // Filled in if tok_identifier
 static float NumVal;             // Filled in if tok_number
+
+std::string ReverseToken(int _char)
+{
+  /*
+  if (_char>=48 && _char<=57) // Handle number
+    return std::to_string(NumVal);
+  */
+  return token_to_string[_char];
+}
+
 int LineCounter;
 
 int SeenTabs = 0;
+int LastSeenTabs = 0;
 
 /// get_token - Return the next token from standard input.
 static int get_token() {
   static int LastChar = ' ';
 
+  /*
+  if (LastChar!=32)
+    std::cout << "Pre last char: " << ReverseToken(LastChar) << "\n";
+  */
+
   // Skip any whitespace and backspace.
-  //while (LastChar==32 || LastChar==tok_tab)
+  bool had_tab=false;
   while (LastChar==32 || LastChar==tok_tab)
   {
     if (LastChar==tok_tab)
+    {
       SeenTabs+=1;
+      had_tab = true;
+    } 
     LastChar = getchar();
   }
-  //while (isspace(LastChar))
+  
+  if (had_tab)
+    return tok_tab;
     
+
   if (LastChar=='"')
   {
 
@@ -251,6 +376,7 @@ static int get_token() {
     
     return tok_str;
   }
+
 
   if (isalpha(LastChar) || LastChar=='_') { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
@@ -360,6 +486,7 @@ static int get_token() {
   if(ThisChar==10)
   {
     LineCounter += 1;
+    LastSeenTabs = SeenTabs;
     SeenTabs = 0;
     return tok_space;
   }
@@ -368,6 +495,9 @@ static int get_token() {
     LastChar = getchar();
     return 77; //
   }
+
+  //std::cout << "Post char: " << ReverseToken(ThisChar) << "\n";
+
   return ThisChar;
 }
 
@@ -465,13 +595,12 @@ class VarExprAST : public ExprAST {
 
   public:
     std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-    std::unique_ptr<ExprAST> Body;
+    
     std::string Type;
     VarExprAST(
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::unique_ptr<ExprAST> Body,
         std::string Type)
-        : VarNames(std::move(VarNames)), Body(std::move(Body)), Type(Type) {}
+        : VarNames(std::move(VarNames)), Type(Type) {}
 
   Value *codegen() override;
 };
@@ -498,11 +627,10 @@ class TensorExprAST : public VarExprAST {
 
     TensorExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::unique_ptr<ExprAST> Body,
       std::string Type,
       std::vector<std::unique_ptr<ExprAST>> V_Dims,
       const std::string &TensorInit)
-      : VarExprAST(std::move(VarNames), std::move(Body), std::move(Type)),
+      : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
   Value *codegen() override;
@@ -515,12 +643,11 @@ class Conv2dExprAST : public VarExprAST {
 
     Conv2dExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::unique_ptr<ExprAST> Body,
       std::string Type,
       std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC, std::unique_ptr<ExprAST> Ks,
       std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding,
       const std::string &TensorInit)
-      : VarExprAST(std::move(VarNames), std::move(Body), std::move(Type)),
+      : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)), OC(std::move(OC)), Ks(std::move(Ks)),
                    Stride(std::move(Stride)), Padding(std::move(Padding)),
                    TensorInit(TensorInit) {}
@@ -626,11 +753,13 @@ class CallExprAST : public ExprAST {
 
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> Cond, Then, Else;
+  std::unique_ptr<ExprAST> Cond;
+  std::vector<std::unique_ptr<ExprAST>> Then, Else;
 
   public:
-    IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
-              std::unique_ptr<ExprAST> Else)
+    IfExprAST(std::unique_ptr<ExprAST> Cond,
+              std::vector<std::unique_ptr<ExprAST>> Then,
+              std::vector<std::unique_ptr<ExprAST>> Else)
         : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
   Value *codegen() override;
@@ -639,12 +768,13 @@ class IfExprAST : public ExprAST {
 /// ForExprAST - Expression class for for.
 class ForExprAST : public ExprAST {
   std::string VarName;
-  std::unique_ptr<ExprAST> Start, End, Step, Body;
+  std::unique_ptr<ExprAST> Start, End, Step;
+  std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
               std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-              std::unique_ptr<ExprAST> Body)
+              std::vector<std::unique_ptr<ExprAST>> Body)
         : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
           Step(std::move(Step)), Body(std::move(Body)) {}
 
@@ -948,61 +1078,100 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
 static std::unique_ptr<ExprAST> ParseIfExpr(int tabcount=1) {
   
-  //std::cout << tabcount << " " << CurTok << "token if atual\n";
-  if(CurTok==tok_space)
+  
+  while(CurTok==tok_space)
     getNextToken();
 
   getNextToken(); // eat the if.
-  //CurTok = '(';
-  //std::cout << CurTok << "token if posterior\n";
+
+  int cur_level_tabs = SeenTabs;
+  //std::cout << "If tabs level: " << cur_level_tabs <<  "\n";
   
 
-  //std::cout << CurTok << " Cond token \n";
   // condition.
-  auto Cond = ParseExpression(tabcount+1);
+  auto Cond = ParseExpression();
   if (!Cond)
     return nullptr;
 
   if(CurTok==tok_space)
     getNextToken();
 
-
-  //std::cout << "If then token " << CurTok << "\n";
-  auto Then = ParseExpression(tabcount+1);
-  //std::cout << "Then finished \n";
-  if (!Then)
+  
+  std::vector<std::unique_ptr<ExprAST>> Then, Else;
+  
+  while(true)
   {
-    //std::cout << "Then is null \n";
+    getNextToken(); // eat tab
+
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+      break;
+
+    while (CurTok == tok_space)
+      getNextToken();
+    
+    if (SeenTabs <= cur_level_tabs)
+      break;
+    
+    auto body = ParseExpression();
+    if (!body)
+      return nullptr;
+    Then.push_back(std::move(body));
+    
+  }
+  
+  //std::cout << "Then finished \n";
+  if (Then.size()==0)
+  {
+    std::cout << "Then is null \n";
     return nullptr;
   }
   
-  //std::cout << "If else token " << CurTok << "\n";
   
-  if(CurTok==tok_space)
+  while(CurTok == tok_space || CurTok == tok_tab)
     getNextToken();
 
+  //std::cout << "\n\nIf else token: " << ReverseToken(CurTok) <<  "\n\n\n";
 
-  if (CurTok != tok_else){
-    auto Else = std::make_unique<NumberExprAST>(0);
-    getNextToken();
+  if (CurTok != tok_else) {
+    //std::cout << "Else not found" << "\n\n\n";
+    Else.push_back(std::make_unique<NumberExprAST>(0));
+
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
   }
   else {
-    getNextToken();
+    while(true)
+    {
+      getNextToken(); // eat tab
 
-    auto Else = ParseExpression(tabcount+1);
-    if (!Else)
-      return nullptr;
-    
+      if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+        break;
+
+      while (CurTok == tok_space)
+        getNextToken();
+
+      if (SeenTabs <= cur_level_tabs)
+        break;
+      
+      auto body = ParseExpression();
+      if (!body)
+        return nullptr;
+      Else.push_back(std::move(body));
+    }
+
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
   }
 }
 
+
 /// forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
 static std::unique_ptr<ExprAST> ParseForExpr() {
   getNextToken(); // eat the for.
+
+  int cur_level_tabs = SeenTabs;
+
+  //std::cout << "\nSeen tabs on for: " << SeenTabs << "\n\n";
 
   if (CurTok != tok_identifier)
     return LogError("identificador da variável de controle esperado depois do for.");
@@ -1025,6 +1194,7 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   if (!End)
     return nullptr;
 
+
   std::unique_ptr<ExprAST> Step = std::make_unique<NumberExprAST>(1.0);
   if (CurTok == ',') { // The step value is optional.
     getNextToken();
@@ -1032,11 +1202,41 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
     if (aux)
       Step = std::move(aux);
   }
-
   
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\n\n";
+
+  while(true)
+  {
+    //std::cout << "Read tab" << "\n";
+    getNextToken(); // eat tab
+
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+    {
+      //std::cout << "Breaking for with cur tok: " << CurTok << "\n";
+      break;
+    } 
+    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+    while (CurTok == tok_space)
+    {
+      //std::cout << "\nJumping tok space\n\n";
+      getNextToken();
+    }
+
+    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+    //std::cout << "\nParse new for expression" <<  "\n\n";
+    auto body = ParseExpression(SeenTabs+1);
+    if (!body)
+      return nullptr;
+    Body.push_back(std::move(body));
+    //getNextToken();
+  }
+
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body));
@@ -1082,6 +1282,10 @@ static std::unique_ptr<ExprAST> ParseFinishExpr() {
 
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   std::vector<bool> IsAsync;
+  
+
+  int cur_level_tabs = SeenTabs;
+  std::cout << "Finish tabs level: " << cur_level_tabs <<  "\n";
 
 
   int last_seen_tabs;
@@ -1089,22 +1293,30 @@ static std::unique_ptr<ExprAST> ParseFinishExpr() {
 
   while(CurTok != ';')
   {
-    while(CurTok == tok_space)
-    {
-      getNextToken();
-      std::cout << "Seen tabs: " << SeenTabs << "\n"; 
-      if (SeenTabs == 0 && last_seen_tabs == 0)
-        return LogError("Expressão finish requer identação por tabulação.");
-      
-      if (SeenTabs < last_seen_tabs)
-      {
-        std::cout << "Return from finish\n";
-        return std::make_unique<FinishExprAST>(std::move(Bodies),
-                                               std::move(IsAsync));
-      }
+    getNextToken(); // eat tab
 
-      last_seen_tabs = SeenTabs;
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+    {
+      std::cout << "Breaking finish with cur tok: " << CurTok << "\n";
+      break;
     }
+    std::cout << "\nSeen tabs on finish body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+
+    while (CurTok == tok_space)
+    {
+      std::cout << "\nJumping tok space\n\n";
+      getNextToken();
+    }
+
+    std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+    if (CurTok==tok_tab)
+      getNextToken();
+
+    std::cout << "finish expression current token: " << ReverseToken(CurTok) << "\n";
 
     if (CurTok == tok_async)
     {
@@ -1113,6 +1325,7 @@ static std::unique_ptr<ExprAST> ParseFinishExpr() {
     }
     else
     {
+      std::cout << "NOW PARSING OTHER EXPRESSION" << "\n";
       Bodies.push_back(std::move(ParseExpression()));
       IsAsync.push_back(false);
     }
@@ -1165,11 +1378,8 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
       return LogError("Esperado um ou mais identificadores após var.");
   }
 
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
 
-  return std::make_unique<VarExprAST>(std::move(VarNames), std::move(Body), "var");
+  return std::make_unique<VarExprAST>(std::move(VarNames), "var");
 }
 
 
@@ -1482,7 +1692,9 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     return aux;
   }
 
-  // Call.
+
+  // ParseCall.
+
   getNextToken(); // eat (
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
@@ -1605,16 +1817,9 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
   }
 
 
-  std::unique_ptr<ExprAST> Body;
-  if (CurTok==';')
-    Body = std::make_unique<NumberExprAST>(0.0f);
-  else {  
-    Body = ParseExpression();
-    if (!Body)
-      return nullptr;
-  }
 
-  auto aux = std::make_unique<TensorExprAST>(std::move(VarNames), std::move(Body), "tensor",
+
+  auto aux = std::make_unique<TensorExprAST>(std::move(VarNames), "tensor",
                                              std::move(dims), init);
   aux->SetSelf(pre_dot);
   
@@ -1708,20 +1913,8 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
   }
 
 
-  std::unique_ptr<ExprAST> Body;
-  if (CurTok==';')
-    Body = std::make_unique<NumberExprAST>(0.0f);
-  else {  
-    Body = ParseExpression();
-    if (!Body)
-      return nullptr;
-  }
 
-
-
-
-
-  auto aux = std::make_unique<Conv2dExprAST>(std::move(VarNames), std::move(Body), "conv2d",
+  auto aux = std::make_unique<Conv2dExprAST>(std::move(VarNames), "conv2d",
                                              std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
                                              std::move(dims[3]), std::move(dims[4]),
                                              init);
@@ -1873,7 +2066,13 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     if (TokPrec < ExprPrec)
       return std::make_tuple(std::move(LHS),L_cuda);
 
-    
+
+    if (CurTok == tok_space)
+    {
+      //std::cout << "Returning tok space with " << LastSeenTabs << " tabs. \n";
+      return std::make_tuple(std::move(LHS), L_cuda);
+    }
+
     int BinOp = CurTok;
 
     if(CurTok==':')
@@ -1908,31 +2107,13 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     
     RhsTok = CurTok;
 
-
-    //std::cout << "Before RHS " << LhsTok << " " << BinOp << " " << CurTok << " " << seen_tabs << "/" << tabcount << " " << RName << " \n";
-
     
-    if((BinOp==tok_space) && (!( CurTok==tok_identifier || CurTok==tok_number || CurTok==tok_self || CurTok==tok_class_attr || CurTok==tok_var || CurTok==tok_tensor)))
-    {
-      
-      std::cout << "SPACE WITHOUT NUMBER OR VAR " << CurTok << " " << IdentifierStr << "\n";
-      return std::make_tuple(std::move(LHS),L_cuda);
-    }
-    
-    
-
-
     auto RHS = ParseUnary(); // Returns an identifier, number or expression result
     if (RHS->GetType()=="tensor")
       R_cuda=1;
     
-    /*
-    if(BinOp==tok_space)
-    {
-      std::cout << "FOUND SPACE HEREEE\n\n";
-      return RHS;
-    }
-    */
+    
+    
     if (!RHS)
     {
       //std::cout << "RETURNING NULL Parse Unary \n";
@@ -1941,20 +2122,8 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 
     
     if ((CurTok==tok_space)&&(seen_tabs<tabcount)&&(seen_tabs>0))
-    {
-      //std::cout << "DIMNISHING IJFNASEJHFBEAIUYSBFESABHFGIYBUEASFBEIAUSBFYEASUIBFYAEUSB\n";
-      //LHS = std::move(RHS); //RETORNA O LADO DIREITO COMO O PRÓPRIO ELSE
-      
-      //LHS = ParseBinOpRHS(TokPrec + 1, std::move(LHS), tabcount);
-
-      //RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS), tabcount);
-      //LHS = std::make_unique<BinaryExprAST>(tok_space, std::move(LHS), std::move(RHS));
-      
-      //LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
-      
-      //return LHS;// RETORNA A VARIÁVEL COM ERRO DE INDEX
       return std::make_tuple(std::move(RHS),R_cuda);
-    } else {
+    else {
 
 
       // If BinOp binds less tightly with RHS than the operator after RHS, let
@@ -1980,7 +2149,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       
       //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
       
-      //if(BinOp==64) // @
+      
 
       
 
@@ -1995,15 +2164,6 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
         std::cout << "Reverse LHS and RHS\n";
         //std::cout << "Bin op: " << BinOp << "\n";
 
-        /*
-        if (BinOp==tok_space)
-        {
-          std::cout << "Changing BinOp\n";
-          BinOp = ':';
-        }
-        if (BinOp==':')
-          BinOp = tok_space;
-        */
 
         if (BinOp==47)
           return std::make_tuple(LogError("Divisão de escalar por tensor."),0);
@@ -2018,7 +2178,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
           LHS = std::make_unique<BinaryTensorScalarExprAST>(43,
                                                     std::move(RHS), std::move(LHS));
         } else {
-          if (BinOp!=tok_space && BinOp!=':') // Avoid codegen reversing
+          if (BinOp!=':') // Avoid codegen reversing
             LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(RHS), std::move(LHS));
           else
@@ -2048,7 +2208,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 ///   ::= unary binoprhs
 ///
 static std::unique_ptr<ExprAST> ParseExpression(int tabcount) {
-  //std::cout << "Parse Expression tabcount " << tabcount << "\n";
+  //std::cout << "\nParse Expression tabcount " << tabcount << "\n\n";
   //std::cout << "Parse Expression\n";
   
   auto LHS = ParseUnary(tabcount);
@@ -2164,9 +2324,17 @@ static std::unique_ptr<FunctionAST> ParseDefinition(std::string ClassName="") {
   auto Proto = ParsePrototype(ClassName);
   if (!Proto)
     return nullptr;
+  
+  
+  std::vector<std::unique_ptr<ExprAST>> Body;
+  while(CurTok!=';')
+    Body.push_back(std::move(ParseExpression()));
 
+  return std::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
+  /*
   if (auto E = ParseExpression())
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+  */  
   return nullptr;
 }
 
@@ -2174,14 +2342,24 @@ static std::unique_ptr<FunctionAST> ParseDefinition(std::string ClassName="") {
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   //std::cout << "Top Level Expression\n";
-  if (auto E = ParseExpression()) {
-    // Make an anonymous proto.
-    auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
+
+  
+  std::vector<std::unique_ptr<ExprAST>> Body;
+  while(CurTok!=';')
+  {
+    Body.push_back(std::move(ParseExpression()));
+    //std::cout << "\n\nTop level expr cur tok: " << ReverseToken(CurTok) <<  ".\n";
+    //std::cout << "Top level expr number of expressions: " << Body.size() <<  ".\n\n\n";
+  }
+  
+
+  // Make an anonymous proto.
+  auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
                                                 std::vector<std::string>(),
                                                 std::vector<std::string>());
     
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
-  }
+  return std::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
+  
   return nullptr;
 }
 
@@ -2448,7 +2626,11 @@ extern "C" float Add(float value, float v2)
 }
 
 extern "C" void PrintFloat(float value){
-  std::cout << value << "\n";
+  std::cout << "Printing float.\n";
+  std::cout << "Float value: " << value << "\n";
+}
+
+extern "C" void UnbugFloat(float value){
 }
 
 extern "C" float PrintStr(char* value){
@@ -3291,19 +3473,22 @@ Value *VariableExprAST::codegen() {
 
   if (NamedValues.count(Name)>0) 
   {
-    std::cout << "Variable Float " << Name << " Codegen.\n";
+    //std::cout << "\nVariable Float " << Name << " codegen.\n";
 
     Value *V = NamedValues[Name];
 
     V = Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
     
-    //if (!seen_var_attr)
-    //  Builder->CreateCall(TheModule->getFunction("PrintFloat"), {V}, "printfloat");
+    
+    if (!seen_var_attr) //TODO: Solve this bug
+      Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
 
     return V;
 
   } else if (NamedStrs.count(Name)>0) {
-    std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n\n";
+
+    //std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n\n";
+
     for (const auto &entry : NamedTensors)
       if (ends_with(entry.first, Name))
         return ret;
@@ -3318,7 +3503,7 @@ Value *VariableExprAST::codegen() {
     //std::cout << "NamedStrs count:" << NamedStrs.count(Name) << "\n";
     return V;
   } else if (NamedTensors.count(Name)>0) {
-    //std::cout << "Variable Tensor " << Name << " Codegen.\n";
+    //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
   
 
     if (!seen_var_attr)
@@ -5090,9 +5275,6 @@ Value *BinaryTensorTensorExprAST::codegen() {
                                "cudasub");
   case ':':
     return LtensorPtr;
-  case tok_space:
-    std::cout << "Returning tok space" << "\n";
-    return RtensorPtr;
   default:
     break;
   }
@@ -5286,9 +5468,15 @@ Value *IfExprAST::codegen() {
   // Emit then value.
   Builder->SetInsertPoint(ThenBB);
 
-  Value *ThenV = Then->codegen();
+  
+  Value *ThenV;
+  for (auto &then_body : Then)
+    ThenV = then_body->codegen();
+  
+
   if (!ThenV)
     return nullptr;
+
 
   Builder->CreateBr(MergeBB);
   // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
@@ -5298,12 +5486,14 @@ Value *IfExprAST::codegen() {
   TheFunction->insert(TheFunction->end(), ElseBB);
   Builder->SetInsertPoint(ElseBB);
 
-  Value *ElseV = Else->codegen();
+
+  Value *ElseV;
+  for (auto &else_body : Else)
+    ElseV = else_body->codegen();
 
   if (!ElseV)
-  {
     return nullptr;
-  }
+
     
 
   Builder->CreateBr(MergeBB);
@@ -5373,8 +5563,11 @@ Value *ForExprAST::codegen() {
   // Emit the body of the loop.  This, like any other expr, can change the
   // current BB.  Note that we ignore the value computed by the body, but don't
   // allow an error.
-  if (!Body->codegen())
-    return nullptr;
+  
+  
+  for (auto &body : Body)
+    body->codegen();
+
 
   // Emit the step value.
   Value *StepVal = nullptr;
@@ -5662,17 +5855,8 @@ Value *VarExprAST::codegen() {
     
   }
 
-  // Codegen the body that is contained by the in expression
-  Value *BodyVal = Body->codegen();
-  if (!BodyVal)
-    return nullptr;
 
-  // Pop all our variables from scope.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
-    NamedValues[VarNames[i].first] = OldBindings[i];
-
-  // Return the body computation.
-  return BodyVal;
+  return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
@@ -5854,16 +6038,8 @@ Value *TensorExprAST::codegen() {
  
   }
 
-  // Codegen the body that is contained by the in expression
 
-  Value *BodyVal = Body->codegen();
-  if (!BodyVal)
-    return nullptr;
-
-
-
-  // Return the body computation.
-  return BodyVal;
+  return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
@@ -5914,14 +6090,8 @@ Value *Conv2dExprAST::codegen() {
 
   // Codegen the body that is contained by the in expression
 
-  Value *BodyVal = Body->codegen();
-  if (!BodyVal)
-    return nullptr;
 
-
-
-  // Return the body computation.
-  return BodyVal;
+  return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
@@ -6138,7 +6308,12 @@ Function *FunctionAST::codegen() {
   //std::cout << "\n\n";
 
 
-  if (Value *RetVal = Body->codegen()) {
+  Value *RetVal;
+
+  for (auto &body : Body)
+    RetVal = body->codegen();
+
+  if (RetVal) {
     // Finish off the function.
     Builder->CreateRet(RetVal);
 
@@ -6742,6 +6917,13 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("PrintFloat", PrintFloatTy);
+
+  FunctionType *UnbugFloatTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("UnbugFloat", UnbugFloatTy);
 
   // char *
   FunctionType *PrintStrTy = FunctionType::get(
