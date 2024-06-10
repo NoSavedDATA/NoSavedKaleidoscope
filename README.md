@@ -1,7 +1,12 @@
 # No Saved Kaleidoscope Compiler
 
 
-NSK is a LLVM/C++ programming language. It implements a 100% jitted interpreter and supports neural network training and parallel coding.
+NSK is a LLVM/C++ programming language. 
+
+Features: 
+- 100% jitted interpreter;
+- Dense and convolutional neural network training;
+- Parallel coding.
 
 All the code is open sourced.
 
