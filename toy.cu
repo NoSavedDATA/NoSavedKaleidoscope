@@ -4923,7 +4923,7 @@ extern "C" float cross_entropy(char *y_hat, char *y)
 
 
 
-extern "C" float Backpropagation()
+extern "C" float backprop()
 {
   //float * loss_gradient = ;
   
@@ -5365,7 +5365,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
 Value *LossBackwardExprAST::codegen()
 {
-  return Builder->CreateCall(TheModule->getFunction("Backpropagation"),
+  return Builder->CreateCall(TheModule->getFunction("backprop"),
                              {}, "backprop");
 }
 
@@ -6636,7 +6636,7 @@ static void InitializeModule() {
   Function::Create(
     BackpropagationTy,
     Function::ExternalLinkage,
-    "Backpropagation",
+    "backprop",
     TheModule.get()
   );
 
