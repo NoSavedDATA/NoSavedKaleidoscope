@@ -1,7 +1,9 @@
-# Culang
+# No Saved Kaleidoscope Compiler
 
 
-Culang is a language created using LLVM and CUDA :)
+NSK is a LLVM/C++ programming language. It implements a 100% jitted interpreter and supports neural network training and parallel coding.
+
+All the code is open sourced.
 
 
 <div align="center">
