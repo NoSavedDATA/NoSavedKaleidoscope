@@ -1,12 +1,19 @@
-# Culang
+# No Saved Kaleidoscope Compiler
 
+NSK is a LLVM/C++ programming language. 
 
-Culang is a language created using LLVM and CUDA :)
+All the code is open sourced.
 
 
 <div align="center">
   <img src="assets/Logo1.jpg" alt="Logo" width="260" height="260">
 </div>
+
+Features: 
+- 100% jitted interpreter (no function nor loop recompiling);
+- Dense and Conv2d Neural Networks training;
+- Automatic differentiation;
+- Parallel coding with finish async expressions.
 
 ## Install
 
@@ -54,7 +61,7 @@ sudo apt-get install llvm clang zlib1g-dev libzstd-dev
 
 CUDA:
 ```bash
-clang++ -g -O3 -rdynamic toy.cu `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/local/cuda-12/lib64" -I"/usr/local/cuda-12/include" -lcudart_static  -lcublas -lcublasLt -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -lcudnn -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -w -o bin/nsk
+clang++ -g -O3 -rdynamic toy.cu `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/local/cuda-12/lib64" -I"/usr/local/cuda-12/include" -lcudart_static  -lcublas -lcublasLt -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -lcudnn -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -w -o bin/nsk
 ```
 
  > `dl.lib` e `rt.lib` (isso é uma tentativa de adicionar as bibliotecas `dl.lib` ou `rt.lib` ao linker com `-ldl` e `-lrt`)

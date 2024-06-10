@@ -1,0 +1,43 @@
+tensor[2,2] b;
+
+b;
+
+var a=2
+
+finish
+	async
+		sleep(7)
+		b = b+1
+
+	async
+		sleep(3)
+		b = b+1
+
+
+	async
+		sleep(0.1)
+		b = b+1
+
+
+
+	async
+		sleep(4)
+		b = b+1
+
+
+
+	async 
+		sleep(10)
+		sleep(5)
+		b = b+1
+
+	async
+		sleep(5)
+		b = b+1
+	0
+
+a+2;
+
+b;
+
+# It does not support var parallel operations yet, only tensor operations.

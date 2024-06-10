@@ -649,10 +649,11 @@ class ForExprAST : public ExprAST {
 
 /// WhileExprAST - Expression class for while.
 class WhileExprAST : public ExprAST {
-	std::unique_ptr<ExprAST> Cond, Body;
+	std::unique_ptr<ExprAST> Cond;
+  std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Body)
+    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
       : Cond(std::move(Cond)), Body(std::move(Body)) {}
 
 	Value* codegen() override;
@@ -661,10 +662,10 @@ class WhileExprAST : public ExprAST {
 
 /// AsyncExprAST - Expression class for async.
 class AsyncExprAST : public ExprAST {
-	std::unique_ptr<ExprAST> Body;
+	std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    AsyncExprAST(std::unique_ptr<ExprAST> Body)
+    AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
       : Body(std::move(Body)) {}
 
 	Value* codegen() override;
@@ -1028,11 +1029,41 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
     if (aux)
       Step = std::move(aux);
   }
-
   
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\n\n";
+
+  while(true)
+  {
+    //std::cout << "Read tab" << "\n";
+    getNextToken(); // eat tab
+
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+    {
+      //std::cout << "Breaking for with cur tok: " << CurTok << "\n";
+      break;
+    } 
+    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+    while (CurTok == tok_space)
+    {
+      //std::cout << "\nJumping tok space\n\n";
+      getNextToken();
+    }
+
+    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+    //std::cout << "\nParse new for expression" <<  "\n\n";
+    auto body = ParseExpression(SeenTabs+1);
+    if (!body)
+      return nullptr;
+    Body.push_back(std::move(body));
+    //getNextToken();
+  }
+
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body));
@@ -1043,6 +1074,10 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
 static std::unique_ptr<ExprAST> ParseWhileExpr() {
   getNextToken(); // eat the while.
 
+  
+  int cur_level_tabs = SeenTabs;
+
+
   if (CurTok != tok_identifier)
     return LogError("Identificador da variável de controle esperado depois do while.");
 
@@ -1051,56 +1086,132 @@ static std::unique_ptr<ExprAST> ParseWhileExpr() {
   if (!Cond)
     return nullptr;
   
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\n\n";
+
+  while(true)
+  {
+    //std::cout << "Read tab" << "\n";
+    getNextToken(); // eat tab
+
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+    {
+      //std::cout << "Breaking for with cur tok: " << CurTok << "\n";
+      break;
+    } 
+    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+    while (CurTok == tok_space)
+    {
+      //std::cout << "\nJumping tok space\n\n";
+      getNextToken();
+    }
+
+    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+    //std::cout << "\nParse new for expression" <<  "\n\n";
+    auto body = ParseExpression(SeenTabs+1);
+    if (!body)
+      return nullptr;
+    Body.push_back(std::move(body));
+    //getNextToken();
+  }
 
   return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body));
 }
 
 static std::unique_ptr<ExprAST> ParseAsyncExpr() {
+
+  int cur_level_tabs = SeenTabs;
+
   getNextToken(); // eat the async.
 
-  std::cout << "Parsing async" <<  "\n";
   
-  auto Body = ParseExpression();
-  
-  std::cout << "Post async: " << CurTok << "\n";
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  //std::cout << "async tabs level: " << cur_level_tabs <<  "\n";
+  //std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
 
-  return std::make_unique<AsyncExprAST>(std::move(Body));
+  if (CurTok != tok_space)
+    Bodies.push_back(std::move(ParseExpression()));
+  else 
+  {
+    while(CurTok != ';')
+    {
+      getNextToken(); // eat tab
+
+      if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+        break;
+      
+      //std::cout << "\nSeen tabs on finish body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+
+      while (CurTok == tok_space)
+        getNextToken();
+      
+
+      //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+
+      if (SeenTabs <= cur_level_tabs)
+        break;
+
+      if (CurTok==tok_tab)
+        getNextToken();
+
+      //std::cout << "async expression current token: " << ReverseToken(CurTok) << "\n";
+
+
+      Bodies.push_back(std::move(ParseExpression()));
+        
+    }
+  }
+  
+  
+  //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
+
+  return std::make_unique<AsyncExprAST>(std::move(Bodies));
 }
 
 
 static std::unique_ptr<ExprAST> ParseFinishExpr() {
   getNextToken(); // eat the finish.
 
-  std::cout << "\nParsing finish" <<  "\n";
 
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   std::vector<bool> IsAsync;
+  
+
+  int cur_level_tabs = SeenTabs;
+  //std::cout << "Finish tabs level: " << cur_level_tabs <<  "\n";
 
 
-  int last_seen_tabs;
-  last_seen_tabs = 0;
 
   while(CurTok != ';')
   {
-    while(CurTok == tok_space)
-    {
-      getNextToken();
-      std::cout << "Seen tabs: " << SeenTabs << "\n"; 
-      if (SeenTabs == 0 && last_seen_tabs == 0)
-        return LogError("Expressão finish requer identação por tabulação.");
-      
-      if (SeenTabs < last_seen_tabs)
-      {
-        std::cout << "Return from finish\n";
-        return std::make_unique<FinishExprAST>(std::move(Bodies),
-                                               std::move(IsAsync));
-      }
+    getNextToken(); // eat tab
 
-      last_seen_tabs = SeenTabs;
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+    {
+      //std::cout << "Breaking finish with cur tok: " << CurTok << "\n";
+      break;
     }
+    //std::cout << "\nSeen tabs on finish body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+
+    while (CurTok == tok_space)
+      getNextToken();
+    
+
+    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+    if (CurTok==tok_tab)
+      getNextToken();
+
+    //std::cout << "finish expression current token: " << ReverseToken(CurTok) << "\n";
 
     if (CurTok == tok_async)
     {
@@ -2479,6 +2590,7 @@ extern "C" char * shuffle_str(char *string_list)
 
 
 extern "C" float * LoadTensor(char* tensor_name){
+  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
   return NamedTensors[tensor_name];
 }
 
@@ -3152,6 +3264,9 @@ extern "C" float *logE(char *tensorName) {
 extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
 {
   std::string pre_dot = pre_dotc;
+
+  //std::cout << "\n\nLAST PRE DOT " << LastPreDot << " PRE DOT " << pre_dot << "\n";
+  
   LastPreDot = pre_dot;
   if (pre_dot!="self")
   {
@@ -3160,11 +3275,14 @@ extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
     else
       FirstArg = pre_dot;
   }
+  //std::cout << "Resulting first arg: " << FirstArg << "\n\n\n";
+
   return 0;
 }
 
 extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 {
+  //std::cout << "\n\nDIMNISH FIRST ARG" << "\n\n\n";
   if (nested_function)
     if(ends_with(FirstArg, pre_dot))
     {
@@ -3172,7 +3290,6 @@ extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 
       FirstArg.erase(pos, std::strlen(pre_dot));
     }
-    
   
   return 0;
 }
@@ -5443,9 +5560,11 @@ Value *WhileExprAST::codegen() {
 	// Handle Loop Body
 	
   Builder->SetInsertPoint(LoopBB);
-	Value* bodyVal = Body->codegen();
-	if (!bodyVal)
-    return nullptr;
+	Value* bodyVal;
+
+  for (auto &body : Body)
+    bodyVal = body->codegen();
+
 	Builder->CreateBr(EntryBB);
 
 
@@ -5457,7 +5576,7 @@ Value *WhileExprAST::codegen() {
 }
 
 
-Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody) {
   
 
   // find unique function name (_async 0, _async1, _async2 etc)
@@ -5488,7 +5607,12 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
   
 
   // define body of function
-  if (auto *FnIR = asyncBody->codegen())
+  Value *V;
+
+  for (auto &body : asyncBody)
+    V = body->codegen();
+
+  if (V)
   {
     /*
     fprintf(stderr, "\nRead top-level expression:");
@@ -5933,7 +6057,7 @@ Value *CallExprAST::codegen() {
   std::string tgt_function_name;
 
   int nested_function;
-  if (functionName=="__anon_expr")
+  if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
     nested_function=0;
   else
     nested_function=1;
@@ -7101,7 +7225,8 @@ static void MainLoop() {
         getNextToken();
         break;
       case tok_tab:
-        LogError("Tab inesperado encontrado\n");
+        //LogError("Tab inesperado encontrado\n");
+        getNextToken();
         break;
       case tok_def:
         HandleDefinition();
