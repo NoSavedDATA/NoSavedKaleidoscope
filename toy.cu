@@ -2733,6 +2733,7 @@ extern "C" char * shuffle_str(char *string_list)
 
 
 extern "C" float * LoadTensor(char* tensor_name){
+  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
   return NamedTensors[tensor_name];
 }
 
@@ -3406,6 +3407,9 @@ extern "C" float *logE(char *tensorName) {
 extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
 {
   std::string pre_dot = pre_dotc;
+
+  //std::cout << "\n\nLAST PRE DOT " << LastPreDot << " PRE DOT " << pre_dot << "\n";
+  
   LastPreDot = pre_dot;
   if (pre_dot!="self")
   {
@@ -3414,11 +3418,14 @@ extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
     else
       FirstArg = pre_dot;
   }
+  //std::cout << "Resulting first arg: " << FirstArg << "\n\n\n";
+
   return 0;
 }
 
 extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 {
+  //std::cout << "\n\nDIMNISH FIRST ARG" << "\n\n\n";
   if (nested_function)
     if(ends_with(FirstArg, pre_dot))
     {
@@ -3426,7 +3433,6 @@ extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 
       FirstArg.erase(pos, std::strlen(pre_dot));
     }
-    
   
   return 0;
 }
@@ -6182,7 +6188,7 @@ Value *CallExprAST::codegen() {
   std::string tgt_function_name;
 
   int nested_function;
-  if (functionName=="__anon_expr")
+  if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
     nested_function=0;
   else
     nested_function=1;
@@ -7362,7 +7368,8 @@ static void MainLoop() {
         getNextToken();
         break;
       case tok_tab:
-        LogError("Tab inesperado encontrado\n");
+        //LogError("Tab inesperado encontrado\n");
+        getNextToken();
         break;
       case tok_def:
         HandleDefinition();
