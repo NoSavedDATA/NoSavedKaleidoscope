@@ -11,7 +11,8 @@ All the code is open sourced.
 
 Features: 
 - 100% jitted interpreter (no function nor loop recompiling);
-- Dense and Convolutional Neural Network training;
+- Dense and Conv2d Neural Networks training;
+- Automatic differentiation;
 - Parallel coding with finish async expressions.
 
 ## Install
