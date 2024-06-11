@@ -50,9 +50,12 @@ for i=0, i<1000 :
 	tensor[32,1] y
 	dataset.yield(32, x, y)
 	y.onehot(10)
+
 	model.forward(x)
+
 	cross_entropy(x, y)
-	loss.backward()
+	backprop()
+
 	AdamW(0.0001, 0.9, 0.999, 0.01)
 	i;
 
@@ -70,4 +73,6 @@ x.view(1,28,28,1);
 model.forward(x);
 
 x;
-softmax(x);
+x = softmax(x);
+
+x;
