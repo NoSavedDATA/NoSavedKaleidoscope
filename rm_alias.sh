@@ -1,8 +1,13 @@
 #!/bin/bash
 
 remove_alias() {
-    unset -f nsk
-    unset -f cnsk
+    if [[ $SHELL == *"zsh"* ]]; then
+        unalias nsk 2>/dev/null
+        unalias cnsk 2>/dev/null
+    else
+        unset -f nsk
+        unset -f cnsk
+    fi
 }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"

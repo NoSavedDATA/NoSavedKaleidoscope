@@ -4,7 +4,8 @@
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 alias_command="alias nsk='$DIR/bin/nsk'"
-alias_compile="alias cnsk='clang++ -g -O3 -rdynamic $DIR/toy.cu \`llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native\` --cuda-path=/usr/local/cuda-12 --cuda-gpu-arch=sm_75 -L/usr/local/cuda-12/lib64 -lcudart_static -lcublas -lcublasLt -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -w -o bin/nsk'"
+# alias_compile="alias cnsk='clang++ -g -O3 -rdynamic $DIR/toy.cu \`llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native\` --cuda-path=/usr/local/cuda-12 --cuda-gpu-arch=sm_75 -L/usr/local/cuda-12/lib64 -lcudart_static -lcublas -lcublasLt -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -w -o bin/nsk'"
+alias_compile="alias cnsk='clang++ -g -O3 -rdynamic toy.cu \`llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native\` --cuda-path=/usr/local/cuda-12 --cuda-gpu-arch=sm_75 -L/usr/local/cuda-12/lib64 -I/usr/local/cuda-12/include -lcudart_static  -lcublas -lcublasLt -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -lcudnn -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -w -o bin/nsk'"
 
 # Function to add alias to shell configuration file
 add_alias() {
