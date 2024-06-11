@@ -41,7 +41,7 @@ sudo ./llvm.sh 19 all
 
 sudo apt-get install llvm clang zlib1g-dev libzstd-dev
 ```
-- Add commands `culang` and `cumpile` to `PATH`:
+- Add commands `nsk` to `PATH`:
 
 ```bash
 ./alias.sh
@@ -53,7 +53,7 @@ sudo apt-get install llvm clang zlib1g-dev libzstd-dev
 ./update_submodules.sh
 ```
 
-- Test using `culang`, type `1+1;`, it should return `2.00`.
+- Test using `nsk`, type `1+1;`, it should return `2.00`.
 
 ---
 
