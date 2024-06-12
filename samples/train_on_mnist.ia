@@ -3,7 +3,6 @@ class Dataset
 		self.batch_size = batch_size
 		self.preprocess_x = load_img
 		self.preprocess_y = split_str_to_float(-2)
-		0
 
 
 
@@ -35,11 +34,11 @@ class Model
 		
 
 
-Model model;
-model.__init__();
+Model model
+model.__init__()
 
 
-Dataset dataset;
+Dataset dataset
 dataset.__init__(32, "a", "b")
 
 
