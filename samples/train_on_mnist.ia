@@ -3,76 +3,83 @@ class Dataset
 		self.batch_size = batch_size
 		self.preprocess_x = load_img
 		self.preprocess_y = split_str_to_float(-2)
-		0;
-0;
+		0
+
+
 
 class Model
+
 	def __init__()
+
 		Conv2d[1,5,5,2,1,xavu_relu] self.conv1
 		Conv2d[5,50,5,2,0,xavu_relu] self.conv2
+
 		tensor[100, 1250, xavu_relu] self.w1
 		tensor[10, 100, xavu_relu] self.w2
-		0;
+
+
 
 	def forward(t x)
+
 		x = self.conv1(x)
 		x = relu(x)
 		x = self.conv2(x)
 		x = relu(x)
+
 		x.view(-1,5*5*50)
+
 		x = x@self.w1
 		x = relu(x)
-		x = x@self.w2;
+		x = x@self.w2
 
 		
-0;
+
 
 Model model;
 model.__init__();
 
 
 Dataset dataset;
-dataset.__init__(32, "a", "b");
+dataset.__init__(32, "a", "b")
 
 
 
 tensor[28,28,1] x
-tensor[10] y;
+tensor[10] y
 
-glob("/home/nosaveddata/mnist/training/*/*.png");
+glob("/home/nosaveddata/mnist/training/*/*.png")
 
-dataset.init_dataset(32);
+dataset.init_dataset(32)
 
 
 
 for i=0, i<1000 :
-
 	tensor[32,28,28,1] x
 	tensor[32,1] y
-
 	dataset.yield(32, x, y)
 	y.onehot(10)
 
 	model.forward(x)
+
 	cross_entropy(x, y)
 	backprop()
 
 	AdamW(0.0001, 0.9, 0.999, 0.01)
-	i;
 
 
 
-tensor[1,28,28,1] x;
+tensor[1,28,28,1] x
 
-load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/3.png");
-#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/1/489.png");
-#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/2/35.png");
-#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/4/27.png");
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/3.png")
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/1/489.png")
+load_preprocess_img(x, "/home/nosaveddata/mnist/testing/2/35.png")
+#load_preprocess_img(x, "/home/nosaveddata/mnist/testing/4/27.png")
 
-x.view(1,28,28,1);
+x.view(1,28,28,1)
 
-model.forward(x);
+model.forward(x)
 
-x;
-x = softmax(x);
+x
+x = softmax(x)
+
 x;
