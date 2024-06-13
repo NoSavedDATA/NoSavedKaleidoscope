@@ -139,12 +139,17 @@ std::vector<std::string> split(const char* input, const std::string& delimiter) 
 }
 
 
-
+bool in_char(char ch, const std::vector<char>& list) {
+  // Use std::find to efficiently search the list for the character
+  return std::find(list.begin(), list.end(), ch) != list.end();
+}
 
 bool in_str(std::string str, std::vector<std::string> list) {
     return std::find(list.begin(), list.end(), str) != list.end();
 }
 
+
+std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';'};
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
@@ -154,12 +159,20 @@ std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
 
+
+
+
 PointerType *floatPtrTy, *int8PtrTy;
 
+bool ShallCodegen = true;
 
 //===----------------------------------------------------------------------===//
 // Lexer
 //===----------------------------------------------------------------------===//
+
+
+
+
 
 
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
@@ -210,25 +223,145 @@ enum Token {
   tok_log = -30
 };
 
+std::map<int, std::string> token_to_string = {
+  { tok_eof, "eof" },
+
+  // functions/classes
+  { tok_def, "def" },
+  { tok_class, "class" },
+  { tok_self, "self" },
+  { tok_class_attr, "class attr" },
+  { tok_extern, "extern" },
+
+  // primary
+  { tok_identifier, "tok identifier" },
+  { tok_number, "tok number" },
+  { tok_str, "tok str" },
+
+  // control
+  { tok_if, "if" },
+  { tok_then, "then" },
+  { tok_else, "else" },
+  { tok_for, "for" },
+  { tok_while, "while" },
+  { tok_async, "async" },
+  { tok_async_finish, "finish" },
+  { tok_tab, "tok tab" },
+
+  // operators
+  { tok_binary, "tok binary" },
+  { tok_unary,"tok unary" },
+
+
+  { tok_space, "tok_space" },
+
+  
+  // var definition
+  { tok_var, "var" },
+  { tok_tensor, "tensor" },
+  { tok_var_str, "var str" },
+  { tok_attr_var, "tok attr var" },
+  { tok_attr_tensor, "tok attr tensor" },
+  { tok_preprocessing, "tok preprocessing" },
+  { tok_conv2d, "Conv2d" },
+
+  { 10, "tok space"},
+
+  { 42, "*" },
+  { 43, "+" },
+  { 44, "," },
+  { 45, "-" },
+  { 47, "/" },
+
+  { 48, "0" },
+  { 49, "1" },
+  { 50, "2" },
+  { 51, "3" },
+  { 52, "4" },
+  { 53, "5" },
+  { 54, "6" },
+  { 55, "7" },
+  { 56, "8" },
+  { 57, "9" },
+  { 58, ":" },
+  { 59, ";" },
+  { 60, "<" },
+  { 61, "=" },
+  { 62, ">" },
+  { 64, "@" },
+
+
+  { static_cast<int>('a'), "a" },
+  { static_cast<int>('b'), "b" },
+  { static_cast<int>('c'), "c" },
+  { static_cast<int>('d'), "d" },
+  { static_cast<int>('e'), "e" },
+  { static_cast<int>('f'), "f" },
+  { static_cast<int>('g'), "g" },
+  { static_cast<int>('h'), "h" },
+  { static_cast<int>('i'), "i" },
+  { static_cast<int>('j'), "j" },
+  { static_cast<int>('k'), "k" },
+  { static_cast<int>('l'), "l" },
+  { static_cast<int>('m'), "m" },
+  { static_cast<int>('n'), "n" },
+  { static_cast<int>('o'), "o" },
+  { static_cast<int>('p'), "p" },
+  { static_cast<int>('q'), "q" },
+  { static_cast<int>('r'), "r" },
+  { static_cast<int>('s'), "s" },
+  { static_cast<int>('t'), "t" },
+  { static_cast<int>('u'), "u" },
+  { static_cast<int>('v'), "v" },
+  { static_cast<int>('w'), "w" },
+  { static_cast<int>('x'), "x" },
+  { static_cast<int>('y'), "y" },
+  { static_cast<int>('z'), "z" },
+
+};
+
+
+
 static std::string IdentifierStr; // Filled in if tok_identifier
 static float NumVal;             // Filled in if tok_number
+
+std::string ReverseToken(int _char)
+{
+  /*
+  if (_char>=48 && _char<=57) // Handle number
+    return std::to_string(NumVal);
+  */
+  if (_char==tok_identifier)
+    return IdentifierStr;
+
+  return token_to_string[_char];
+}
+
 int LineCounter;
 
 int SeenTabs = 0;
+int LastSeenTabs = 0;
 
 /// get_token - Return the next token from standard input.
 static int get_token() {
   static int LastChar = ' ';
 
+  
+
+  /*
+  if (LastChar!=32)
+    std::cout << "Pre last char: " << ReverseToken(LastChar) << "\n";
+  */
+
   // Skip any whitespace and backspace.
-  //while (LastChar==32 || LastChar==tok_tab)
+  
+  
   while (LastChar==32 || LastChar==tok_tab)
-  {
-    if (LastChar==tok_tab)
-      SeenTabs+=1;
     LastChar = getchar();
-  }
-  //while (isspace(LastChar))
+    
+    
+
+  //std::cout << "Last char: " << LastChar << "\n";
     
   if (LastChar=='"')
   {
@@ -251,6 +384,7 @@ static int get_token() {
     
     return tok_str;
   }
+
 
   if (isalpha(LastChar) || LastChar=='_') { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
@@ -322,6 +456,7 @@ static int get_token() {
   }
 
   if (isdigit(LastChar) || LastChar == '.') { // Number: [-.]+[0-9.]+
+    
     std::string NumStr;
     if (LastChar == '-') { // Check for optional minus sign
       NumStr += LastChar;
@@ -352,22 +487,44 @@ static int get_token() {
 
   // Otherwise, just return the character as its ascii value.
   int ThisChar = LastChar;
-  LastChar = getchar();
-  int otherChar = LastChar;
 
 
   
-  if(ThisChar==10)
+  if (ThisChar==10 || LastChar==tok_tab)
   {
-    LineCounter += 1;
-    SeenTabs = 0;
+    //std::cout << "Gotcha\n";
+    //std::cout << "ThisChar: " << ThisChar << " LastChar " << LastChar << "\n";
+    
+    while(LastChar==10 || LastChar==tok_tab) {
+      if(ThisChar==10)
+      {
+        LineCounter += 1;
+        LastSeenTabs = SeenTabs;
+        SeenTabs = 0;
+      }
+      if (LastChar==tok_tab)
+        SeenTabs+=1;
+
+      ThisChar = (int)LastChar;
+      LastChar = getchar(); 
+    } 
+
+    //std::cout << "New seen tabs: " << SeenTabs << "\n";
     return tok_space;
   }
+
+
+  LastChar = getchar();
+  int otherChar = LastChar;
+
 
   if((ThisChar==47)&&(otherChar == 47)){
     LastChar = getchar();
     return 77; //
   }
+
+  //std::cout << "Post char: " << ReverseToken(ThisChar) << "\n";
+
   return ThisChar;
 }
 
@@ -465,13 +622,12 @@ class VarExprAST : public ExprAST {
 
   public:
     std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-    std::unique_ptr<ExprAST> Body;
+    
     std::string Type;
     VarExprAST(
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::unique_ptr<ExprAST> Body,
         std::string Type)
-        : VarNames(std::move(VarNames)), Body(std::move(Body)), Type(Type) {}
+        : VarNames(std::move(VarNames)), Type(Type) {}
 
   Value *codegen() override;
 };
@@ -498,11 +654,10 @@ class TensorExprAST : public VarExprAST {
 
     TensorExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::unique_ptr<ExprAST> Body,
       std::string Type,
       std::vector<std::unique_ptr<ExprAST>> V_Dims,
       const std::string &TensorInit)
-      : VarExprAST(std::move(VarNames), std::move(Body), std::move(Type)),
+      : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
   Value *codegen() override;
@@ -515,12 +670,11 @@ class Conv2dExprAST : public VarExprAST {
 
     Conv2dExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::unique_ptr<ExprAST> Body,
       std::string Type,
       std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC, std::unique_ptr<ExprAST> Ks,
       std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding,
       const std::string &TensorInit)
-      : VarExprAST(std::move(VarNames), std::move(Body), std::move(Type)),
+      : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)), OC(std::move(OC)), Ks(std::move(Ks)),
                    Stride(std::move(Stride)), Padding(std::move(Padding)),
                    TensorInit(TensorInit) {}
@@ -540,11 +694,6 @@ class LogExprAST : public ExprAST {
     }
 };
 
-class LossBackwardExprAST : public ExprAST {
-  public:
-    LossBackwardExprAST() {}
-    Value *codegen() override;
-};
 
 
 /// UnaryExprAST - Expression class for a unary operator.
@@ -626,11 +775,13 @@ class CallExprAST : public ExprAST {
 
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> Cond, Then, Else;
+  std::unique_ptr<ExprAST> Cond;
+  std::vector<std::unique_ptr<ExprAST>> Then, Else;
 
   public:
-    IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
-              std::unique_ptr<ExprAST> Else)
+    IfExprAST(std::unique_ptr<ExprAST> Cond,
+              std::vector<std::unique_ptr<ExprAST>> Then,
+              std::vector<std::unique_ptr<ExprAST>> Else)
         : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
   Value *codegen() override;
@@ -639,12 +790,13 @@ class IfExprAST : public ExprAST {
 /// ForExprAST - Expression class for for.
 class ForExprAST : public ExprAST {
   std::string VarName;
-  std::unique_ptr<ExprAST> Start, End, Step, Body;
+  std::unique_ptr<ExprAST> Start, End, Step;
+  std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
               std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-              std::unique_ptr<ExprAST> Body)
+              std::vector<std::unique_ptr<ExprAST>> Body)
         : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
           Step(std::move(Step)), Body(std::move(Body)) {}
 
@@ -653,10 +805,11 @@ class ForExprAST : public ExprAST {
 
 /// WhileExprAST - Expression class for while.
 class WhileExprAST : public ExprAST {
-	std::unique_ptr<ExprAST> Cond, Body;
+	std::unique_ptr<ExprAST> Cond;
+  std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Body)
+    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
       : Cond(std::move(Cond)), Body(std::move(Body)) {}
 
 	Value* codegen() override;
@@ -665,10 +818,10 @@ class WhileExprAST : public ExprAST {
 
 /// AsyncExprAST - Expression class for async.
 class AsyncExprAST : public ExprAST {
-	std::unique_ptr<ExprAST> Body;
+	std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    AsyncExprAST(std::unique_ptr<ExprAST> Body)
+    AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
       : Body(std::move(Body)) {}
 
 	Value* codegen() override;
@@ -758,6 +911,7 @@ static int get_tokenPrecedence() {
 /// LogError* - These are little helper functions for error handling.
 //std::unique_ptr<ExprAST> LogError(const char *Str) {
 std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
+  ShallCodegen = false;
   //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
   if (Str!=" ")
     std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0m " << Str << "\n\n";
@@ -776,11 +930,25 @@ std::unique_ptr<ExprAST> LogError(std::string Str) {
   return nullptr;
 }
 
+
+std::unique_ptr<ExprAST> LogError_toNextToken(std::string Str) {
+  //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
+  LogErrorS(Str);
+
+  getNextToken();
+  
+  return nullptr;
+}
+
+
 std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
   //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
   LogErrorS(Str);
 
   while(CurTok!=tok_space && CurTok!=';')
+    getNextToken();
+
+  if (CurTok==tok_space)
     getNextToken();
   
   return nullptr;
@@ -793,10 +961,11 @@ void LogWarning(const char *Str) {
 
 // Modified LogError function with token parameter
 std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
+  ShallCodegen = false;
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mErro: \033[0m%s\n", buf);
-  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0mtoken " << IdentifierStr << " inesperado. Esperava-se uma expressão.\n\n";
+  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0mtoken " << ReverseToken(CurTok) << " inesperado. Esperava-se uma expressão.\n\n";
   return nullptr;
 }
 
@@ -894,6 +1063,9 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
     if (std::find(tensorVars.begin(), tensorVars.end(), IdentifierStr) != tensorVars.end())
       aux->SetType("tensor");
     //std::cout << "call arg identifier type: " << aux->GetType() <<  "\n";
+    
+  if (CurTok==tok_space)
+    getNextToken();
     return aux;
   }
 
@@ -948,61 +1120,104 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(int tabcount=0) {
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
 static std::unique_ptr<ExprAST> ParseIfExpr(int tabcount=1) {
   
-  //std::cout << tabcount << " " << CurTok << "token if atual\n";
-  if(CurTok==tok_space)
-    getNextToken();
+  int cur_level_tabs = SeenTabs;
 
   getNextToken(); // eat the if.
-  //CurTok = '(';
-  //std::cout << CurTok << "token if posterior\n";
+
+  
+  //std::cout << "If tabs level: " << cur_level_tabs <<  "\n";
   
 
-  //std::cout << CurTok << " Cond token \n";
   // condition.
-  auto Cond = ParseExpression(tabcount+1);
+  auto Cond = ParseExpression();
   if (!Cond)
     return nullptr;
 
   if(CurTok==tok_space)
     getNextToken();
 
-
-  //std::cout << "If then token " << CurTok << "\n";
-  auto Then = ParseExpression(tabcount+1);
-  //std::cout << "Then finished \n";
-  if (!Then)
+  
+  std::vector<std::unique_ptr<ExprAST>> Then, Else;
+  
+  while(true)
   {
-    //std::cout << "Then is null \n";
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
+      break;
+
+    while (CurTok == tok_space)
+      getNextToken();
+    
+    if (SeenTabs <= cur_level_tabs)
+      break;
+    
+    auto body = ParseExpression();
+    if (!body)
+      return nullptr;
+    Then.push_back(std::move(body));
+    
+  }
+  
+  if (Then.size()==0)
+  {
+    LogError("Then is null");
     return nullptr;
   }
   
-  //std::cout << "If else token " << CurTok << "\n";
   
-  if(CurTok==tok_space)
+  if(CurTok == tok_space)
     getNextToken();
 
+  //std::cout << "\n\nIf else token: " << ReverseToken(CurTok) <<  "\n\n\n";
 
-  if (CurTok != tok_else){
-    auto Else = std::make_unique<NumberExprAST>(0);
-    getNextToken();
+  if (CurTok != tok_else) {
+    Else.push_back(std::make_unique<NumberExprAST>(0));
+
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
   }
   else {
+    getNextToken(); //eat else
+    if(CurTok != tok_space)
+      LogError("else requer barra de espaço.");
     getNextToken();
 
-    auto Else = ParseExpression(tabcount+1);
-    if (!Else)
-      return nullptr;
-    
+    while(true)
+    {
+
+      if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+        break;
+
+      while (CurTok == tok_space)
+        getNextToken();
+
+      if (SeenTabs <= cur_level_tabs)
+        break;
+      
+      auto body = ParseExpression();
+      if (!body)
+        return nullptr;
+      Else.push_back(std::move(body));
+    }
+
+  
+    if (CurTok==tok_space)
+      getNextToken();
+
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
   }
 }
 
+
 /// forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
 static std::unique_ptr<ExprAST> ParseForExpr() {
+
+  int cur_level_tabs = SeenTabs;
+
+  //std::cout << "\nSeen tabs on for: " << SeenTabs << "\n\n";
+
   getNextToken(); // eat the for.
+
 
   if (CurTok != tok_identifier)
     return LogError("identificador da variável de controle esperado depois do for.");
@@ -1010,42 +1225,91 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
-  if (CurTok != '=')
-    return LogError("Esperada atribuição do valor inicial do for.");
-  getNextToken(); // eat '='.
+  std::unique_ptr<ExprAST> Start, End;
+  Start = nullptr;
 
-  auto Start = ParseExpression(0);
-  if (!Start)
-    return nullptr;
+  if (CurTok != '=')
+    LogError("Esperada atribuição do valor inicial do for.");
+  else 
+  {
+    getNextToken(); // eat '='.
+
+    auto Start = ParseExpression();
+  }
+  //if (!Start)
+  //  return nullptr;
+  
   if (CurTok != ',')
     return LogError("Esperado ',' depois de atribuir valor inicial do for.");
   getNextToken();
 
-  auto End = ParseExpression(0);
-  if (!End)
-    return nullptr;
+
+
+  End = ParseExpression();
+  //if (!End)
+  //  return nullptr;
+
+  
+
 
   std::unique_ptr<ExprAST> Step = std::make_unique<NumberExprAST>(1.0);
   if (CurTok == ',') { // The step value is optional.
     getNextToken();
-    auto aux = ParseExpression(0);
+    auto aux = ParseExpression();
     if (aux)
       Step = std::move(aux);
   }
-
   
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  //std::cout << "\nSeen tabs on for body POST: " << SeenTabs << "\n\n";
+  if (CurTok==tok_space)
+    getNextToken();
+
+  while(true)
+  {
+    //std::cout << "\n\nParsing new expression with tabs: " << SeenTabs << " tok: " << ReverseToken(CurTok) << "\n";
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
+    {
+      //std::cout << "Breaking for with cur tok: " << ReverseToken(CurTok) << " Seen Tabs:" << SeenTabs <<  "\n";
+      break;
+    } 
+    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << ReverseToken(CurTok) << "\n\n";
+
+    while (CurTok == tok_space)
+    {
+      //std::cout << "\nJumping tok space\n\n";
+      getNextToken();
+    }
+
+    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+
+    auto body = ParseExpression();
+    if (!body)
+      return nullptr;
+    Body.push_back(std::move(body));
+    //getNextToken();
+  }
+
+  if (CurTok==tok_space)
+    getNextToken();
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body));
 }
 
 
+
 /// whileexpr ::= 'while' identifier '=' expr ',' expr (',' expr)? 'in' expression
 static std::unique_ptr<ExprAST> ParseWhileExpr() {
+
+  int cur_level_tabs = SeenTabs;
+
   getNextToken(); // eat the while.
+
 
   if (CurTok != tok_identifier)
     return LogError("Identificador da variável de controle esperado depois do while.");
@@ -1055,56 +1319,134 @@ static std::unique_ptr<ExprAST> ParseWhileExpr() {
   if (!Cond)
     return nullptr;
   
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\n\n";
+
+  if (CurTok==tok_space)
+    getNextToken();
+
+  while(true)
+  {
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+    {
+      //std::cout << "Breaking for with cur tok: " << CurTok << "\n";
+      break;
+    } 
+    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+    while (CurTok == tok_space)
+    {
+      //std::cout << "\nJumping tok space\n\n";
+      getNextToken();
+    }
+
+    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+    //std::cout << "\nParse new for expression" <<  "\n\n";
+    auto body = ParseExpression();
+    if (!body)
+      return nullptr;
+    Body.push_back(std::move(body));
+    //getNextToken();
+  }
+
+  if (CurTok==tok_space)
+    getNextToken();
 
   return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body));
 }
 
 static std::unique_ptr<ExprAST> ParseAsyncExpr() {
+
+  int cur_level_tabs = SeenTabs;
+
   getNextToken(); // eat the async.
 
-  std::cout << "Parsing async" <<  "\n";
   
-  auto Body = ParseExpression();
-  
-  std::cout << "Post async: " << CurTok << "\n";
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::cout << "async tabs level: " << cur_level_tabs <<  "\n";
+  std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
 
-  return std::make_unique<AsyncExprAST>(std::move(Body));
+  if (CurTok != tok_space)
+    Bodies.push_back(std::move(ParseExpression()));
+  else 
+  {
+    getNextToken(); // eat \n
+    while(CurTok != ';')
+    {
+
+      if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+        break;
+      
+      //std::cout << "\nSeen tabs on finish body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+
+      while (CurTok == tok_space)
+        getNextToken();
+      
+
+      //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+
+      if (SeenTabs <= cur_level_tabs)
+        break;
+
+      if (CurTok==tok_tab)
+        getNextToken();
+
+      //std::cout << "async expression current token: " << ReverseToken(CurTok) << "\n";
+
+
+      Bodies.push_back(std::move(ParseExpression()));
+        
+    }
+  }
+  
+  
+  //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
+
+  return std::make_unique<AsyncExprAST>(std::move(Bodies));
 }
 
 
 static std::unique_ptr<ExprAST> ParseFinishExpr() {
+
+  int cur_level_tabs = SeenTabs;
+  //std::cout << "Finish tabs level: " << cur_level_tabs <<  "\n";
+
   getNextToken(); // eat the finish.
 
-  std::cout << "\nParsing finish" <<  "\n";
 
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   std::vector<bool> IsAsync;
+  
 
+  if (CurTok!=tok_space)
+    LogError("Finish requer quebra de linha.");
+  getNextToken(); 
 
-  int last_seen_tabs;
-  last_seen_tabs = 0;
 
   while(CurTok != ';')
   {
-    while(CurTok == tok_space)
-    {
-      getNextToken();
-      std::cout << "Seen tabs: " << SeenTabs << "\n"; 
-      if (SeenTabs == 0 && last_seen_tabs == 0)
-        return LogError("Expressão finish requer identação por tabulação.");
-      
-      if (SeenTabs < last_seen_tabs)
-      {
-        std::cout << "Return from finish\n";
-        return std::make_unique<FinishExprAST>(std::move(Bodies),
-                                               std::move(IsAsync));
-      }
 
-      last_seen_tabs = SeenTabs;
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
+    {
+      //std::cout << "Breaking finish with cur tok: " << ReverseToken(CurTok) << "\n";
+      //std::cout << "Current tabs: " << SeenTabs << "\n";
+      break;
     }
+    //std::cout << "\nSeen tabs on finish body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
+
+
+
+
+    if (CurTok==tok_space)
+      getNextToken();
+    
+
+    //std::cout << "finish expression current token: " << ReverseToken(CurTok) << "\n";
 
     if (CurTok == tok_async)
     {
@@ -1165,11 +1507,11 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
       return LogError("Esperado um ou mais identificadores após var.");
   }
 
-  auto Body = ParseExpression();
-  if (!Body)
-    return nullptr;
+  if (CurTok==tok_space)
+    getNextToken();
 
-  return std::make_unique<VarExprAST>(std::move(VarNames), std::move(Body), "var");
+
+  return std::make_unique<VarExprAST>(std::move(VarNames), "var");
 }
 
 
@@ -1221,15 +1563,12 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
 
 
 
-
-int used_cuda = 0;
 unsigned char* current_data_attr;
 std::vector<float> current_data_attr_dims;
 
 
 extern "C" float * load_img(char *img_name)
 {
-  used_cuda=0;
   int width, height, channels;
   
   unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
@@ -1443,7 +1782,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     getNextToken(); // eat object or self token.
   
   
-  std::cout << "\n\nPre-dot: " << pre_dot << " Post-dot: " << IdentifierStr  << "\n\n\n";
+  //std::cout << "\n\nPre-dot: " << pre_dot << " Post-dot: " << IdentifierStr  << "\n\n\n";
 
 
   std::string IdName = IdentifierStr;
@@ -1451,16 +1790,6 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
   getNextToken(); // eat identifier.
 
   
-  if (pre_dot=="loss" and IdName=="backward")
-  {
-    if (CurTok != '(')
-      LogErrorBreakLine("Precisa do '(' na chamada do backward");
-    getNextToken();
-    if (CurTok != ')')
-      LogErrorBreakLine("Precisa do ')' na chamada do backward");
-    getNextToken();
-    return std::make_unique<LossBackwardExprAST>();
-  }
 
   if (CurTok != '(') // Simple variable ref.
   {
@@ -1482,10 +1811,15 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
 
     }
     
+    if (CurTok==tok_space)
+      getNextToken();
+
     return aux;
   }
 
-  // Call.
+
+  // ParseCall.
+
   getNextToken(); // eat (
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
@@ -1521,10 +1855,15 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     callee_override = functionVars[IdName];
   }
 
+  
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 
   if (in_str(IdName, tensor_resulting_methods) || is_var_forward)
     aux->SetType("tensor");
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
   
   return aux;
 }
@@ -1608,18 +1947,14 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
   }
 
 
-  std::unique_ptr<ExprAST> Body;
-  if (CurTok==';')
-    Body = std::make_unique<NumberExprAST>(0.0f);
-  else {  
-    Body = ParseExpression();
-    if (!Body)
-      return nullptr;
-  }
 
-  auto aux = std::make_unique<TensorExprAST>(std::move(VarNames), std::move(Body), "tensor",
+  auto aux = std::make_unique<TensorExprAST>(std::move(VarNames), "tensor",
                                              std::move(dims), init);
   aux->SetSelf(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
   
   return aux;
 }
@@ -1711,24 +2046,16 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
   }
 
 
-  std::unique_ptr<ExprAST> Body;
-  if (CurTok==';')
-    Body = std::make_unique<NumberExprAST>(0.0f);
-  else {  
-    Body = ParseExpression();
-    if (!Body)
-      return nullptr;
-  }
 
-
-
-
-
-  auto aux = std::make_unique<Conv2dExprAST>(std::move(VarNames), std::move(Body), "conv2d",
+  auto aux = std::make_unique<Conv2dExprAST>(std::move(VarNames), "conv2d",
                                              std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
                                              std::move(dims[3]), std::move(dims[4]),
                                              init);
   aux->SetSelf(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
   
   return aux;
 }
@@ -1773,7 +2100,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
     getNextToken();
   switch (CurTok) {
   default:
-    std::cout << CurTok << " token atual de erro esperando expressão\n";
+    getNextToken();
     return LogErrorT(CurTok);
   case tok_identifier:
     return ParseIdentifierExpr(tabcount);
@@ -1819,7 +2146,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(int tabcount=0) {
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
   //std::cout <<"Parse unary\n";
-  while((CurTok==tok_tab)||(CurTok==tok_space))
+  if(CurTok==tok_space)
     getNextToken();
   // If the current token is not an operator, it must be a primary expr.
   
@@ -1827,7 +2154,7 @@ static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
   {
     //std::cout << "Returning, non-ascii found.\n";
-    return ParsePrimary(tabcount);
+    return ParsePrimary();
   }
   
   
@@ -1840,6 +2167,7 @@ static std::unique_ptr<ExprAST> ParseUnary(int tabcount=0) {
     return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
   return nullptr;
 }
+
 
 /// binoprhs
 ///   ::= ('+' unary)*
@@ -1860,7 +2188,9 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 
   while (true) {
     
-    
+    // check if it is a valid op
+
+
     int TokPrec = get_tokenPrecedence();
 
     // If this is a binop that binds at least as tightly as the current binop,
@@ -1874,9 +2204,34 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     }
     if (TokPrec < ExprPrec)
       return std::make_tuple(std::move(LHS),L_cuda);
+      
 
-    
+
+    if (CurTok == tok_space)
+    {
+      //std::cout << "Returning tok space with " << SeenTabs << " tabs. \n\n\n";
+      getNextToken();
+      return std::make_tuple(std::move(LHS), L_cuda);
+    }
+
     int BinOp = CurTok;
+
+
+    /*
+    //todo: it somehow jumps wrong op placements
+    std::cout << "\n\nCur tok: " << CurTok << "\n";
+    std::cout << in_char(CurTok, ops) <<  "\n";
+
+    if (not in_char(CurTok, ops))
+    {
+      LogErrorBreakLine("Operador desconhecido.");
+      return std::make_tuple(nullptr,0);
+    }
+    
+    std::cout << "Cur tok post error: " << CurTok << "\n";
+    */
+
+
 
     if(CurTok==':')
     {
@@ -1898,43 +2253,19 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 
     int seen_tabs = 0;
     
-    
-    while(CurTok==tok_tab)
-    {
-      getNextToken();
-      seen_tabs+=1;
-    }
 
     
 
     
     RhsTok = CurTok;
 
-
-    //std::cout << "Before RHS " << LhsTok << " " << BinOp << " " << CurTok << " " << seen_tabs << "/" << tabcount << " " << RName << " \n";
-
     
-    if((BinOp==tok_space) && (!( CurTok==tok_identifier || CurTok==tok_number || CurTok==tok_self || CurTok==tok_class_attr || CurTok==tok_var || CurTok==tok_tensor)))
-    {
-      
-      std::cout << "SPACE WITHOUT NUMBER OR VAR " << CurTok << " " << IdentifierStr << "\n";
-      return std::make_tuple(std::move(LHS),L_cuda);
-    }
-    
-    
-
-
     auto RHS = ParseUnary(); // Returns an identifier, number or expression result
     if (RHS->GetType()=="tensor")
       R_cuda=1;
     
-    /*
-    if(BinOp==tok_space)
-    {
-      std::cout << "FOUND SPACE HEREEE\n\n";
-      return RHS;
-    }
-    */
+    
+    
     if (!RHS)
     {
       //std::cout << "RETURNING NULL Parse Unary \n";
@@ -1942,21 +2273,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     }
 
     
-    if ((CurTok==tok_space)&&(seen_tabs<tabcount)&&(seen_tabs>0))
-    {
-      //std::cout << "DIMNISHING IJFNASEJHFBEAIUYSBFESABHFGIYBUEASFBEIAUSBFYEASUIBFYAEUSB\n";
-      //LHS = std::move(RHS); //RETORNA O LADO DIREITO COMO O PRÓPRIO ELSE
-      
-      //LHS = ParseBinOpRHS(TokPrec + 1, std::move(LHS), tabcount);
-
-      //RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS), tabcount);
-      //LHS = std::make_unique<BinaryExprAST>(tok_space, std::move(LHS), std::move(RHS));
-      
-      //LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
-      
-      //return LHS;// RETORNA A VARIÁVEL COM ERRO DE INDEX
-      return std::make_tuple(std::move(RHS),R_cuda);
-    } else {
+    
 
 
       // If BinOp binds less tightly with RHS than the operator after RHS, let
@@ -1982,7 +2299,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       
       //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
       
-      //if(BinOp==64) // @
+      
 
       
 
@@ -1997,15 +2314,6 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
         std::cout << "Reverse LHS and RHS\n";
         //std::cout << "Bin op: " << BinOp << "\n";
 
-        /*
-        if (BinOp==tok_space)
-        {
-          std::cout << "Changing BinOp\n";
-          BinOp = ':';
-        }
-        if (BinOp==':')
-          BinOp = tok_space;
-        */
 
         if (BinOp==47)
           return std::make_tuple(LogError("Divisão de escalar por tensor."),0);
@@ -2020,7 +2328,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
           LHS = std::make_unique<BinaryTensorScalarExprAST>(43,
                                                     std::move(RHS), std::move(LHS));
         } else {
-          if (BinOp!=tok_space && BinOp!=':') // Avoid codegen reversing
+          if (BinOp!=':') // Avoid codegen reversing
             LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(RHS), std::move(LHS));
           else
@@ -2041,7 +2349,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
         LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
 
       LhsTok = RhsTok;    
-  }
+  
 }
 }
 
@@ -2050,7 +2358,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 ///   ::= unary binoprhs
 ///
 static std::unique_ptr<ExprAST> ParseExpression(int tabcount) {
-  //std::cout << "Parse Expression tabcount " << tabcount << "\n";
+  //std::cout << "\nParse Expression tabcount " << tabcount << "\n\n";
   //std::cout << "Parse Expression\n";
   
   auto LHS = ParseUnary(tabcount);
@@ -2154,6 +2462,10 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
   if (Kind && ArgNames.size() != Kind)
     return LogErrorP("Número inválido de operandos para o operador");
 
+  if (CurTok!=tok_space)
+    LogError("Protótipo requer finalização com quebra de linha.");
+  getNextToken();
+
   return std::make_unique<PrototypeAST>(FnName, ArgNames, Types, Kind != 0,
                                          BinaryPrecedence);
 }
@@ -2162,28 +2474,62 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
 
 /// definition ::= 'def' prototype expression
 static std::unique_ptr<FunctionAST> ParseDefinition(std::string ClassName="") {
+
+  int cur_level_tabs = SeenTabs;
+
   getNextToken(); // eat def.
+
+
   auto Proto = ParsePrototype(ClassName);
   if (!Proto)
     return nullptr;
+  
+  
+  std::vector<std::unique_ptr<ExprAST>> Body;
 
-  if (auto E = ParseExpression())
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
-  return nullptr;
+  while(CurTok!=';')
+  {
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
+      break;
+      
+
+    if (CurTok==tok_space)
+      getNextToken();
+
+    Body.push_back(std::move(ParseExpression()));
+  }
+
+  //std::cout << "function number of expressions: " << Body.size() << "\n";
+
+  if (Body.size()==0)
+    return nullptr;
+
+  return std::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
+  
 }
 
 
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   //std::cout << "Top Level Expression\n";
-  if (auto E = ParseExpression()) {
-    // Make an anonymous proto.
-    auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
+
+  
+  std::vector<std::unique_ptr<ExprAST>> Body;
+  while(CurTok!=';')
+  {
+    Body.push_back(std::move(ParseExpression()));
+    //std::cout << "\n\nTop level expr cur tok: " << ReverseToken(CurTok) <<  ".\n";
+    //std::cout << "Top level expr number of expressions: " << Body.size() <<  ".\n\n\n";
+  }
+  
+
+  // Make an anonymous proto.
+  auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
                                                 std::vector<std::string>(),
                                                 std::vector<std::string>());
     
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
-  }
+  return std::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
+  
   return nullptr;
 }
 
@@ -2232,7 +2578,7 @@ static std::map<std::string, std::vector<float>> NamedDims;
 static std::map<std::string, std::vector<float>> NamedDimsConv;
 
 // Current Cuda Result
-float *currentCudaResult;
+
 std::vector<float> currentDims;
 
 // Cuda Parallellism
@@ -2291,7 +2637,7 @@ static std::unique_ptr<ExprAST> ParseClass() {
   
 
   if (CurTok!=tok_def)
-    return LogError("Definição de uma Classe requer suas respectivas funções.");
+    return LogError("A definição de uma Classe requer suas respectivas funções.");
 
   int i=0;
   while(CurTok==tok_def)
@@ -2302,7 +2648,7 @@ static std::unique_ptr<ExprAST> ParseClass() {
       return nullptr;
       //return LogError("Falha no parsing da função da Classe.");
     if (!ends_with(Func->getProto().getName(),"__init__") && i==0)
-      return LogError("Classe requer método init");
+      return LogError("Classe requer método __init__");
     
     //std::cout << "THE FUNCTION WAS CREATED AS: " << Func->getProto().getName() << "\n";
 
@@ -2439,12 +2785,25 @@ extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdim
 
   std::string random_str = RandomString(15); 
   NamedDims[random_str] = new_dims; // Deal with new_dims being deleted after scope finished.
-  
+
+  //TODO: This can lead to out of memory errors.
   return &NamedDims[random_str];
 }
 
+extern "C" float Add(float value, float v2)
+{
+  return value + v2; 
+}
+
+extern "C" void PrintFloat(float value){
+  std::cout << "Printing float.\n";
+  std::cout << "Float value: " << value << "\n";
+}
+
+extern "C" void UnbugFloat(float value){
+}
+
 extern "C" float PrintStr(char* value){
-  
   std::cout << "Str: " << value << "\n";
   return 0;
 }
@@ -2476,6 +2835,7 @@ extern "C" char * shuffle_str(char *string_list)
 
 
 extern "C" float * LoadTensor(char* tensor_name){
+  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
   return NamedTensors[tensor_name];
 }
 
@@ -2489,10 +2849,7 @@ extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self)
   std::string conv_name = conv_namec;
   if (is_obj_attr_or_self)
     conv_name = FirstArg + conv_name;
-
   
-  std::cout << "\n\n\n\n\n\nLOADING DIMS FOR: " << conv_name<< "\n\n\n\n\n\n\n";
-
   return &NamedDimsConv[conv_name];
 }
 
@@ -2710,11 +3067,15 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 }
 
 Value *NumberExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   //std::cout << "Codegen for Number: " << Val << "\n";
   return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
 Value *StringExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
   return Builder->CreateGlobalString(Val);
 }
@@ -2951,7 +3312,6 @@ extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 extern "C" float view(float first_dim, ...)
 {
   
-  
   std::string tensor_name = LastPreDot;
   std::vector<float> new_dims, new_dims_no_minus, current_dims;
   bool has_minus = false;
@@ -3025,7 +3385,7 @@ extern "C" float view(float first_dim, ...)
   }
 
   NamedDims[tensor_name] = new_dims;
-  used_cuda=1;
+  
 
   return  0;
 }
@@ -3037,39 +3397,28 @@ extern "C" float view(float first_dim, ...)
 //===----------------------------------------------------------------------===//
 
 
-__global__ void vec_mult(float a, float* x, float* y) {
+__global__ void vec_mult(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] * a;
 }
-__global__ void vec_div(float a, float* x, float* y) {
+__global__ void vec_div(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] / a;
 }
-__global__ void vec_add(float a, float* x, float* y) {
+__global__ void vec_add(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] + a;
 }
-__global__ void vec_sub(float a, float* x, float* y) {
+__global__ void vec_sub(const float a, float* x, float* y) {
   y[threadIdx.x] = x[threadIdx.x] - a;
 }
-__global__ void vec_log(float* x, float* y) {
+__global__ void vec_log(const float* x, float* y) {
   y[threadIdx.x] = logf(x[threadIdx.x]);
 }
 
 
 
 
-extern "C" float CudaScalarMult(char *tensorName, float R, int _used_cuda) {
-  
-  float * device_x;
-  
+extern "C" float *CudaScalarMult(float *tensor, std::vector<float> dims, float R) {
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
@@ -3080,28 +3429,16 @@ extern "C" float CudaScalarMult(char *tensorName, float R, int _used_cuda) {
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, device_x, device_y);
+  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
 
-  currentCudaResult = device_y;
-
-  return 0;
+  
+  return device_y;
 }
 
 
-extern "C" float CudaScalarDiv(char *tensorName, float R, int _used_cuda) {
-  
-  float * device_x;
-  
+extern "C" float *CudaScalarDiv(float *tensor, std::vector<float> dims, float R) {
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
@@ -3109,56 +3446,30 @@ extern "C" float CudaScalarDiv(char *tensorName, float R, int _used_cuda) {
 
 
   // Launch the kernel.
-  vec_div<<<1, kDataLen>>>(R, device_x, device_y);
-
-  currentCudaResult = device_y;
-
-  return 0;
-}
-
-extern "C" float CudaScalarAdd(char *tensorName, float R, int _used_cuda) {
-  float * device_x;
+  vec_div<<<1, kDataLen>>>(R, tensor, device_y);
 
   
+  return device_y;
+}
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+extern "C" float *CudaScalarAdd(float *tensor, std::vector<float> dims, float R) {
+  
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
   
   // Launch the kernel.
-  vec_add<<<1, kDataLen>>>(R, device_x, device_y);
   
-  currentCudaResult = device_y;
+  vec_add<<<1, kDataLen>>>(R, tensor, device_y);
 
-
-  return 0;
+  return device_y;
 }
 
-extern "C" float CudaScalarSub(char *tensorName, float R, int _used_cuda) {
-  
-  float * device_x;
+extern "C" float *CudaScalarSub(float *tensor, std::vector<float> dims, float R) {
 
-  
-
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
-
-  int kDataLen = DimsProd(currentDims);
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
@@ -3166,25 +3477,22 @@ extern "C" float CudaScalarSub(char *tensorName, float R, int _used_cuda) {
 
 
   // Launch the kernel.
-  vec_sub<<<1, kDataLen>>>(R, device_x, device_y);
+  vec_sub<<<1, kDataLen>>>(R, tensor, device_y);
 
-  currentCudaResult = device_y;
 
-  return 0;
+
+  return device_y;
 }
 
 
-extern "C" float logE(char *tensorName, int _used_cuda) {
+extern "C" float *logE(char *tensorName) {
   
   float * device_x;
 
-  if (_used_cuda==1)
-    device_x = currentCudaResult;
-  else
-  {
-    device_x = NamedTensors[tensorName];
-    currentDims = NamedDims[tensorName];
-  }
+  
+  device_x = NamedTensors[tensorName];
+  currentDims = NamedDims[tensorName];
+  
 
   int kDataLen = DimsProd(currentDims);
 
@@ -3196,15 +3504,18 @@ extern "C" float logE(char *tensorName, int _used_cuda) {
   // Launch the kernel.
   vec_log<<<1, kDataLen>>>(device_x, device_y);
 
-  currentCudaResult = device_y;
 
-  return 0;
+
+  return device_y;
 }
 
 
 extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
 {
   std::string pre_dot = pre_dotc;
+
+  //std::cout << "\n\nLAST PRE DOT " << LastPreDot << " PRE DOT " << pre_dot << "\n";
+  
   LastPreDot = pre_dot;
   if (pre_dot!="self")
   {
@@ -3213,11 +3524,14 @@ extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
     else
       FirstArg = pre_dot;
   }
+  //std::cout << "Resulting first arg: " << FirstArg << "\n\n\n";
+
   return 0;
 }
 
 extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 {
+  //std::cout << "\n\nDIMNISH FIRST ARG" << "\n\n\n";
   if (nested_function)
     if(ends_with(FirstArg, pre_dot))
     {
@@ -3225,7 +3539,6 @@ extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 
       FirstArg.erase(pos, std::strlen(pre_dot));
     }
-    
   
   return 0;
 }
@@ -3291,6 +3604,8 @@ extern "C" float LoadOnDemand(char *object_var_name) {
 
 bool seen_var_attr = false;
 Value *VariableExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
 
   //std::cout << "Now Loading Var "<< Name <<" to Context" << "  \n";
@@ -3307,15 +3622,15 @@ Value *VariableExprAST::codegen() {
   var_name = Builder->CreateGlobalString(Name);
   
 
+  /*
   std::cout << "\nVARIABLE EXPR CODEGEN: " << Name << "\n";
-
-
   for (const auto &entry : NamedStrs)
     std::cout << "NamedStr: " << entry.first << "\n";
   for (const auto &entry : NamedValues)
     std::cout << "NamedValues: " << entry.first << "\n";
   for (const auto &entry : NamedTensors)
     std::cout << "NamedTensors: " << entry.first << "\n";
+  */
 
   std::string pre_dot = GetSelf();
   if (pre_dot!="false")
@@ -3340,35 +3655,37 @@ Value *VariableExprAST::codegen() {
 
   if (NamedValues.count(Name)>0) 
   {
-    std::cout << "Variable Float " << Name << " Codegen.\n";
+    //std::cout << "\nVariable Float " << Name << " codegen.\n";
 
     Value *V = NamedValues[Name];
-    
-    
 
-    return Builder->CreateLoad(Type::getFloatTy(*GlobalContext), V, Name.c_str());
+    V = Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
+    
+    
+    if (!seen_var_attr) //TODO: Solve this bug
+      Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
+
+    return V;
 
   } else if (NamedStrs.count(Name)>0) {
-    std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n\n";
+
+    //std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n\n";
+
     for (const auto &entry : NamedTensors)
       if (ends_with(entry.first, Name))
         return ret;
 
     Value *V = NamedStrs[Name];
     
-    V = Builder->CreateLoad(Type::getInt8Ty(*TheContext)->getPointerTo(), V, Name.c_str());
+    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
     if (!seen_var_attr)
-    {
-      //std::cout << "Print str call for: " << Name << "\n";
-      Builder->CreateCall(TheModule->getFunction("PrintStr"),
-                      {V});
-    }
+      Builder->CreateCall(TheModule->getFunction("PrintStr"), {V});
 
     //std::cout << "RETURNING STRING: " << Name << "\n";
     //std::cout << "NamedStrs count:" << NamedStrs.count(Name) << "\n";
     return V;
   } else if (NamedTensors.count(Name)>0) {
-    std::cout << "Variable Tensor " << Name << " Codegen.\n";
+    //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
   
 
     if (!seen_var_attr)
@@ -3380,12 +3697,6 @@ Value *VariableExprAST::codegen() {
     DimsPtr = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(dims_ptr, DimsPtr);
     
-    
-    /*
-    TensorPtr = Builder->CreateAlloca(Type::getFloatTy(*TheContext)->getPointerTo(),
-                                      nullptr);
-    Builder->CreateStore(FloatPtr_toValue(NamedTensors[Name]), TensorPtr);
-    */
 
     //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
 
@@ -3413,7 +3724,7 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
 
 
   cudaCheck(cudaGetLastError());
-  //NamedTensors[tensor_name] = currentCudaResult;
+  
   NamedTensors[tensor_name] = tensor;
   NamedDims[tensor_name] = new_dims;
   
@@ -3426,8 +3737,12 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
 
 
 Value *BinaryTensorScalarExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
 
   Value *tensor_name = Builder->CreateGlobalString(LHS->GetName());
+
+  DimsPtr = Builder->CreateAlloca(int8PtrTy);
 
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
@@ -3469,10 +3784,9 @@ Value *BinaryTensorScalarExprAST::codegen() {
     */
     
     
-    Function *temporaryCudaResult_AttrFn = TheModule->getFunction("temporaryCudaResult_Attr");
-    Builder->CreateCall(temporaryCudaResult_AttrFn, {tensor_name});        
+    Builder->CreateCall(TheModule->getFunction("temporaryCudaResult_Attr"),
+                            {tensor_name});        
       
-    used_cuda=0;
     
       
     
@@ -3481,14 +3795,24 @@ Value *BinaryTensorScalarExprAST::codegen() {
   }
 
 
-  Value *L = LHS->codegen();
+  std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
+  Value *LtensorPtr = LHS->codegen();
   Value *R = RHS->codegen();
+  std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
+
+
+
   
-  if (!L || !R)
+  Value *LdimsPtr = Builder->CreateLoad(int8PtrTy, LHS->GetDimsPtr());
+  Builder->CreateStore(LdimsPtr, DimsPtr);
+
+  //Builder->CreateCall(TheModule->getFunction("PrintDims"),
+  //                    {LdimsPtr});
+
+  if (!LtensorPtr || !R)
     return nullptr;
 
 
-  Function *CudaFn;
 
   /*
   std::cout << "\nTensorScalar, LHS is self: " << LHS->GetSelf() << "\n";
@@ -3498,25 +3822,24 @@ Value *BinaryTensorScalarExprAST::codegen() {
   */
   
 
-  Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
-  used_cuda = 1;
+
 
   switch (Op)
   {
   case '*':
-    CudaFn = TheModule->getFunction("CudaScalarMult");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalarmult");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarmult");
   case '/':
-    CudaFn = TheModule->getFunction("CudaScalarDiv");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalardiv");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalardiv");
   case '+':
-    CudaFn = TheModule->getFunction("CudaScalarAdd");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalaradd");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalaradd");
   case '-':
-    CudaFn = TheModule->getFunction("CudaScalarSub");
-    return Builder->CreateCall(CudaFn, {tensor_name, R, used_cuda_aux}, "cudascalarsub");
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarsub");
   case ':':
-    return L;
+    return LtensorPtr;
   case tok_space:
     return R;
   default:
@@ -3529,7 +3852,7 @@ Value *BinaryTensorScalarExprAST::codegen() {
   Function *F = getFunction(std::string("binary") + Op);
   assert(F && "Operator not found.");
 
-  Value *Ops[] = {L, R};
+  Value *Ops[] = {LtensorPtr, R};
   return Builder->CreateCall(F, Ops, "binop");
 }
 
@@ -3592,7 +3915,7 @@ std::vector<backward_tuple> todo_backwards;
 
 
 
-extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int _used_cuda, int is_forward_func,
+extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int is_forward_func,
                           float *device_x, float *device_w,
                           std::vector<float> Ldims, std::vector<float> Rdims) {
   
@@ -3636,7 +3959,7 @@ extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int _used_cuda,
                   //);
 
 
-  currentCudaResult = device_y;
+
   //std::cout << "L tensor: " << LtensorName << " R tensor: " << RtensorName << "\n";
   
 
@@ -3713,7 +4036,7 @@ __global__ void onehot_kernel(const float* tensor,
     }
 }
 
-extern "C" float onehot(float num_classes)
+extern "C" float *onehot(float num_classes)
 {
   std::string tensor_name = FirstArg;
 
@@ -3745,9 +4068,8 @@ extern "C" float onehot(float num_classes)
   cudaFree(NamedTensors[tensor_name]);
   NamedTensors[tensor_name] = probs;
 
-  used_cuda=1;
 
-  return 0;
+  return probs;
 }
 
 
@@ -3877,9 +4199,8 @@ extern "C" float *gelu(char * tensor_name) {
                                            "gelu", "none"));
   }
 
-  //cudaCheck(cudaFree(currentCudaResult));
+
   
-  used_cuda=1;
 
   return y;
 }
@@ -3953,7 +4274,7 @@ extern "C" float *relu(char *tensor_name)
                                            "relu", "none"));
   }
 
-  //cudaCheck(cudaFree(currentCudaResult));
+
   
 
   return y;
@@ -4498,7 +4819,7 @@ void conv2d_backward(float *inp,  float *weight,
 
 extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
 {
-  std::cout << "\n\nCONV FORWARD\n\n\n";
+  
   std::string conv_name = conv_namec;
   if (is_obj_attr_or_self)
     conv_name = FirstArg + conv_name;
@@ -4522,10 +4843,10 @@ extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_
   {
     std::string error = "O número de canais do tensor é " + std::to_string((int)dims[dims.size()-1]) + ", enquanto a entrada esperada da convolução tem canais " + std::to_string(conv->C);
     LogError(error);
-    currentCudaResult = tensor;
+    
     currentDims = dims;
     NamedConv2d[conv_name] = std::move(conv);
-    return 0;
+    return nullptr;
   }
 
   output = conv->Forward(tensor, dims[dims.size()-3], dims[dims.size()-2], dims[0]);
@@ -4535,7 +4856,7 @@ extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_
 
 
   
-  currentCudaResult = output;
+  
   float resultingDimsProd = B * (float)conv->OC * (float)conv->out_W * (float)conv->out_W;
 
   int is_forward_func = 1;
@@ -4712,7 +5033,7 @@ extern "C" float cross_entropy(char *y_hat, char *y)
 
 
 
-extern "C" float Backpropagation()
+extern "C" float backprop()
 {
   //float * loss_gradient = ;
   
@@ -4969,7 +5290,7 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
   }
   optimizer->count_step();
 
-  used_cuda=0;
+
 
   return 0;
 }
@@ -4978,6 +5299,9 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
 
 
 Value *BinaryTensorTensorExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
   Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
   Value *RtensorName = Builder->CreateGlobalString(RHS->GetName());
   Value *object_name;
@@ -5044,10 +5368,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
     std::cout << "Post attr call\n";
 
 
-    used_cuda=0;
-      
-    
-    
+
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   }
@@ -5091,10 +5412,9 @@ Value *BinaryTensorTensorExprAST::codegen() {
   std::cout << "Tensor tensor: " << LHS->GetName() << ", " << RHS->GetName() << "\n";
     
 
-  Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
-  Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
-  used_cuda = 1;
 
+  Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
+  
   /*
   void *vec = &NamedDims[LHS->GetName()];
   Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
@@ -5117,7 +5437,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
     std::cout << "Create call for mult\n";
     return Builder->CreateCall(TheModule->getFunction("CudaMult"),
-                                    {LtensorName, RtensorName, used_cuda_aux, is_forward_func,
+                                    {LtensorName, RtensorName, is_forward_func,
                                      LtensorPtr, RtensorPtr,
                                      LdimsPtr, RdimsPtr},
                                      "cudamult");
@@ -5125,25 +5445,23 @@ Value *BinaryTensorTensorExprAST::codegen() {
   /*
   case '*':
     CudaFn = TheModule->getFunction("CudaMult");
-    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, used_cuda_aux, is_forward_func, LLVMValue},
+    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, is_forward_func, LLVMValue},
                                "cudamult");
   */
   case '/':
     CudaFn = TheModule->getFunction("CudaDiv");
-    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
                                "cudadiv");
   case '+':
     CudaFn = TheModule->getFunction("CudaAdd");
-    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
                                "cudaadd");
   case '-':
     CudaFn = TheModule->getFunction("CudaSub");
-    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName, used_cuda_aux},
+    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
                                "cudasub");
   case ':':
-    return LtensorName;
-  case tok_space:
-    return RtensorName;
+    return LtensorPtr;
   default:
     break;
   }
@@ -5158,24 +5476,21 @@ Value *BinaryTensorTensorExprAST::codegen() {
 }
 
 
-Value *LossBackwardExprAST::codegen()
-{
-  return Builder->CreateCall(TheModule->getFunction("Backpropagation"),
-                             {}, "backprop");
-}
 
 Value *LogExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   
-  Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
-  used_cuda=1;
-
+  
   return Builder->CreateCall(TheModule->getFunction("logE"),
-                             {Builder->CreateGlobalString(Name), used_cuda_aux}, "cudalog");
+                             {Builder->CreateGlobalString(Name)}, "cudalog");
 }
 
 
 
 Value *BinaryExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
   if (Op == '=') {
     seen_var_attr=true;
@@ -5206,20 +5521,6 @@ Value *BinaryExprAST::codegen() {
         Builder->CreateStore(Val, Variable);
       
     
-    } else if (NamedTensors.count(LHSE->getName()) != 0 ) {
-      /*
-      float *Variable = NamedTensors[LHSE->getName()];
-      if (!Variable)
-        return LogErrorV("O nome do tensor/variável é desconhecido.");
-      */
-      std::cout << "Atribuíndo em 0 0\n";
-      
-      Value *valStr = Builder->CreateGlobalString(LHSE->getName());
-      Function *temporaryCudaResult_AttrFn = TheModule->getFunction("temporaryCudaResult_Attr");
-      Builder->CreateCall(temporaryCudaResult_AttrFn, {valStr});
-        
-      used_cuda=0;
-      
     } else if (NamedStrs.count(LHSE->getName()) != 0 ) {
       //std::cout << "ATTRIBUTTING TO STRING: " << LHSE->getName() << "\n";
       Value *Variable = NamedStrs[LHSE->getName()];
@@ -5289,24 +5590,31 @@ Value *BinaryExprAST::codegen() {
 
 
 Value *UnaryExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   Value *OperandV = Operand->codegen();
   if (!OperandV)
     return nullptr;
-
   
   
-  //std::cout << "unary used_cuda: " << used_cuda << "\n";
+  
   //std::cout << "Operand type: " << Operand->GetType();
   if (Opcode=='-')
   {
     if (Operand->GetType()=="tensor")
     {
-      Value *tensorName = Builder->CreateGlobalString(Operand->GetName());
-      Value *used_cuda_aux = ConstantInt::get(Type::getInt32Ty(*TheContext), used_cuda);
+      Value *tensor_name = Builder->CreateGlobalString(Operand->GetName());
+      Value *LtensorPtr = Builder->CreateCall(TheModule->getFunction("LoadTensor"),
+                                              {tensor_name});
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
-      used_cuda=1;
+
+      DimsPtr = Builder->CreateAlloca(int8PtrTy);
+      Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"),
+                                              {tensor_name});
+      Builder->CreateStore(dims_ptr, DimsPtr);
+      
       return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                                {tensorName, R, used_cuda_aux}, "cudascalarmult");
+                                {LtensorPtr, dims_ptr, R}, "cudascalarmult");
     }
     return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
                               OperandV, "multmp");
@@ -5327,6 +5635,8 @@ Value *UnaryExprAST::codegen() {
 
 
 Value *IfExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   Value *CondV = Cond->codegen();
   if (!CondV)
     return nullptr;
@@ -5348,9 +5658,15 @@ Value *IfExprAST::codegen() {
   // Emit then value.
   Builder->SetInsertPoint(ThenBB);
 
-  Value *ThenV = Then->codegen();
+  
+  Value *ThenV;
+  for (auto &then_body : Then)
+    ThenV = then_body->codegen();
+  
+
   if (!ThenV)
     return nullptr;
+
 
   Builder->CreateBr(MergeBB);
   // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
@@ -5360,12 +5676,14 @@ Value *IfExprAST::codegen() {
   TheFunction->insert(TheFunction->end(), ElseBB);
   Builder->SetInsertPoint(ElseBB);
 
-  Value *ElseV = Else->codegen();
+
+  Value *ElseV;
+  for (auto &else_body : Else)
+    ElseV = else_body->codegen();
 
   if (!ElseV)
-  {
     return nullptr;
-  }
+
     
 
   Builder->CreateBr(MergeBB);
@@ -5404,6 +5722,8 @@ Value *IfExprAST::codegen() {
 // outloop:
 
 Value *ForExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
   // Create an alloca for the variable in the entry block.
@@ -5435,8 +5755,11 @@ Value *ForExprAST::codegen() {
   // Emit the body of the loop.  This, like any other expr, can change the
   // current BB.  Note that we ignore the value computed by the body, but don't
   // allow an error.
-  if (!Body->codegen())
-    return nullptr;
+  
+  
+  for (auto &body : Body)
+    body->codegen();
+
 
   // Emit the step value.
   Value *StepVal = nullptr;
@@ -5485,6 +5808,8 @@ Value *ForExprAST::codegen() {
 
 
 Value *WhileExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
 	Function* TheFunction = Builder->GetInsertBlock()->getParent();
 
 	BasicBlock *EntryBB = BasicBlock::Create(*TheContext, "entry_while", TheFunction);
@@ -5509,9 +5834,11 @@ Value *WhileExprAST::codegen() {
 	// Handle Loop Body
 	
   Builder->SetInsertPoint(LoopBB);
-	Value* bodyVal = Body->codegen();
-	if (! bodyVal)
-    return nullptr;
+	Value* bodyVal;
+
+  for (auto &body : Body)
+    bodyVal = body->codegen();
+
 	Builder->CreateBr(EntryBB);
 
 
@@ -5523,7 +5850,7 @@ Value *WhileExprAST::codegen() {
 }
 
 
-Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody) {
   
 
   // find unique function name (_async 0, _async1, _async2 etc)
@@ -5554,7 +5881,12 @@ Function *codegenAsyncFunction(std::unique_ptr<ExprAST> &asyncBody) {
   
 
   // define body of function
-  if (auto *FnIR = asyncBody->codegen())
+  Value *V;
+
+  for (auto &body : asyncBody)
+    V = body->codegen();
+
+  if (V)
   {
     /*
     fprintf(stderr, "\nRead top-level expression:");
@@ -5607,6 +5939,8 @@ extern "C" void pthread_join_aux(pthread_t thread)
 
 
 Value *AsyncExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
 
   
   // Create/Spawn Threads
@@ -5648,6 +5982,8 @@ Value *AsyncExprAST::codegen() {
 
 
 Value *FinishExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
 
   std::vector<Value *> thread_pointers;
   
@@ -5686,6 +6022,8 @@ Value *FinishExprAST::codegen() {
 
 // Create Var
 Value *VarExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -5724,17 +6062,8 @@ Value *VarExprAST::codegen() {
     
   }
 
-  // Codegen the body that is contained by the in expression
-  Value *BodyVal = Body->codegen();
-  if (!BodyVal)
-    return nullptr;
 
-  // Pop all our variables from scope.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
-    NamedValues[VarNames[i].first] = OldBindings[i];
-
-  // Return the body computation.
-  return BodyVal;
+  return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
@@ -5742,6 +6071,8 @@ Value *VarExprAST::codegen() {
 
 
 Value *StrExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -5864,6 +6195,8 @@ extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self,
 
 
 Value *TensorExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
 
 
@@ -5916,16 +6249,8 @@ Value *TensorExprAST::codegen() {
  
   }
 
-  // Codegen the body that is contained by the in expression
 
-  Value *BodyVal = Body->codegen();
-  if (!BodyVal)
-    return nullptr;
-
-
-
-  // Return the body computation.
-  return BodyVal;
+  return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
@@ -5933,6 +6258,9 @@ Value *TensorExprAST::codegen() {
 
 
 Value *Conv2dExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
   std::vector<AllocaInst *> OldBindings;
 
 
@@ -5976,20 +6304,16 @@ Value *Conv2dExprAST::codegen() {
 
   // Codegen the body that is contained by the in expression
 
-  Value *BodyVal = Body->codegen();
-  if (!BodyVal)
-    return nullptr;
 
-
-
-  // Return the body computation.
-  return BodyVal;
+  return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
 
 Value *CallExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look up the name in the global module table.
   std::string tgt_function = Callee;
   
@@ -5999,7 +6323,7 @@ Value *CallExprAST::codegen() {
   std::string tgt_function_name;
 
   int nested_function;
-  if (functionName=="__anon_expr")
+  if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
     nested_function=0;
   else
     nested_function=1;
@@ -6083,8 +6407,7 @@ Value *CallExprAST::codegen() {
       DimsPtr = Builder->CreateAlloca(int8PtrTy);
       Builder->CreateStore(dims_ptr, DimsPtr);
 
-      Builder->CreateCall(getFunction("PrintDims"), 
-                          {dims_ptr});
+
     }
   }
 
@@ -6107,6 +6430,8 @@ Value *CallExprAST::codegen() {
 
 
 Function *PrototypeAST::codegen() {
+  if (not ShallCodegen)
+    return nullptr;
   // Make the function type:  float(float,float) etc.
 
   std::vector<Type *> types;
@@ -6150,6 +6475,8 @@ const std::string& FunctionAST::getName() const {
 }
 
 Function *FunctionAST::codegen() {
+  if (not ShallCodegen)
+    return nullptr;
   
   // Transfer ownership of the prototype to the FunctionProtos map, but keep a
   // reference to it for use below.
@@ -6201,7 +6528,12 @@ Function *FunctionAST::codegen() {
   //std::cout << "\n\n";
 
 
-  if (Value *RetVal = Body->codegen()) {
+  Value *RetVal;
+
+  for (auto &body : Body)
+    RetVal = body->codegen();
+
+  if (RetVal) {
     // Finish off the function.
     Builder->CreateRet(RetVal);
 
@@ -6233,7 +6565,6 @@ Function *FunctionAST::codegen() {
 static void InitializeModule() {
   //std::cout << "\nINITIALIZING A NEW MODULE"  << "\n";
 
-  used_cuda=0;
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
@@ -6247,6 +6578,7 @@ static void InitializeModule() {
 
   floatPtrTy = Type::getFloatTy(*TheContext)->getPointerTo();
   int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  ShallCodegen = true;
 
   //===----------------------------------------------------------------------===//
   // Tensor -- Scalar   Operations
@@ -6254,8 +6586,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarMultTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6270,8 +6602,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarDivTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6286,8 +6618,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarAddTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6302,8 +6634,8 @@ static void InitializeModule() {
 
   // char *, float, int
   FunctionType *CudaScalarSubTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
 
@@ -6322,10 +6654,9 @@ static void InitializeModule() {
 
   // char *, char *, int
   FunctionType *CudaMultTy = FunctionType::get(
-      Type::getFloatTy(*TheContext)->getPointerTo(),
+      floatPtrTy,
       {Type::getInt8Ty(*TheContext)->getPointerTo(),
        Type::getInt8Ty(*TheContext)->getPointerTo(),
-       Type::getInt32Ty(*TheContext),
        Type::getInt32Ty(*TheContext),
        floatPtrTy,
        floatPtrTy,
@@ -6445,7 +6776,7 @@ static void InitializeModule() {
   Function::Create(
     BackpropagationTy,
     Function::ExternalLinkage,
-    "Backpropagation",
+    "backprop",
     TheModule.get()
   );
 
@@ -6472,7 +6803,7 @@ static void InitializeModule() {
   // char *, int
   FunctionType *CudaLogTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt32Ty(*TheContext)},
+      {Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
   Function::Create(
@@ -6551,7 +6882,7 @@ static void InitializeModule() {
 
   // float
   FunctionType *onehotTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      floatPtrTy,
       {Type::getFloatTy(*TheContext)},
       false
   );
@@ -6800,18 +7131,28 @@ static void InitializeModule() {
   );
 
 
+
+  FunctionType *PrintFloatTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("PrintFloat", PrintFloatTy);
+
+  FunctionType *UnbugFloatTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("UnbugFloat", UnbugFloatTy);
+
   // char *
   FunctionType *PrintStrTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
-  Function::Create(
-    PrintStrTy,
-    Function::ExternalLinkage, 
-    "PrintStr", 
-    TheModule.get() 
-  );
+  TheModule->getOrInsertFunction("PrintStr", PrintStrTy);
 
 
   // char *
@@ -7167,7 +7508,8 @@ static void MainLoop() {
         getNextToken();
         break;
       case tok_tab:
-        LogError("Tab inesperado encontrado\n");
+        //LogError("Tab inesperado encontrado\n");
+        getNextToken();
         break;
       case tok_def:
         HandleDefinition();
