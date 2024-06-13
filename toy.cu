@@ -1225,29 +1225,23 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
-  std::unique_ptr<ExprAST> Start, End;
-  Start = nullptr;
 
   if (CurTok != '=')
-    LogError("Esperada atribuição do valor inicial do for.");
-  else 
-  {
-    getNextToken(); // eat '='.
+    return LogError("Esperada atribuição do valor inicial do for.");
+  getNextToken(); // eat '='.
 
-    auto Start = ParseExpression();
-  }
-  //if (!Start)
-  //  return nullptr;
-  
+  auto Start = ParseExpression();
+  if (!Start)
+    return nullptr;
   if (CurTok != ',')
     return LogError("Esperado ',' depois de atribuir valor inicial do for.");
   getNextToken();
 
 
 
-  End = ParseExpression();
-  //if (!End)
-  //  return nullptr;
+  auto End = ParseExpression();
+  if (!End)
+    return nullptr;
 
   
 
