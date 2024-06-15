@@ -259,7 +259,7 @@ std::map<int, std::string> token_to_string = {
 
   
   // var definition
-  { tok_var, "var" },
+  { tok_var, "float" },
   { tok_tensor, "tensor" },
   { tok_var_str, "var str" },
   { tok_attr_var, "tok attr var" },
@@ -443,7 +443,7 @@ static int get_token() {
       return tok_binary;
     if (IdentifierStr == "unary")
       return tok_unary;
-    if (IdentifierStr == "var")
+    if (IdentifierStr == "float")
       return tok_var;
     if (IdentifierStr == "log")
       return tok_log;
@@ -878,21 +878,28 @@ class FinishExprAST : public ExprAST {
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes), as well as if it is an operator.
 class PrototypeAST {
+
   std::string Name;
+  std::string Class;
+  std::string Method;
+
   std::vector<std::string> Args;
   std::vector<std::string> Types;
   bool IsOperator;
   unsigned Precedence; // Precedence if a binary op.
 
   public:
-    PrototypeAST(const std::string &Name, std::vector<std::string> Args,
+    PrototypeAST(const std::string &Name, const std::string &Class, const std::string &Method,
+                std::vector<std::string> Args,
                 std::vector<std::string> Types,
                 bool IsOperator = false, unsigned Prec = 0)
-        : Name(Name), Args(std::move(Args)), Types(std::move(Types)),
+        : Name(Name), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
           IsOperator(IsOperator), Precedence(Prec) {}
 
   Function *codegen();
   const std::string &getName() const { return Name; }
+  const std::string &getClass() const { return Class; }
+  const std::string &getMethod() const { return Method; }
 
   bool isUnaryOp() const { return IsOperator && Args.size() == 1; }
   bool isBinaryOp() const { return IsOperator && Args.size() == 2; }
@@ -901,6 +908,8 @@ class PrototypeAST {
     assert(isUnaryOp() || isBinaryOp());
     return Name[Name.size() - 1];
   }
+
+
 
   unsigned getBinaryPrecedence() const { return Precedence; }
 };
@@ -1076,7 +1085,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
     if(IdentifierStr==Classes[i])  // Object object
     {
       getNextToken();
-      std::cout << "Object name: " << IdentifierStr << " and Class: " << Classes[i]<< "\n";
+      //std::cout << "Object name: " << IdentifierStr << " and Class: " << Classes[i]<< "\n";
       Object_toClass[IdentifierStr] = Classes[i];
       
       getNextToken();
@@ -1816,6 +1825,9 @@ static std::unique_ptr<ExprAST> ParsePreprocessing(std::string preprocess_var_na
 }
 
 
+
+
+//
 static std::unique_ptr<ExprAST> ParseSelfExpr() {
 
   std::string pre_dot = IdentifierStr;
@@ -1840,7 +1852,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
     //std::cout << "Search object method: " << IdentifierStr <<  "\n";
     if (Object_toClass.find(object_class) != Object_toClass.end())
     {
-      //std::cout << "Found object to class for\n";
+      //std::cout << "Found object to class for: " << object_class << "\n";
       object_class = Object_toClass[object_class]; 
     }
   } else
@@ -1934,6 +1946,8 @@ static std::unique_ptr<ExprAST> ParseSelfExpr() {
 }
 
 
+
+//
 static std::unique_ptr<ExprAST> ParseTensorExpr() {
   
   getNextToken(); // eat the tensor.
@@ -2023,6 +2037,8 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
   
   return aux;
 }
+
+
 
 
 //
@@ -2438,6 +2454,9 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 ///   ::= unary LETTER (id)
 static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
   std::string FnName = ClassName;
+  std::string _class, method;
+  method = "";
+  _class = ClassName;
 
   unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary.
   unsigned BinaryPrecedence = 30;
@@ -2447,6 +2466,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
     return LogErrorP("Esperado nome da função no protótipo");
   case tok_identifier:
     FnName += IdentifierStr;
+    method = IdentifierStr;
     Kind = 0;
     getNextToken();
     break;
@@ -2530,7 +2550,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string ClassName="") {
     LogError("Protótipo requer finalização com quebra de linha.");
   getNextToken();
 
-  return std::make_unique<PrototypeAST>(FnName, ArgNames, Types, Kind != 0,
+
+  return std::make_unique<PrototypeAST>(FnName, _class, method, ArgNames, Types, Kind != 0,
                                          BinaryPrecedence);
 }
 
@@ -2596,7 +2617,7 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   
 
   // Make an anonymous proto.
-  auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
+  auto Proto = std::make_unique<PrototypeAST>("__anon_expr", "", "",
                                                 std::vector<std::string>(),
                                                 std::vector<std::string>());
     
@@ -2634,6 +2655,7 @@ static std::unique_ptr<Module> GlobalModule;
 
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+static std::map<std::string, std::string> Method_toClassMethod;
 static ExitOnError ExitOnErr;
 
 
@@ -2705,7 +2727,7 @@ static std::unique_ptr<ExprAST> ParseClass() {
   getNextToken(); // eat class.
 
   if (CurTok != tok_identifier)
-    return LogError("Esperado o nome da Classe.");
+    return LogError("Expected class name");
   std::string Name = IdentifierStr;
 
   Classes.push_back(Name);
@@ -2717,7 +2739,7 @@ static std::unique_ptr<ExprAST> ParseClass() {
   
 
   if (CurTok!=tok_def)
-    return LogError("A definição de uma Classe requer suas respectivas funções.");
+    return LogError("A class definition requires it's functions.");
 
   int i=0;
   while(CurTok==tok_def)
@@ -2728,11 +2750,19 @@ static std::unique_ptr<ExprAST> ParseClass() {
       return nullptr;
       //return LogError("Falha no parsing da função da Classe.");
     if (!ends_with(Func->getProto().getName(),"__init__") && i==0)
-      return LogError("Classe requer método __init__");
+      return LogError("Class requires __init__ method");
     
     //std::cout << "THE FUNCTION WAS CREATED AS: " << Func->getProto().getName() << "\n";
 
-    FunctionProtos[Func->getProto().getName()] =
+
+    std::string proto_name = Func->getProto().getName();    
+
+    //std::cout << "Adding " << proto_name << " to  Method_toClassMethod  \n";
+
+    Method_toClassMethod[Func->getProto().getMethod()] = proto_name;
+  
+
+    FunctionProtos[proto_name] =
       std::make_unique<PrototypeAST>(Func->getProto());
     ExitOnErr(TheJIT->addAST(std::move(Func)));
     if(CurTok==';')
@@ -2902,7 +2932,7 @@ extern "C" float PrintStr(char* value){
 extern "C" float PrintStrVec(std::vector<char*> vec)
 {
   for (int i=0; i<vec.size(); i++)
-    std::cout << "Str: " << vec[i] << "\n";
+    std::cout << vec[i] << "\n";
 
   return 0;
 }
@@ -3332,6 +3362,7 @@ extern "C" float Datasetyield(float batch_size, char * x_name, ...)
     for (int j = 0; j < dims_prod; ++j)
       current_data[b * dims_prod + j] = cur_float_img[j];
     
+    
     preprocessing = "preprocess_";
     preprocessing += (const char *)y_name;
     y_aux = preprocessings[preprocessing]->Preprocess(files[file_idxs[yield_pointer]]);
@@ -3704,16 +3735,10 @@ extern "C" float StoreStrOnDemand(char *object_var_name, char * value){
 }
 
 extern "C" float StoreStrVecOnDemand(char *object_var_name, std::vector<char *> value){
-  std::cout << "STORING " << object_var_name << " on demand as StrVec type.\n";
-
-  
-  //Value *ptr = VoidPtr_toValue(&value);
-  //NamedClassValues[FirstArg + object_var_name] = ptr;
+   //std::cout << "STORING " << object_var_name << " on demand as StrVec type.\n";
 
   ClassStrVecs[FirstArg + object_var_name] = value;
   
-  std::cout << "Stored successfuly.\n";
-
   return 0;
 }
 
@@ -3731,7 +3756,7 @@ extern "C" float LoadOnDemand(char *object_var_name) {
 
 
 extern "C" void * LoadStrVecOnDemand(char *object_var_name) {
-  std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+  //std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
     
   return &ClassStrVecs[object_var_name];
 }
@@ -3751,13 +3776,14 @@ Value *VariableExprAST::codegen() {
   
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  Value *V;
 
 
   Value *var_name, *object_name, *object_var_name;
   var_name = Builder->CreateGlobalString(Name);
   
 
-  
+  /*
   std::cout << "\nVARIABLE EXPR CODEGEN: " << Name << "\n";
   for (const auto &entry : NamedStrVecs)
     std::cout << "NamedStrVec: " << entry.first << "\n";
@@ -3769,7 +3795,7 @@ Value *VariableExprAST::codegen() {
     std::cout << "NamedTensors: " << entry.first << "\n";
   for (const auto &entry : NamedClassValues)
     std::cout << "NamedClassValues: " << entry.first << "\n";
-  
+  */
 
   std::string pre_dot = GetSelf();
   if (pre_dot!="false")
@@ -3786,21 +3812,26 @@ Value *VariableExprAST::codegen() {
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, var_name});
     }
-      for (const auto &entry : NamedClassValues)
-        if (ends_with(entry.first, Name))
-          return Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),
+
+    for (const auto &entry : NamedClassValues)
+      if (ends_with(entry.first, Name))
+        return Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),
                                                       {var_name});
-      for (const auto &entry : ClassStrVecs)
-        if (ends_with(entry.first, Name))
-          return Builder->CreateCall(TheModule->getFunction("LoadStrVecOnDemand"),
+    for (const auto &entry : ClassStrVecs)
+      if (ends_with(entry.first, Name))
+      {
+        V = Builder->CreateCall(TheModule->getFunction("LoadStrVecOnDemand"),
                                                       {var_name});
+        Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
+        return V;
+      }                                                    
   }
 
   if (NamedValues.count(Name)>0) 
   {
     //std::cout << "\nVariable Float " << Name << " codegen.\n";
 
-    Value *V = NamedValues[Name];
+    V = NamedValues[Name];
 
     V = Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
     
@@ -3818,7 +3849,7 @@ Value *VariableExprAST::codegen() {
       if (ends_with(entry.first, Name))
         return ret;
 
-    Value *V = NamedStrs[Name];
+    V = NamedStrs[Name];
     
     V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
     if (!seen_var_attr)
@@ -3829,17 +3860,16 @@ Value *VariableExprAST::codegen() {
     return V;
   } else if (NamedStrVecs.count(Name)>0) {
 
-    std::cout << "\nVariable Str Vector " << Name << " Codegen. \nNamedStrVecs.count(Name): " << NamedStrVecs.count(Name) <<"\n\n";
+    //std::cout << "\nVariable Str Vector " << Name << " Codegen. \nNamedStrVecs.count(Name): " << NamedStrVecs.count(Name) <<"\n\n";
 
 
 
-    Value *V = NamedStrVecs[Name];
+    V = NamedStrVecs[Name];
     
     V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
     if (!seen_var_attr)
       Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
 
-    std::cout << "RETURNING STRING VECTOR: " << Name << "\n";
     return V;
   } else if (NamedTensors.count(Name)>0) {
     //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
@@ -5691,6 +5721,7 @@ Value *BinaryExprAST::codegen() {
         Builder->CreateStore(Val, Variable);
 
     } else if (NamedStrVecs.count(Lname) != 0 ) {
+
       std::cout << "ATTRIBUTTING TO STRING VEC: " << Lname << "\n";
       Value *Variable = NamedStrVecs[Lname];
       
@@ -5702,7 +5733,17 @@ Value *BinaryExprAST::codegen() {
         Builder->CreateStore(Val, Variable);
 
     } else {
-      std::string _error = "Variable " + Lname + " not found.";
+      bool var_exists_in_objects = false;
+      for (const auto &entry : NamedClassValues)
+        if (ends_with(entry.first, Lname))
+          var_exists_in_objects = true;
+      
+      
+      if (var_exists_in_objects)
+        return Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+                                                  {Builder->CreateGlobalString(Lname),
+                                                   Val});  
+      std::string _error = "Could not find variable " + Lname + ".";
       return LogErrorV(_error);
     }
 
@@ -6554,7 +6595,22 @@ Value *CallExprAST::codegen() {
   else
     nested_function=1;
 
+  //std::cout << "\nParent function: " << functionName << "\n";
+  //std::cout << "CREATE CALL FOR class: " << Class << ", pre-dot: "  << PreDot << " and function name: " << tgt_function <<  "\n";
+
+
+  if (PreDot=="self" && CalleeOverride == "none")
+  {
+    /*
+    std::cout << "\n\n\n\n\n\n";
+    for (auto &_aux : Method_toClassMethod)
+      std::cout << "tgt_function: " << tgt_function << " Method_toClassMethod: " << Method_toClassMethod[tgt_function] << "\n";
+    std::cout << "\n\n\n\n\n\n";
+    */
+    tgt_function = Method_toClassMethod[tgt_function];
+  }
   
+
   if(Class!="None")
   {
     if (!in_str(tgt_function, tensor_methods))
@@ -7648,18 +7704,15 @@ ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
 
 
 
-static void HandleClass() {
-  
-
-  ParseClass();
-
-}
+static void HandleClass() { ParseClass(); }
 
 static void HandleDefinition() {
   
   if (auto FnAST = ParseDefinition()) {
+
     FunctionProtos[FnAST->getProto().getName()] =
       std::make_unique<PrototypeAST>(FnAST->getProto());
+
     ExitOnErr(TheJIT->addAST(std::move(FnAST)));
   } else {
     // Skip token for error recovery.
