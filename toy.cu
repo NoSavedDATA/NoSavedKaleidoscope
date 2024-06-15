@@ -224,6 +224,14 @@ enum Token {
   tok_log = -30
 };
 
+
+enum Types {
+  type_float = 0,
+  type_tensor = 1,
+  type_pinned_tensor = 2
+};
+
+
 std::map<int, std::string> token_to_string = {
   { tok_eof, "eof" },
 
@@ -2260,14 +2268,17 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
   int RhsTok = 0;
   int LhsTok = 0;
 
-  int L_cuda = 0;
-  int R_cuda = 0;
+  int L_cuda = type_float;
+  int R_cuda = type_float;
 
   std::string LName, RName;
   if (LHS->GetType()=="tensor")
-    L_cuda = 1;
+    L_cuda = type_tensor;
+  if (LHS->GetType()=="pinned_tensor")
+    L_cuda = type_pinned_tensor;
 
-  while (true) {
+  while (true)
+  {
     
     // check if it is a valid op
 
@@ -2281,10 +2292,10 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     if (TokPrec==BinopPrecedence[':'])
     {
       getNextToken();
-      return std::make_tuple(std::move(LHS),L_cuda);
+      return std::make_tuple(std::move(LHS), L_cuda);
     }
     if (TokPrec < ExprPrec)
-      return std::make_tuple(std::move(LHS),L_cuda);
+      return std::make_tuple(std::move(LHS), L_cuda);
       
 
 
@@ -2330,52 +2341,48 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     else
       RName = IdentifierStr;
 
+
     // Get the Right Hand Side token
-
-    int seen_tabs = 0;
-    
-
-    
-
-    
     RhsTok = CurTok;
 
     
     auto RHS = ParseUnary(class_name); // Returns an identifier, number or expression result
     if (RHS->GetType()=="tensor")
-      R_cuda=1;
+      R_cuda=type_tensor;
+    if (RHS->GetType()=="pinned_tensor")
+      R_cuda=type_pinned_tensor;
+    
     
     
     
     if (!RHS)
-    {
-      //std::cout << "RETURNING NULL Parse Unary \n";
       return std::make_tuple(nullptr,0);
-    }
+    
 
     
     
 
 
-      // If BinOp binds less tightly with RHS than the operator after RHS, let
-      // the pending operator take RHS as its LHS.
-      int NextPrec = get_tokenPrecedence();
+    // If BinOp binds less tightly with RHS than the operator after RHS, let
+    // the pending operator take RHS as its LHS.
+    int NextPrec = get_tokenPrecedence();
         
       
-      if (TokPrec < NextPrec){
-        //std::cout << NextPrec << " Next Prec\n";
+    if (TokPrec < NextPrec)
+    {
+      //std::cout << NextPrec << " Next Prec\n";
         
-        auto tuple = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
-        RHS = std::move(std::get<0>(tuple));
-        R_cuda = std::get<1>(tuple);
+      auto tuple = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
+      RHS = std::move(std::get<0>(tuple));
+      R_cuda = std::get<1>(tuple);
 
-        //std::cout << "Error after RHS parse \n";
-        if (!RHS)
-        {
-          //std::cout << "RETURNING NULL Recursive Bin Op \n";
-          return std::make_tuple(nullptr,0);
-        }
+      //std::cout << "Error after RHS parse \n";
+      if (!RHS)
+      {
+        //std::cout << "RETURNING NULL Recursive Bin Op \n";
+        return std::make_tuple(nullptr,0);
       }
+    }
 
       
       //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
@@ -2384,54 +2391,54 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 
       
 
-      if (L_cuda==1 && R_cuda==0)
-      {
-        LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
+    if (L_cuda==type_tensor && R_cuda==type_float)
+    {
+      LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
         
-      }
-      else if (L_cuda==0 && R_cuda==1 )
+    }
+    else if (L_cuda==type_float && R_cuda==type_tensor)
+    {
+      std::cout << "Reverse LHS and RHS\n";
+      //std::cout << "Bin op: " << BinOp << "\n";
+
+
+      if (BinOp==47)
+        return std::make_tuple(LogError("Tried to divide a tensor by a scalar."),0);
+
+      if (BinOp==45) // inversion of 1 - tensor
       {
-        std::cout << "Reverse LHS and RHS\n";
-        //std::cout << "Bin op: " << BinOp << "\n";
-
-
-        if (BinOp==47)
-          return std::make_tuple(LogError("Divisão de escalar por tensor."),0);
-
-        if (BinOp==45) // inversion of 1 - tensor
-        {
-          RHS = std::make_unique<BinaryTensorScalarExprAST>(42,
+        RHS = std::make_unique<BinaryTensorScalarExprAST>(42,
                                                     std::move(RHS),
                                                     std::move(std::make_unique<NumberExprAST>(-1.0f)));
                                                     //std::move(LHS)
                                                     
-          LHS = std::make_unique<BinaryTensorScalarExprAST>(43,
+        LHS = std::make_unique<BinaryTensorScalarExprAST>(43,
                                                     std::move(RHS), std::move(LHS));
-        } else {
-          if (BinOp!=':') // Avoid codegen reversing
-            LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
+      } else {
+        if (BinOp!=':') // Avoid codegen reversing
+          LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(RHS), std::move(LHS));
-          else
-            LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
+        else
+          LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(LHS), std::move(RHS));
-        }
+      }
           
-        L_cuda=1;
-        R_cuda=0;
-      }
-      else if (L_cuda==1 && R_cuda==1)
-      { 
-        LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
+      L_cuda=type_tensor;
+      R_cuda=type_float;
+    }
+    else if (L_cuda==type_tensor && R_cuda==type_tensor)
+    { 
+      LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
-        R_cuda=0;
-      }
-      else
-        LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+      R_cuda=type_float;
+    }
+    else
+      LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
 
-      LhsTok = RhsTok;    
+    LhsTok = RhsTok;    
   
-}
+  }
 }
 
 
@@ -2984,7 +2991,7 @@ extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self)
 
 
 extern "C" float PrintTensor(char* tensorName){
-  //std::cout << "Called print tensor for " << tensorName << "\n";
+  
   
 
   std::vector<float> dims = NamedDims[tensorName];
@@ -6849,6 +6856,7 @@ static void InitializeModule() {
   floatPtrTy = Type::getFloatTy(*TheContext)->getPointerTo();
   int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   ShallCodegen = true;
+  seen_var_attr = false;
 
   //===----------------------------------------------------------------------===//
   // Tensor -- Scalar   Operations
@@ -7897,3 +7905,4 @@ int main() {
 
   return 0;
 }
+
