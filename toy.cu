@@ -170,7 +170,7 @@ std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
-std::vector<std::string> tensor_resulting_methods = {"gelu", "relu", "softmax", "gpu"};
+std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu"};
 std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
@@ -831,6 +831,20 @@ public:
 };
 
 
+class BinaryTensorPinnedExprAST : public ExprAST {
+  char Op;
+  std::unique_ptr<ExprAST> LHS, RHS;
+
+public:
+  BinaryTensorPinnedExprAST(char Op, std::unique_ptr<ExprAST> LHS,
+                std::unique_ptr<ExprAST> RHS)
+      : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+
+  Value *codegen() override;
+};
+
+
+
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST {
   std::string Callee;
@@ -1168,9 +1182,11 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
 
   // Call.
   getNextToken(); // eat (
+  std::cout << "PARSING CALL" << "\n";
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
     while (true) {
+      std::cout << "Tok: " << ReverseToken(CurTok) << " Identifier: " << IdentifierStr << "\n";
       
       if (auto Arg = ParseExpression(class_name))
         Args.push_back(std::move(Arg));
@@ -1204,11 +1220,16 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
 
   
-  if (in_str(IdName, tensor_resulting_methods) || is_var_forward)
+  
+  if (in_str(IdName, return_dims_methods) || is_var_forward)
     aux->SetType("tensor");
+  if (IdName=="gpu")
+    aux->SetType("pinned_tensor");
   
   return aux;
 }
+
+
 
 
 
@@ -1767,6 +1788,7 @@ extern "C" float * load_img(char *img_name)
 
 extern "C" float * gload_img(char* tensor_name, char *img_name)
 {
+  std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n";
 
   int width, height, channels;
   
@@ -1806,7 +1828,8 @@ extern "C" float * gload_img(char* tensor_name, char *img_name)
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         for (int c = 0; c < channels; ++c) {
-          float aux =  (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          //float aux =  (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          //std::cout << "Assigning: " << aux << "\n";
           // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
           image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
         }
@@ -2012,14 +2035,19 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   if (CurTok != '(') // Simple variable ref.
   {
     auto aux = std::make_unique<VariableExprAST>(IdName);
-    if (std::find(tensorVars.begin(), tensorVars.end(), IdentifierStr) != tensorVars.end())
+    
+    if (in_str(IdentifierStr, pinnedTensorVars))
+      aux->SetType("pinned_tensor");
+    if (in_str(IdentifierStr, tensorVars))
       aux->SetType("tensor");
     if (functionVars.find(IdName) != functionVars.end())
       aux->SetType("tensor");
+
     if (is_class_attr)
       aux->SetSelf(pre_dot);
     if (pre_dot=="self")
       aux->SetSelf("true");
+    
     
     if (starts_with(IdName.c_str(), "preprocess_") && pre_dot=="self")
     {
@@ -2079,7 +2107,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 
-  if (in_str(IdName, tensor_resulting_methods) || is_var_forward)
+  if (in_str(IdName, return_dims_methods) || is_var_forward)
     aux->SetType("tensor");
 
   
@@ -2609,21 +2637,21 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
     
     
-    if ((L_cuda!=type_pinned_tensor && R_cuda==type_pinned_tensor) || (L_cuda==type_pinned_tensor && R_cuda!=type_pinned_tensor))
+    
+
+    std::cout << "\n\nL type: " << L_cuda << " R type: " << R_cuda << "\n";
+
+
+    if (L_cuda==type_tensor && R_cuda==type_pinned_tensor)
     {
-      LogError("Operations between a tensor and a pinned tensor are not supported.\n   Please, send the pinned tensor to the gpu with the gpu() command");
-      return std::make_tuple(nullptr,0);
+      std::cout << "\nParse BinaryTensorPinned " << ReverseToken(BinOp) <<  "\n";
+      LHS = std::make_unique<BinaryTensorPinnedExprAST>(BinOp,
+                                                      std::move(LHS), std::move(RHS));
     }
-
-    //std::cout << "L type: " << L_cuda << " R type: " << R_cuda << "\n";
-
-
-
-    if (L_cuda==type_tensor && R_cuda==type_float)
+    else if (L_cuda==type_tensor && R_cuda==type_float)
     {
       LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
-        
     }
     else if (L_cuda==type_float && R_cuda==type_tensor)
     {
@@ -2749,7 +2777,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
     if (IdentifierStr=="c")
       is_tensor="function";
     if (IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="s" && IdentifierStr!="c")
-      LogErrorP_to_comma("Tipo da variável no protótipo precisa ser t ou f.");
+      LogErrorP_to_comma("Prototype var type must be t, f, s or c");
     else {
       getNextToken();
 
@@ -2910,9 +2938,6 @@ static std::map<std::string, float> StoredValues;
 std::map<std::string, std::string> AuxRandomStrs;
 std::map<std::string, std::vector<char *>> StrVecAuxHash;
 
-// Current Cuda Result
-
-std::vector<float> currentDims;
 
 // Cuda Parallellism
 constexpr int num_parallel_streams = 2;
@@ -3070,7 +3095,7 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 
 extern "C" float *gpu(char *tensor_name)
 {
-  std::cout << "Gpu transfer for: " << tensor_name << "\n";
+  std::cout << "\nGpu transfer for: " << tensor_name << "\n";
   
   float *tensor, *tensor_cpu;
 
@@ -3084,7 +3109,9 @@ extern "C" float *gpu(char *tensor_name)
     // Handle error
     fprintf(stderr, "cpu to gpu tensor transfer failed: %s\n", cudaGetErrorString(err));
   }
-  std::cout << "Transfer succeed" << "\n";
+  std::cout << "Transfer succeed" << "\n\n";
+
+  //PrintTensorF(tensor, 28, 28);
 
   return tensor;
 }
@@ -3185,6 +3212,8 @@ extern "C" float * LoadTensor(char* tensor_name){
 
 extern "C" void *LoadDims(char* tensor_name)
 {
+  //std::cout << "LOADING DIMS"  << "\n";
+  //PrintDims(NamedDims[tensor_name]);
   return &NamedDims[tensor_name];
 }
 
@@ -3851,10 +3880,10 @@ extern "C" float *logE(char *tensorName) {
 
   
   device_x = NamedTensors[tensorName];
-  currentDims = NamedDims[tensorName];
+  std::vector<float> dims = NamedDims[tensorName];
   
 
-  int kDataLen = DimsProd(currentDims);
+  int kDataLen = DimsProd(dims);
 
 
   float* device_y;
@@ -4092,8 +4121,8 @@ Value *VariableExprAST::codegen() {
     //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
   
 
-    //if (!seen_var_attr)
-    //  Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+    if (!seen_var_attr)
+      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
     
     
     
@@ -4138,10 +4167,26 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
 {
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
 
-  //PrintDims(currentDims);
 
+  //std::cout << "Freeing tensor" << "\n";
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
+
+  //PrintDims(NamedDims[tensor_name]);
+
+
+  cudaCheck(cudaGetLastError());
   
+  NamedTensors[tensor_name] = tensor;
+  NamedDims[tensor_name] = new_dims;
+  
+
+  return 0;
+}
+
+extern "C" float TensorAttrNoFree(char *tensor_name, float *tensor, std::vector<float> new_dims)
+{
+  //std::cout << "Attributing to tensor: " << tensor_name << "\n";
+  //PrintDims(NamedDims[tensor_name]);
 
 
   cudaCheck(cudaGetLastError());
@@ -4369,8 +4414,6 @@ extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int is_forward_
 
 
   
-  //if(currentDims[1]==784)
-  //PrintTensorF(device_x, currentDims[0], currentDims[1]);
   //PrintTensorF(device_w, Rdims[0], Rdims[1]);
 
   matmul_forward2(device_y, device_x, device_w,
@@ -5263,7 +5306,6 @@ extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_
     std::string error = "O número de canais do tensor é " + std::to_string((int)dims[dims.size()-1]) + ", enquanto a entrada esperada da convolução tem canais " + std::to_string(conv->C);
     LogError(error);
     
-    currentDims = dims;
     NamedConv2d[conv_name] = std::move(conv);
     return nullptr;
   }
@@ -5896,6 +5938,79 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
 
 
+
+Value *BinaryTensorPinnedExprAST::codegen() {
+  std::cout << "Binary Tensor Pinned codegen" << "\n";
+
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  std::cout << "Binary Tensor Pinned codegen" << "\n";
+
+  Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
+  Value *RtensorName = Builder->CreateGlobalString(RHS->GetName());
+  Value *object_name;
+
+
+  DimsPtr = Builder->CreateAlloca(int8PtrTy);
+
+
+  // Concat self or obj name to tensor name
+  std::string pre_dot = LHS->GetSelf();
+  if (pre_dot=="true")
+    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
+                                                      {LtensorName});
+    // Gets from pre_dot if it is a class attribute
+  else if (pre_dot!="false") {
+    object_name = Builder->CreateGlobalString(pre_dot);
+
+    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {object_name, LtensorName});
+  }
+  pre_dot = RHS->GetSelf();
+  if (pre_dot=="true")
+    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
+                                                      {RtensorName});
+    // Gets from pre_dot if it is a class attribute
+  else if (pre_dot!="false") {
+    object_name = Builder->CreateGlobalString(pre_dot);
+
+    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {object_name, RtensorName});
+  }
+
+  // if is attribution
+  if (Op == '=') {
+  
+    seen_var_attr=true;
+
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    if (!LHSE)
+      return LogErrorV("Destino do '=' deve ser uma variável.");
+    
+
+    Value *RtensorPtr = RHS->codegen();
+    std::cout << "1 2 attr\n";
+
+    
+    std::cout << "Pre dims\n";
+    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+    std::cout << "Post dims\n";
+
+    Builder->CreateCall(TheModule->getFunction("TensorAttrNoFree"),
+                        {LtensorName, RtensorPtr,
+                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
+    std::cout << "Post attr call\n";
+
+
+
+    seen_var_attr=false;
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  }
+}
+
+
+
 Value *LogExprAST::codegen() {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -5904,6 +6019,8 @@ Value *LogExprAST::codegen() {
   return Builder->CreateCall(TheModule->getFunction("logE"),
                              {Builder->CreateGlobalString(Name)}, "cudalog");
 }
+
+
 
 
 
@@ -5926,7 +6043,10 @@ Value *BinaryExprAST::codegen() {
     
     Value *Val = RHS->codegen();
     if (!Val)
+    {
+      seen_var_attr=false;
       return nullptr;
+    }
 
     // Look up the name.
     if (NamedValues.count(Lname) != 0) {
@@ -5972,12 +6092,14 @@ Value *BinaryExprAST::codegen() {
         if (ends_with(entry.first, Lname))
           var_exists_in_objects = true;
       
+      seen_var_attr=false;
       
       if (var_exists_in_objects)
         return Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
                                                   {Builder->CreateGlobalString(Lname),
                                                    Val});  
       std::string _error = "Could not find variable " + Lname + ".";
+
       return LogErrorV(_error);
     }
 
@@ -6980,16 +7102,21 @@ Value *CallExprAST::codegen() {
   std::vector<Value *> ArgsV;  
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
 
-    std::cout << "\n\nCallExprAST codegen for argument n°: " << i << ".\n";
+    //std::cout << "\n\nCallExprAST codegen for argument n°: " << i << ".\n";
 
     Value * arg;
+    std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n";
     if (Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor")
+    {
       arg = Builder->CreateGlobalString(Args[i]->GetName());
+      if (Args[i]->GetSelf()=="true")
+        arg = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
+                                                      {arg});
+    }
     else
       arg = Args[i]->codegen();
 
-    //std::cout << "Args[i]: " << Args[i]->GetName() << "\n";
-
+  
 
     ArgsV.push_back(arg);
 
@@ -6997,6 +7124,7 @@ Value *CallExprAST::codegen() {
     if (!ArgsV.back())
       return nullptr;
   }
+  //std::cout << "\n\n\n\n\n";
   
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -7017,7 +7145,7 @@ Value *CallExprAST::codegen() {
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
 
 
-      std::cout << "Load dims for conv: " << tgt_function << "\n";
+      //std::cout << "Load dims for conv: " << tgt_function << "\n";
       
       Value *dims_ptr = Builder->CreateCall(getFunction("LoadDimsConv"), 
                           {conv_name, is_attr});
@@ -7028,10 +7156,13 @@ Value *CallExprAST::codegen() {
     }
   }
 
-  if (in_str(tgt_function_name, tensor_resulting_methods))
+  std::cout << "\n\n\nTGT FUNCTION NAME IS: " << tgt_function_name  << ".\n";
+  if (in_str(tgt_function_name, return_dims_methods))
   {
-    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"),
-                                          {Builder->CreateGlobalString(Args[0]->GetName())});
+    
+
+    // Get resulting tensor dims.
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {ArgsV[0]});
     DimsPtr = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(dims_ptr, DimsPtr);
   }
@@ -7974,6 +8105,15 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("temporaryCudaResult_Attr", temporaryCudaResult_AttrTy);
+
+  FunctionType *TensorAttrNoFreeTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       floatPtrTy,
+       int8PtrTy}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("TensorAttrNoFree", TensorAttrNoFreeTy);
   
 
 
