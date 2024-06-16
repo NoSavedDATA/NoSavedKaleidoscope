@@ -176,7 +176,7 @@ bool ShallCodegen = true;
 
 
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
-// of these for known things.
+// of these for known words.
 enum Token {
   tok_eof = -1,
 
@@ -213,6 +213,7 @@ enum Token {
   // var definition
   tok_var = -15,
   tok_tensor = -16,
+  tok_pinned_tensor = -25,
   tok_var_str = -17,
   tok_str_vec = -24,
   tok_attr_var = -18,
@@ -412,6 +413,11 @@ static int get_token() {
       {
         LastChar = getchar();
         return tok_tensor;
+      }
+      if (IdentifierStr == "pinned_tensor" && LastChar=='[')
+      {
+        LastChar = getchar();
+        return tok_pinned_tensor;
       }
       if (IdentifierStr == "Conv2d" && LastChar=='[')
       {
@@ -701,6 +707,25 @@ class TensorExprAST : public VarExprAST {
 
   Value *codegen() override;
 };
+
+
+class PinnedTensorExprAST : public VarExprAST {
+  public:
+    std::vector<std::unique_ptr<ExprAST>> V_Dims;
+    std::string TensorInit;
+
+    PinnedTensorExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::vector<std::unique_ptr<ExprAST>> V_Dims,
+      const std::string &TensorInit)
+      : VarExprAST(std::move(VarNames), std::move(Type)),
+                   V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
+
+  Value *codegen() override;
+};
+
+
 
 class Conv2dExprAST : public VarExprAST {
   public:
@@ -1957,25 +1982,24 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 }
 
 
-
 //
-static std::unique_ptr<ExprAST> ParseTensorExpr() {
+static std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
   
-  getNextToken(); // eat the tensor.
+  getNextToken(); // eat pinned_tensor.
   
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu_relu";
+  std::string init = "zeros";
   //std::make_unique<NumberExprAST>(NumVal)
   
   while (true) {
     if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Esperado número da dimensão do tensor.");
+      return LogError("Expected a number or var on the tensor dimension.");
     
     if (CurTok==tok_number)
     {
       if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("A dimensão do tensor precisa ser int. Não pode ser float ou double.");
+        LogWarning("A tensor's dimension should be int, not float.");
     
       dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
       getNextToken();
@@ -1998,7 +2022,102 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
 
   
   if (CurTok != ']')
-    return LogError("Faltou fechar ].");
+    return LogError("] not found.");
+    getNextToken();
+
+
+  std::string pre_dot = "false";
+  if (CurTok == tok_self)
+  {
+    pre_dot = "true";
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected pinned tensor identifier name.");
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    tensorVars.push_back(IdentifierStr);
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Expected pinned tensor identifier names.");
+  }
+
+
+
+  auto aux = std::make_unique<PinnedTensorExprAST>(std::move(VarNames), "pinned_tensor",
+                                             std::move(dims), init);
+  aux->SetSelf(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
+
+
+
+
+
+//
+static std::unique_ptr<ExprAST> ParseTensorExpr() {
+  
+  getNextToken(); // eat the tensor.
+  
+  std::vector<std::unique_ptr<ExprAST>> dims;
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::string init = "xavu_relu";
+  //std::make_unique<NumberExprAST>(NumVal)
+  
+  while (true) {
+    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      return LogError("Expected a number or var on the tensor dimension.");
+    
+    if (CurTok==tok_number)
+    {
+      if (std::fmod(NumVal, 1.0) != 0)
+        LogWarning("A tensor's dimension should be int, not float.");
+    
+      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      getNextToken();
+    } else if (CurTok==tok_identifier)
+      if (in_str(IdentifierStr, tensor_inits))
+      {
+        init = IdentifierStr;
+        getNextToken();
+      } else
+        dims.push_back(std::move(ParseIdentifierExpr()));
+    else {
+      dims.push_back(std::move(ParseSelfExpr()));
+    }
+
+    
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+  }
+
+  
+  if (CurTok != ']')
+    return LogError("] not found.");
     getNextToken();
 
 
@@ -2016,7 +2135,7 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
   }
 
   if (CurTok != tok_identifier)
-    return LogError("Esperado identificador após var.");
+    return LogError("Expected tensor identifier name.");
 
   while (true) {
     std::string Name = IdentifierStr;
@@ -2033,7 +2152,7 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
     getNextToken(); // eat the ','.
 
     if (CurTok != tok_identifier)
-      return LogError("Esperado um ou mais identificadores após var.");
+      return LogError("Expected tensor identifier names.");
   }
 
 
@@ -2220,6 +2339,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseVarExpr(class_name);
   case tok_tensor:
     return ParseTensorExpr();
+  case tok_pinned_tensor:
+    return ParsePinnedTensorExpr();
   case tok_conv2d:
     return ParseConv2dExpr();
   case tok_log:
@@ -2264,9 +2385,9 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
                                               std::unique_ptr<ExprAST> LHS,
                                               std::string class_name="") {
   
-  // If this is a binop, find its precedence.
-  int RhsTok = 0;
+  
   int LhsTok = 0;
+  int RhsTok = 0;
 
   int L_cuda = type_float;
   int R_cuda = type_float;
@@ -2279,10 +2400,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 
   while (true)
   {
-    
-    // check if it is a valid op
-
-
+    // If this is a binop, find its precedence.
     int TokPrec = get_tokenPrecedence();
 
     // If this is a binop that binds at least as tightly as the current binop,
@@ -2342,11 +2460,15 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       RName = IdentifierStr;
 
 
-    // Get the Right Hand Side token
+    // Get the Right Hand Side token for debugging only
     RhsTok = CurTok;
 
     
     auto RHS = ParseUnary(class_name); // Returns an identifier, number or expression result
+    if (!RHS)
+      return std::make_tuple(nullptr,0);
+
+
     if (RHS->GetType()=="tensor")
       R_cuda=type_tensor;
     if (RHS->GetType()=="pinned_tensor")
@@ -2355,13 +2477,6 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     
     
     
-    if (!RHS)
-      return std::make_tuple(nullptr,0);
-    
-
-    
-    
-
 
     // If BinOp binds less tightly with RHS than the operator after RHS, let
     // the pending operator take RHS as its LHS.
@@ -2376,16 +2491,14 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       RHS = std::move(std::get<0>(tuple));
       R_cuda = std::get<1>(tuple);
 
-      //std::cout << "Error after RHS parse \n";
+
       if (!RHS)
-      {
-        //std::cout << "RETURNING NULL Recursive Bin Op \n";
         return std::make_tuple(nullptr,0);
-      }
+      
     }
 
       
-      //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
+    //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
       
       
 
@@ -2677,6 +2790,7 @@ static std::map<std::string, float> StoredValues;
 
 // Tensors
 static std::map<std::string, float *> NamedTensors;
+static std::map<std::string, float *> NamedPinnedTensors;
 static std::map<std::string, std::vector<float>> NamedDims;
 static std::map<std::string, std::vector<float>> NamedDimsConv;
 
@@ -6409,11 +6523,55 @@ extern "C" float StoreDimsOnDemand(float d)
   return 0;
 }
 
-extern "C" float CreateTensorOnDemand(char *tensorName, int is_obj_attr_or_self, char *init)
+extern "C" float CreatePinnedTensorOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init)
 {
-  std::string objectTensorName = tensorName;
+  std::string objectTensorName = tensor_name;
   if (is_obj_attr_or_self)
-    objectTensorName = FirstArg + tensorName;
+    objectTensorName = FirstArg + tensor_name;
+
+  char * cObjectTensorName = new char[objectTensorName.length() + 1];
+  std::strcpy(cObjectTensorName, objectTensorName.c_str());
+
+
+  //float * d = (float *) dims;
+  int product = DimsProd(cur_dim);
+  float * tensor;
+  float * tensor_cpu;
+
+
+  cudaMallocHost(&tensor_cpu, product*sizeof(float));
+
+  for (int i = 0; i < product; ++i) {
+    tensor_cpu[i] = 0.0f;
+  }
+  
+
+  cudaMalloc(&tensor, product*sizeof(float));
+  //cudaCheck(cudaMemcpy(tensor, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
+  
+
+  
+
+  NamedTensors[cObjectTensorName] = tensor;
+  NamedPinnedTensors[cObjectTensorName] = tensor_cpu;
+  NamedDims[cObjectTensorName] = cur_dim;
+
+
+
+
+
+  cur_dim.clear();
+
+  return 0;
+}
+
+
+
+extern "C" float CreateTensorOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init)
+{
+  std::string objectTensorName = tensor_name;
+  if (is_obj_attr_or_self)
+    objectTensorName = FirstArg + tensor_name;
 
   char * cObjectTensorName = new char[objectTensorName.length() + 1];
   std::strcpy(cObjectTensorName, objectTensorName.c_str());
@@ -6514,6 +6672,70 @@ Value *TensorExprAST::codegen() {
       is_obj_attr_or_self=1;
     
     Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
+                                              {Builder->CreateGlobalString(VarName),
+                                               ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
+                                               Builder->CreateGlobalString(TensorInit)});
+
+ 
+  }
+
+
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
+Value *PinnedTensorExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  std::vector<AllocaInst *> OldBindings;
+
+
+  std::cout << "Pinned tensor type: " << Type << "\n";
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+    // Emit the initializer before adding the variable to scope, this prevents
+    // the initializer from referencing the variable itself, and permits stuff
+    // like this:
+    //  var a = 1 in
+    Value *InitVal;
+    if (Init) {
+      InitVal = Init->codegen();
+      if (!InitVal)
+        return nullptr;
+    } else { // If not specified, use 0.0.
+      InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
+    }
+
+
+    std::vector<float> dims;
+    Value *aux;
+    std::vector<Value *> dim_values;
+
+
+    for (int j=0; j<V_Dims.size(); j++)
+    {
+      aux = V_Dims[j]->codegen();
+      Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
+                                                  {aux});
+      //dims.push_back(cast<ConstantFP>(aux)->getValueAPF().convertToFloat());
+      //std::cout << "Dim: " << cast<ConstantFP>(aux)->getValueAPF().convertToFloat() << "\n";
+    }
+    //void * v_dims_ptr = &V_Dims;
+
+    
+    int is_obj_attr_or_self = 0;
+    if (GetSelf()!="false")
+      is_obj_attr_or_self=1;
+    
+    Builder->CreateCall(TheModule->getFunction("CreatePinnedTensorOnDemand"),
                                               {Builder->CreateGlobalString(VarName),
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
                                                Builder->CreateGlobalString(TensorInit)});
@@ -7597,6 +7819,16 @@ static void InitializeModule() {
 
 
   // char *, int, char *
+  FunctionType *CreatePinnedTensorOnDemandTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {Type::getInt8Ty(*TheContext)->getPointerTo(),
+       Type::getInt32Ty(*TheContext),
+       Type::getInt8Ty(*TheContext)->getPointerTo()},
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("CreatePinnedTensorOnDemand", CreatePinnedTensorOnDemandTy);
+
+
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
@@ -7605,12 +7837,7 @@ static void InitializeModule() {
        Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
-  Function::Create(
-    CreateTensorOnDemandTy,
-    Function::ExternalLinkage,
-    "CreateTensorOnDemand",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("CreateTensorOnDemand", CreateTensorOnDemandTy);
 
 
 // char *, int, char *, int, int, int, int, int
@@ -7905,4 +8132,3 @@ int main() {
 
   return 0;
 }
-
