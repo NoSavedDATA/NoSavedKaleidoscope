@@ -106,6 +106,21 @@ using namespace llvm::orc;
 // \033[95m purple
 
 
+std::string RandomString(size_t length) {
+  const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  std::random_device rd;
+  std::mt19937 generator(rd());
+  std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
+
+  std::string random_string;
+  for (size_t i = 0; i < length; ++i) {
+    int random_index = distribution(generator);
+    random_string += charset[random_index];
+  }
+
+  return random_string;
+}
+
 bool ends_with(std::string str_input, std::string str_end)
 {
   return str_input.size() >= str_end.size() && str_input.compare(str_input.size() - str_end.size(), str_end.size(), str_end) == 0;
@@ -149,11 +164,13 @@ bool in_str(std::string str, std::vector<std::string> list) {
 }
 
 
+
+
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';'};
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
-std::vector<std::string> tensor_resulting_methods = {"gelu", "relu", "softmax"};
+std::vector<std::string> tensor_resulting_methods = {"gelu", "relu", "softmax", "gpu"};
 std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
@@ -1101,6 +1118,7 @@ static std::unique_ptr<ExprAST> ParseParenExpr(std::string class_name="") {
 
 //global
 std::vector<std::string> tensorVars;
+std::vector<std::string> pinnedTensorVars;
 std::map<std::string, std::string> functionVars;
 
 
@@ -1135,7 +1153,9 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
   if (CurTok != '(') // Simple variable ref.
   {
     auto aux = std::make_unique<VariableExprAST>(IdName);
-    if (std::find(tensorVars.begin(), tensorVars.end(), IdentifierStr) != tensorVars.end())
+    if (in_str(IdentifierStr, pinnedTensorVars))
+      aux->SetType("pinned_tensor");
+    if (in_str(IdentifierStr, tensorVars))
       aux->SetType("tensor");
     //std::cout << "call arg identifier type: " << aux->GetType() <<  "\n";
     
@@ -1670,8 +1690,40 @@ static std::unique_ptr<ExprAST> ParseStrVecExpr() {
 
 
 
+
+
+// Tensors
+static std::map<std::string, float *> NamedTensors;
+static std::map<std::string, float *> NamedPinnedTensors;
+static std::map<std::string, std::vector<float>> NamedDims;
+static std::map<std::string, std::vector<float>> NamedDimsConv;
+
 unsigned char* current_data_attr;
 std::vector<float> current_data_attr_dims;
+
+
+
+
+extern "C" void PrintDims(std::vector<float> dims)
+{
+  std::cout << "dims: [";
+  for (int i=0; i<dims.size();i++)
+  {
+    std::cout << (int)dims[i];
+    if (i==dims.size()-1)
+      std::cout << "]";
+    else
+      std::cout << ", ";
+  }
+  std::cout  << "\n";
+}
+int DimsProd(std::vector<float> dims)
+{
+  float aux=1;
+  for (int i = 0; i < dims.size(); i++)
+    aux = aux*dims[i];
+  return (int)aux;
+}
 
 
 extern "C" float * load_img(char *img_name)
@@ -1686,12 +1738,6 @@ extern "C" float * load_img(char *img_name)
     current_data_attr_dims.push_back((float)width);
     current_data_attr_dims.push_back((float)height);
     current_data_attr_dims.push_back((float)channels);
-
-    /*
-    std::cout << "Width: " << width << " pixels\n";
-    std::cout << "Height: " << height << " pixels\n";
-    std::cout << "Channels: " << channels << "\n";
-    */
 
     //stbi_image_free(image_data);
 
@@ -1711,12 +1757,74 @@ extern "C" float * load_img(char *img_name)
     
   } else {
     std::string img_n = img_name;
-    std::string _error = "Falha ao abrir a imagem: " + img_n + ".";
+    std::string _error = "Failed to open image: " + img_n + ".";
     LogErrorS(_error);
   }
 
   return nullptr;
 }
+
+
+extern "C" float * gload_img(char* tensor_name, char *img_name)
+{
+
+  int width, height, channels;
+  
+  unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
+
+  if (image_data) {
+    
+    std::vector<float> dims = NamedDims[tensor_name];
+    int dims_prod = DimsProd(dims);
+    
+    current_data_attr_dims.clear();
+    current_data_attr_dims.push_back((float)width);
+    current_data_attr_dims.push_back((float)height);
+    current_data_attr_dims.push_back((float)channels);
+
+    if (dims_prod < width*height*channels)
+    {
+      std::string t_n = tensor_name;
+      std::string _error = "The image dimensions are incompatible with the tensor " + t_n + " dimensions.";
+      LogErrorS(_error);
+
+      std::cout << "\nTensor dims:" << "\n";
+      PrintDims(dims);
+
+      std::cout << "\nImage dims: [" << width << ", " << height << ", " << channels << "]\n\n";
+
+      return nullptr;
+    }
+
+    //stbi_image_free(image_data);
+
+    //float *image_data_float = new float[width * height * channels];
+    float *image_data_float = NamedPinnedTensors[tensor_name];
+    
+  
+    // Loop through each pixel and convert to float between 0.0 and 1.0
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        for (int c = 0; c < channels; ++c) {
+          float aux =  (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
+          image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+        }
+      }
+    }
+
+    return image_data_float;
+    
+  } else {
+    std::string img_n = img_name;
+    std::string _error = "Failed to open image: " + img_n + ".";
+    LogErrorS(_error);
+  }
+
+  return nullptr;
+}
+
+
 
 
 extern "C" float * split_str_to_float(char *in_string, int gather_position)
@@ -2044,7 +2152,7 @@ static std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
 
   while (true) {
     std::string Name = IdentifierStr;
-    tensorVars.push_back(IdentifierStr);
+    pinnedTensorVars.push_back(IdentifierStr);
     getNextToken(); // eat identifier.
 
     
@@ -2481,8 +2589,8 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     // If BinOp binds less tightly with RHS than the operator after RHS, let
     // the pending operator take RHS as its LHS.
     int NextPrec = get_tokenPrecedence();
-        
-      
+    
+
     if (TokPrec < NextPrec)
     {
       //std::cout << NextPrec << " Next Prec\n";
@@ -2497,12 +2605,19 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       
     }
 
-      
-    //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
-      
-      
 
-      
+    //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
+    
+    
+    if ((L_cuda!=type_pinned_tensor && R_cuda==type_pinned_tensor) || (L_cuda==type_pinned_tensor && R_cuda!=type_pinned_tensor))
+    {
+      LogError("Operations between a tensor and a pinned tensor are not supported.\n   Please, send the pinned tensor to the gpu with the gpu() command");
+      return std::make_tuple(nullptr,0);
+    }
+
+    //std::cout << "L type: " << L_cuda << " R type: " << R_cuda << "\n";
+
+
 
     if (L_cuda==type_tensor && R_cuda==type_float)
     {
@@ -2788,11 +2903,6 @@ static std::map<std::string, Value *> NamedClassValues;
 static std::map<std::string, float> StoredValues;
 
 
-// Tensors
-static std::map<std::string, float *> NamedTensors;
-static std::map<std::string, float *> NamedPinnedTensors;
-static std::map<std::string, std::vector<float>> NamedDims;
-static std::map<std::string, std::vector<float>> NamedDimsConv;
 
 
 
@@ -2934,15 +3044,6 @@ std::vector<float> BatchLessDims(std::vector<float> dims)
 }
 
 
-int DimsProd(std::vector<float> dims)
-{
-  float aux=1;
-  for (int i = 0; i < dims.size(); i++)
-    aux = aux*dims[i];
-  return (int)aux;
-}
-
-
 std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 {
   std::vector<float> new_dims;
@@ -2955,19 +3056,6 @@ std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 }
 
 
-extern "C" void PrintDims(std::vector<float> dims)
-{
-  std::cout << "dims: [";
-  for (int i=0; i<dims.size();i++)
-  {
-    std::cout << (int)dims[i];
-    if (i==dims.size()-1)
-      std::cout << "]";
-    else
-      std::cout << ", ";
-  }
-  std::cout  << "\n";
-}
 
 
 int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
@@ -2980,20 +3068,27 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 }
 
 
-std::string RandomString(size_t length) {
-  const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  std::random_device rd;
-  std::mt19937 generator(rd());
-  std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
+extern "C" float *gpu(char *tensor_name)
+{
+  std::cout << "Gpu transfer for: " << tensor_name << "\n";
+  
+  float *tensor, *tensor_cpu;
 
-  std::string random_string;
-  for (size_t i = 0; i < length; ++i) {
-    int random_index = distribution(generator);
-    random_string += charset[random_index];
+  tensor = NamedTensors[tensor_name];
+  tensor_cpu = NamedPinnedTensors[tensor_name];
+  float dims_prod = (float)DimsProd(NamedDims[tensor_name]);
+
+  cudaError_t err = cudaMemcpy(tensor, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+
+  if (err != cudaSuccess) {
+    // Handle error
+    fprintf(stderr, "cpu to gpu tensor transfer failed: %s\n", cudaGetErrorString(err));
   }
+  std::cout << "Transfer succeed" << "\n";
 
-  return random_string;
+  return tensor;
 }
+
 
 
 extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
@@ -3196,6 +3291,9 @@ extern "C" float PrintTensor(char* tensorName){
 
   return 0;
 }
+
+
+
 
 extern "C" float PrintTensorF(float *cuda_tensor, int d1, int d2){
   
@@ -3990,6 +4088,23 @@ Value *VariableExprAST::codegen() {
       Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
 
     return V;
+  } else if (NamedPinnedTensors.count(Name)>0) {
+    //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
+  
+
+    //if (!seen_var_attr)
+    //  Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+    
+    
+    
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {var_name});
+    DimsPtr = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(dims_ptr, DimsPtr);
+    
+
+    //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+
+    return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   } else if (NamedTensors.count(Name)>0) {
     //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
   
@@ -6523,11 +6638,14 @@ extern "C" float StoreDimsOnDemand(float d)
   return 0;
 }
 
-extern "C" float CreatePinnedTensorOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init)
+extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init)
 {
+  
   std::string objectTensorName = tensor_name;
   if (is_obj_attr_or_self)
     objectTensorName = FirstArg + tensor_name;
+
+  std::cout << "CREATING PINNED TENSOR:" << objectTensorName << "\n";
 
   char * cObjectTensorName = new char[objectTensorName.length() + 1];
   std::strcpy(cObjectTensorName, objectTensorName.c_str());
@@ -6540,6 +6658,7 @@ extern "C" float CreatePinnedTensorOnDemand(char *tensor_name, int is_obj_attr_o
 
 
   cudaMallocHost(&tensor_cpu, product*sizeof(float));
+  //tensor_cpu = new float[product];
 
   for (int i = 0; i < product; ++i) {
     tensor_cpu[i] = 0.0f;
@@ -6557,14 +6676,13 @@ extern "C" float CreatePinnedTensorOnDemand(char *tensor_name, int is_obj_attr_o
   NamedDims[cObjectTensorName] = cur_dim;
 
 
+  std::cout << "Pinned tensor created\n";
 
 
 
   cur_dim.clear();
 
-  return 0;
 }
-
 
 
 extern "C" float CreateTensorOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init)
@@ -6692,7 +6810,7 @@ Value *PinnedTensorExprAST::codegen() {
   std::vector<AllocaInst *> OldBindings;
 
 
-  std::cout << "Pinned tensor type: " << Type << "\n";
+  std::cout << "\n\nPinned tensor type: " << Type << "\n\n\n";
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
@@ -6862,10 +6980,10 @@ Value *CallExprAST::codegen() {
   std::vector<Value *> ArgsV;  
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
 
-    //std::cout << "\n\nCallExprAST::codegen for argument n°: " << i << ".\n";
+    std::cout << "\n\nCallExprAST codegen for argument n°: " << i << ".\n";
 
     Value * arg;
-    if (Args[i]->GetType()=="tensor")
+    if (Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor")
       arg = Builder->CreateGlobalString(Args[i]->GetName());
     else
       arg = Args[i]->codegen();
@@ -6910,7 +7028,7 @@ Value *CallExprAST::codegen() {
     }
   }
 
-  if (in_str(tgt_function_name, activation_functions))
+  if (in_str(tgt_function_name, tensor_resulting_methods))
   {
     Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"),
                                           {Builder->CreateGlobalString(Args[0]->GetName())});
@@ -7458,12 +7576,8 @@ static void InitializeModule() {
       {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false // Not vararg
   );
-  Function::Create(
-    cross_entropyTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "cross_entropy", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
+  TheModule->getOrInsertFunction("cross_entropy", cross_entropyTy);
+  
 
   //===----------------------------------------------------------------------===//
   // DATASET Ops
@@ -7476,12 +7590,8 @@ static void InitializeModule() {
       {Type::getFloatTy(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo()},
       true // vararg
   );
-  Function::Create(
-    yieldTy,
-    Function::ExternalLinkage,
-    "Datasetyield",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("Datasetyield", yieldTy);
+  
 
   // float, char *, ... 
   FunctionType *init_datasetTy = FunctionType::get(
@@ -7489,12 +7599,8 @@ static void InitializeModule() {
       {Type::getFloatTy(*TheContext)},
       false
   );
-  Function::Create(
-    init_datasetTy,
-    Function::ExternalLinkage,
-    "Datasetinit_dataset",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("Datasetinit_dataset", init_datasetTy);
+  
 
 
   //===----------------------------------------------------------------------===//
@@ -7509,12 +7615,16 @@ static void InitializeModule() {
       {PointerType::get(Type::getInt8Ty(*GlobalContext), 0)},
       false // Not vararg
   );
-  Function::Create(
-    load_imgTy,
-    Function::ExternalLinkage,
-    "load_img",
-    TheModule.get()
+  TheModule->getOrInsertFunction("load_img", load_imgTy);
+
+  
+  FunctionType *gload_imgTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, int8PtrTy},
+      false // Not vararg
   );
+  TheModule->getOrInsertFunction("gload_img", gload_imgTy);
+  
   
 
   // char *
@@ -7523,13 +7633,15 @@ static void InitializeModule() {
       {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
       false
   );
-  Function::Create(
-    load_preprocess_imgTy,
-    Function::ExternalLinkage,
-    "load_preprocess_img",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("load_preprocess_img", load_preprocess_imgTy);
+  
 
+  FunctionType *gpuTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy},
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("gpu", gpuTy);
 
   //===----------------------------------------------------------------------===//
   // Parallel Ops
@@ -7542,25 +7654,16 @@ static void InitializeModule() {
       {Type::getFloatTy(*TheContext)},
       false
   );
-  Function::Create(
-    sleepTy,
-    Function::ExternalLinkage,
-    "sleep",
-    TheModule.get()
-  );
-
+  TheModule->getOrInsertFunction("sleep", sleepTy);
+  
 
   FunctionType *PrintVoidTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {Type::getInt8Ty(*TheContext)->getPointerTo()},
       false
   );
-  Function::Create(
-    PrintVoidTy,
-    Function::ExternalLinkage,
-    "PrintVoid",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("PrintVoid", PrintVoidTy);
+  
 
 
 
@@ -7583,15 +7686,6 @@ static void InitializeModule() {
                                        int8PtrTy},
                                       false
                                     );
-  /*                                  
-  Function::Create(
-    pthreadCreateTy,
-    Function::ExternalLinkage,
-    "pthread_create",
-    TheModule.get()
-  );
-  */
-  
   TheModule->getOrInsertFunction("pthread_create_aux", pthreadCreateTy);
 
 
@@ -7600,15 +7694,6 @@ static void InitializeModule() {
     Type::getVoidTy(*TheContext),
     {pthreadPtr},
     false);
-  
-  /*
-  Function::Create(
-    pthreadJoinTy,
-    Function::ExternalLinkage,
-    "pthread_join",
-    TheModule.get()
-  );
-  */ 
   TheModule->getOrInsertFunction("pthread_join_aux", pthreadJoinTy);
 
 
@@ -7888,12 +7973,8 @@ static void InitializeModule() {
        int8PtrTy}, 
       false 
   );
-  Function::Create(
-    temporaryCudaResult_AttrTy,
-    Function::ExternalLinkage, 
-    "temporaryCudaResult_Attr", 
-    TheModule.get() 
-  );
+  TheModule->getOrInsertFunction("temporaryCudaResult_Attr", temporaryCudaResult_AttrTy);
+  
 
 
   // char *
@@ -7902,15 +7983,14 @@ static void InitializeModule() {
       {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
-  Function::Create(
-    printTTy,
-    Function::ExternalLinkage, 
-    "PrintTensor", 
-    TheModule.get() 
-  );
+  TheModule->getOrInsertFunction("PrintTensor", printTTy);
+  
   
 
 }
+
+
+
 
 ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
                                        const std::string &Suffix) {
