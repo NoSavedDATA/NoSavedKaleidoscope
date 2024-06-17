@@ -170,7 +170,7 @@ std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '
 
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
-std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu"};
+std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu", "log"};
 std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 
 std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
@@ -1182,11 +1182,10 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
 
   // Call.
   getNextToken(); // eat (
-  std::cout << "PARSING CALL" << "\n";
+  
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
     while (true) {
-      std::cout << "Tok: " << ReverseToken(CurTok) << " Identifier: " << IdentifierStr << "\n";
       
       if (auto Arg = ParseExpression(class_name))
         Args.push_back(std::move(Arg));
@@ -1477,8 +1476,8 @@ static std::unique_ptr<ExprAST> ParseAsyncExpr(std::string class_name="") {
 
   
   std::vector<std::unique_ptr<ExprAST>> Bodies;
-  std::cout << "async tabs level: " << cur_level_tabs <<  "\n";
-  std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
+  std::cout << "\nasync tabs level: " << cur_level_tabs <<  "\n";
+  //std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
 
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(class_name)));
@@ -2852,7 +2851,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition(std::string class_name="") {
     Body.push_back(std::move(ParseExpression(class_name)));
   }
 
-  //std::cout << "function number of expressions: " << Body.size() << "\n";
+  std::cout << "function number of expressions: " << Body.size() << "\n";
 
   if (Body.size()==0)
   {
@@ -6200,9 +6199,25 @@ Value *UnaryExprAST::codegen() {
 }
 
 
+
+void getTheModuleErrors()
+{
+  std::string moduleError;
+  llvm::raw_string_ostream moduleErrorStream(moduleError);
+
+  if (llvm::verifyModule(*TheModule, &moduleErrorStream)) {
+    moduleErrorStream.flush();
+    llvm::errs() << "\n\n\nModule verification failed:\n" << moduleError << "\n\n\n\n";
+    //asyncFun->eraseFromParent();
+    //return nullptr;
+  }
+}
+
 Value *IfExprAST::codegen() {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
   Value *CondV = Cond->codegen();
   if (!CondV)
     return nullptr;
@@ -6367,6 +6382,8 @@ Value *ForExprAST::codegen() {
   else
     NamedValues.erase(VarName);
 
+  
+
   // for expr always returns 0.0.
   return Constant::getNullValue(Type::getFloatTy(*TheContext));
 }
@@ -6416,6 +6433,7 @@ Value *WhileExprAST::codegen() {
 }
 
 
+
 Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody) {
   
 
@@ -6442,6 +6460,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody)
 
   
   // emit EntryBB value
+  std::cout << "\n\n\n\n\n\n\n\n\nfunction * get basic block for function: " << functionName << "\n";
   BasicBlock *EntryBB = BasicBlock::Create(*TheContext, "entry", asyncFun);
   Builder->SetInsertPoint(EntryBB);
   
@@ -6452,20 +6471,30 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody)
   for (auto &body : asyncBody)
     V = body->codegen();
 
+  
   if (V)
   {
-    /*
-    fprintf(stderr, "\nRead top-level expression:");
-    FnIR->print(errs());
-    fprintf(stderr, "\n\n");
-    */
-
-    //Builder->CreateRet(ConstantFP::get(*TheContext, APFloat(0.0f)));
+    
+    
     Builder->CreateRet(Constant::getNullValue(int8PtrTy));
-    verifyFunction(*asyncFun);
+    //verifyFunction(*asyncFun);
+
+    std::string functionError;
+    llvm::raw_string_ostream functionErrorStream(functionError);
+
+    if (llvm::verifyFunction(*asyncFun, &functionErrorStream)) {
+      functionErrorStream.flush();
+      llvm::errs() << "\n\n\nFunction verification failed:\n" << functionError << "\n\n\n\n";
+      //asyncFun->eraseFromParent();
+      //return nullptr;
+    } 
+
+    getTheModuleErrors();
+
     return asyncFun;
   }
   
+  std::cout << "ERASING ASYNC FROM PARENT" << "\n";
   asyncFun->eraseFromParent();
 
   return nullptr;
@@ -6474,16 +6503,16 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody)
 
 //int pthread_create(pthread_t *thread, pthread_attr_t *attr,
 //                   void *(*start_routine) (void *arg), void *arg);
-
-
-
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
                    void *(*start_routine) (void *arg), void *arg)
 {
-  pthread_t t;
-  t=0;
+  //pthread_t t;
+  //t=0;
   
+  std::cout << "Creating thread" << "\n";
   pthread_create(thread, attr, start_routine, arg);
+  std::cout << "Created" << "\n";
+
   //pthread_create(&t, attr, start_routine, arg);
 
   //pthread_join(t, nullptr);
@@ -6494,10 +6523,12 @@ extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
 
 extern "C" void pthread_join_aux(pthread_t thread)
 {
+  std::cout << "Joining " << thread <<  "\n";
   void **value_ptr;
   value_ptr = nullptr;
 
-  pthread_join(thread, value_ptr);  
+  pthread_join(thread, value_ptr);
+  std::cout << "Joined: " << thread << "\n";
 }
 
 
@@ -6511,21 +6542,27 @@ Value *AsyncExprAST::codegen() {
   
   // Create/Spawn Threads
 
-  //BasicBlock *CurrentBB = Builder->GetInsertBlock();
+  
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  std::string functionName = TheFunction->getName().str();
   BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
   Builder->CreateBr(CurrentBB);
+  
+  
+  
+  //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
   Function *asyncFun = codegenAsyncFunction(std::ref(Body));
+
 
   Builder->SetInsertPoint(CurrentBB);
 
   
   Function *pthread_create = TheModule->getFunction("pthread_create_aux");
 
-  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+
+  PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
-  //Builder->CreateStore(ConstantInt::get(Type::getInt8Ty(*GlobalContext), 0), pthreadPtr);
   
   
 
@@ -6540,7 +6577,15 @@ Value *AsyncExprAST::codegen() {
      asyncFun,
      voidPtrNull}
   );
+  
+  //std::cout << "Created join call" << "\n";
 
+  BasicBlock *PostAsyncBB = BasicBlock::Create(*TheContext, "postasync", TheFunction);
+  Builder->CreateBr(PostAsyncBB); // Branch from the async block to the post async block
+  Builder->SetInsertPoint(PostAsyncBB);
+
+  std::cout << "Post async" << "\n";
+  getTheModuleErrors();
 
   return pthreadPtr;
 }
@@ -6550,6 +6595,15 @@ Value *AsyncExprAST::codegen() {
 Value *FinishExprAST::codegen() {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  
+  BasicBlock *FinishBB = BasicBlock::Create(*TheContext, "finish", TheFunction);
+  BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "aftherfinish", TheFunction);
+
+  Builder->CreateBr(FinishBB);
+  Builder->SetInsertPoint(FinishBB);
+  
 
   std::vector<Value *> thread_pointers;
   
@@ -6563,12 +6617,11 @@ Value *FinishExprAST::codegen() {
   }
 
 
-  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
 
   Function *pthread_join = TheModule->getFunction("pthread_join_aux");
 
 
-  int i=0;
   for (Value *pthreadPtr : thread_pointers)
   {
     Value *pthread = Builder->CreateLoad(pthreadTy, pthreadPtr);
@@ -6576,10 +6629,15 @@ Value *FinishExprAST::codegen() {
     Builder->CreateCall(pthread_join,
                         {pthread});
     
-    i+=1;
   }
   
   thread_pointers.clear();
+
+  Builder->CreateBr(AfterBB);
+  Builder->SetInsertPoint(AfterBB);
+
+  std::cout << "Post finish" << "\n";
+  getTheModuleErrors();
 
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
@@ -7156,11 +7214,9 @@ Value *CallExprAST::codegen() {
     }
   }
 
-  std::cout << "\n\n\nTGT FUNCTION NAME IS: " << tgt_function_name  << ".\n";
+  //std::cout << "\n\n\nTGT FUNCTION NAME IS: " << tgt_function_name  << ".\n";
   if (in_str(tgt_function_name, return_dims_methods))
   {
-    
-
     // Get resulting tensor dims.
     Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {ArgsV[0]});
     DimsPtr = Builder->CreateAlloca(int8PtrTy);
@@ -7311,7 +7367,7 @@ Function *FunctionAST::codegen() {
 
 
 static void InitializeModule() {
-  //std::cout << "\nINITIALIZING A NEW MODULE"  << "\n";
+  std::cout << "\nINITIALIZING A NEW MODULE"  << "\n";
 
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
@@ -7742,8 +7798,8 @@ static void InitializeModule() {
   
   // char *
   FunctionType *load_imgTy = FunctionType::get(
-      PointerType::get(Type::getFloatTy(*GlobalContext), 0),
-      {PointerType::get(Type::getInt8Ty(*GlobalContext), 0)},
+      PointerType::get(Type::getFloatTy(*TheContext), 0),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("load_img", load_imgTy);
@@ -7798,8 +7854,7 @@ static void InitializeModule() {
 
 
 
-  auto int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-  auto pthreadPtr = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  auto pthreadPtr = Type::getInt8Ty(*TheContext)->getPointerTo();
   auto pthreadPtrTy = pthreadPtr->getPointerTo();
 
   // (void *) fn (void * arg)
