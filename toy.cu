@@ -6566,9 +6566,11 @@ Value *AsyncExprAST::codegen() {
   
   std::cout << "Created join call" << "\n";
   
+  /*
   BasicBlock *PostAsyncBB = BasicBlock::Create(*TheContext, "postasync", TheFunction);
   Builder->CreateBr(PostAsyncBB); // Branch from the async block to the post async block
   Builder->SetInsertPoint(PostAsyncBB);
+  */
 
   return pthreadPtr;
 }
@@ -6582,11 +6584,13 @@ Value *FinishExprAST::codegen() {
   
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
-  BasicBlock *FinishBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
-  BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "afterbb", TheFunction);
+  //BasicBlock *FinishBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
+  //BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "afterbb", TheFunction);
 
-  Builder->CreateBr(FinishBB);
-  Builder->SetInsertPoint(FinishBB);
+
+
+  //Builder->CreateBr(FinishBB);
+  //Builder->SetInsertPoint(FinishBB);
 
   std::cout << "\n\nFinish codegen for: " << functionName <<  "\n";
 
@@ -6595,16 +6599,22 @@ Value *FinishExprAST::codegen() {
 
   for (int i=0; i < Bodies.size(); i++)
   {
+    BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "currentbb", TheFunction);
+
+
     if (IsAsync[i])
       thread_pointers.push_back(Bodies[i]->codegen());
     else
       Bodies[i]->codegen();
+
+    Builder->CreateBr(CurrentBB);
+    Builder->SetInsertPoint(CurrentBB);
   }
 
 
   
-  Builder->CreateBr(AfterBB);
-  Builder->SetInsertPoint(AfterBB);
+  //Builder->CreateBr(AfterBB);
+  //Builder->SetInsertPoint(AfterBB);
 
 
   PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
