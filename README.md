@@ -15,6 +15,12 @@ Features:
 - Automatic differentiation;
 - Parallel coding with finish async expressions.
 
+Limitations:
+- Whereas there is already some liberty for building neural networks, the dataset is hardcoded. Only MNIST and Cifar like datasets are supported;
+- No support to backward mode of residuals nor additions or multiple multiplications at a single line (requires a computational graph);
+- The error debugging is still precarious;
+- Finish/async expressions currently do not work inside function calls, they are only supported at the main.
+
 ## Install
 
 **Pre-requisites**:
