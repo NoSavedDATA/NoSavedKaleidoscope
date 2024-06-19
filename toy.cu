@@ -54,6 +54,10 @@
 
 #include "include/cu_commons.h"
 
+#include <mutex>
+
+std::mutex mtx_load_tensor, mtx_store_tensor, mtx_store_pinned_tensor; // Create a mutex object
+
 #define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
 
 
@@ -3206,7 +3210,12 @@ extern "C" char * shuffle_str(char *string_list)
 
 extern "C" float * LoadTensor(char* tensor_name){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
-  return NamedTensors[tensor_name];
+
+  mtx_load_tensor.lock();
+  float *tensor = NamedTensors[tensor_name];
+  mtx_load_tensor.unlock();
+
+  return tensor;
 }
 
 extern "C" void *LoadDims(char* tensor_name)
@@ -4166,6 +4175,9 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
 {
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
 
+  mtx_store_tensor.lock();
+  
+  
 
   //std::cout << "Freeing tensor" << "\n";
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
@@ -4178,6 +4190,7 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
   NamedTensors[tensor_name] = tensor;
   NamedDims[tensor_name] = new_dims;
   
+  mtx_store_tensor.unlock();
 
   return 0;
 }
@@ -4187,12 +4200,14 @@ extern "C" float TensorAttrNoFree(char *tensor_name, float *tensor, std::vector<
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
   //PrintDims(NamedDims[tensor_name]);
 
+  mtx_store_pinned_tensor.lock();
 
   cudaCheck(cudaGetLastError());
   
   NamedTensors[tensor_name] = tensor;
   NamedDims[tensor_name] = new_dims;
   
+  mtx_store_pinned_tensor.unlock();
 
   return 0;
 }
@@ -6526,13 +6541,14 @@ Value *AsyncExprAST::codegen() {
   
   // Create/Spawn Threads
 
-  //BasicBlock *CurrentBB = Builder->GetInsertBlock();
+  BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-   
+  /* 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
   BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
   Builder->CreateBr(CurrentBB);
+  */
   
   
   
@@ -6599,7 +6615,7 @@ Value *FinishExprAST::codegen() {
 
   for (int i=0; i < Bodies.size(); i++)
   {
-    BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "currentbb", TheFunction);
+    //BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "currentbb", TheFunction);
 
 
     if (IsAsync[i])
@@ -6607,8 +6623,8 @@ Value *FinishExprAST::codegen() {
     else
       Bodies[i]->codegen();
 
-    Builder->CreateBr(CurrentBB);
-    Builder->SetInsertPoint(CurrentBB);
+    //Builder->CreateBr(CurrentBB);
+    //Builder->SetInsertPoint(CurrentBB);
   }
 
 
