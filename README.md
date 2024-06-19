@@ -83,10 +83,20 @@ clang++ test.cu --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/l
 
 ## Todos:
 
-- Map var names to hash function.
+- Map var names to hash function;
+- C++ vs Python vs NSK speed benchmarks;
+- NSK vs PyTorch benchmarks.
 
 ## Awards:
 
 <div align="center">
   <img src="assets/Screenshot_2.jpg" alt="Logo" width="350" height="350">
 </div>
+
+## Changelogs
+
+0.01
+  - Launched Cifar and MNIST like hardcoded datasets for neural network training;
+  - MLP and Conv2d support;
+  - Neural networks have decent expressivity, but only single-path non-residual architectures are supported.
+
