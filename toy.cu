@@ -54,9 +54,11 @@
 
 #include "include/cu_commons.h"
 
-#include <mutex>
 
-std::mutex mtx_load_tensor, mtx_store_tensor, mtx_store_pinned_tensor; // Create a mutex object
+pthread_mutex_t mtx_self_float;
+pthread_mutex_t mutex;
+
+int gambiarra_lock = 0;
 
 #define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
 
@@ -221,6 +223,8 @@ enum Token {
   tok_while = -10,
   tok_async = -22,
   tok_async_finish = -23,
+  tok_lock = -26,
+  tok_unlock = -27,
   tok_tab = 9,
 
   // operators
@@ -474,6 +478,10 @@ static int get_token() {
       return tok_async;
     if (IdentifierStr == "finish")
       return tok_async_finish;
+    if (IdentifierStr == "lock")
+      return tok_lock;
+    if (IdentifierStr == "unlock")
+      return tok_unlock;
     if (IdentifierStr == "binary")
       return tok_binary;
     if (IdentifierStr == "unary")
@@ -942,6 +950,33 @@ class FinishExprAST : public ExprAST {
 };
 
 
+/// LockExprAST
+class LockExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::string Name;
+
+  public:
+    LockExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
+                std::string Name)
+            : Bodies(std::move(Bodies)), Name(Name) {}
+
+
+	Value* codegen() override;
+};
+
+class UnlockExprAST : public ExprAST {
+  std::string Name;
+
+  public:
+    UnlockExprAST(std::string Name) : Name(Name) {}
+
+
+	Value* codegen() override;
+};
+
+
+
+
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes), as well as if it is an operator.
@@ -1062,7 +1097,6 @@ std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
   return nullptr;
 }
 
-
 void LogWarning(const char *Str) {
   std::cout << "\nLinha: " << LineCounter << "\n   \033[33m Aviso: \033[0m " << Str << "\n\n";
 }
@@ -1074,6 +1108,10 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mErro: \033[0m%s\n", buf);
   std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0mtoken " << ReverseToken(CurTok) << " inesperado. Esperava-se uma expressão.\n\n";
+  
+  while(CurTok!=tok_space && CurTok!=';')
+    getNextToken();
+
   return nullptr;
 }
 
@@ -1138,6 +1176,7 @@ static std::unique_ptr<ExprAST> ParseParenExpr(std::string class_name="") {
 std::vector<std::string> tensorVars;
 std::vector<std::string> pinnedTensorVars;
 std::map<std::string, std::string> functionVars;
+std::map<std::string, pthread_mutex_t *> lockVars;
 
 
 //global
@@ -1303,7 +1342,7 @@ static std::unique_ptr<ExprAST> ParseIfExpr(std::string class_name="") {
     while(true)
     {
 
-      if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
+      if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
         break;
 
       while (CurTok == tok_space)
@@ -1325,6 +1364,50 @@ static std::unique_ptr<ExprAST> ParseIfExpr(std::string class_name="") {
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
   }
+}
+
+
+
+
+static std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(int cur_level_tabs, std::string class_name="")
+{
+  std::vector<std::unique_ptr<ExprAST>> Body, NullBody;
+  //std::cout << "\nSeen tabs on for body POST: " << SeenTabs << "\n\n";
+  if (CurTok==tok_space)
+    getNextToken();
+
+  while(true)
+  {
+    //std::cout << "\n\nParsing new expression with tabs: " << SeenTabs << " tok: " << ReverseToken(CurTok) << "\n";
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
+    {
+      //std::cout << "Breaking for with cur tok: " << ReverseToken(CurTok) << " Seen Tabs:" << SeenTabs <<  "\n";
+      break;
+    } 
+    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << ReverseToken(CurTok) << "\n\n";
+
+    while (CurTok == tok_space)
+    {
+      //std::cout << "\nJumping tok space\n\n";
+      getNextToken();
+    }
+
+    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
+    if (SeenTabs <= cur_level_tabs)
+      break;
+
+
+    auto body = ParseExpression(class_name);
+    if (!body)
+      return std::move(NullBody);
+    Body.push_back(std::move(body));
+    //getNextToken();
+  }
+
+  if (CurTok==tok_space)
+    getNextToken();
+
+  return std::move(Body);
 }
 
 
@@ -1375,40 +1458,7 @@ static std::unique_ptr<ExprAST> ParseForExpr(std::string class_name="") {
   
   std::vector<std::unique_ptr<ExprAST>> Body;
 
-  //std::cout << "\nSeen tabs on for body POST: " << SeenTabs << "\n\n";
-  if (CurTok==tok_space)
-    getNextToken();
-
-  while(true)
-  {
-    //std::cout << "\n\nParsing new expression with tabs: " << SeenTabs << " tok: " << ReverseToken(CurTok) << "\n";
-    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
-    {
-      //std::cout << "Breaking for with cur tok: " << ReverseToken(CurTok) << " Seen Tabs:" << SeenTabs <<  "\n";
-      break;
-    } 
-    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << ReverseToken(CurTok) << "\n\n";
-
-    while (CurTok == tok_space)
-    {
-      //std::cout << "\nJumping tok space\n\n";
-      getNextToken();
-    }
-
-    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
-    if (SeenTabs <= cur_level_tabs)
-      break;
-
-
-    auto body = ParseExpression(class_name);
-    if (!body)
-      return nullptr;
-    Body.push_back(std::move(body));
-    //getNextToken();
-  }
-
-  if (CurTok==tok_space)
-    getNextToken();
+  Body = ParseIdentedBodies(cur_level_tabs, class_name);
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body));
@@ -1432,45 +1482,12 @@ static std::unique_ptr<ExprAST> ParseWhileExpr(std::string class_name="") {
   if (!Cond)
     return nullptr;
   
-  std::vector<std::unique_ptr<ExprAST>> Body;
-
-  //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\n\n";
-
-  if (CurTok==tok_space)
-    getNextToken();
-
-  while(true)
-  {
-    if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
-    {
-      //std::cout << "Breaking for with cur tok: " << CurTok << "\n";
-      break;
-    } 
-    //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
-
-    while (CurTok == tok_space)
-    {
-      //std::cout << "\nJumping tok space\n\n";
-      getNextToken();
-    }
-
-    //std::cout << "Post space has " << SeenTabs << " tabs.\n";
-    if (SeenTabs <= cur_level_tabs)
-      break;
-
-    //std::cout << "\nParse new for expression" <<  "\n\n";
-    auto body = ParseExpression(class_name);
-    if (!body)
-      return nullptr;
-    Body.push_back(std::move(body));
-    //getNextToken();
-  }
-
-  if (CurTok==tok_space)
-    getNextToken();
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
 
   return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body));
 }
+
+
 
 static std::unique_ptr<ExprAST> ParseAsyncExpr(std::string class_name="") {
 
@@ -1485,43 +1502,16 @@ static std::unique_ptr<ExprAST> ParseAsyncExpr(std::string class_name="") {
 
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(class_name)));
-  else 
-  {
-    getNextToken(); // eat \n
-    while(CurTok != ';')
-    {
-
-      if (SeenTabs <= cur_level_tabs && CurTok != tok_space && CurTok != tok_tab)
-        break;
-      
-      //std::cout << "\nSeen tabs on finish body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
-
-
-      while (CurTok == tok_space)
-        getNextToken();
-      
-
-      //std::cout << "Post space has " << SeenTabs << " tabs.\n";
-
-      if (SeenTabs <= cur_level_tabs)
-        break;
-
-      if (CurTok==tok_tab)
-        getNextToken();
-
-      //std::cout << "async expression current token: " << ReverseToken(CurTok) << "\n";
-
-
-      Bodies.push_back(std::move(ParseExpression(class_name)));
-        
-    }
-  }
+  else
+    Bodies = ParseIdentedBodies(cur_level_tabs, class_name);
+  
   
   
   //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
 
   return std::make_unique<AsyncExprAST>(std::move(Bodies));
 }
+
 
 
 static std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name="") {
@@ -1563,7 +1553,7 @@ static std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name="") {
 
     if (CurTok == tok_async)
     {
-      Bodies.push_back(std::move(ParseAsyncExpr()));
+      Bodies.push_back(std::move(ParseAsyncExpr(class_name)));
       IsAsync.push_back(true);
     }
     else
@@ -2107,7 +2097,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       IdName = class_name + IdName;
   }
 
-  
+  std::cout << "\n\n\n\nParsing call of " << IdName << "\n\n\n\n\n";
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 
   if (in_str(IdName, return_dims_methods) || is_var_forward)
@@ -2438,6 +2428,42 @@ static std::unique_ptr<ExprAST> ParseLogExpr() {
 
 
 
+static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
+  int cur_level_tabs = SeenTabs;
+  getNextToken(); // eat the lock.
+
+
+  std::string Name = "mutex";
+  if (CurTok==tok_str)
+  {
+    Name = IdentifierStr;
+    getNextToken(); // eat lock string "" name
+  }
+
+
+
+  if (lockVars.count(Name) == 0)
+  {
+    pthread_mutex_t* _mutex = new pthread_mutex_t;
+    if (pthread_mutex_init(&mutex, NULL) != 0) {
+      printf("Mutex initialization failed\n");
+      return nullptr;
+    }
+    
+    lockVars[IdentifierStr] = _mutex;
+    
+  } 
+  
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
+
+
+  Body.push_back(std::make_unique<UnlockExprAST>(Name));
+
+  return std::make_unique<LockExprAST>(std::move(Body), Name);
+}
+
+
+
 /// primary
 ///   ::= identifierexpr
 ///   ::= numberexpr
@@ -2448,7 +2474,6 @@ static std::unique_ptr<ExprAST> ParseLogExpr() {
 static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
   switch (CurTok) {
   default:
-    getNextToken();
     return LogErrorT(CurTok);
   case tok_identifier:
     return ParseIdentifierExpr();
@@ -2474,6 +2499,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseWhileExpr(class_name);
   case tok_async_finish:
     return ParseFinishExpr(class_name);
+  case tok_lock:
+    return ParseLockExpr(class_name);
   case tok_var:
     return ParseVarExpr(class_name);
   case tok_tensor:
@@ -3211,11 +3238,7 @@ extern "C" char * shuffle_str(char *string_list)
 extern "C" float * LoadTensor(char* tensor_name){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
 
-  mtx_load_tensor.lock();
-  float *tensor = NamedTensors[tensor_name];
-  mtx_load_tensor.unlock();
-
-  return tensor;
+  return NamedTensors[tensor_name];
 }
 
 extern "C" void *LoadDims(char* tensor_name)
@@ -3969,9 +3992,7 @@ extern "C" char * ConcatFirstArgToVarName(char *var_name)
 
 
 extern "C" float StoreOnDemand(char *object_var_name, float value){
-  
-//  std::cout << "StoreOnDemand: " << FirstArg << "." << object_var_name << " " << value << "\n";
-
+  //std::cout << "StoreOnDemand: " << FirstArg << "." << object_var_name << " " << value << "\n";
   NamedClassValues[FirstArg + object_var_name] = ConstantFP::get(*GlobalContext, APFloat(value));
   return 0;
 }
@@ -3997,9 +4018,11 @@ extern "C" float StoreStrVecOnDemand(char *object_var_name, std::vector<char *> 
 }
 
 
+
+
 extern "C" float LoadOnDemand(char *object_var_name) {
   //std::cout << "LoadOnDemand var to load: " << object_var_name << "\n";
-    
+
   Value * class_val = NamedClassValues[object_var_name];
 
   if (class_val) 
@@ -4008,6 +4031,18 @@ extern "C" float LoadOnDemand(char *object_var_name) {
     return 0;
 }
 
+
+extern "C" void LockMutex(char *mutex_name)
+{
+  pthread_mutex_t *_mutex = lockVars[mutex_name];
+  pthread_mutex_lock(_mutex);
+}
+
+extern "C" void UnlockMutex(char *mutex_name)
+{
+  pthread_mutex_t *_mutex = lockVars[mutex_name];
+  pthread_mutex_unlock(_mutex);
+}
 
 extern "C" void * LoadStrVecOnDemand(char *object_var_name) {
   //std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
@@ -4175,10 +4210,6 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
 {
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
 
-  mtx_store_tensor.lock();
-  
-  
-
   //std::cout << "Freeing tensor" << "\n";
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
 
@@ -4190,8 +4221,6 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
   NamedTensors[tensor_name] = tensor;
   NamedDims[tensor_name] = new_dims;
   
-  mtx_store_tensor.unlock();
-
   return 0;
 }
 
@@ -4200,14 +4229,13 @@ extern "C" float TensorAttrNoFree(char *tensor_name, float *tensor, std::vector<
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
   //PrintDims(NamedDims[tensor_name]);
 
-  mtx_store_pinned_tensor.lock();
 
   cudaCheck(cudaGetLastError());
   
   NamedTensors[tensor_name] = tensor;
   NamedDims[tensor_name] = new_dims;
   
-  mtx_store_pinned_tensor.unlock();
+  
 
   return 0;
 }
@@ -6653,6 +6681,25 @@ Value *FinishExprAST::codegen() {
 }
 
 
+Value *LockExprAST::codegen(){
+  
+  Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
+
+  Value *V;
+  for (auto &body : Bodies)
+    V = body->codegen();
+
+  return V;
+}
+
+Value *UnlockExprAST::codegen(){
+  Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+
+
 
 // Create Var
 Value *VarExprAST::codegen() {
@@ -7892,6 +7939,20 @@ static void InitializeModule() {
     false);
   TheModule->getOrInsertFunction("pthread_join_aux", pthreadJoinTy);
 
+  
+
+  FunctionType *LockTy = FunctionType::get(
+    Type::getVoidTy(*TheContext),
+    {int8PtrTy},
+    false);
+  TheModule->getOrInsertFunction("LockMutex", LockTy);
+
+  FunctionType *UnlockMutexTy = FunctionType::get(
+    Type::getVoidTy(*TheContext),
+    {int8PtrTy},
+    false);
+  TheModule->getOrInsertFunction("UnlockMutex", UnlockMutexTy);
+
 
   //===----------------------------------------------------------------------===//
   // Str Ops
@@ -7965,78 +8026,52 @@ static void InitializeModule() {
 
   // char *, int
   FunctionType *FirstArgOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
-  Function::Create(
-    FirstArgOnDemandTy,
-    Function::ExternalLinkage,
-    "FirstArgOnDemand",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
   
 
 
 
   // char *, int
   FunctionType *DimnishFirstArgOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
-  Function::Create(
-    DimnishFirstArgOnDemandTy,
-    Function::ExternalLinkage,
-    "DimnishFirstArgOnDemand",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("DimnishFirstArgOnDemand", DimnishFirstArgOnDemandTy);
   
 
   // char *, char *
   FunctionType * ConcatStrTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
-      Type::getInt8Ty(*TheContext)->getPointerTo(),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
       false // Not vararg
   );
-  Function::Create(
-    ConcatStrTy,
-    Function::ExternalLinkage,
-    "ConcatStr",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
 
 
   // char *, char *
   FunctionType *ConcatFirstArgToVarNameTy = FunctionType::get(
-      Type::getInt8Ty(*TheContext)->getPointerTo(),
+      int8PtrTy,
       //{Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
-      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      {int8PtrTy},
       false // Not vararg
   );
-  Function::Create(
-    ConcatFirstArgToVarNameTy,
-    Function::ExternalLinkage,
-    "ConcatFirstArgToVarName",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("ConcatFirstArgToVarName", ConcatFirstArgToVarNameTy);
+  
 
 
   // char *, float
   FunctionType *StoreOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false // Not vararg
   );
-  Function::Create(
-    StoreOnDemandTy,
-    Function::ExternalLinkage,
-    "StoreOnDemand",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("StoreOnDemand", StoreOnDemandTy);
+  
 
 
   FunctionType *StoreStrOnDemandTy = FunctionType::get(
@@ -8062,12 +8097,8 @@ static void InitializeModule() {
       {Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
-  Function::Create(
-    LoadOnDemandTy,
-    Function::ExternalLinkage,
-    "LoadOnDemand",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("LoadOnDemand", LoadOnDemandTy);
+  
 
   FunctionType *LoadStrVecOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
@@ -8075,12 +8106,8 @@ static void InitializeModule() {
       {int8PtrTy},
       false // Not vararg
   );
-  Function::Create(
-    LoadStrVecOnDemandTy,
-    Function::ExternalLinkage,
-    "LoadStrVecOnDemand",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("LoadStrVecOnDemand", LoadStrVecOnDemandTy);
+  
 
 
   // char *
@@ -8091,20 +8118,16 @@ static void InitializeModule() {
       //{Type::getInt8Ty(*TheContext)->getPointerTo()},
       false // Not vararg
   );
-  Function::Create(
-    StoreDimsOnDemandTy,
-    Function::ExternalLinkage,
-    "StoreDimsOnDemand",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("StoreDimsOnDemand", StoreDimsOnDemandTy);
+  
 
 
   // char *, int, char *
   FunctionType *CreatePinnedTensorOnDemandTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(),
+      {int8PtrTy,
        Type::getInt32Ty(*TheContext),
-       Type::getInt8Ty(*TheContext)->getPointerTo()},
+       int8PtrTy},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("CreatePinnedTensorOnDemand", CreatePinnedTensorOnDemandTy);
@@ -8113,9 +8136,9 @@ static void InitializeModule() {
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(),
+      {int8PtrTy,
        Type::getInt32Ty(*TheContext),
-       Type::getInt8Ty(*TheContext)->getPointerTo()},
+       int8PtrTy},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("CreateTensorOnDemand", CreateTensorOnDemandTy);
@@ -8125,9 +8148,9 @@ static void InitializeModule() {
   FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(),
+      {int8PtrTy,
        Type::getInt32Ty(*TheContext),
-       Type::getInt8Ty(*TheContext)->getPointerTo(),
+       int8PtrTy,
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
@@ -8137,14 +8160,7 @@ static void InitializeModule() {
        Type::getFloatTy(*TheContext)},
       false // Not vararg
   );
-  Function::Create(
-    CreateConv2dOnDemandTy,
-    Function::ExternalLinkage,
-    "CreateConv2dOnDemand",
-    TheModule.get()
-  );
-
-
+  TheModule->getOrInsertFunction("CreateConv2dOnDemand", CreateConv2dOnDemandTy);
 
 
   // float, char *
@@ -8153,12 +8169,7 @@ static void InitializeModule() {
       {Type::getFloatTy(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
       false 
   );
-  Function::Create(
-    CallToStoredValuesTy,
-    Function::ExternalLinkage, 
-    "toStoredValues", 
-    TheModule.get() 
-  );
+  TheModule->getOrInsertFunction("toStoredValues", CallToStoredValuesTy);
 
 
   // char *
@@ -8379,6 +8390,15 @@ int main() {
   cudaCheck(cudaMalloc(&cublaslt_workspace, cublaslt_workspace_size));
 
 
+  if (pthread_mutex_init(&mutex, NULL) != 0) {
+    printf("Mutex initialization failed\n");
+    return 1;
+  }
+
+  std::cout << "Adding MAIN mutex as " << &mutex << "\n";
+
+  lockVars["mutex"] = &mutex;
+  
 
   
   cudnnCreate(&cudnn);
