@@ -326,6 +326,9 @@ std::map<int, std::string> token_to_string = {
   { 62, ">" },
   { 64, "@" },
 
+  { 91, "[" },
+  { 93, "]" },
+
 
   { static_cast<int>('a'), "a" },
   { static_cast<int>('b'), "b" },
@@ -395,7 +398,11 @@ static int get_token() {
   while (LastChar==32 || LastChar==tok_tab)
     LastChar = getchar();
     
-    
+  if (LastChar=='[')
+  {
+    LastChar = getchar();
+    return '[';
+  }
 
   //std::cout << "Last char: " << LastChar << "\n";
     
@@ -429,22 +436,28 @@ static int get_token() {
     {
       LastChar = getchar();
       
+
+      if (LastChar=='[')
+      {
+        return tok_identifier;
+      }
+      
       if(isalnum(LastChar) || LastChar=='_')
         IdentifierStr += LastChar;
       else
         name_ok = false;
 
-      if (IdentifierStr == "tensor" && LastChar=='[')
+      if (IdentifierStr == "tensor")
       {
         LastChar = getchar();
         return tok_tensor;
       }
-      if (IdentifierStr == "pinned_tensor" && LastChar=='[')
+      if (IdentifierStr == "pinned_tensor")
       {
         LastChar = getchar();
         return tok_pinned_tensor;
       }
-      if (IdentifierStr == "Conv2d" && LastChar=='[')
+      if (IdentifierStr == "Conv2d")
       {
         LastChar = getchar();
         return tok_conv2d;
@@ -595,6 +608,7 @@ public:
   virtual ~ExprAST() = default;
   std::vector<float> Dims = {-1.0f};
   std::string Type = "None";
+  std::string ReturnType = "None";
   std::string Name = "Unnamed";
   std::string isSelf = "false";
 
@@ -604,9 +618,13 @@ public:
   virtual Value *codegen() = 0;
   virtual void SetType(std::string Type) {
     this->Type=Type;
+    this->ReturnType=Type;
   }
   virtual std::string GetType() {
     return Type;
+  }
+  virtual void SetReturnType(std::string ReturnType) {
+    this->ReturnType=ReturnType;
   }
   virtual void SetSelf(std::string Self) {
     this->isSelf=Self;
@@ -674,6 +692,22 @@ class VariableExprAST : public ExprAST {
 };
 
 
+class VecIdxExprAST : public ExprAST {
+  std::string Name;
+  std::unique_ptr<ExprAST> Idx;
+
+
+  public:
+    VecIdxExprAST(const std::string &Name, std::unique_ptr<ExprAST> Idx)
+                  : Name(Name), Idx(std::move(Idx)) {}
+
+    Value *codegen() override;
+    const std::string &getName() const { return Name; }
+    std::string GetName() override {
+    return Name;
+  }
+};
+
 /// VarExprAST - Expression class for var/in
 class VarExprAST : public ExprAST {
 
@@ -717,6 +751,7 @@ class StrVecExprAST : public ExprAST {
 
   Value *codegen() override;
 };
+
 
 
 
@@ -1176,6 +1211,7 @@ static std::unique_ptr<ExprAST> ParseParenExpr(std::string class_name="") {
 std::vector<std::string> tensorVars;
 std::vector<std::string> pinnedTensorVars;
 std::map<std::string, std::string> functionVars;
+std::vector<std::string> str_vecVars;
 std::map<std::string, pthread_mutex_t *> lockVars;
 
 
@@ -1203,11 +1239,11 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
   std::string IdName = IdentifierStr;
   
   
-  
+  std::cout << "Identifier " << IdName <<  "\n";
 
   getNextToken(); // eat identifier.
   
-  if (CurTok != '(') // Simple variable ref.
+  if (CurTok != '(' && CurTok != '[') // Simple variable ref.
   {
     auto aux = std::make_unique<VariableExprAST>(IdName);
     if (in_str(IdentifierStr, pinnedTensorVars))
@@ -1220,6 +1256,37 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     getNextToken();
     return aux;
   }
+
+
+
+
+
+  if (CurTok=='[')
+  {
+    getNextToken(); // eat [
+    
+    std::unique_ptr<ExprAST> Idx = ParseExpression(class_name);
+
+    auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
+    
+    if (in_str(IdName, str_vecVars))
+    {
+      aux->SetType("str_vec");
+      aux->SetReturnType("str");
+    }
+
+
+    
+    
+    getNextToken(); // eat ]
+
+    std::cout << "Parsed vector indexation" << "\n";
+    return std::move(aux);
+  }
+
+
+
+
 
   
 
@@ -1661,7 +1728,7 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
 
 
 static std::unique_ptr<ExprAST> ParseStrVecExpr() {
-  getNextToken(); // eat str
+  getNextToken(); // eat str_vec
   
   
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
@@ -1685,6 +1752,7 @@ static std::unique_ptr<ExprAST> ParseStrVecExpr() {
     }
 
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    str_vecVars.push_back(Name);
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -1833,7 +1901,7 @@ extern "C" float * gload_img(char* tensor_name, char *img_name)
     
   } else {
     std::string img_n = img_name;
-    std::string _error = "Failed to open image: " + img_n + ".";
+    std::string _error = "Failed to open image: " + img_n + ".\n\n";
     LogErrorS(_error);
   }
 
@@ -2025,7 +2093,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
   
 
-  if (CurTok != '(') // Simple variable ref.
+  if (CurTok != '(' && CurTok != '[') // Simple variable ref.
   {
     auto aux = std::make_unique<VariableExprAST>(IdName);
     
@@ -2055,6 +2123,38 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
     return aux;
   }
+
+
+
+  if (CurTok=='[')
+  {
+    getNextToken(); // eat [
+
+    std::cout << "Post [ cur tok" << ReverseToken(CurTok) << "\n";
+    std::cout << "num val " << NumVal << "\n";
+
+    std::unique_ptr<ExprAST> Idx = ParseExpression(class_name);
+
+    auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
+    if (is_class_attr)
+      aux->SetSelf(pre_dot);
+    if (pre_dot=="self")
+      aux->SetSelf("true");
+    
+    if (in_str(IdName, str_vecVars))
+    {
+      aux->SetType("str_vec");
+      aux->SetReturnType("str");
+    }
+
+
+    getNextToken(); // eat ]
+
+    std::cout << "Parsed vector indexation on SELF" << "\n\n\n";
+    return std::move(aux);
+  }
+
+
 
 
   // ParseCall.
@@ -2116,6 +2216,10 @@ static std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
   
   getNextToken(); // eat pinned_tensor.
   
+  if (CurTok != '[')
+    return LogError("pinned tensor declaration expected [");
+    getNextToken();
+
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   std::string init = "zeros";
@@ -2210,6 +2314,11 @@ static std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
 static std::unique_ptr<ExprAST> ParseTensorExpr() {
   
   getNextToken(); // eat the tensor.
+
+  
+  if (CurTok != '[')
+    return LogError("tensor declaration expected [");
+    getNextToken();
   
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
@@ -2305,6 +2414,10 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
   
   getNextToken(); // eat the Conv2d.
   
+  if (CurTok != '[')
+    return LogError("Conv2d declaration expected [");
+    getNextToken();
+
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   std::string init = "xavu_relu";
@@ -2452,7 +2565,7 @@ static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
     
     lockVars[IdentifierStr] = _mutex;
     
-  } 
+  }
   
   std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
 
@@ -4196,6 +4309,131 @@ Value *VariableExprAST::codegen() {
     return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   }
 }
+
+
+
+
+extern "C" char * IndexStrVec(std::vector<char*> vec, float _idx)
+{
+
+  int idx = (int) _idx;
+
+  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
+  
+
+  return vec[idx];
+}
+
+
+extern "C" char * IndexClassStrVec(char * vec_name, float _idx)
+{
+  int idx = (int) _idx;
+
+
+  std::vector<char*> vec = ClassStrVecs[vec_name];
+
+  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
+  
+
+  return vec[idx];
+}
+
+
+extern "C" char * AuxFn(char * arg1)
+{
+
+  std::cout << "Aux fn: " << arg1 << "\n";
+  
+
+  return arg1;
+}
+
+
+
+
+
+Value *VecIdxExprAST::codegen() {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // Look this variable up in the function.
+
+  std::cout << "Now Loading Vec indexation for " << Name << ", type: " << Type << "  \n";
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  std::string functionName = TheFunction->getName().str();
+  
+  
+  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  Value *V, *idx;
+
+  idx = Idx->codegen();
+
+
+  Value *var_name, *object_name, *object_var_name;
+  var_name = Builder->CreateGlobalString(Name);
+  
+
+
+
+
+  std::string pre_dot = GetSelf();
+  if (pre_dot!="false")
+  {
+    // Gets from FirstArg if it is self
+    if (pre_dot=="true")
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
+                                                      {var_name});
+    // Gets from pre_dot if it is a class attribute
+    else {
+      object_name = Builder->CreateGlobalString(pre_dot);
+      var_name = Builder->CreateGlobalString(Name);
+
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {object_name, var_name});
+    }
+
+    for (const auto &entry : NamedClassValues)
+      if (ends_with(entry.first, Name))
+        return Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),
+                                                      {var_name});
+
+
+    if (Type=="str_vec"){
+      
+      V = Builder->CreateCall(TheModule->getFunction("IndexClassStrVec"), {var_name, idx});
+      V = Builder->CreateCall(TheModule->getFunction("AuxFn"), {V});  
+      
+      return V;
+    }                                                    
+  }
+
+
+  if (Type=="str_vec")
+  {
+    V = NamedStrVecs[Name];
+    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
+
+
+    V = Builder->CreateCall(TheModule->getFunction("IndexStrVec"), {V, idx});
+    V = Builder->CreateCall(TheModule->getFunction("AuxFn"), {V});
+
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  }
+
+
+  std::string _error = "Unkown vector: " + Name + ".";
+  LogErrorS(_error);
+
+  return ret;
+}
+
+
+
+
+
+
+
 
 
 
@@ -7229,7 +7467,10 @@ Value *CallExprAST::codegen() {
                                                       {arg});
     }
     else
+    {
+      std::cout << "Call expr codegen for arg of type " << Args[i]->GetType() << "\n";
       arg = Args[i]->codegen();
+    }
 
   
 
@@ -7997,6 +8238,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("PrintStr", PrintStrTy);
 
 
+  //
   FunctionType *PrintStrVecTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy}, 
@@ -8005,18 +8247,40 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("PrintStrVec", PrintStrVecTy);
 
 
-  // char *
-  FunctionType *shuffle_strTy = FunctionType::get(
-      Type::getInt8Ty(*TheContext)->getPointerTo(),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
+  //
+  FunctionType *IndexStrVecTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false 
   );
-  Function::Create(
-    shuffle_strTy,
-    Function::ExternalLinkage, 
-    "shuffle_str", 
-    TheModule.get() 
+  TheModule->getOrInsertFunction("IndexStrVec", IndexStrVecTy);
+
+
+  //
+  FunctionType *IndexClassStrVecTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false 
   );
+  TheModule->getOrInsertFunction("IndexClassStrVec", IndexClassStrVecTy);
+
+
+  //
+  FunctionType *AuxFnTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("AuxFn", AuxFnTy);
+
+
+  // char *
+  FunctionType *shuffle_strTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
 
 
   //===----------------------------------------------------------------------===//
@@ -8395,7 +8659,6 @@ int main() {
     return 1;
   }
 
-  std::cout << "Adding MAIN mutex as " << &mutex << "\n";
 
   lockVars["mutex"] = &mutex;
   
