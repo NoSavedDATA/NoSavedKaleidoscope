@@ -615,7 +615,7 @@ public:
   Value *TensorPtr, *DimsPtr;
 
 
-  virtual Value *codegen() = 0;
+  virtual Value *codegen(Value *first_arg) = 0;
   virtual void SetType(std::string Type) {
     this->Type=Type;
     this->ReturnType=Type;
@@ -660,7 +660,7 @@ class NumberExprAST : public ExprAST {
     NumberExprAST(float Val) : Val(Val) {} //{std::cout << "number created";}
   std::string Type = "num";
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -672,9 +672,22 @@ class StringExprAST : public ExprAST {
     StringExprAST(std::string Val) : Val(Val) {} //{std::cout << "string created";}
   std::string Type = "str";
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
+
+
+/// VariableExprAST - Expression class for referencing a variable, like "a".
+class ObjAttrExprAST : public ExprAST {
+  std::unique_ptr<ExprAST> Body;
+  std::string PreDot;
+
+  public:
+    ObjAttrExprAST(std::unique_ptr<ExprAST> Body, const std::string &PreDot)
+                : Body(std::move(Body)), PreDot(PreDot) {}
+
+    Value *codegen(Value *first_arg) override;
+};
 
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
@@ -684,7 +697,7 @@ class VariableExprAST : public ExprAST {
   public:
     VariableExprAST(const std::string &Name) : Name(Name) {}
 
-    Value *codegen() override;
+    Value *codegen(Value *first_arg) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override {
     return Name;
@@ -701,7 +714,7 @@ class VecIdxExprAST : public ExprAST {
     VecIdxExprAST(const std::string &Name, std::unique_ptr<ExprAST> Idx)
                   : Name(Name), Idx(std::move(Idx)) {}
 
-    Value *codegen() override;
+    Value *codegen(Value *first_arg) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override {
     return Name;
@@ -720,7 +733,7 @@ class VarExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 class StrExprAST : public ExprAST {
@@ -734,7 +747,7 @@ class StrExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -749,7 +762,7 @@ class StrVecExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -769,7 +782,7 @@ class TensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -786,7 +799,7 @@ class PinnedTensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -807,7 +820,7 @@ class Conv2dExprAST : public VarExprAST {
                    Stride(std::move(Stride)), Padding(std::move(Padding)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 class LogExprAST : public ExprAST {
@@ -816,7 +829,7 @@ class LogExprAST : public ExprAST {
   public:
     LogExprAST(const std::string &Name) : Name(Name) {}
 
-    Value *codegen() override;
+    Value *codegen(Value *first_arg) override;
     std::string GetName() override {
       return Name;
     }
@@ -833,7 +846,7 @@ public:
   UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
       : Opcode(Opcode), Operand(std::move(Operand)) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -848,7 +861,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -861,7 +874,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -874,7 +887,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -887,7 +900,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -910,7 +923,7 @@ class CallExprAST : public ExprAST {
                 const std::string &CalleeOverride)
         : Callee(Callee), Args(std::move(Args)), Class(Class), PreDot(PreDot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 
@@ -926,7 +939,7 @@ class IfExprAST : public ExprAST {
               std::vector<std::unique_ptr<ExprAST>> Else)
         : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 /// ForExprAST - Expression class for for.
@@ -942,7 +955,7 @@ class ForExprAST : public ExprAST {
         : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
           Step(std::move(Step)), Body(std::move(Body)) {}
 
-  Value *codegen() override;
+  Value *codegen(Value *first_arg) override;
 };
 
 /// WhileExprAST - Expression class for while.
@@ -954,7 +967,7 @@ class WhileExprAST : public ExprAST {
     WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
       : Cond(std::move(Cond)), Body(std::move(Body)) {}
 
-	Value* codegen() override;
+	Value* codegen(Value *first_arg) override;
 };
 
 
@@ -966,7 +979,7 @@ class AsyncExprAST : public ExprAST {
     AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
       : Body(std::move(Body)) {}
 
-	Value* codegen() override;
+	Value* codegen(Value *first_arg) override;
 };
 
 
@@ -981,7 +994,7 @@ class FinishExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), IsAsync(std::move(IsAsync)) {}
 
 
-	Value* codegen() override;
+	Value* codegen(Value *first_arg) override;
 };
 
 
@@ -996,7 +1009,7 @@ class LockExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), Name(Name) {}
 
 
-	Value* codegen() override;
+	Value* codegen(Value *first_arg) override;
 };
 
 class UnlockExprAST : public ExprAST {
@@ -1006,7 +1019,7 @@ class UnlockExprAST : public ExprAST {
     UnlockExprAST(std::string Name) : Name(Name) {}
 
 
-	Value* codegen() override;
+	Value* codegen(Value *first_arg) override;
 };
 
 
@@ -1807,6 +1820,21 @@ int DimsProd(std::vector<float> dims)
   return (int)aux;
 }
 
+std::vector<float> BatchLessDims(std::vector<float> dims)
+{
+  // Removes first dim (batch dim).
+  if (dims.size()<=1)
+    LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+
+  std::vector<float> new_dims;
+
+  for (int i=0; i<dims.size()-1;i++)
+    new_dims.push_back(dims[i+1]);
+
+  return new_dims;
+}
+
+
 
 extern "C" float * load_img(char *img_name)
 {
@@ -1871,10 +1899,11 @@ extern "C" float * gload_img(char* tensor_name, char *img_name)
       std::string _error = "The image dimensions are incompatible with the tensor " + t_n + " dimensions.";
       LogErrorS(_error);
 
-      std::cout << "\nTensor dims:" << "\n";
-      PrintDims(dims);
 
-      std::cout << "\nImage dims: [" << width << ", " << height << ", " << channels << "]\n\n";
+      std::cout << "\nTensor batchless dims:" << "\n";
+      PrintDims(BatchLessDims(dims));
+
+      std::cout << "\nImage required dims: [" << width << ", " << height << ", " << channels << "]\n\n";
 
       return nullptr;
     }
@@ -2133,20 +2162,28 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     std::cout << "Post [ cur tok" << ReverseToken(CurTok) << "\n";
     std::cout << "num val " << NumVal << "\n";
 
-    std::unique_ptr<ExprAST> Idx = ParseExpression(class_name);
+    std::unique_ptr<ExprAST> Idx, aux;
 
-    auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
-    if (is_class_attr)
-      aux->SetSelf(pre_dot);
-    if (pre_dot=="self")
-      aux->SetSelf("true");
-    
+    Idx = ParseExpression(class_name);
+
+    aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
+
     if (in_str(IdName, str_vecVars))
     {
       aux->SetType("str_vec");
       aux->SetReturnType("str");
     }
 
+
+    if (pre_dot=="self")
+      aux->SetSelf("true");
+    
+    if (is_class_attr)
+    {
+      aux->SetSelf(pre_dot);
+
+      //aux = std::make_unique<ObjAttrExprAST>(std::move(aux), pre_dot);
+    }
 
     getNextToken(); // eat ]
 
@@ -2197,7 +2234,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       IdName = class_name + IdName;
   }
 
-  std::cout << "\n\n\n\nParsing call of " << IdName << "\n\n\n\n\n";
+
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 
   if (in_str(IdName, return_dims_methods) || is_var_forward)
@@ -2782,12 +2819,12 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     
     
 
-    std::cout << "\n\nL type: " << L_cuda << " R type: " << R_cuda << "\n";
+    //std::cout << "\n\nL type: " << L_cuda << " R type: " << R_cuda << "\n";
 
 
     if (L_cuda==type_tensor && R_cuda==type_pinned_tensor)
     {
-      std::cout << "\nParse BinaryTensorPinned " << ReverseToken(BinOp) <<  "\n";
+      //std::cout << "\nParse BinaryTensorPinned " << ReverseToken(BinOp) <<  "\n";
       LHS = std::make_unique<BinaryTensorPinnedExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
     }
@@ -2912,6 +2949,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
 
   std::string is_tensor="no";
   std::vector<std::string> ArgNames, Types;
+  if (class_name!="")
+    ArgNames.push_back("self");
   while (CurTok != ')')
   {
     Types.push_back(IdentifierStr);
@@ -2940,8 +2979,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
       
     if (CurTok != ',')
     {
-      std::cout << "comma Cur Tok " << IdentifierStr << "\n";
-      return LogErrorP("Esperado ')' ou ',' na lista de argumentos do protótipo.");
+      return LogErrorP("Expected ')' or ',' at prototype arguments list.");
     }
     getNextToken();
   }
@@ -2995,7 +3033,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition(std::string class_name="") {
     Body.push_back(std::move(ParseExpression(class_name)));
   }
 
-  std::cout << "function number of expressions: " << Body.size() << "\n";
+  //std::cout << "function number of expressions: " << Body.size() << "\n";
 
   if (Body.size()==0)
   {
@@ -3197,20 +3235,6 @@ extern "C" float sleep(float id)
 
 
 
-std::vector<float> BatchLessDims(std::vector<float> dims)
-{
-  // Removes first dim (batch dim).
-  if (dims.size()<=1)
-    LogError("Remover dimensão do batch requer uma entrada com mais de uma dimensão.");
-
-  std::vector<float> new_dims;
-
-  for (int i=0; i<dims.size()-1;i++)
-    new_dims.push_back(dims[i+1]);
-
-  return new_dims;
-}
-
 
 std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 {
@@ -3320,6 +3344,8 @@ extern "C" float PrintStrVec(std::vector<char*> vec)
 
   return 0;
 }
+
+
 
 
 extern "C" char * shuffle_str(char *string_list)
@@ -3586,14 +3612,14 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
   return TmpB.CreateAlloca(Type::getFloatTy(*TheContext), nullptr, VarName);
 }
 
-Value *NumberExprAST::codegen() {
+Value *NumberExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   //std::cout << "Codegen for Number: " << Val << "\n";
   return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
-Value *StringExprAST::codegen() {
+Value *StringExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
@@ -3647,7 +3673,7 @@ float *current_labels;
 
 std::vector<int> file_idxs;
 
-extern "C" float Datasetinit_dataset(float batch_size)
+extern "C" float Datasetinit_dataset(char *self, float batch_size)
 {
   std::cout << "Executing init dataset\n";
   std::cout << "Fist arg: " << FirstArg << "\n";
@@ -3687,7 +3713,7 @@ extern "C" float Datasetinit_dataset(float batch_size)
 
 int yield_pointer = 0;
 bool has_dataset_started=false;
-extern "C" float Datasetyield(float batch_size, char * x_name, ...)
+extern "C" float Datasetyield(char *self, float batch_size, char * x_name, ...)
 {
   //std::cout << "Executing yield\n";
   //std::cout << "Fist arg: " << FirstArg << "\n";
@@ -3842,7 +3868,7 @@ extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 //===----------------------------------------------------------------------===//
 
 
-extern "C" float view(float first_dim, ...)
+extern "C" float view(char *self, float first_dim, ...)
 {
   
   std::string tensor_name = LastPreDot;
@@ -4043,8 +4069,9 @@ extern "C" float *logE(char *tensorName) {
 }
 
 
-extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
+extern "C" char * FirstArgOnDemand(char *pre_dotc, int nested_function)
 {
+  
   std::string pre_dot = pre_dotc;
 
   //std::cout << "\n\nLAST PRE DOT " << LastPreDot << " PRE DOT " << pre_dot << "\n";
@@ -4058,12 +4085,13 @@ extern "C" float FirstArgOnDemand(char *pre_dotc, int nested_function)
       FirstArg = pre_dot;
   }
   //std::cout << "Resulting first arg: " << FirstArg << "\n\n\n";
-
-  return 0;
+  
+  return const_cast<char*>(FirstArg.c_str());
 }
 
 extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 {
+  
   //std::cout << "\n\nDIMNISH FIRST ARG" << "\n\n\n";
   if (nested_function)
     if(ends_with(FirstArg, pre_dot))
@@ -4073,12 +4101,15 @@ extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
       FirstArg.erase(pos, std::strlen(pre_dot));
     }
   
+  
   return 0;
 }
 
 
 extern "C" char * ConcatStr(char *lc, char *rc)
 {
+  //std::cout << "CONCAT STRS " << lc << " & " << rc << "\n";
+
   std::string l = lc;
   std::string r = rc;
 
@@ -4089,19 +4120,6 @@ extern "C" char * ConcatStr(char *lc, char *rc)
   return result_cstr;
 }
 
-extern "C" char * ConcatFirstArgToVarName(char *var_name)
-{
-  //std::cout << "\nConcatFirstArgToVarName: " << FirstArg << "\nVar name: " << var_name <<"\n\n";
-  
-  std::string l = var_name;
-
-  std::string result_str = FirstArg + l;
-  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
-  std::strcpy(result_cstr, result_str.c_str());
-
-
-  return result_cstr;
-}
 
 
 extern "C" float StoreOnDemand(char *object_var_name, float value){
@@ -4164,8 +4182,25 @@ extern "C" void * LoadStrVecOnDemand(char *object_var_name) {
 }
 
 
+
+Value *ObjAttrExprAST::codegen(Value *ignored_first_arg) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  Value *first_arg, *ret;
+
+  first_arg = Builder->CreateAlloca(int8PtrTy);
+  Builder->CreateStore(Builder->CreateGlobalString(PreDot), first_arg);
+
+
+  ret = Body->codegen(first_arg);
+
+  return ret;
+}
+
+
 bool seen_var_attr = false;
-Value *VariableExprAST::codegen() {
+Value *VariableExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -4204,8 +4239,8 @@ Value *VariableExprAST::codegen() {
   {
     // Gets from FirstArg if it is self
     if (pre_dot=="true")
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {var_name});
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, var_name});
     // Gets from pre_dot if it is a class attribute
     else {
       object_name = Builder->CreateGlobalString(pre_dot);
@@ -4329,6 +4364,7 @@ extern "C" char * IndexClassStrVec(char * vec_name, float _idx)
 {
   int idx = (int) _idx;
 
+  std::cout << "Class str vec " << vec_name << "\n";
 
   std::vector<char*> vec = ClassStrVecs[vec_name];
 
@@ -4352,12 +4388,14 @@ extern "C" char * AuxFn(char * arg1)
 
 
 
-Value *VecIdxExprAST::codegen() {
+Value *VecIdxExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
 
   std::cout << "Now Loading Vec indexation for " << Name << ", type: " << Type << "  \n";
+
+
 
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -4367,23 +4405,31 @@ Value *VecIdxExprAST::codegen() {
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   Value *V, *idx;
 
-  idx = Idx->codegen();
+  idx = Idx->codegen(first_arg);
 
 
   Value *var_name, *object_name, *object_var_name;
   var_name = Builder->CreateGlobalString(Name);
   
 
-
-
-
   std::string pre_dot = GetSelf();
+
+  /*  
+  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("str_vec[idx] self is:")});
+  Builder->CreateCall(TheModule->getFunction("PrintStr"),
+                      {Builder->CreateLoad(int8PtrTy, first_arg)});
+  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("str_vec[idx] pre_dot is:")});
+  Builder->CreateCall(TheModule->getFunction("PrintStr"),
+                      {Builder->CreateGlobalString(pre_dot)});
+  */
+
+
   if (pre_dot!="false")
   {
     // Gets from FirstArg if it is self
     if (pre_dot=="true")
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {var_name});
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, var_name});
     // Gets from pre_dot if it is a class attribute
     else {
       object_name = Builder->CreateGlobalString(pre_dot);
@@ -4405,7 +4451,7 @@ Value *VecIdxExprAST::codegen() {
       V = Builder->CreateCall(TheModule->getFunction("AuxFn"), {V});  
       
       return V;
-    }                                                    
+    }
   }
 
 
@@ -4482,7 +4528,7 @@ extern "C" float TensorAttrNoFree(char *tensor_name, float *tensor, std::vector<
 
 
 
-Value *BinaryTensorScalarExprAST::codegen() {
+Value *BinaryTensorScalarExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -4492,8 +4538,8 @@ Value *BinaryTensorScalarExprAST::codegen() {
 
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {tensor_name});
+    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, tensor_name});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     Value * object_name = Builder->CreateGlobalString(pre_dot);
@@ -4516,7 +4562,7 @@ Value *BinaryTensorScalarExprAST::codegen() {
       return LogErrorV("Destino do '=' deve ser uma variável.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen();
+    Value *Val = RHS->codegen(first_arg);
     if (!Val)
       return nullptr;
 
@@ -4542,8 +4588,8 @@ Value *BinaryTensorScalarExprAST::codegen() {
 
 
   std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
-  Value *LtensorPtr = LHS->codegen();
-  Value *R = RHS->codegen();
+  Value *LtensorPtr = LHS->codegen(first_arg);
+  Value *R = RHS->codegen(first_arg);
   std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
 
 
@@ -4780,8 +4826,9 @@ __global__ void onehot_kernel(const float* tensor,
     }
 }
 
-extern "C" float *onehot(float num_classes)
+extern "C" float *onehot(char *self, float num_classes)
 {
+  //std::cout << "ONEHOT SELF IS " << self << "\n";
   std::string tensor_name = FirstArg;
 
   float * tensor = NamedTensors[tensor_name];
@@ -5559,12 +5606,13 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-extern "C" float *ConvForward2d(char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
+extern "C" float *ConvForward2d(char *self, char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
 {
   
+  std::string _self = self;
   std::string conv_name = conv_namec;
   if (is_obj_attr_or_self)
-    conv_name = FirstArg + conv_name;
+    conv_name = _self + conv_name;
 
   //std::cout << "Conv forward for tensor: " << tensor_name << " and conv: " << conv_name <<"\n";
   
@@ -6039,7 +6087,7 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
 
 
 
-Value *BinaryTensorTensorExprAST::codegen() {
+Value *BinaryTensorTensorExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -6056,8 +6104,8 @@ Value *BinaryTensorTensorExprAST::codegen() {
   // Concat self or obj name to tensor name
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {LtensorName});
+    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, LtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6067,8 +6115,8 @@ Value *BinaryTensorTensorExprAST::codegen() {
   }
   pre_dot = RHS->GetSelf();
   if (pre_dot=="true")
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {RtensorName});
+    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, RtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6090,7 +6138,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
     if (!LHSE)
       return LogErrorV("Destino do '=' deve ser uma variável.");
     
-    Value *RtensorPtr = RHS->codegen();
+    Value *RtensorPtr = RHS->codegen(first_arg);
     std::cout << "1 1 attr\n";
     
 
@@ -6130,8 +6178,8 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
 
   
-  Value *LtensorPtr = LHS->codegen();
-  Value *RtensorPtr = RHS->codegen();
+  Value *LtensorPtr = LHS->codegen(first_arg);
+  Value *RtensorPtr = RHS->codegen(first_arg);
 
   std::cout << "Create load for dims\n";
 
@@ -6219,7 +6267,7 @@ Value *BinaryTensorTensorExprAST::codegen() {
 
 
 
-Value *BinaryTensorPinnedExprAST::codegen() {
+Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg) {
   std::cout << "Binary Tensor Pinned codegen" << "\n";
 
   if (not ShallCodegen)
@@ -6238,8 +6286,8 @@ Value *BinaryTensorPinnedExprAST::codegen() {
   // Concat self or obj name to tensor name
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {LtensorName});
+    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, LtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6249,8 +6297,8 @@ Value *BinaryTensorPinnedExprAST::codegen() {
   }
   pre_dot = RHS->GetSelf();
   if (pre_dot=="true")
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {RtensorName});
+    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, RtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6269,7 +6317,7 @@ Value *BinaryTensorPinnedExprAST::codegen() {
       return LogErrorV("Destino do '=' deve ser uma variável.");
     
 
-    Value *RtensorPtr = RHS->codegen();
+    Value *RtensorPtr = RHS->codegen(first_arg);
     std::cout << "1 2 attr\n";
 
     
@@ -6291,7 +6339,7 @@ Value *BinaryTensorPinnedExprAST::codegen() {
 
 
 
-Value *LogExprAST::codegen() {
+Value *LogExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   
@@ -6304,7 +6352,7 @@ Value *LogExprAST::codegen() {
 
 
 
-Value *BinaryExprAST::codegen() {
+Value *BinaryExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
@@ -6321,7 +6369,7 @@ Value *BinaryExprAST::codegen() {
       return LogErrorV("Destino do '=' deve ser uma variável.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen();
+    Value *Val = RHS->codegen(first_arg);
     if (!Val)
     {
       seen_var_attr=false;
@@ -6390,8 +6438,8 @@ Value *BinaryExprAST::codegen() {
 
   
 
-  Value *L = LHS->codegen();
-  Value *R = RHS->codegen();
+  Value *L = LHS->codegen(first_arg);
+  Value *R = RHS->codegen(first_arg);
   
   if (!L || !R)
     return nullptr;
@@ -6435,10 +6483,10 @@ Value *BinaryExprAST::codegen() {
 }
 
 
-Value *UnaryExprAST::codegen() {
+Value *UnaryExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *OperandV = Operand->codegen();
+  Value *OperandV = Operand->codegen(first_arg);
   if (!OperandV)
     return nullptr;
   
@@ -6480,12 +6528,12 @@ Value *UnaryExprAST::codegen() {
 }
 
 
-Value *IfExprAST::codegen() {
+Value *IfExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
 
-  Value *CondV = Cond->codegen();
+  Value *CondV = Cond->codegen(first_arg);
   if (!CondV)
     return nullptr;
 
@@ -6509,7 +6557,7 @@ Value *IfExprAST::codegen() {
   
   Value *ThenV;
   for (auto &then_body : Then)
-    ThenV = then_body->codegen();
+    ThenV = then_body->codegen(first_arg);
   
 
   if (!ThenV)
@@ -6527,7 +6575,7 @@ Value *IfExprAST::codegen() {
 
   Value *ElseV;
   for (auto &else_body : Else)
-    ElseV = else_body->codegen();
+    ElseV = else_body->codegen(first_arg);
 
   if (!ElseV)
     return nullptr;
@@ -6569,7 +6617,7 @@ Value *IfExprAST::codegen() {
 //   br endcond, loop, endloop
 // outloop:
 
-Value *ForExprAST::codegen() {
+Value *ForExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -6578,7 +6626,7 @@ Value *ForExprAST::codegen() {
   AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
 
   // Emit the start code first, without 'variable' in scope.
-  Value *StartVal = Start->codegen();
+  Value *StartVal = Start->codegen(first_arg);
   if (!StartVal)
     return nullptr;
 
@@ -6606,19 +6654,19 @@ Value *ForExprAST::codegen() {
   
   
   for (auto &body : Body)
-    body->codegen();
+    body->codegen(first_arg);
 
 
   // Emit the step value.
   Value *StepVal = nullptr;
   if (Step) {
-    StepVal = Step->codegen();
+    StepVal = Step->codegen(first_arg);
     if (!StepVal)
       return nullptr;
   } 
 
   // Compute the end condition.
-  Value *EndCond = End->codegen();
+  Value *EndCond = End->codegen(first_arg);
   if (!EndCond)
     return nullptr;
 
@@ -6655,7 +6703,7 @@ Value *ForExprAST::codegen() {
 
 
 
-Value *WhileExprAST::codegen() {
+Value *WhileExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 	Function* TheFunction = Builder->GetInsertBlock()->getParent();
@@ -6670,7 +6718,7 @@ Value *WhileExprAST::codegen() {
 	// Handle Cond
 
 	Builder->SetInsertPoint(EntryBB);
-	Value* condVal = Cond->codegen();
+	Value* condVal = Cond->codegen(first_arg);
 	if (! condVal)
     return nullptr;
 
@@ -6685,7 +6733,7 @@ Value *WhileExprAST::codegen() {
 	Value* bodyVal;
 
   for (auto &body : Body)
-    bodyVal = body->codegen();
+    bodyVal = body->codegen(first_arg);
 
 	Builder->CreateBr(EntryBB);
 
@@ -6698,7 +6746,7 @@ Value *WhileExprAST::codegen() {
 }
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg) {
   
 
   // find unique function name (_async 0, _async1, _async2 etc)
@@ -6733,7 +6781,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody)
   Value *V;
 
   for (auto &body : asyncBody)
-    V = body->codegen();
+    V = body->codegen(first_arg);
 
 
 
@@ -6800,7 +6848,7 @@ extern "C" void pthread_join_aux(pthread_t thread)
 
 
 
-Value *AsyncExprAST::codegen() {
+Value *AsyncExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -6820,7 +6868,7 @@ Value *AsyncExprAST::codegen() {
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
-  Function *asyncFun = codegenAsyncFunction(std::ref(Body));
+  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -6859,7 +6907,7 @@ Value *AsyncExprAST::codegen() {
 
 
 
-Value *FinishExprAST::codegen() {
+Value *FinishExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -6885,9 +6933,9 @@ Value *FinishExprAST::codegen() {
 
 
     if (IsAsync[i])
-      thread_pointers.push_back(Bodies[i]->codegen());
+      thread_pointers.push_back(Bodies[i]->codegen(first_arg));
     else
-      Bodies[i]->codegen();
+      Bodies[i]->codegen(first_arg);
 
     //Builder->CreateBr(CurrentBB);
     //Builder->SetInsertPoint(CurrentBB);
@@ -6919,18 +6967,18 @@ Value *FinishExprAST::codegen() {
 }
 
 
-Value *LockExprAST::codegen(){
+Value *LockExprAST::codegen(Value *first_arg){
   
   Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
 
   Value *V;
   for (auto &body : Bodies)
-    V = body->codegen();
+    V = body->codegen(first_arg);
 
   return V;
 }
 
-Value *UnlockExprAST::codegen(){
+Value *UnlockExprAST::codegen(Value *first_arg){
   Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
@@ -6940,7 +6988,7 @@ Value *UnlockExprAST::codegen(){
 
 
 // Create Var
-Value *VarExprAST::codegen() {
+Value *VarExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
@@ -6959,7 +7007,7 @@ Value *VarExprAST::codegen() {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen();
+      InitVal = Init->codegen(first_arg);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -6989,7 +7037,7 @@ Value *VarExprAST::codegen() {
 
 
 
-Value *StrExprAST::codegen() {
+Value *StrExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -7009,7 +7057,7 @@ Value *StrExprAST::codegen() {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen();
+      InitVal = Init->codegen(first_arg);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -7042,7 +7090,7 @@ Value *StrExprAST::codegen() {
 }
 
 
-Value *StrVecExprAST::codegen() {
+Value *StrVecExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -7062,7 +7110,7 @@ Value *StrVecExprAST::codegen() {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen();
+      InitVal = Init->codegen(first_arg);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -7217,7 +7265,7 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, int is_obj_attr_or_self
 
 
 
-Value *TensorExprAST::codegen() {
+Value *TensorExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
@@ -7236,7 +7284,7 @@ Value *TensorExprAST::codegen() {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen();
+      InitVal = Init->codegen(first_arg);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -7251,7 +7299,7 @@ Value *TensorExprAST::codegen() {
 
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen();
+      aux = V_Dims[j]->codegen(first_arg);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {aux});
       //dims.push_back(cast<ConstantFP>(aux)->getValueAPF().convertToFloat());
@@ -7279,7 +7327,7 @@ Value *TensorExprAST::codegen() {
 
 
 
-Value *PinnedTensorExprAST::codegen() {
+Value *PinnedTensorExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
@@ -7300,7 +7348,7 @@ Value *PinnedTensorExprAST::codegen() {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen();
+      InitVal = Init->codegen(first_arg);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -7315,7 +7363,7 @@ Value *PinnedTensorExprAST::codegen() {
 
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen();
+      aux = V_Dims[j]->codegen(first_arg);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {aux});
       //dims.push_back(cast<ConstantFP>(aux)->getValueAPF().convertToFloat());
@@ -7344,7 +7392,7 @@ Value *PinnedTensorExprAST::codegen() {
 
 
 
-Value *Conv2dExprAST::codegen() {
+Value *Conv2dExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -7364,7 +7412,7 @@ Value *Conv2dExprAST::codegen() {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen();
+      InitVal = Init->codegen(first_arg);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -7383,8 +7431,8 @@ Value *Conv2dExprAST::codegen() {
                                               {Builder->CreateGlobalString(VarName),
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
                                                Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(), OC->codegen(), Ks->codegen(), Stride->codegen(),
-                                               Padding->codegen()});
+                                               C->codegen(first_arg), OC->codegen(first_arg), Ks->codegen(first_arg), Stride->codegen(first_arg),
+                                               Padding->codegen(first_arg)});
 
 
   }
@@ -7398,7 +7446,7 @@ Value *Conv2dExprAST::codegen() {
 
 
 
-Value *CallExprAST::codegen() {
+Value *CallExprAST::codegen(Value *first_arg) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look up the name in the global module table.
@@ -7415,21 +7463,39 @@ Value *CallExprAST::codegen() {
   else
     nested_function=1;
 
-  //std::cout << "\nParent function: " << functionName << "\n";
-  //std::cout << "CREATE CALL FOR class: " << Class << ", pre-dot: "  << PreDot << " and function name: " << tgt_function <<  "\n";
+
+  //std::cout << "CREATE CALL FOR class: " << Class << ", pre-dot: "  << PreDot << " and function name: " << tgt_function <<  "\nParent function " << functionName << ".\n";
 
 
+  if (PreDot!="self" && PreDot!="None")
+    first_arg = Builder->CreateGlobalString(PreDot);
+
+  int target_args_size = Args.size();
   
+
+  std::vector<Value *> ArgsV;
 
   if(Class!="None")
   {
     if (!in_str(tgt_function, tensor_methods))
       tgt_function = Class+tgt_function;
-    Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
+    first_arg = Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
                                                   {Builder->CreateGlobalString(PreDot),
                                                    ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)});
     
+    ArgsV.push_back(first_arg);
+
+
+    target_args_size+=1;
   }
+
+
+  /*
+  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString(PreDot)});
+  Builder->CreateCall(TheModule->getFunction("PrintStr"), {first_arg});
+  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("")});
+  */
+
 
   //std::cout << "\nCalling function: " << tgt_function <<"\n\n";
 
@@ -7439,20 +7505,22 @@ Value *CallExprAST::codegen() {
     CalleeF = getFunction(tgt_function);
     if (!CalleeF)
     {
-      std::string _error = "Função referenciada, "+ tgt_function +", ainda não foi declarada";
+      std::string _error = "The referenced function "+ tgt_function +" was not yet declared.";
       return LogErrorV(_error);
     }
 
     tgt_function_name = CalleeF->getName().str();
 
-
     // If argument mismatch error.
-    if ((CalleeF->arg_size()) != Args.size() && !in_str(tgt_function_name, vararg_methods))
-      return LogErrorV("Parâmetros passados incorretos.");
+    if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
+    {
+      //std::cout << "CalleeF->arg_size() " << CalleeF->arg_size() << " target_args_size " << target_args_size << "\n";
+      std::string _error = "Incorrect parameters used on function " + tgt_function + " call.";
+      return LogErrorV(_error);
+    }
   }
 
 
-  std::vector<Value *> ArgsV;  
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
 
     //std::cout << "\n\nCallExprAST codegen for argument n°: " << i << ".\n";
@@ -7463,14 +7531,11 @@ Value *CallExprAST::codegen() {
     {
       arg = Builder->CreateGlobalString(Args[i]->GetName());
       if (Args[i]->GetSelf()=="true")
-        arg = Builder->CreateCall(TheModule->getFunction("ConcatFirstArgToVarName"),
-                                                      {arg});
+        arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {first_arg, arg});
     }
     else
-    {
-      std::cout << "Call expr codegen for arg of type " << Args[i]->GetType() << "\n";
-      arg = Args[i]->codegen();
-    }
+      arg = Args[i]->codegen(first_arg);
 
   
 
@@ -7482,6 +7547,8 @@ Value *CallExprAST::codegen() {
   }
   //std::cout << "\n\n\n\n\n";
   
+  std::cout << "\nARGS Size: " << ArgsV.size() << "\n\n";
+
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   
@@ -7537,6 +7604,13 @@ Function *PrototypeAST::codegen() {
   // Make the function type:  float(float,float) etc.
 
   std::vector<Type *> types;
+
+  if (Class!="")
+  {
+    types.push_back(int8PtrTy);
+    std::cout << "CLASS IS: " << Class << "\n";
+  }
+
   for (auto &type : Types)
   {
     if (type=="s")
@@ -7562,7 +7636,10 @@ Function *PrototypeAST::codegen() {
   // Set names for all arguments.
   unsigned Idx = 0;
   for (auto &Arg : F->args())
+  {
+    std::cout << "Protype arg " << Idx << " name " << Args[Idx] << "\n";
     Arg.setName(Args[Idx++]);
+  }
   
 
   return F;
@@ -7605,8 +7682,9 @@ Function *FunctionAST::codegen() {
 
   // Record the function arguments in the NamedValues map.
 
+  Value *first_arg;// =  Builder->CreateAlloca(int8PtrTy);
 
-  //std::cout << "\n\n";
+
 
   NamedValues.clear();
 
@@ -7615,7 +7693,16 @@ Function *FunctionAST::codegen() {
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
     
-    if (!in_str(Arg.getName().str(), tensorVars))
+    std::string arg_name = Arg.getName().str();
+    if (arg_name == "self")
+    {
+      std::cout << "CREATING ALLOCA FOR SELF: " << arg_name << "\n";
+      //Builder->CreateStore(&Arg, first_arg);
+      first_arg = &Arg;
+
+    }
+
+    if (!in_str(arg_name, tensorVars) && arg_name != "self")
     {
       AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
 
@@ -7623,6 +7710,7 @@ Function *FunctionAST::codegen() {
       Builder->CreateStore(&Arg, Alloca);
 
       // Add arguments to variable symbol table.
+      std::cout << "Create function alloca for " << std::string(Arg.getName()) << "\n";
       NamedValues[std::string(Arg.getName())] = Alloca;
     }
     
@@ -7633,7 +7721,7 @@ Function *FunctionAST::codegen() {
   Value *RetVal;
 
   for (auto &body : Body)
-    RetVal = body->codegen();
+    RetVal = body->codegen(first_arg);
 
   if (RetVal) {
     // Finish off the function.
@@ -7906,15 +7994,11 @@ static void InitializeModule() {
   // char *, int
   FunctionType *CudaLogTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      {int8PtrTy},
       false // Not vararg
   );
-  Function::Create(
-    CudaLogTy,
-    Function::ExternalLinkage,
-    "logE",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("logE", CudaLogTy);
+  
 
 
   // char *
@@ -7923,12 +8007,8 @@ static void InitializeModule() {
       {int8PtrTy},
       false
   );
-  Function::Create(
-    softmaxTy,
-    Function::ExternalLinkage,
-    "softmax",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("softmax", softmaxTy);
+  
 
   //char *
   FunctionType *reluTy = FunctionType::get(
@@ -7936,12 +8016,8 @@ static void InitializeModule() {
       {int8PtrTy},
       false
   );
-  Function::Create(
-    reluTy,
-    Function::ExternalLinkage,
-    "relu",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("relu", reluTy);
+  
 
   //char *
   FunctionType *geluTy = FunctionType::get(
@@ -7949,52 +8025,26 @@ static void InitializeModule() {
       {int8PtrTy},
       false
   );
-  Function::Create(
-    geluTy,
-    Function::ExternalLinkage,
-    "gelu",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("gelu", geluTy);
 
-  
-  //char *
-  FunctionType *conv2dTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {PointerType::get(Type::getInt8Ty(*TheContext),0), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),},
-      false
-  );
-  Function::Create(
-    conv2dTy,
-    Function::ExternalLinkage,
-    "Conv_2d",
-    TheModule.get()
-  );
 
   //char *, char *, int
   FunctionType *conv2dForwardTy = FunctionType::get(
       floatPtrTy,
-      {PointerType::get(Type::getInt8Ty(*TheContext),0), PointerType::get(Type::getInt8Ty(*TheContext),0), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
-  Function::Create(
-    conv2dForwardTy,
-    Function::ExternalLinkage,
-    "ConvForward2d",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("ConvForward2d", conv2dForwardTy);
+  
 
   // float
   FunctionType *onehotTy = FunctionType::get(
       floatPtrTy,
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
-  Function::Create(
-    onehotTy,
-    Function::ExternalLinkage,
-    "onehot",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("onehot", onehotTy);
+  
 
   // 
   FunctionType *sumTy = FunctionType::get(
@@ -8002,12 +8052,7 @@ static void InitializeModule() {
       {},
       false
   );
-  Function::Create(
-    sumTy,
-    Function::ExternalLinkage,
-    "sum",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("sum", sumTy);
 
   // 
   FunctionType *meanTy = FunctionType::get(
@@ -8015,12 +8060,8 @@ static void InitializeModule() {
       {},
       false
   );
-  Function::Create(
-    meanTy,
-    Function::ExternalLinkage,
-    "mean",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("mean", meanTy);
+  
 
   // 
   FunctionType *maxTy = FunctionType::get(
@@ -8028,26 +8069,16 @@ static void InitializeModule() {
       {},
       false
   );
-  Function::Create(
-    maxTy,
-    Function::ExternalLinkage,
-    "max",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("max", maxTy);
 
   
   // char *, floats, Vararg
   FunctionType *viewTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // Vararg
   );
-  Function::Create(
-    viewTy,
-    Function::ExternalLinkage,
-    "view",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("view", viewTy);
   
 
   //===----------------------------------------------------------------------===//
@@ -8072,7 +8103,7 @@ static void InitializeModule() {
   // float, chars *, ... 
   FunctionType *yieldTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo()},
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo()},
       true // vararg
   );
   TheModule->getOrInsertFunction("Datasetyield", yieldTy);
@@ -8081,7 +8112,7 @@ static void InitializeModule() {
   // float, char *, ... 
   FunctionType *init_datasetTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("Datasetinit_dataset", init_datasetTy);
@@ -8290,7 +8321,7 @@ static void InitializeModule() {
 
   // char *, int
   FunctionType *FirstArgOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      int8PtrTy,
       {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
@@ -8316,16 +8347,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
 
-
-  // char *, char *
-  FunctionType *ConcatFirstArgToVarNameTy = FunctionType::get(
-      int8PtrTy,
-      //{Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
-      {int8PtrTy},
-      false // Not vararg
-  );
-  TheModule->getOrInsertFunction("ConcatFirstArgToVarName", ConcatFirstArgToVarNameTy);
-  
 
 
   // char *, float
