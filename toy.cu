@@ -170,8 +170,6 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 
 
-std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';'};
-
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
 std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu", "log"};
@@ -228,6 +226,8 @@ enum Token {
   // operators
   tok_binary = -11,
   tok_unary = -12,
+  tok_equal = -28,
+  tok_mod = -29,
 
 
   tok_space = -14,
@@ -327,6 +327,9 @@ std::map<int, std::string> token_to_string = {
   { 91, "[" },
   { 93, "]" },
 
+  { tok_equal, "==" },
+  { tok_mod, "//" },
+
 
   { static_cast<int>('a'), "a" },
   { static_cast<int>('b'), "b" },
@@ -356,7 +359,7 @@ std::map<int, std::string> token_to_string = {
   { static_cast<int>('z'), "z" },
 
 };
-
+std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal};
 
 
 static std::string IdentifierStr; // Filled in if tok_identifier
@@ -586,13 +589,21 @@ static int get_token() {
   int otherChar = LastChar;
 
 
-  if((ThisChar==47)&&(otherChar == 47)){
+
+  if (ThisChar=='=' && otherChar=='=')
+  {
     LastChar = getchar();
-    return 77; //
+    return tok_equal;
+  }
+
+  if((ThisChar=='/')&&(otherChar == '/')){
+    LastChar = getchar();
+    return 77;
   }
 
   //std::cout << "Post char: " << ReverseToken(ThisChar) << "\n";
 
+  // else: return ascii number of the character.
   return ThisChar;
 }
 
@@ -1085,7 +1096,8 @@ static int get_tokenPrecedence() {
   if (CurTok==tok_space)
     return 1;
 
-  if (!isascii(CurTok))
+
+  if (BinopPrecedence.find(CurTok) == BinopPrecedence.end()) // if not found
     return -1;
 
   // Make sure it's a declared binop.
@@ -1098,7 +1110,6 @@ static int get_tokenPrecedence() {
 
 
 /// LogError* - These are little helper functions for error handling.
-//std::unique_ptr<ExprAST> LogError(const char *Str) {
 std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
   ShallCodegen = false;
   //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
@@ -1330,7 +1341,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
 
   bool is_var_forward = false;
   std::string callee_override = "none";
-  if (functionVars.find(IdName) != functionVars.end())
+  if (functionVars.find(IdName) != functionVars.end()) // if found
   {
     is_var_forward = true;
     callee_override = functionVars[IdName];
@@ -2745,6 +2756,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     }
     if (TokPrec < ExprPrec)
       return std::make_tuple(std::move(LHS), L_cuda);
+    
       
 
 
@@ -2829,7 +2841,8 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     }
 
 
-    //std::cout << LhsTok << " " << BinOp << " " << RhsTok << "\n" << CurTok <<  " " << RName << "\n\n";
+    std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
+    std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n" <<  " " << "\n\n";
     
     
     
@@ -6503,6 +6516,10 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
       L = Builder->CreateFCmpULT(R, L, "cmptmp");
       // Convert bool 0/1 to float 0.0 or 1.0
       return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+    case tok_equal:
+      L = Builder->CreateFCmpUEQ(L, R, "cmptmp");
+      // Convert bool 0/1 to float 0.0 or 1.0
+      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
     default:
       break;
     }
@@ -8678,10 +8695,11 @@ int main() {
   // Install standard binary operators.
   // 1 is lowest precedence.
   BinopPrecedence[tok_space] = 1;
-  BinopPrecedence[':'] = 9;
   BinopPrecedence['='] = 4;
+  BinopPrecedence[':'] = 9;
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
+  BinopPrecedence[tok_equal] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['/'] = 39;
