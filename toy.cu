@@ -15,9 +15,7 @@
 #include "llvm/Target/TargetMachine.h"
 
 
-
 #include "include/KaleidoscopeJIT.h"
-
 
 
 #include <cudnn.h>
@@ -58,7 +56,7 @@
 pthread_mutex_t mtx_self_float;
 pthread_mutex_t mutex;
 
-int gambiarra_lock = 0;
+
 
 #define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
 
@@ -265,7 +263,7 @@ std::map<int, std::string> token_to_string = {
   { tok_def, "def" },
   { tok_class, "class" },
   { tok_self, "self" },
-  { tok_class_attr, "class attr" },
+  { tok_class_attr, "object attr" },
   { tok_extern, "extern" },
 
   // primary
@@ -1292,8 +1290,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     
     
     getNextToken(); // eat ]
-
-    std::cout << "Parsed vector indexation" << "\n";
+    
     return std::move(aux);
   }
 
@@ -1836,6 +1833,8 @@ std::vector<float> BatchLessDims(std::vector<float> dims)
 
 
 
+
+
 extern "C" float * load_img(char *img_name)
 {
   int width, height, channels;
@@ -1875,9 +1874,10 @@ extern "C" float * load_img(char *img_name)
 }
 
 
-extern "C" float * gload_img(char* tensor_name, char *img_name)
+extern "C" float * gload_img(char* tensor_name, char *img_name, float batch_idx)
 {
-  std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n";
+  std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n\n";
+
 
   int width, height, channels;
   
@@ -1886,14 +1886,15 @@ extern "C" float * gload_img(char* tensor_name, char *img_name)
   if (image_data) {
     
     std::vector<float> dims = NamedDims[tensor_name];
-    int dims_prod = DimsProd(dims);
+    std::vector<float> batchless_dims = BatchLessDims(dims);
+    int batchless_dims_prod = DimsProd(batchless_dims);
     
     current_data_attr_dims.clear();
     current_data_attr_dims.push_back((float)width);
     current_data_attr_dims.push_back((float)height);
     current_data_attr_dims.push_back((float)channels);
 
-    if (dims_prod < width*height*channels)
+    if (batchless_dims_prod < width*height*channels)
     {
       std::string t_n = tensor_name;
       std::string _error = "The image dimensions are incompatible with the tensor " + t_n + " dimensions.";
@@ -1907,12 +1908,19 @@ extern "C" float * gload_img(char* tensor_name, char *img_name)
 
       return nullptr;
     }
+    if (batch_idx > dims[0])
+    {
+      std::string _error = "Tried to load a pinned tensor on batch index " + std::to_string(batch_idx) + ", whereas this tensor batch size is " + std::to_string(dims[0]) + ".";
+      LogErrorS(_error);
+    }
+
 
     //stbi_image_free(image_data);
 
     //float *image_data_float = new float[width * height * channels];
     float *image_data_float = NamedPinnedTensors[tensor_name];
-    
+    int batch_offset = (int) batchless_dims_prod*batch_idx;
+    std::cout << "batch idx: " << batch_idx << ", batch offset: " << batch_offset << "\n";
   
     // Loop through each pixel and convert to float between 0.0 and 1.0
     for (int y = 0; y < height; ++y) {
@@ -1921,7 +1929,7 @@ extern "C" float * gload_img(char* tensor_name, char *img_name)
           //float aux =  (float)image_data[(y * width + x) * channels + c] / 255.0f;
           //std::cout << "Assigning: " << aux << "\n";
           // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
-          image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          image_data_float[batch_offset + (y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
         }
       }
     }
@@ -2095,25 +2103,26 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   {
     is_class_attr = true;
     pre_dot="";
-
-    
-    while (CurTok==tok_class_attr)
-    {
-      object_class=IdentifierStr;
-      pre_dot+=IdentifierStr;
-      getNextToken();
-    }
-    
-    // substitute object name by class name upon object method call parsing
-    if (Object_toClass.find(object_class) != Object_toClass.end())
-      object_class = Object_toClass[object_class]; 
-    
-  } else
-    getNextToken(); // eat object_name or self token.
-  
+  } else 
+    getNextToken(); // eat self
   
 
-  //std::cout << "\n\nPARSE SELF of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
+  std::cout << "\nCUR TOK on attr: " << ReverseToken(CurTok) << ", pre dot: " << pre_dot << "\n\n";
+  while (CurTok==tok_class_attr)
+  {
+    object_class=IdentifierStr;
+    pre_dot+=IdentifierStr;
+    getNextToken();
+  }
+  
+  // substitute object name by class name upon object method call parsing
+  if (Object_toClass.find(object_class) != Object_toClass.end())
+    object_class = Object_toClass[object_class]; 
+  
+  
+  
+  
+  std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
 
 
   std::string IdName = IdentifierStr;
@@ -2159,8 +2168,6 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   {
     getNextToken(); // eat [
 
-    std::cout << "Post [ cur tok" << ReverseToken(CurTok) << "\n";
-    std::cout << "num val " << NumVal << "\n";
 
     std::unique_ptr<ExprAST> Idx, aux;
 
@@ -2187,7 +2194,6 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
     getNextToken(); // eat ]
 
-    std::cout << "Parsed vector indexation on SELF" << "\n\n\n";
     return std::move(aux);
   }
 
@@ -2214,6 +2220,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     }
   }
 
+  // varargs
   if (IdName=="view")
     Args.push_back(std::make_unique<NumberExprAST>(-2.0f));
   if (ends_with(IdName, "yield"))
@@ -2223,6 +2230,9 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   getNextToken();
 
 
+
+
+  // Override function calls: e.g: conv1 -> Conv2d
   bool is_var_forward = false;
   std::string callee_override = "none";
   if (functionVars.find(IdName) != functionVars.end())
@@ -2233,6 +2243,11 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     if (pre_dot=="self")
       IdName = class_name + IdName;
   }
+
+  
+  std::cout << "\nCalling method: " << IdName << " for pre-dot: " << pre_dot << "\n\n";
+
+  //if (IdName == "len")
 
 
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
@@ -3347,6 +3362,26 @@ extern "C" float PrintStrVec(std::vector<char*> vec)
 
 
 
+extern "C" float LenStrVec(std::vector<char*> vec)
+{
+  return (float) vec.size();
+}
+
+
+
+extern "C" void * ShuffleStrVec(std::vector<char*> vec)
+{
+  std::random_device rd;
+  std::mt19937 g(rd());
+
+  //std::cout << "Shuffling vector: " << &vec << " of size " << vec.size() << "\n";
+  std::shuffle(vec.begin(), vec.end(), g);
+
+  
+  return &vec;
+}
+
+
 
 extern "C" char * shuffle_str(char *string_list)
 {
@@ -4259,7 +4294,7 @@ Value *VariableExprAST::codegen(Value *first_arg) {
       {
         V = Builder->CreateCall(TheModule->getFunction("LoadStrVecOnDemand"),
                                                       {var_name});
-        Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
+        //Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
         return V;
       }                                                    
   }
@@ -7547,12 +7582,11 @@ Value *CallExprAST::codegen(Value *first_arg) {
   }
   //std::cout << "\n\n\n\n\n";
   
-  std::cout << "\nARGS Size: " << ArgsV.size() << "\n\n";
 
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   
-  //std::cout << "\nCreate call: "  << tgt_function_name << " from parent: " << functionName << "\n\n";
+  //std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << "\n\n";
   if (CalleeOverride=="none")
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
   else
@@ -7598,6 +7632,10 @@ Value *CallExprAST::codegen(Value *first_arg) {
 
 
 
+
+
+
+
 Function *PrototypeAST::codegen() {
   if (not ShallCodegen)
     return nullptr;
@@ -7608,7 +7646,7 @@ Function *PrototypeAST::codegen() {
   if (Class!="")
   {
     types.push_back(int8PtrTy);
-    std::cout << "CLASS IS: " << Class << "\n";
+    //std::cout << "CLASS IS: " << Class << "\n";
   }
 
   for (auto &type : Types)
@@ -7636,10 +7674,7 @@ Function *PrototypeAST::codegen() {
   // Set names for all arguments.
   unsigned Idx = 0;
   for (auto &Arg : F->args())
-  {
-    std::cout << "Protype arg " << Idx << " name " << Args[Idx] << "\n";
     Arg.setName(Args[Idx++]);
-  }
   
 
   return F;
@@ -7696,7 +7731,6 @@ Function *FunctionAST::codegen() {
     std::string arg_name = Arg.getName().str();
     if (arg_name == "self")
     {
-      std::cout << "CREATING ALLOCA FOR SELF: " << arg_name << "\n";
       //Builder->CreateStore(&Arg, first_arg);
       first_arg = &Arg;
 
@@ -7710,7 +7744,7 @@ Function *FunctionAST::codegen() {
       Builder->CreateStore(&Arg, Alloca);
 
       // Add arguments to variable symbol table.
-      std::cout << "Create function alloca for " << std::string(Arg.getName()) << "\n";
+      //std::cout << "Create function alloca for " << std::string(Arg.getName()) << "\n";
       NamedValues[std::string(Arg.getName())] = Alloca;
     }
     
@@ -7753,7 +7787,7 @@ Function *FunctionAST::codegen() {
 
 
 static void InitializeModule() {
-  std::cout << "\nINITIALIZING A NEW MODULE"  << "\n";
+  //std::cout << "\nINITIALIZING A NEW MODULE"  << "\n\n";
 
   // Open a new context and module.
   TheContext = std::make_unique<LLVMContext>();
@@ -7781,13 +7815,7 @@ static void InitializeModule() {
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
-
-  Function::Create(
-    CudaScalarMultTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "CudaScalarMult", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
+  TheModule->getOrInsertFunction("CudaScalarMult", CudaScalarMultTy);
 
 
 
@@ -7797,13 +7825,8 @@ static void InitializeModule() {
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
+  TheModule->getOrInsertFunction("CudaScalarDiv", CudaScalarDivTy);
 
-  Function::Create(
-    CudaScalarDivTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "CudaScalarDiv", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
 
 
 
@@ -7813,13 +7836,7 @@ static void InitializeModule() {
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
-
-  Function::Create(
-    CudaScalarAddTy,
-    Function::ExternalLinkage, 
-    "CudaScalarAdd", 
-    TheModule.get() 
-  );
+  TheModule->getOrInsertFunction("CudaScalarAdd", CudaScalarAddTy);
 
 
 
@@ -7829,13 +7846,8 @@ static void InitializeModule() {
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
+  TheModule->getOrInsertFunction("CudaScalarSub", CudaScalarSubTy);
 
-  Function::Create(
-    CudaScalarSubTy,
-    Function::ExternalLinkage, 
-    "CudaScalarSub", 
-    TheModule.get()
-  );
 
 
   //===----------------------------------------------------------------------===//
@@ -7855,13 +7867,8 @@ static void InitializeModule() {
        int8PtrTy}, 
       false // Not vararg
   );
+  TheModule->getOrInsertFunction("CudaMult", CudaMultTy);
 
-  Function::Create(
-    CudaMultTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "CudaMult", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
 
 
 
@@ -7870,14 +7877,9 @@ static void InitializeModule() {
       {floatPtrTy}, 
       false // Not vararg
   );
-
-  Function::Create(
-    LoadTensorTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "LoadTensor", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
+  TheModule->getOrInsertFunction("LoadTensor", LoadTensorTy);
   
+
 
   FunctionType *PrintTensorFTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -7886,13 +7888,8 @@ static void InitializeModule() {
        Type::getInt32Ty(*TheContext),}, 
       false // Not vararg
   );
-
-  Function::Create(
-    PrintTensorFTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "PrintTensorF", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
+  TheModule->getOrInsertFunction("PrintTensorF", PrintTensorFTy);
+  
 
 
 
@@ -7901,13 +7898,9 @@ static void InitializeModule() {
       {int8PtrTy},
       false
   );
+  TheModule->getOrInsertFunction("LoadDims", LoadDimsTy);
 
-  Function::Create(
-    LoadDimsTy,
-    Function::ExternalLinkage,
-    "LoadDims",
-    TheModule.get()
-  );
+
 
 
   FunctionType *LoadDimsConvTy = FunctionType::get(
@@ -7916,13 +7909,8 @@ static void InitializeModule() {
        Type::getInt32Ty(*TheContext)}, 
       false // Not vararg
   );
+  TheModule->getOrInsertFunction("LoadDimsConv", LoadDimsConvTy);
 
-  Function::Create(
-    LoadDimsConvTy,
-    Function::ExternalLinkage, 
-    "LoadDimsConv", 
-    TheModule.get() 
-  );
 
 
   FunctionType *PrintDimsTy = FunctionType::get(
@@ -7930,13 +7918,8 @@ static void InitializeModule() {
       {int8PtrTy}, 
       false // Not vararg
   );
+  TheModule->getOrInsertFunction("PrintDims", PrintDimsTy);
 
-  Function::Create(
-    PrintDimsTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "PrintDims", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
 
   
 
@@ -7946,13 +7929,8 @@ static void InitializeModule() {
        int8PtrTy}, 
       false // Not vararg
   );
-
-  Function::Create(
-    NewDimsOnMultTy,
-    Function::ExternalLinkage, // Linkage (e.g., external for linking with other modules)
-    "NewDimsOnMult", // Function name
-    TheModule.get() // Module to which the function belongs
-  );
+  TheModule->getOrInsertFunction("NewDimsOnMult", NewDimsOnMultTy);
+  
 
   //===----------------------------------------------------------------------===//
   // Backward and Optimizers CUDA Ops
@@ -7964,13 +7942,9 @@ static void InitializeModule() {
       {}, 
       false // Not vararg
   );
-  Function::Create(
-    BackpropagationTy,
-    Function::ExternalLinkage,
-    "backprop",
-    TheModule.get()
-  );
-
+  TheModule->getOrInsertFunction("backprop", BackpropagationTy);
+  
+  
   //
   FunctionType *AdamWTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -7980,12 +7954,7 @@ static void InitializeModule() {
        Type::getFloatTy(*TheContext)}, 
       false // Not vararg
   );
-  Function::Create(
-    AdamWTy,
-    Function::ExternalLinkage,
-    "AdamW",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("AdamW", AdamWTy);
 
   //===----------------------------------------------------------------------===//
   // Unary CUDA Ops
@@ -8133,10 +8102,11 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("load_img", load_imgTy);
 
+
   
   FunctionType *gload_imgTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("gload_img", gload_imgTy);
@@ -8146,7 +8116,7 @@ static void InitializeModule() {
   // char *
   FunctionType *load_preprocess_imgTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("load_preprocess_img", load_preprocess_imgTy);
@@ -8237,12 +8207,7 @@ static void InitializeModule() {
       {int8PtrTy},
       false // Not vararg
   );
-  Function::Create(
-    globTy,
-    Function::ExternalLinkage,
-    "_glob_b_",
-    TheModule.get()
-  );
+  TheModule->getOrInsertFunction("_glob_b_", globTy);
 
 
 
@@ -8279,6 +8244,51 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *LoadStrVecOnDemandTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("LoadStrVecOnDemand", LoadStrVecOnDemandTy);
+
+
+  //
+  FunctionType *StoreStrOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
+
+
+  //
+  FunctionType *StoreStrVecOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("StoreStrVecOnDemand", StoreStrVecOnDemandTy);
+  
+
+  //
+  FunctionType *LenStrVecTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("LenStrVec", LenStrVecTy);
+
+
+  //
+  FunctionType *ShuffleStrVecTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("ShuffleStrVec", ShuffleStrVecTy);
+
+
+  //
   FunctionType *IndexStrVecTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext)}, 
@@ -8294,7 +8304,6 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("IndexClassStrVec", IndexClassStrVecTy);
-
 
   //
   FunctionType *AuxFnTy = FunctionType::get(
@@ -8328,8 +8337,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
   
 
-
-
   // char *, int
   FunctionType *DimnishFirstArgOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -8339,6 +8346,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("DimnishFirstArgOnDemand", DimnishFirstArgOnDemandTy);
   
 
+
   // char *, char *
   FunctionType * ConcatStrTy = FunctionType::get(
       int8PtrTy,
@@ -8346,7 +8354,6 @@ static void InitializeModule() {
       false // Not vararg
   );
   TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
-
 
 
   // char *, float
@@ -8359,22 +8366,6 @@ static void InitializeModule() {
   
 
 
-  FunctionType *StoreStrOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false // Not vararg
-  );
-  TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
-
-  
-  FunctionType *StoreStrVecOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false // Not vararg
-  );
-  TheModule->getOrInsertFunction("StoreStrVecOnDemand", StoreStrVecOnDemandTy);
-
-
   // char *
   FunctionType *LoadOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
@@ -8383,15 +8374,6 @@ static void InitializeModule() {
       false // Not vararg
   );
   TheModule->getOrInsertFunction("LoadOnDemand", LoadOnDemandTy);
-  
-
-  FunctionType *LoadStrVecOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
-      int8PtrTy,
-      {int8PtrTy},
-      false // Not vararg
-  );
-  TheModule->getOrInsertFunction("LoadStrVecOnDemand", LoadStrVecOnDemandTy);
   
 
 
