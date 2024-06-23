@@ -1112,16 +1112,16 @@ static int get_tokenPrecedence() {
 /// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
   ShallCodegen = false;
-  //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
+  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   if (Str!=" ")
-    std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0m " << Str << "\n\n";
+    std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Error: \033[0m " << Str << "\n\n";
   
   
   return nullptr;
 }
 
 std::unique_ptr<ExprAST> LogError(std::string Str) {
-  //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
+  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   LogErrorS(Str);
 
   while(CurTok!=tok_space && CurTok!=';' && CurTok!=',' && CurTok!=')')
@@ -1132,7 +1132,7 @@ std::unique_ptr<ExprAST> LogError(std::string Str) {
 
 
 std::unique_ptr<ExprAST> LogError_toNextToken(std::string Str) {
-  //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
+  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   LogErrorS(Str);
 
   getNextToken();
@@ -1142,7 +1142,7 @@ std::unique_ptr<ExprAST> LogError_toNextToken(std::string Str) {
 
 
 std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
-  //fprintf(stderr, "\033[31m Erro: \033[0m%s\n", Str);
+  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   LogErrorS(Str);
 
   while(CurTok!=tok_space && CurTok!=';')
@@ -1163,8 +1163,8 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
   ShallCodegen = false;
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
-  //fprintf(stderr, "\033[31mErro: \033[0m%s\n", buf);
-  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Erro: \033[0mtoken " << ReverseToken(CurTok) << " inesperado. Esperava-se uma expressão.\n\n";
+  //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
+  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Error: \033[0mtoken " << ReverseToken(CurTok) << " inesperado. Esperava-se uma expressão.\n\n";
   
   while(CurTok!=tok_space && CurTok!=';')
     getNextToken();
@@ -1897,6 +1897,16 @@ extern "C" float * gload_img(char* tensor_name, char *img_name, float batch_idx)
   if (image_data) {
     
     std::vector<float> dims = NamedDims[tensor_name];
+    std::cout << "GLOAD IMG, dims of " << tensor_name << "\n";
+
+    /*
+    for (auto &dms : NamedDims)
+    {
+      std::cout << "Dim name: " << dms.first << "\n";
+      //PrintDims(dms.second);
+    }*/
+
+    PrintDims(dims);
     std::vector<float> batchless_dims = BatchLessDims(dims);
     int batchless_dims_prod = DimsProd(batchless_dims);
     
@@ -1912,8 +1922,8 @@ extern "C" float * gload_img(char* tensor_name, char *img_name, float batch_idx)
       LogErrorS(_error);
 
 
-      std::cout << "\nTensor batchless dims:" << "\n";
-      PrintDims(BatchLessDims(dims));
+      std::cout << "\nTENSOR BATCHLESS DIMS:" << "\n";
+      PrintDims(batchless_dims);
 
       std::cout << "\nImage required dims: [" << width << ", " << height << ", " << channels << "]\n\n";
 
@@ -2841,10 +2851,8 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     }
 
 
-    std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
-    std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n" <<  " " << "\n\n";
-    
-    
+    //std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
+    //std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n" <<  " " << "\n\n";
     
 
     //std::cout << "\n\nL type: " << L_cuda << " R type: " << R_cuda << "\n";
@@ -3241,7 +3249,7 @@ static std::unique_ptr<ExprAST> ParseClass() {
 
 
 
-extern "C" float sleep(float id)
+extern "C" void sleep(float id)
 {
   std::cout << "\n\nSleep " << id << " begin" << "\n";
   std::random_device rd;
@@ -3255,7 +3263,23 @@ extern "C" float sleep(float id)
 
   std::cout << "Sleep " << id << " finish" << "\n";
 
-  return id;
+  //return id;
+}
+
+
+extern "C" void silent_sleep(float id)
+{
+  std::random_device rd;
+  std::mt19937 gen(rd());
+
+  std::uniform_int_distribution<> dis(3, 7); // Generate between 1 and 100
+  int random_number = dis(gen);
+
+  //std::this_thread::sleep_for(std::chrono::seconds(random_number));
+  std::this_thread::sleep_for(std::chrono::seconds((int)id));
+
+ 
+  //return id;
 }
 
 
@@ -3290,24 +3314,26 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 
 extern "C" float *gpu(char *tensor_name)
 {
-  std::cout << "\nGpu transfer for: " << tensor_name << "\n";
+  //std::cout << "\nGpu transfer for: " << tensor_name << "\n";
   
   float *tensor, *tensor_cpu;
 
   tensor = NamedTensors[tensor_name];
   tensor_cpu = NamedPinnedTensors[tensor_name];
   float dims_prod = (float)DimsProd(NamedDims[tensor_name]);
+  
 
+  
   cudaError_t err = cudaMemcpy(tensor, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+
 
   if (err != cudaSuccess) {
     // Handle error
-    fprintf(stderr, "cpu to gpu tensor transfer failed: %s\n", cudaGetErrorString(err));
-  }
-  std::cout << "Transfer succeed" << "\n\n";
+    fprintf(stderr, "CPU to GPU tensor transfer failed: %s\n", cudaGetErrorString(err));
+  } 
+  //std::cout << "Transfer succeed" << "\n\n";
 
-  //PrintTensorF(tensor, 28, 28);
-
+  
   return tensor;
 }
 
@@ -3428,20 +3454,34 @@ extern "C" float * LoadTensor(char* tensor_name){
   return NamedTensors[tensor_name];
 }
 
+
 extern "C" void *LoadDims(char* tensor_name)
 {
   //std::cout << "LOADING DIMS"  << "\n";
   //PrintDims(NamedDims[tensor_name]);
-  return &NamedDims[tensor_name];
+
+  std::string random_str = RandomString(15);
+  NamedDims[random_str] = NamedDims[tensor_name];
+  AuxRandomStrs[random_str] = "dim";
+
+  return &NamedDims[random_str];
 }
 
-extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self)
+extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self, char *self)
 {
   std::string conv_name = conv_namec;
+  std::string _self = self;
   if (is_obj_attr_or_self)
-    conv_name = FirstArg + conv_name;
+    conv_name = _self + conv_name;
   
   return &NamedDimsConv[conv_name];
+}
+
+extern "C" void print(char* str, float x){
+  std::string _str = str;
+  std::cout << "\n\n\n\n\n" << _str << " " << x << "\n\n\n\n\n\n";
+
+  //return 0;
 }
 
 
@@ -3918,6 +3958,7 @@ extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 
 extern "C" float view(char *self, float first_dim, ...)
 {
+  std::cout << "Executing: " << self << "." << "view" << "\n";
   
   std::string tensor_name = LastPreDot;
   std::vector<float> new_dims, new_dims_no_minus, current_dims;
@@ -4117,7 +4158,7 @@ extern "C" float *logE(char *tensorName) {
 }
 
 
-extern "C" char * FirstArgOnDemand(char *pre_dotc, int nested_function)
+extern "C" char * FirstArgOnDemand(char *pre_dotc, char *_class, char *method, int nested_function)
 {
   
   std::string pre_dot = pre_dotc;
@@ -4132,10 +4173,11 @@ extern "C" char * FirstArgOnDemand(char *pre_dotc, int nested_function)
     else
       FirstArg = pre_dot;
   }
-  //std::cout << "Resulting first arg: " << FirstArg << "\n\n\n";
+  //std::cout << "\n\n\n\nResulting first arg: " << FirstArg << " from pre-dot: " << pre_dot << ";\n   class: " << _class << ", method: " << method <<".\n\n\n\n";
   
   return const_cast<char*>(FirstArg.c_str());
 }
+
 
 extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
 {
@@ -4170,26 +4212,29 @@ extern "C" char * ConcatStr(char *lc, char *rc)
 
 
 
-extern "C" float StoreOnDemand(char *object_var_name, float value){
-  //std::cout << "StoreOnDemand: " << FirstArg << "." << object_var_name << " " << value << "\n";
-  NamedClassValues[FirstArg + object_var_name] = ConstantFP::get(*GlobalContext, APFloat(value));
+extern "C" float StoreOnDemand(char *self, char *object_var_name, float value){
+  std::string _self = self;
+  //std::cout << "StoreOnDemand: " << _self << "." << object_var_name << " " << value << "\n";
+  NamedClassValues[_self + object_var_name] = ConstantFP::get(*GlobalContext, APFloat(value));
   return 0;
 }
 
 
-extern "C" float StoreStrOnDemand(char *object_var_name, char * value){
-  std::cout << "STORING " << object_var_name << " on demand.\n";
+extern "C" float StoreStrOnDemand(char *self, char *object_var_name, char * value){
+  std::string _self = self;
 
-  std::cout << "Value to store: " << value << "\n";
+  //std::cout << "STORING " << object_var_name << " on demand.\n";
+  //std::cout << "Value to store: " << value << "\n";
 
-  NamedClassValues[FirstArg + object_var_name] = Builder->CreateGlobalString(value);
+  NamedClassValues[_self + object_var_name] = Builder->CreateGlobalString(value);
 
   std::cout << "Stored successfuly.\n";
   return 0;
 }
 
-extern "C" float StoreStrVecOnDemand(char *object_var_name, std::vector<char *> value){
-   //std::cout << "STORING " << object_var_name << " on demand as StrVec type.\n";
+extern "C" float StoreStrVecOnDemand(char *self, char *object_var_name, std::vector<char *> value){
+  std::string _self = self;
+  //std::cout << "STORING " << self << "." << object_var_name << " on demand as StrVec type.\n";
 
   ClassStrVecs[FirstArg + object_var_name] = value;
   
@@ -4200,7 +4245,7 @@ extern "C" float StoreStrVecOnDemand(char *object_var_name, std::vector<char *> 
 
 
 extern "C" float LoadOnDemand(char *object_var_name) {
-  //std::cout << "LoadOnDemand var to load: " << object_var_name << "\n";
+  //std::cout << "Load on demand for: " << object_var_name << "\n";
 
   Value * class_val = NamedClassValues[object_var_name];
 
@@ -4288,7 +4333,7 @@ Value *VariableExprAST::codegen(Value *first_arg) {
     // Gets from FirstArg if it is self
     if (pre_dot=="true")
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, var_name});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
     // Gets from pre_dot if it is a class attribute
     else {
       object_name = Builder->CreateGlobalString(pre_dot);
@@ -4302,6 +4347,7 @@ Value *VariableExprAST::codegen(Value *first_arg) {
       if (ends_with(entry.first, Name))
         return Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),
                                                       {var_name});
+
     for (const auto &entry : ClassStrVecs)
       if (ends_with(entry.first, Name))
       {
@@ -4412,11 +4458,10 @@ extern "C" char * IndexClassStrVec(char * vec_name, float _idx)
 {
   int idx = (int) _idx;
 
-  std::cout << "Class str vec " << vec_name << "\n";
 
   std::vector<char*> vec = ClassStrVecs[vec_name];
 
-  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
+  //std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
   
 
   return vec[idx];
@@ -4444,8 +4489,6 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
   std::cout << "Now Loading Vec indexation for " << Name << ", type: " << Type << "  \n";
 
 
-
-
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
   
@@ -4465,7 +4508,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
   /*  
   Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("str_vec[idx] self is:")});
   Builder->CreateCall(TheModule->getFunction("PrintStr"),
-                      {Builder->CreateLoad(int8PtrTy, first_arg)});
+                      {first_arg});
   Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("str_vec[idx] pre_dot is:")});
   Builder->CreateCall(TheModule->getFunction("PrintStr"),
                       {Builder->CreateGlobalString(pre_dot)});
@@ -4477,7 +4520,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
     // Gets from FirstArg if it is self
     if (pre_dot=="true")
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, var_name});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
     // Gets from pre_dot if it is a class attribute
     else {
       object_name = Builder->CreateGlobalString(pre_dot);
@@ -4487,10 +4530,6 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
                                                       {object_name, var_name});
     }
 
-    for (const auto &entry : NamedClassValues)
-      if (ends_with(entry.first, Name))
-        return Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),
-                                                      {var_name});
 
 
     if (Type=="str_vec"){
@@ -4556,15 +4595,23 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
   return 0;
 }
 
+
+// Copies a pinned_tensor's reserved memory into a tensor.
 extern "C" float TensorAttrNoFree(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
-  //std::cout << "Attributing to tensor: " << tensor_name << "\n";
-  //PrintDims(NamedDims[tensor_name]);
+  //std::cout << "\nTensorAttrNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
+  
 
+  float dims_prod = DimsProd(new_dims);
 
   cudaCheck(cudaGetLastError());
-  
-  NamedTensors[tensor_name] = tensor;
+
+
+  float *new_tensor;
+  cudaMalloc(&new_tensor, dims_prod*sizeof(float));
+  cudaCheck(cudaMemcpy(new_tensor, tensor, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+
+  NamedTensors[tensor_name] = new_tensor;
   NamedDims[tensor_name] = new_dims;
   
   
@@ -4587,7 +4634,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg) {
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, tensor_name});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     Value * object_name = Builder->CreateGlobalString(pre_dot);
@@ -4874,10 +4921,9 @@ __global__ void onehot_kernel(const float* tensor,
     }
 }
 
-extern "C" float *onehot(char *self, float num_classes)
+extern "C" float *onehot(char *self, float num_classes) //TODO: update self for all methods
 {
-  //std::cout << "ONEHOT SELF IS " << self << "\n";
-  std::string tensor_name = FirstArg;
+  std::string tensor_name = self;
 
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
@@ -5662,7 +5708,7 @@ extern "C" float *ConvForward2d(char *self, char *tensor_name, char *conv_namec,
   if (is_obj_attr_or_self)
     conv_name = _self + conv_name;
 
-  //std::cout << "Conv forward for tensor: " << tensor_name << " and conv: " << conv_name <<"\n";
+  std::cout << "Conv forward for tensor: " << tensor_name << " and conv: " << conv_name <<"\n";
   
 
   float *tensor, *output, *d_filter;
@@ -6153,7 +6199,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg) {
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, LtensorName});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), LtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6164,7 +6210,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg) {
   pre_dot = RHS->GetSelf();
   if (pre_dot=="true")
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, RtensorName});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), RtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6335,7 +6381,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg) {
   std::string pre_dot = LHS->GetSelf();
   if (pre_dot=="true")
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, LtensorName});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), LtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6346,7 +6392,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg) {
   pre_dot = RHS->GetSelf();
   if (pre_dot=="true")
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, RtensorName});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), RtensorName});
     // Gets from pre_dot if it is a class attribute
   else if (pre_dot!="false") {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6432,7 +6478,8 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
 
       if(LHS->GetSelf()=="true")
         Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Builder->CreateGlobalString(Lname),
+                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
+                                                   Builder->CreateGlobalString(Lname),
                                                    Val});
       else
         Builder->CreateStore(Val, Variable);
@@ -6440,24 +6487,26 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
     
     } else if (NamedStrs.count(Lname) != 0 ) {
 
-      std::cout << "ATTRIBUTTING TO STRING: " << Lname << "\n";
+      std::cout << "ATTRIBUTING TO STRING: " << Lname << "\n";
       Value *Variable = NamedStrs[Lname];
       
       if(LHS->GetSelf()=="true")
         Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
-                                                  {Builder->CreateGlobalString(Lname),
+                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
+                                                   Builder->CreateGlobalString(Lname),
                                                    Val});
       else
         Builder->CreateStore(Val, Variable);
 
     } else if (NamedStrVecs.count(Lname) != 0 ) {
 
-      std::cout << "ATTRIBUTTING TO STRING VEC: " << Lname << "\n";
+      std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
       Value *Variable = NamedStrVecs[Lname];
       
       if(LHS->GetSelf()=="true")
         Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
-                                                  {Builder->CreateGlobalString(Lname),
+                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
+                                                   Builder->CreateGlobalString(Lname),
                                                    Val});
       else
         Builder->CreateStore(Val, Variable);
@@ -6472,7 +6521,7 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
       
       if (var_exists_in_objects)
         return Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Builder->CreateGlobalString(Lname),
+                                                  {Builder->CreateLoad(int8PtrTy, first_arg), Builder->CreateGlobalString(Lname),
                                                    Val});  
       std::string _error = "Could not find variable " + Lname + ".";
 
@@ -6597,8 +6646,8 @@ Value *IfExprAST::codegen(Value *first_arg) {
 
   // Create blocks for the then and else cases.  Insert the 'then' block at the
   // end of the function.
-  BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "then", TheFunction);
-  BasicBlock *ElseBB = BasicBlock::Create(*TheContext, "else");
+  BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "then", TheFunction);
+  BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "else");
   BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "ifcont");
 
   Builder->CreateCondBr(CondV, ThenBB, ElseBB);
@@ -6791,7 +6840,6 @@ Value *WhileExprAST::codegen(Value *first_arg) {
 
 
 	// Handle Loop End
-	
 	Builder->SetInsertPoint(AfterBB);
 
 	return Constant::getNullValue(Type::getFloatTy(*TheContext));
@@ -7272,8 +7320,8 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, int is_obj_attr_or_self
 
   //float * d = (float *) dims;
   int product = DimsProd(cur_dim);
-  float * tensor;
-  float * tensor_cpu;
+  float *tensor;
+  float *tensor_cpu;
 
 
   if (std::strcmp(init, "randu") == 0)
@@ -7519,8 +7567,14 @@ Value *CallExprAST::codegen(Value *first_arg) {
   //std::cout << "CREATE CALL FOR class: " << Class << ", pre-dot: "  << PreDot << " and function name: " << tgt_function <<  "\nParent function " << functionName << ".\n";
 
 
-  if (PreDot!="self" && PreDot!="None")
-    first_arg = Builder->CreateGlobalString(PreDot);
+  if (PreDot!="self" && PreDot!="None") // e.g: x.view()
+  {
+    first_arg = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(Builder->CreateGlobalString(PreDot), first_arg);
+    //first_arg = Builder->CreateGlobalString(PreDot);
+  }
+  
+  
 
   int target_args_size = Args.size();
   
@@ -7531,22 +7585,47 @@ Value *CallExprAST::codegen(Value *first_arg) {
   {
     if (!in_str(tgt_function, tensor_methods))
       tgt_function = Class+tgt_function;
-    first_arg = Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
-                                                  {Builder->CreateGlobalString(PreDot),
-                                                   ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)});
+
+
+    if (!(nested_function==1 && PreDot=="self"))
+    {
+      first_arg = Builder->CreateAlloca(int8PtrTy);
+      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
+                                                    {Builder->CreateGlobalString(PreDot),
+                                                     Builder->CreateGlobalString(Class),
+                                                     Builder->CreateGlobalString(Callee),
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)}),
+                                                    first_arg);
+    }
+    else
+    {
+      
+      Builder->CreateCall(TheModule->getFunction("PrintStr"),
+        {Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+         {Builder->CreateGlobalString("\n\n\nFirst arg of nested function " + tgt_function +", with parent " + functionName + " is: "),
+                                                          Builder->CreateLoad(int8PtrTy, first_arg)})
+        
+        });
+
+      
+      
+    }
     
-    ArgsV.push_back(first_arg);
+    
+    
+    
+    if (CalleeOverride=="Conv2d" || in_str(Callee, tensor_methods))
+      ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
+    else
+      ArgsV.push_back(first_arg);
 
 
     target_args_size+=1;
   }
 
 
-  /*
-  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString(PreDot)});
-  Builder->CreateCall(TheModule->getFunction("PrintStr"), {first_arg});
-  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("")});
-  */
+
+
 
 
   //std::cout << "\nCalling function: " << tgt_function <<"\n\n";
@@ -7584,7 +7663,7 @@ Value *CallExprAST::codegen(Value *first_arg) {
       arg = Builder->CreateGlobalString(Args[i]->GetName());
       if (Args[i]->GetSelf()=="true")
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {first_arg, arg});
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), arg});
     }
     else
       arg = Args[i]->codegen(first_arg);
@@ -7622,7 +7701,7 @@ Value *CallExprAST::codegen(Value *first_arg) {
       //std::cout << "Load dims for conv: " << tgt_function << "\n";
       
       Value *dims_ptr = Builder->CreateCall(getFunction("LoadDimsConv"), 
-                          {conv_name, is_attr});
+                          {conv_name, is_attr, Builder->CreateLoad(int8PtrTy, first_arg)});
       DimsPtr = Builder->CreateAlloca(int8PtrTy);
       Builder->CreateStore(dims_ptr, DimsPtr);
 
@@ -7697,6 +7776,19 @@ Function *PrototypeAST::codegen() {
   return F;
 }
 
+// Change the pointer for a new memory location, because it was changing
+// alognswith the global variable FirstArg
+extern "C" char *UnbugFirstArg(char *self)
+{
+
+  char* copy = (char*)malloc(strlen(self) + 1);
+
+  strcpy(copy, self);
+
+  return copy;
+}
+
+
 const PrototypeAST& FunctionAST::getProto() const {
   return *Proto;
 }
@@ -7728,15 +7820,11 @@ Function *FunctionAST::codegen() {
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(BB);
 
-
   
-
-
   // Record the function arguments in the NamedValues map.
 
-  Value *first_arg;// =  Builder->CreateAlloca(int8PtrTy);
-
-
+  //Value *first_arg;
+  Value *first_arg = Builder->CreateAlloca(int8PtrTy);
 
   NamedValues.clear();
 
@@ -7748,9 +7836,12 @@ Function *FunctionAST::codegen() {
     std::string arg_name = Arg.getName().str();
     if (arg_name == "self")
     {
-      //Builder->CreateStore(&Arg, first_arg);
-      first_arg = &Arg;
-
+      
+      Value *self = Builder->CreateCall(TheModule->getFunction("UnbugFirstArg"),
+                        {Builder->CreateLoad(int8PtrTy, &Arg)});
+      Builder->CreateStore(self, first_arg);
+      
+      //first_arg = &Arg;
     }
 
     if (!in_str(arg_name, tensorVars) && arg_name != "self")
@@ -7923,7 +8014,7 @@ static void InitializeModule() {
   FunctionType *LoadDimsConvTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy,
-       Type::getInt32Ty(*TheContext)}, 
+       Type::getInt32Ty(*TheContext), int8PtrTy}, 
       false // Not vararg
   );
   TheModule->getOrInsertFunction("LoadDimsConv", LoadDimsConvTy);
@@ -8153,11 +8244,19 @@ static void InitializeModule() {
 
   //  
   FunctionType *sleepTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      Type::getVoidTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("sleep", sleepTy);
+
+  
+  FunctionType *silent_sleepTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("silent_sleep", silent_sleepTy);
   
 
   FunctionType *PrintVoidTy = FunctionType::get(
@@ -8242,6 +8341,15 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("UnbugFloat", UnbugFloatTy);
 
+  
+  FunctionType *UnbugFirstArgTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("UnbugFirstArg", UnbugFirstArgTy);
+
+
   // char *
   FunctionType *PrintStrTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -8272,7 +8380,7 @@ static void InitializeModule() {
   //
   FunctionType *StoreStrOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
@@ -8281,7 +8389,7 @@ static void InitializeModule() {
   //
   FunctionType *StoreStrVecOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("StoreStrVecOnDemand", StoreStrVecOnDemandTy);
@@ -8348,7 +8456,7 @@ static void InitializeModule() {
   // char *, int
   FunctionType *FirstArgOnDemandTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
@@ -8376,7 +8484,7 @@ static void InitializeModule() {
   // char *, float
   FunctionType *StoreOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("StoreOnDemand", StoreOnDemandTy);
@@ -8480,11 +8588,20 @@ static void InitializeModule() {
   // char *
   FunctionType *printTTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()}, 
+      {int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("PrintTensor", printTTy);
   
+  
+  
+  // char *
+  FunctionType *printTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("print", printTy);
   
 
 }
