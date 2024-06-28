@@ -23,6 +23,7 @@
 #include <cstdarg>
 #include <cassert>
 #include <cctype>
+#include <cstring>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -41,6 +42,7 @@
 #include <chrono>
 #include <thread>
 #include <random>
+
 
 // Cuda
 #include <stdio.h>
@@ -177,7 +179,7 @@ std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
 
 // Universal
-std::vector<std::string> vararg_methods = {"view", "Datasetyield"};
+std::vector<std::string> vararg_methods = {"view"};
 std::vector<std::string> string_methods = {"split", "split_idx"};
 
 
@@ -1927,7 +1929,8 @@ extern "C" float * load_img(char *img_name)
 
 extern "C" float * gload_img(char* tensor_name, char *img_name, float batch_idx)
 {
-  //std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n\n";
+  //std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n";
+  //std::cout << "Image: " << img_name <<  "\n";
 
 
   int width, height, channels;
@@ -2002,9 +2005,97 @@ extern "C" float * gload_img(char* tensor_name, char *img_name, float batch_idx)
 
 
 
+
+
+
+extern "C" float * wload_img(char* tensor_name, char *img_name, float batch_idx, float worker_idx)
+{
+  //std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n";
+  //std::cout << "Image: " << img_name <<  "\n";
+
+
+  int width, height, channels;
+  
+  unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
+
+  if (image_data) {
+    
+    std::vector<float> dims = NamedDims[tensor_name];
+
+    //std::cout << "GLOAD IMG, dims of " << tensor_name << "\n";
+    //PrintDims(dims);
+
+    std::vector<float> workerless_dims = BatchLessDims(dims);
+    int workerless_dims_prod = DimsProd(workerless_dims);
+    std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+    int batchless_dims_prod = DimsProd(batchless_dims);
+    
+    current_data_attr_dims.clear();
+    current_data_attr_dims.push_back((float)width);
+    current_data_attr_dims.push_back((float)height);
+    current_data_attr_dims.push_back((float)channels);
+
+
+    if (batchless_dims_prod < width*height*channels)
+    {
+      std::string t_n = tensor_name;
+      std::string _error = "The image dimensions are incompatible with the tensor " + t_n + " dimensions.";
+      LogErrorS(_error);
+
+
+      std::cout << "\nTENSOR BATCHLESS DIMS:" << "\n";
+      PrintDims(batchless_dims);
+
+      std::cout << "\nImage required dims: [" << width << ", " << height << ", " << channels << "]\n\n";
+
+      return nullptr;
+    }
+    if (batch_idx > dims[1])
+    {
+      std::string _error = "Tried to load a pinned tensor on batch index " + std::to_string(batch_idx) + ", whereas this tensor batch size is " + std::to_string(dims[1]) + ".";
+      LogErrorS(_error);
+    }
+
+
+
+    //float *image_data_float = new float[width * height * channels];
+    float *image_data_float = NamedPinnedTensors[tensor_name];
+    int batch_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+    //std::cout << "batch idx: " << batch_idx << ", batch offset: " << batch_offset << "\n";
+  
+    // Loop through each pixel and convert to float between 0.0 and 1.0
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        for (int c = 0; c < channels; ++c) {
+          // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
+          image_data_float[batch_offset + (y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+        }
+      }
+    }
+    stbi_image_free(image_data);
+
+    return image_data_float;
+    
+  } else {
+    std::string img_n = img_name;
+    std::string _error = "Failed to open image: " + img_n + ".\n\n";
+    LogErrorS(_error);
+  }
+
+  return nullptr;
+}
+
+
+
+
+
+
+
+
+
 extern "C" float * split_str_to_float(char *in_string, int gather_position)
 {
-  std::vector<std::string> splitted = split_str(in_string,'/');
+  std::vector<std::string> splitted = split_str(in_string, '/');
 
   float * ret = new float[1];
 
@@ -2286,8 +2377,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   // varargs
   if (IdName=="view")
     Args.push_back(std::make_unique<NumberExprAST>(-2.0f));
-  if (ends_with(IdName, "yield"))
-    Args.push_back(std::make_unique<StringExprAST>("-2"));
+  
 
   // Eat the ')'.
   getNextToken();
@@ -3556,15 +3646,16 @@ extern "C" void print(char* str, float x){
 
 extern "C" float PrintTensor(char* tensorName){
   
-  
+  std::cout << "Printing Tensor " << tensorName << "\n";
 
   std::vector<float> dims = NamedDims[tensorName];
   int arr_size = DimsProd(dims);
 
 
   float *tensor_cuda = NamedTensors[tensorName];
+  
   float *tensor = new float[arr_size];
-  //std::cout << "Printing Tensor " << tensorName << "\n";
+  
   
   cudaDeviceSynchronize();
   cudaCheck(cudaMemcpy(tensor, tensor_cuda, arr_size*sizeof(float), cudaMemcpyDeviceToHost));
@@ -3825,166 +3916,7 @@ extern "C" void * _glob_b_(char *pattern) {
 
 
 float *current_data;
-float *current_labels;
 
-std::vector<int> file_idxs;
-
-extern "C" float Datasetinit_dataset(char *self, float batch_size)
-{
-  std::cout << "Executing init dataset\n";
-  std::cout << "Fist arg: " << FirstArg << "\n";
-
-
-  std::string files_name = FirstArg + "files";
-  std::vector<char *> files = ClassStrVecs[files_name];
-
-  file_idxs.resize(files.size());
-  std::iota(file_idxs.begin(), file_idxs.end(), 0);
-
-  
-  std::random_shuffle(file_idxs.begin(), file_idxs.end());
-
-
-
-
-  load_img(files[0]);
-
-  
-  int dims_prod = DimsProd(current_data_attr_dims);
-
-  current_data = new float[batch_size*dims_prod];
-  current_labels = new float[batch_size];
-
-  // Using CUDA CPU pinned memory for faster PCI Express transfers to GPU
-  // See: https://developer.nvidia.com/blog/how-optimize-data-transfers-cuda-cc/
-  cudaCheck(cudaMallocHost(&current_data, batch_size*dims_prod*sizeof(float)));
-  cudaCheck(cudaMallocHost(&current_labels, batch_size*sizeof(float)));
-  return 0;
-}
-
-
-
-
-
-
-int yield_pointer = 0;
-bool has_dataset_started=false;
-extern "C" float Datasetyield(char *self, float batch_size, char * x_name, ...)
-{
-  //std::cout << "Executing yield\n";
-  //std::cout << "Fist arg: " << FirstArg << "\n";
-
-  std::vector<char *> tensor_names;
-  tensor_names.push_back(x_name);
-
-
-  //std::cout << "X name: " << x_name << "\n";
-  va_list args;
-  va_start(args, x_name);
-
-  for (int i=0; i<10; i++)
-  {
-    //std::cout << "Vararg for: " << i << "\n";
-    char * name = va_arg(args, char *);
-    //std::cout << "Name: " << name << "\n\n";
-    
-    if (starts_with(name, "-2"))
-      break;
-
-    tensor_names.push_back(name);
-  }
-  va_end(args);
-
-  char * y_name = tensor_names[1];
-
-  int dims_prod, y_dims_prod;
-
-
-  /*
-  if(!has_dataset_started)
-  {
-    for (char *preprocess : tensor_names)
-    {
-      std::cout << "Tensor name: " << preprocess << "\n";
-
-    }
-  }
-  */
-  
-  int b=0;
-
-
-  std::string files_name = FirstArg + "files";
-  std::vector<char *> files = ClassStrVecs[files_name];
-
-
-
-  float *cur_float_img, *y_aux;
-
-  while (b < batch_size)
-  {
-
-
-    //for (char *preprocess:tensor_names)
-    std::string preprocessing = "preprocess_";
-    preprocessing += (const char *)x_name;
-    //std::cout << "Preprocessing for: " << preprocessing << "\n";
-    cur_float_img = preprocessings[preprocessing]->Preprocess(files[file_idxs[yield_pointer]]);
-    dims_prod = DimsProd(BatchLessDims(NamedDims[x_name]));
-    for (int j = 0; j < dims_prod; ++j)
-      current_data[b * dims_prod + j] = cur_float_img[j];
-    
-    
-    preprocessing = "preprocess_";
-    preprocessing += (const char *)y_name;
-    y_aux = preprocessings[preprocessing]->Preprocess(files[file_idxs[yield_pointer]]);
-    y_dims_prod=1;
-    for (int j = 0; j < y_dims_prod; ++j)
-      current_labels[b * y_dims_prod + j] = y_aux[j];
-
-    delete[] cur_float_img;
-    delete[] y_aux;
-    
-    b+=1;
-    
-    yield_pointer+=1;
-    // Drop last batch and reset idx
-    if(yield_pointer>(files.size()-batch_size-batch_size))
-    {
-      std::random_shuffle(files.begin(), files.end());
-      yield_pointer=0;
-    }
-  }
-
-  float *x, *y;
-  
-  x = NamedTensors[x_name];
-  y = NamedTensors[y_name];
-
-
-  // todo - inputs is copied on default stream so this synchronises CPU/GPU for now
-  /*
-  cudaMemcpyAsync(x, current_data, batch_size*dims_prod*sizeof(float), cudaMemcpyHostToDevice,0);
-  // memcpy targets in parallel then wait for them before fused_classifier
-  cudaMemcpyAsync(y, current_labels, batch_size*sizeof(float), cudaMemcpyHostToDevice, parallel_streams[0]);
-  cudaEventRecord(parallel_events[0], parallel_streams[0]);
-  */
-  
-  cudaMemcpy(x, current_data, batch_size*dims_prod*sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(y, current_labels, batch_size*sizeof(float), cudaMemcpyHostToDevice);
-
-  std::vector<float> dims_x, dims_y;
-  dims_x.push_back(batch_size);
-  dims_y.push_back(batch_size);
-  for(int i=0; i<current_data_attr_dims.size(); i++)
-    dims_x.push_back(current_data_attr_dims[i]);
-
-
-  NamedDims[x_name] = dims_x;
-  NamedDims[y_name] = dims_y;
-
-  return 0;
-}
 
 
 
@@ -5030,8 +4962,8 @@ extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int is_forward_
                           float *device_x, float *device_w,
                           std::vector<float> Ldims, std::vector<float> Rdims) {
   
-  //std::cout << "cuda mult called\n";
-  //std::cout << "L " << LtensorName << "\nR " << RtensorName << "\n";
+  
+  //std::cout << "      L " << LtensorName << "  &  R " << RtensorName << "\n";
   
 
   
@@ -7628,8 +7560,6 @@ Value *TensorExprAST::codegen(Value *first_arg) {
       aux = V_Dims[j]->codegen(first_arg);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {aux});
-      //dims.push_back(cast<ConstantFP>(aux)->getValueAPF().convertToFloat());
-      //std::cout << "Dim: " << cast<ConstantFP>(aux)->getValueAPF().convertToFloat() << "\n";
     }
     //void * v_dims_ptr = &V_Dims;
 
@@ -7692,8 +7622,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg) {
       aux = V_Dims[j]->codegen(first_arg);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {aux});
-      //dims.push_back(cast<ConstantFP>(aux)->getValueAPF().convertToFloat());
-      //std::cout << "Dim: " << cast<ConstantFP>(aux)->getValueAPF().convertToFloat() << "\n";
+                                                  
     }
     //void * v_dims_ptr = &V_Dims;
 
@@ -8052,35 +7981,57 @@ extern "C" void *SplitString(char *self, char *pattern)
 }
 
 
+int count_pattern(const std::string& text, const std::string& pattern) {
+  int count = 0;
+  size_t pos = 0;
+
+  std::cout << "Trying to count"  << "\n";
+  // Iterate while finding occurrences of the pattern
+  while ((pos = text.find(pattern, pos)) != std::string::npos) {
+    count++;
+    pos += pattern.length(); // Move to the character after the found pattern
+  }
+
+  return count;
+}
+
+
 extern "C" char *SplitStringIndexate(char *self, char *pattern, float idx)
 {
 
-  //std::cout << "\n\nSPLITTING: " << self << ", with pattern: " << pattern << "\n";
+  //std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
 
+  
+  std::vector<char *> splits;
+  char *input = (char*)malloc(strlen(self) + 1);
+  strcpy(input, self);
 
-  std::vector<char *> result;
-  char *input = strdup(self); // Duplicate the input string to avoid modifying the original
-  char *token = strtok(input, pattern); // Get the first token
+  char *saveptr;
+  char *token = strtok_r(input, pattern, &saveptr); // Get the first token
 
   while (token != nullptr) {
-    result.push_back(token);
-    token = strtok(nullptr, pattern); // Get the next token
+    splits.push_back(token);
+    token = strtok_r(nullptr, pattern, &saveptr); // Get the next token
   }
+
+  if (idx < 0) 
+    idx = splits.size() + idx;
   
-  if (idx<0)
-    idx = result.size()+idx;
-
-
-  return result[idx];
+ 
+  return splits[idx];
     
 }
 
 
 
-extern "C" float StrToFloat(char *str)
+extern "C" float StrToFloat(char *in_str)
 {
+  //std::cout << "StrToFloat" << "\n";
+  //std::cout << "str to float of " << in_str << "\n";
+  char *copied = (char*)malloc(strlen(in_str) + 1);
+  strcpy(copied, in_str);
   char *end;
-  return std::strtof(str, &end);
+  return std::strtof(copied, &end);
 }
 
 
@@ -8090,7 +8041,6 @@ extern "C" float StrToFloat(char *str)
 extern "C" char *CopyString(char *in_str)
 {
   char* copied = (char*)malloc(strlen(in_str) + 1);
-
   strcpy(copied, in_str);
 
   return copied;
@@ -8504,13 +8454,7 @@ static void InitializeModule() {
   //===----------------------------------------------------------------------===//
 
 
-  // float, chars *, ... 
-  FunctionType *yieldTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo(),Type::getInt8Ty(*TheContext)->getPointerTo()},
-      true // vararg
-  );
-  TheModule->getOrInsertFunction("Datasetyield", yieldTy);
+
   
 
   // float, char *, ... 
@@ -8559,6 +8503,13 @@ static void InitializeModule() {
       false // Not vararg
   );
   TheModule->getOrInsertFunction("gload_img", gload_imgTy);
+
+  FunctionType *wload_imgTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("wload_img", wload_imgTy);
   
 
   FunctionType *AttrPinnedOnIdxTy = FunctionType::get(
