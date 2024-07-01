@@ -136,6 +136,23 @@ bool starts_with(const char* str, const char* sub) {
   return strncmp(str, sub, strlen(sub)) == 0;
 }
 
+
+
+
+int count_pattern(const std::string& text, const std::string& pattern) {
+  int count = 0;
+  size_t pos = 0;
+
+  std::cout << "Trying to count"  << "\n";
+  // Iterate while finding occurrences of the pattern
+  while ((pos = text.find(pattern, pos)) != std::string::npos) {
+    count++;
+    pos += pattern.length(); // Move to the character after the found pattern
+  }
+
+  return count;
+}
+
 std::vector<std::string> split_str(const std::string& str, char delimiter) {
   std::vector<std::string> tokens;
   std::string token;
@@ -173,9 +190,13 @@ bool in_str(std::string str, std::vector<std::string> list) {
 // Tensor related
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu", "log"};
+std::vector<std::string> return_batchless_dims_methods = {"gpuw"};
+std::vector<std::string> return_pinned_methods = {"gpu", "gpuw"};
+
+
 std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 
-std::vector<std::string> preprocessing_names = {"load_img", "split_str_to_float"};
+
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
 
 // Universal
@@ -246,9 +267,9 @@ enum Token {
   tok_pinned_tensor = -25,
   tok_var_str = -17,
   tok_str_vec = -24,
+  tok_float_vec = -31,
   tok_attr_var = -18,
   tok_attr_tensor = -19,
-  tok_preprocessing = -20,
   tok_conv2d = -21,
 
   // function ops
@@ -278,6 +299,9 @@ std::map<int, std::string> token_to_string = {
   { tok_number, "tok number" },
   { tok_str, "tok str `` ''" },
   { tok_str_vec, "tok str vector" },
+  { tok_float_vec, "tok float vec" },
+
+  
 
   // control
   { tok_if, "if" },
@@ -303,7 +327,6 @@ std::map<int, std::string> token_to_string = {
   { tok_var_str, "var str" },
   { tok_attr_var, "tok attr var" },
   { tok_attr_tensor, "tok attr tensor" },
-  { tok_preprocessing, "tok preprocessing" },
   { tok_conv2d, "Conv2d" },
 
   { 10, "tok space"},
@@ -517,9 +540,8 @@ static int get_token() {
       return tok_var_str;
     if (IdentifierStr == "str_vec")
       return tok_str_vec;
-    if (in_str(IdentifierStr,preprocessing_names))
-      return tok_preprocessing;
-    
+    if (IdentifierStr == "float_vec")
+      return tok_float_vec;
     return tok_identifier;
   }
 
@@ -657,7 +679,7 @@ public:
   }
 
   
-  virtual bool SetIsVec(bool isVec) {
+  virtual void SetIsVec(bool isVec) {
     this->isVec=isVec;
   }
   virtual bool GetIsVec() {
@@ -736,9 +758,9 @@ class VecIdxExprAST : public ExprAST {
   std::string Name;
 
   public:
-    std::unique_ptr<ExprAST> Idx;
+    std::vector<std::unique_ptr<ExprAST>> Idx;
 
-    VecIdxExprAST(const std::string &Name, std::unique_ptr<ExprAST> Idx)
+    VecIdxExprAST(const std::string &Name, std::vector<std::unique_ptr<ExprAST>> Idx)
                   : Name(Name), Idx(std::move(Idx)) {}
 
     Value *codegen(Value *first_arg) override;
@@ -1265,6 +1287,7 @@ std::vector<std::string> pinnedTensorVars;
 std::map<std::string, std::string> functionVars;
 std::map<std::string, std::string> stringMethods;
 std::vector<std::string> str_vecVars;
+std::vector<std::string> float_vecVars;
 std::map<std::string, pthread_mutex_t *> lockVars;
 
 
@@ -1321,7 +1344,17 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
   {
     getNextToken(); // eat [
     
-    std::unique_ptr<ExprAST> Idx = ParseExpression(class_name);
+
+    std::vector<std::unique_ptr<ExprAST>> Idx;
+    
+    Idx.push_back(ParseExpression(class_name));
+
+    while(CurTok==',')
+    {
+      getNextToken(); // eat ,
+      Idx.push_back(ParseExpression(class_name));
+    }
+
 
     auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
     aux->SetIsVec(true);
@@ -1330,6 +1363,11 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     {
       aux->SetType("str_vec");
       aux->SetReturnType("str");
+    }
+    if (in_str(IdName, float_vecVars))
+    {
+      aux->SetType("float_vec");
+      aux->SetReturnType("float");
     }
 
 
@@ -1393,9 +1431,9 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
 
   
   
-  if (in_str(IdName, return_dims_methods) || return_tensor)
+  if (in_str(IdName, return_dims_methods) || in_str(IdName, return_batchless_dims_methods) || return_tensor)
     aux->SetType("tensor");
-  if (IdName=="gpu")
+  if (in_str(IdName, return_pinned_methods))
     aux->SetType("pinned_tensor");
   
   return aux;
@@ -1604,8 +1642,8 @@ static std::unique_ptr<ExprAST> ParseWhileExpr(std::string class_name="") {
   getNextToken(); // eat the while.
 
 
-  if (CurTok != tok_identifier)
-    return LogError("Identificador da variável de controle esperado depois do while.");
+  //if (CurTok != tok_identifier)
+  //  return LogError("Identificador da variável de controle esperado depois do while.");
 
 
   auto Cond = ParseExpression(class_name);
@@ -1791,14 +1829,26 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
 
 
 static std::unique_ptr<ExprAST> ParseStrVecExpr() {
+  int vec_type = CurTok;
+  std::string vec_type_str;
+
+  if (vec_type==tok_str_vec)
+    vec_type_str = "str";
+  if (vec_type==tok_float_vec)
+    vec_type_str = "float";
+    
   getNextToken(); // eat str_vec
+
+  
   
   
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
 
   // At least one variable name is required.
   if (CurTok != tok_identifier)
-    return LogError("Esperado identificador após var.");
+    return LogError("Expected identifier after vector var.");
+
+  
 
   while (true) {
     std::string Name = IdentifierStr;
@@ -1815,7 +1865,12 @@ static std::unique_ptr<ExprAST> ParseStrVecExpr() {
     }
 
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    str_vecVars.push_back(Name);
+
+    if (vec_type==tok_str_vec)
+      str_vecVars.push_back(Name);
+    if (vec_type==tok_float_vec)
+      float_vecVars.push_back(Name);
+    
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -1829,7 +1884,7 @@ static std::unique_ptr<ExprAST> ParseStrVecExpr() {
   if (CurTok==tok_space)
     getNextToken();
 
-  return std::make_unique<StrVecExprAST>(std::move(VarNames), "str");
+  return std::make_unique<StrVecExprAST>(std::move(VarNames), vec_type_str);
 }
 
 
@@ -1864,6 +1919,9 @@ extern "C" void PrintDims(std::vector<float> dims)
 }
 int DimsProd(std::vector<float> dims)
 {
+  if (dims.size()==1)
+    return (int) dims[0];
+
   float aux=1;
   for (int i = 0; i < dims.size(); i++)
     aux = aux*dims[i];
@@ -1875,6 +1933,18 @@ std::vector<float> BatchLessDims(std::vector<float> dims)
   // Removes first dim (batch dim).
   if (dims.size()<=1)
     LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+
+  std::vector<float> new_dims;
+
+  for (int i=0; i<dims.size()-1;i++)
+    new_dims.push_back(dims[i+1]);
+
+  return new_dims;
+}
+
+std::vector<float> RemoveFirstDim(std::vector<float> dims)
+{
+  // Removes first dim (batch dim).
 
   std::vector<float> new_dims;
 
@@ -2023,10 +2093,11 @@ extern "C" float * wload_img(char* tensor_name, char *img_name, float batch_idx,
     std::vector<float> dims = NamedDims[tensor_name];
 
     //std::cout << "GLOAD IMG, dims of " << tensor_name << "\n";
-    //PrintDims(dims);
+    
 
     std::vector<float> workerless_dims = BatchLessDims(dims);
     int workerless_dims_prod = DimsProd(workerless_dims);
+
     std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
     int batchless_dims_prod = DimsProd(batchless_dims);
     
@@ -2039,7 +2110,7 @@ extern "C" float * wload_img(char* tensor_name, char *img_name, float batch_idx,
     if (batchless_dims_prod < width*height*channels)
     {
       std::string t_n = tensor_name;
-      std::string _error = "The image dimensions are incompatible with the tensor " + t_n + " dimensions.";
+      std::string _error = "The image dimensions are incompatible with the tensor \033[95m" + t_n + "\033[0m dimensions.";
       LogErrorS(_error);
 
 
@@ -2058,17 +2129,17 @@ extern "C" float * wload_img(char* tensor_name, char *img_name, float batch_idx,
 
 
 
-    //float *image_data_float = new float[width * height * channels];
     float *image_data_float = NamedPinnedTensors[tensor_name];
-    int batch_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
-    //std::cout << "batch idx: " << batch_idx << ", batch offset: " << batch_offset << "\n";
+    int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+
+    //std::cout << "worker idx: " << worker_idx << ", batch idx: " << batch_idx << ", batch offset: " << idx_offset << "\n";
   
     // Loop through each pixel and convert to float between 0.0 and 1.0
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         for (int c = 0; c < channels; ++c) {
           // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
-          image_data_float[batch_offset + (y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          image_data_float[idx_offset + (y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
         }
       }
     }
@@ -2108,128 +2179,8 @@ extern "C" float * split_str_to_float(char *in_string, int gather_position)
 }
 
 
-class PreprocessingsInterface {
-public:
-  virtual ~PreprocessingsInterface() = default;
-  std::vector<float> Dims = {-1.0f};
-  std::string Type = "None";
-  std::string Name = "Unnamed";
-  std::string isSelf = "false";
-
-  virtual float * Preprocess(char *, ...) {}
-  virtual void SetType(std::string Type) {
-    this->Type=Type;
-  }
-};
 
 
-class LoadImg : public PreprocessingsInterface
-{
-
-  public:
-   LoadImg() {}
-
-    virtual float * Preprocess(char *, ...) override;
-};
-
-
-class SplitStrToFloat : public PreprocessingsInterface
-{
-  std::vector<int> Args;
-
-  public:
-   SplitStrToFloat(std::vector<int> Args)
-    : Args(std::move(Args)) {}
-
-    virtual float * Preprocess(char *, ...) override;
-};
-
-
-float * LoadImg::Preprocess(char *file_name, ...)
-{
-  va_list args;
-  va_end(args);
-
-  return load_img(file_name);
-}
-
-float * SplitStrToFloat::Preprocess(char *file_name, ...)
-{
-  va_list args;
-  va_end(args);
-
-  int gather_position = Args[0];
-
-
-  return split_str_to_float(file_name, gather_position);
-}
-
-
-//global
-std::map<std::string, std::unique_ptr<PreprocessingsInterface>> preprocessings;
-
-
-
-static std::unique_ptr<ExprAST> ParsePreprocessing(std::string preprocess_var_name) {
-
-  if (CurTok!=tok_preprocessing)
-    LogError("Pré-processamento desconhecido.");
-
-  while (CurTok==tok_preprocessing)
-  {
-    
-    std::string preprocess_name = IdentifierStr;
-    
-    
-    getNextToken();
-
-    std::vector<int> Args;
-    if (CurTok=='(')
-    {
-      getNextToken();
-      
-      while(CurTok!=')')
-      {
-        int is_minus=1;
-
-        if (CurTok=='-')
-        {
-          is_minus=-1;
-          getNextToken();
-        }
-
-        
-        if (auto Arg = ParseNumberExpr())
-          Args.push_back(is_minus*NumVal);
-        else
-          return nullptr;
-
-        if (CurTok == ')')
-        {
-          std::cout << "Broke\n";
-          break;
-        }
-        if (CurTok != ',')
-          return LogError("Esperado ')' ou ',' na lista de argumentos");
-        getNextToken();
-      }
-      getNextToken();
-    } 
-
-    if (preprocess_name=="load_img")
-      preprocessings[preprocess_var_name] = std::make_unique<LoadImg>();
-
-    if (preprocess_name=="split_str_to_float")
-      preprocessings[preprocess_var_name] = std::make_unique<SplitStrToFloat>(std::move(Args));
-
-
-    if (CurTok==tok_space)
-      break;
-    if (CurTok!=',')
-      LogError("Esperava-se ',' ou quebra de linha após pré-processamento.");
-  }
-  return nullptr;
-}
 
 
 
@@ -2297,13 +2248,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetSelf("true");
     
     
-    if (starts_with(IdName.c_str(), "preprocess_") && pre_dot=="self")
-    {
-      getNextToken(); // eat =
 
-      ParsePreprocessing(IdName);
-
-    }
     
     if (CurTok==tok_space)
       getNextToken();
@@ -2315,15 +2260,27 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
   if (CurTok=='[')
   {
+    std::cout << "PARSING INDEXATION" << "\n";
     getNextToken(); // eat [
 
 
-    std::unique_ptr<ExprAST> Idx, aux;
+    std::unique_ptr<ExprAST> aux;
 
-    Idx = ParseExpression(class_name);
+    std::vector<std::unique_ptr<ExprAST>> Idx;
+    
+    Idx.push_back(ParseExpression(class_name));
+
+    while(CurTok==',')
+    {
+      getNextToken(); // eat ,
+      Idx.push_back(ParseExpression(class_name));
+    }
+
+    Idx.push_back(std::make_unique<NumberExprAST>(-40370000000.0f));
+
 
     aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
-    std::cout << "SET IS VEC TO TRUE FOR: " << IdName << "\n";
+    
     aux->SetIsVec(true);
 
     if (in_str(IdName, str_vecVars))
@@ -2331,7 +2288,13 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetType("str_vec");
       aux->SetReturnType("str");
     }
+    if (in_str(IdName, float_vecVars))
+    {
+      aux->SetType("float_vec");
+      aux->SetReturnType("float");
+    }
 
+    
     if (in_str(IdName, pinnedTensorVars))
       aux->SetType("pinned_tensor");
 
@@ -2340,11 +2303,8 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetSelf("true");
     
     if (is_class_attr)
-    {
       aux->SetSelf(pre_dot);
 
-      //aux = std::make_unique<ObjAttrExprAST>(std::move(aux), pre_dot);
-    }
 
     getNextToken(); // eat ]
 
@@ -2415,7 +2375,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 
-  if (in_str(IdName, return_dims_methods) || return_tensor)
+  if (in_str(IdName, return_dims_methods) || in_str(IdName, return_batchless_dims_methods) || return_tensor)
     aux->SetType("tensor");
 
   if (return_string)
@@ -2819,6 +2779,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
   case tok_var_str:
     return ParseStrExpr();
   case tok_str_vec:
+    return ParseStrVecExpr();
+  case tok_float_vec:
     return ParseStrVecExpr();
   case '(':
     return ParseParenExpr();
@@ -3303,7 +3265,9 @@ static ExitOnError ExitOnErr;
 static std::map<std::string, AllocaInst *> NamedValues;
 static std::map<std::string, AllocaInst *> NamedStrs;
 static std::map<std::string, AllocaInst *> NamedStrVecs;
+static std::map<std::string, AllocaInst *> NamedFloatVecs;
 static std::map<std::string, std::vector<char *>> ClassStrVecs;
+static std::map<std::string, std::vector<float>> ClassFloatVecs;
 static std::map<std::string, float> NamedClassValues;
 
 
@@ -3312,6 +3276,7 @@ static std::map<std::string, float> NamedClassValues;
 // Aux to not lose pointers
 std::map<std::string, std::string> AuxRandomStrs;
 std::map<std::string, std::vector<char *>> StrVecAuxHash;
+std::map<std::string, std::vector<float>>  FloatVecAuxHash;
 
 
 // Cuda Parallellism
@@ -3495,6 +3460,40 @@ extern "C" float *gpu(char *tensor_name)
   return tensor;
 }
 
+extern "C" float *gpuw(char *tensor_name, float idx)
+{
+  std::cout << "\nGpu transfer for: " << tensor_name << " on worker " << idx << "\n";
+  
+  float *tensor, *tensor_cpu;
+
+  
+  std::vector<float> dims, batchless_dims;
+  dims = NamedDims[tensor_name];
+
+  batchless_dims = BatchLessDims(dims);
+
+  float batchless_dims_prod = (float)DimsProd(batchless_dims);
+
+
+
+  tensor = NamedTensors[tensor_name];
+  //tensor_cpu = NamedPinnedTensors[tensor_name];
+  tensor_cpu = NamedPinnedTensors[tensor_name] + static_cast<int>(idx*batchless_dims_prod);
+
+
+  cudaError_t err = cudaMemcpy(tensor, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+
+
+  if (err != cudaSuccess) {
+    // Handle error
+    fprintf(stderr, "CPU to GPU tensor transfer failed: %s\n", cudaGetErrorString(err));
+  } 
+  //std::cout << "Transfer succeed" << "\n\n";
+
+  
+  return tensor;
+}
+
 
 
 extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
@@ -3553,6 +3552,19 @@ extern "C" float PrintStrVec(std::vector<char*> vec)
 {
   for (int i=0; i<vec.size(); i++)
     std::cout << vec[i] << "\n";
+
+  return 0;
+}
+
+
+extern "C" float PrintFloatVec(std::vector<float> vec)
+{
+
+  std::cout << "Float vector:\n[";
+  for (int i=0; i<vec.size()-1; i++)
+    std::cout << "" << vec[i] << ", ";
+  std::cout << "" << vec[vec.size()-1];
+  std::cout << "]\n\n";
 
   return 0;
 }
@@ -3621,6 +3633,20 @@ extern "C" void *LoadDims(char* tensor_name) // TODO: invert this back
   std::string random_str = RandomString(15);
   NamedDims[random_str] = NamedDims[tensor_name];
   AuxRandomStrs[random_str] = "dim";
+
+  return &NamedDims[random_str];
+}
+
+extern "C" void *LoadBatchlessDims(char* tensor_name) // TODO: invert this back
+{
+  //std::cout << "LOADING batchless DIMS"  << "\n";
+  //PrintDims(NamedDims[tensor_name]);
+
+  std::string random_str = RandomString(15);
+  NamedDims[random_str] = BatchLessDims(NamedDims[tensor_name]);
+  AuxRandomStrs[random_str] = "dim";
+
+  PrintDims(NamedDims[random_str]);
 
   return &NamedDims[random_str];
 }
@@ -3881,42 +3907,63 @@ Value *StringExprAST::codegen(Value *first_arg) {
 //===----------------------------------------------------------------------===//
 
 
+extern "C" void * zeros_vec(float size) {
+  // TODO: turn into python like expression [0]*size
+
+  std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 0.0f);
+  
+
+  // Aux to not lose pointers
+  std::string random_str = RandomString(15);
+  FloatVecAuxHash[random_str] = vec;
+  AuxRandomStrs[random_str] = "float_vec";
+    
+  return &FloatVecAuxHash[random_str];
+}
+
+extern "C" void * ones_vec(float size) {
+  // TODO: turn into python like expression [0]*size
+
+  std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 1.0f);
+  
+
+  // Aux to not lose pointers
+  std::string random_str = RandomString(15);
+  FloatVecAuxHash[random_str] = vec;
+  AuxRandomStrs[random_str] = "float_vec";
+    
+  return &FloatVecAuxHash[random_str];
+}
+
 
 extern "C" void * _glob_b_(char *pattern) {
-    // TODO: make var of type string vector to hold this result.
+  glob_t glob_result;
 
-    glob_t glob_result;
+  std::vector<char *> ret;
 
-    //std::vector<char *> glob_str_files;
-    std::vector<char *> ret;
+  if (glob(pattern, GLOB_TILDE, NULL, &glob_result) == 0) {
+      for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
 
-
-
-    if (glob(pattern, GLOB_TILDE, NULL, &glob_result) == 0) {
-        for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
-            //result = result + "|||" + glob_result.gl_pathv[i];
-
-            ret.push_back(strdup(glob_result.gl_pathv[i]));
-        }
-        globfree(&glob_result);
-    }
+        ret.push_back(strdup(glob_result.gl_pathv[i]));
+      }
+      globfree(&glob_result);
+  }
 
 
-    if (ret.size()<1)
-      LogErrorS("Glob falhou ao encontrar arquivos.");
+  if (ret.size()<1)
+    LogErrorS("Glob falhou ao encontrar arquivos.");
     
-    // Aux to not lose pointers
-    std::string random_str = RandomString(15);
-    StrVecAuxHash[random_str] = ret;
-    AuxRandomStrs[random_str] = "str_vec";
+  // Aux to not lose pointers
+  std::string random_str = RandomString(15);
+  StrVecAuxHash[random_str] = ret;
+  AuxRandomStrs[random_str] = "str_vec";
     
-    return &StrVecAuxHash[random_str];
+  return &StrVecAuxHash[random_str];
 }
 
 
 
 float *current_data;
-
 
 
 
@@ -4019,7 +4066,6 @@ extern "C" float view(char *self, float first_dim, ...)
       if (new_dims[i]==-1)
         new_dims[i] = hidden_dim;
     
-
   } else {
     if (current_dims_prod != new_dims_prod)
     {
@@ -4158,13 +4204,86 @@ extern "C" float *logE(char *tensorName) {
 }
 
 
-extern "C" void AttrPinnedOnIdx(char *tensor_name, float idx, float val) {
+extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
+  
+  std::vector<float> idxs, new_dims_no_minus, dims;
+  int current_dims_prod;
+  bool has_minus = false;
+  dims = NamedDims[tensor_name];
+
+  int idx_at = 0;
+
+  
+  va_list args;
+  va_start(args, first_idx);
+
+  if (first_idx!=-1)
+    new_dims_no_minus.push_back(first_idx);
+  else
+    has_minus=true;
+  
+    
+  idxs.push_back(first_idx);
+
+  dims = RemoveFirstDim(dims);
+  
+  current_dims_prod = DimsProd(dims);
+
+  idx_at += (int)(current_dims_prod*first_idx);
+
+
+
+
+  //std::cout << "CalculateIdxOffset pushing dim: " << first_idx << "\n";
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions???");
+      return 0;
+    }
+
+    float idx = va_arg(args, float);
+    if (idx==-40370000000)
+      break;
+
+    idxs.push_back(idx);
+    
+    dims = RemoveFirstDim(dims);
+    
+    current_dims_prod = DimsProd(dims);
+
+    idx_at += (int)(current_dims_prod*idx);
+
+    //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
+    
+
+    if (idx!=-1)
+      new_dims_no_minus.push_back(idx);
+    else
+      has_minus=true;
+  }
+  va_end(args);
+
+
+
+
+
+
+  return idx_at;
+}
+
+
+extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
   
   std::vector<float> dims = NamedDims[tensor_name];
   int dims_prod = DimsProd(dims);
-  if (idx>(dims_prod-1))
+  if (idx_at>(dims_prod-1))
   {
-    std::string _error = "Tried to indexate pinned_tensor "+std::string(tensor_name)+" with index "+std::to_string((int)idx)+", but this is outside it's acceptable dimensions (dims prod: "+std::to_string(dims_prod)+").";
+    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)idx_at);
+    _error = _error + "\033[0m on pinned_tensor \033[95m"+std::string(tensor_name);
+    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
 
     LogErrorS(_error);
     std::cout << "Dimensions:" << "\n";
@@ -4174,10 +4293,10 @@ extern "C" void AttrPinnedOnIdx(char *tensor_name, float idx, float val) {
 
   float *base_address = NamedPinnedTensors[tensor_name];
   
-  //std::cout << "loaded tensor" << "\n";
-  //std::cout << "idx " << idx << ", val " << val << "\n";
+  
+  //std::cout << "idx " << idx_at << ", val " << val << "\n";
 
-  float *device_x = base_address + static_cast<int>(idx);
+  float *device_x = base_address + static_cast<int>(idx_at);
 
   *device_x = val;
 }
@@ -4260,7 +4379,27 @@ extern "C" float StoreStrVecOnDemand(char *self, char *object_var_name, std::vec
   std::string _self = self;
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as StrVec type.\n";
 
-  ClassStrVecs[FirstArg + object_var_name] = value;
+  ClassStrVecs[_self + object_var_name] = value;
+  
+  return 0;
+}
+
+extern "C" float StoreFloatVecOnDemand(char *self, char *object_var_name, std::vector<float> value){
+
+  std::string _self = self;
+  std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
+
+  ClassFloatVecs[_self + object_var_name] = value;
+  
+  return 0;
+}
+
+extern "C" float StoreFloatVecOnDemandOnIdx(char *self, char *object_var_name, float idx, float value){
+
+  std::string _self = self;
+  std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
+
+  ClassFloatVecs[_self + object_var_name][(int)idx] = value;
   
   return 0;
 }
@@ -4293,6 +4432,12 @@ extern "C" void * LoadStrVecOnDemand(char *object_var_name) {
   return &ClassStrVecs[object_var_name];
 }
 
+
+extern "C" void * LoadFloatVecOnDemand(char *object_var_name) {
+  //std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+    
+  return &ClassFloatVecs[object_var_name];
+}
 
 
 Value *ObjAttrExprAST::codegen(Value *ignored_first_arg) {
@@ -4374,7 +4519,16 @@ Value *VariableExprAST::codegen(Value *first_arg) {
                                                       {var_name});
         //Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
         return V;
-      }                                                    
+      }
+
+    for (const auto &entry : ClassFloatVecs)
+      if (ends_with(entry.first, Name))
+      {
+        V = Builder->CreateCall(TheModule->getFunction("LoadFloatVecOnDemand"),
+                                                      {var_name});
+        Builder->CreateCall(TheModule->getFunction("PrintFloatVec"), {V});
+        return V;
+      }
   }
 
   if (NamedValues.count(Name)>0) 
@@ -4462,31 +4616,6 @@ Value *VariableExprAST::codegen(Value *first_arg) {
 
 
 
-extern "C" char * IndexStrVec(std::vector<char*> vec, float _idx)
-{
-
-  int idx = (int) _idx;
-
-  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
-  
-
-  return vec[idx];
-}
-
-
-extern "C" char * IndexClassStrVec(char * vec_name, float _idx)
-{
-  int idx = (int) _idx;
-
-
-  std::vector<char*> vec = ClassStrVecs[vec_name];
-
-  //std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
-  
-
-  return vec[idx];
-}
-
 
 extern "C" char * AuxFn(char * arg1)
 {
@@ -4516,7 +4645,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   Value *V, *idx;
 
-  idx = Idx->codegen(first_arg);
+  idx = Idx[0]->codegen(first_arg);
 
 
   Value *var_name, *object_name, *object_var_name;
@@ -4559,12 +4688,28 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
       
       return V;
     }
+
+    if (Type=="float_vec"){
+      V = Builder->CreateCall(TheModule->getFunction("IndexClassFloatVec"), {var_name, idx});
+      return V;
+    }
   }
 
 
   if (Type=="str_vec")
   {
     V = NamedStrVecs[Name];
+    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
+
+
+    V = Builder->CreateCall(TheModule->getFunction("IndexStrVec"), {V, idx});
+    //V = Builder->CreateCall(TheModule->getFunction("AuxFn"), {V});
+
+    return V;
+  }
+    if (Type=="float_vec")
+  {
+    V = NamedFloatVecs[Name];
     V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
 
 
@@ -4590,7 +4735,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
 
 
 
-extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std::vector<float> new_dims)
+extern "C" float AttrTensor(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
 
@@ -4610,9 +4755,9 @@ extern "C" float temporaryCudaResult_Attr(char *tensor_name, float *tensor, std:
 
 
 // Copies a pinned_tensor's reserved memory into a tensor.
-extern "C" float TensorAttrNoFree(char *tensor_name, float *tensor, std::vector<float> new_dims)
+extern "C" float AttrTensorNoFree(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
-  //std::cout << "\nTensorAttrNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
+  //std::cout << "\nAttrTensorNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
   
 
   float dims_prod = DimsProd(new_dims);
@@ -4776,7 +4921,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg) {
                                                       {object_name, tensor_name});
   }
 
-
+  
 
   if (Op == '=') {
     seen_var_attr=true;
@@ -4791,12 +4936,28 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg) {
 
 
     
+
+
     VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
     if (!LHSE)
       return LogErrorV("'=' destiny must be a variable.");
 
+    
+
+    std::vector<Value *> idx_calc_args;
+
+    idx_calc_args.push_back(tensor_name);
+
+    for (int i=0; i<LHSE->Idx.size(); i++)
+    {
+      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg));
+    }
+
+    Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                          idx_calc_args);
+
     Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
-                          {tensor_name, LHSE->Idx->codegen(first_arg), Val});
+                          {tensor_name, Val, idx_at});
 
 
     /*
@@ -6400,7 +6561,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg) {
     Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
     std::cout << "Post dims\n";
 
-    Builder->CreateCall(TheModule->getFunction("temporaryCudaResult_Attr"),
+    Builder->CreateCall(TheModule->getFunction("AttrTensor"),
                         {LtensorName, RtensorPtr,
                          Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
     std::cout << "Post attr call\n";
@@ -6574,7 +6735,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg) {
     Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
     std::cout << "Post dims\n";
 
-    Builder->CreateCall(TheModule->getFunction("TensorAttrNoFree"),
+    Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
                         {LtensorName, RtensorPtr,
                          Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
     std::cout << "Post attr call\n";
@@ -6606,6 +6767,9 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
   if (Op == '=') {
+
+    //std::cout << "\n0 0 ATTRIBUTION" << "\n\n\n";
+
     seen_var_attr=true;
     // Assignment requires the LHS to be an identifier.
     // This assume we're building without RTTI because LLVM builds that way by
@@ -6667,6 +6831,41 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
                                                    Val});
       else
         Builder->CreateStore(Val, Variable);
+
+    } else if (NamedFloatVecs.count(Lname) != 0 ) {
+
+      std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
+      Value *Variable = NamedFloatVecs[Lname];
+      
+
+      if(LHS->GetSelf()=="true")
+      {
+        if(LHS->GetIsVec())
+        {
+          VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+          
+
+          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
+                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
+                                                   Builder->CreateGlobalString(Lname),
+                                                   LHSV->Idx[0]->codegen(first_arg),
+                                                   Val});
+
+        } else
+          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
+                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
+                                                   Builder->CreateGlobalString(Lname),
+                                                   Val});
+      }
+      else
+      {
+        if(LHS->GetIsVec())
+        {
+          // TODO: Implement non-object-attr float vector index attribution.
+        } else
+          Builder->CreateStore(Val, Variable);
+      }
+        
 
     } else {
       
@@ -7386,7 +7585,12 @@ Value *StrVecExprAST::codegen(Value *first_arg) {
 
     
     // Remember this binding.
-    NamedStrVecs[VarName] = Alloca;
+
+    if (Type=="str")
+      NamedStrVecs[VarName] = Alloca;
+    if (Type=="float")
+      NamedFloatVecs[VarName] = Alloca;
+    
     
   }
 
@@ -7907,6 +8111,16 @@ Value *CallExprAST::codegen(Value *first_arg) {
     DimsPtr = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(dims_ptr, DimsPtr);
   }
+
+  if (in_str(tgt_function_name, return_batchless_dims_methods))
+  {
+    // Get resulting tensor dims.
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadBatchlessDims"), {ArgsV[0]});
+    DimsPtr = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(dims_ptr, DimsPtr);
+  }
+  
+  
     
   if(Class!="None")
     Builder->CreateCall(TheModule->getFunction("DimnishFirstArgOnDemand"),
@@ -7981,20 +8195,9 @@ extern "C" void *SplitString(char *self, char *pattern)
 }
 
 
-int count_pattern(const std::string& text, const std::string& pattern) {
-  int count = 0;
-  size_t pos = 0;
 
-  std::cout << "Trying to count"  << "\n";
-  // Iterate while finding occurrences of the pattern
-  while ((pos = text.find(pattern, pos)) != std::string::npos) {
-    count++;
-    pos += pattern.length(); // Move to the character after the found pattern
-  }
 
-  return count;
-}
-
+// INDEX METHODS
 
 extern "C" char *SplitStringIndexate(char *self, char *pattern, float idx)
 {
@@ -8017,9 +8220,48 @@ extern "C" char *SplitStringIndexate(char *self, char *pattern, float idx)
   if (idx < 0) 
     idx = splits.size() + idx;
   
+
+  //std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
  
   return splits[idx];
     
+}
+
+
+
+
+extern "C" char * IndexStrVec(std::vector<char*> vec, float _idx)
+{
+
+  int idx = (int) _idx;
+
+  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
+  
+
+  return vec[idx];
+}
+
+
+extern "C" char * IndexClassStrVec(char * vec_name, float _idx)
+{
+  int idx = (int) _idx;
+
+
+  std::vector<char*> vec = ClassStrVecs[vec_name];
+
+  //std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
+  
+
+  return vec[idx];
+}
+
+
+extern "C" float IndexClassFloatVec(char * vec_name, float _idx)
+{
+  int idx = (int) _idx;
+
+  
+  return ClassFloatVecs[vec_name][idx];
 }
 
 
@@ -8180,7 +8422,7 @@ static void InitializeModule() {
   TheModule->setDataLayout(TheJIT->getDataLayout());
 
   //std::cout << "Initialize Module\n";
-  // todo: It's creating one initialize for each ";" (top level expression).
+  
 
   // Create a new builder for the module.
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
@@ -8194,42 +8436,41 @@ static void InitializeModule() {
   // Tensor -- Scalar   Operations
   //===----------------------------------------------------------------------===//
 
-  // char *, float, int
+  //
   FunctionType *CudaScalarMultTy = FunctionType::get(
       floatPtrTy,
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
-      false // Not vararg
+      false 
   );
   TheModule->getOrInsertFunction("CudaScalarMult", CudaScalarMultTy);
 
 
 
-  // char *, float, int
+  //
   FunctionType *CudaScalarDivTy = FunctionType::get(
       floatPtrTy,
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
-      false // Not vararg
+      false
   );
   TheModule->getOrInsertFunction("CudaScalarDiv", CudaScalarDivTy);
 
 
 
-
-  // char *, float, int
+  //
   FunctionType *CudaScalarAddTy = FunctionType::get(
       floatPtrTy,
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
-      false // Not vararg
+      false
   );
   TheModule->getOrInsertFunction("CudaScalarAdd", CudaScalarAddTy);
 
 
 
-  // char *, float, int
+  //
   FunctionType *CudaScalarSubTy = FunctionType::get(
       floatPtrTy,
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
-      false // Not vararg
+      false
   );
   TheModule->getOrInsertFunction("CudaScalarSub", CudaScalarSubTy);
 
@@ -8240,11 +8481,11 @@ static void InitializeModule() {
   //===----------------------------------------------------------------------===//
 
 
-  // char *, char *, int
+  //
   FunctionType *CudaMultTy = FunctionType::get(
       floatPtrTy,
-      {Type::getInt8Ty(*TheContext)->getPointerTo(),
-       Type::getInt8Ty(*TheContext)->getPointerTo(),
+      {int8PtrTy,
+       int8PtrTy,
        Type::getInt32Ty(*TheContext),
        floatPtrTy,
        floatPtrTy,
@@ -8285,7 +8526,13 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("LoadDims", LoadDimsTy);
 
-
+  
+  FunctionType *LoadBatchlessDimsTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("LoadBatchlessDims", LoadBatchlessDimsTy);
 
 
   FunctionType *LoadDimsConvTy = FunctionType::get(
@@ -8433,6 +8680,14 @@ static void InitializeModule() {
       true // Vararg
   );
   TheModule->getOrInsertFunction("view", viewTy);
+
+
+  FunctionType *CalculateIdxOffsetTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      true // Vararg
+  );
+  TheModule->getOrInsertFunction("CalculateIdxOffset", CalculateIdxOffsetTy);
   
 
   //===----------------------------------------------------------------------===//
@@ -8527,6 +8782,14 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("gpu", gpuTy);
 
+  
+  FunctionType *gpuwTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("gpuw", gpuwTy);
+
   //===----------------------------------------------------------------------===//
   // Parallel Ops
   //===----------------------------------------------------------------------===//
@@ -8611,11 +8874,28 @@ static void InitializeModule() {
   FunctionType *globTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy},
-      false // Not vararg
+      false
   );
   TheModule->getOrInsertFunction("_glob_b_", globTy);
 
 
+  //
+  FunctionType *zeros_vecTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("zeros_vec", zeros_vecTy);
+
+
+  //
+  FunctionType *ones_vecTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("ones_vec", ones_vecTy);
+  
 
   FunctionType *PrintFloatTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
@@ -8684,6 +8964,15 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *PrintFloatVecTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("PrintFloatVec", PrintFloatVecTy);
+  
+
+  //
   FunctionType *LoadStrVecOnDemandTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy},
@@ -8693,10 +8982,19 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *LoadFloatVecOnDemandTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("LoadFloatVecOnDemand", LoadFloatVecOnDemandTy);
+
+  
+  //
   FunctionType *StoreStrOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy, int8PtrTy},
-      false // Not vararg
+      false
   );
   TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
 
@@ -8705,10 +9003,26 @@ static void InitializeModule() {
   FunctionType *StoreStrVecOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy, int8PtrTy},
-      false // Not vararg
+      false
   );
   TheModule->getOrInsertFunction("StoreStrVecOnDemand", StoreStrVecOnDemandTy);
   
+  
+  //
+  FunctionType *StoreFloatVecOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("StoreFloatVecOnDemand", StoreFloatVecOnDemandTy);
+
+  FunctionType *StoreFloatVecOnDemandOnIdxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("StoreFloatVecOnDemandOnIdx", StoreFloatVecOnDemandOnIdxTy);
+
 
   //
   FunctionType *LenStrVecTy = FunctionType::get(
@@ -8744,6 +9058,15 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("IndexClassStrVec", IndexClassStrVecTy);
+
+  //
+  FunctionType *IndexClassFloatVecTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("IndexClassFloatVec", IndexClassFloatVecTy);
+
 
   //
   FunctionType *AuxFnTy = FunctionType::get(
@@ -8872,23 +9195,23 @@ static void InitializeModule() {
 
 
   // char *
-  FunctionType *temporaryCudaResult_AttrTy = FunctionType::get(
+  FunctionType *AttrTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
        floatPtrTy,
        int8PtrTy}, 
       false 
   );
-  TheModule->getOrInsertFunction("temporaryCudaResult_Attr", temporaryCudaResult_AttrTy);
+  TheModule->getOrInsertFunction("AttrTensor", AttrTensorTy);
 
-  FunctionType *TensorAttrNoFreeTy = FunctionType::get(
+  FunctionType *AttrTensorNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
        floatPtrTy,
        int8PtrTy}, 
       false 
   );
-  TheModule->getOrInsertFunction("TensorAttrNoFree", TensorAttrNoFreeTy);
+  TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
   
 
 
