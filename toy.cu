@@ -187,17 +187,17 @@ bool in_str(std::string str, std::vector<std::string> list) {
 }
 
 
+
 // Tensor related
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu", "log"};
 std::vector<std::string> return_batchless_dims_methods = {"gpuw"};
 std::vector<std::string> return_pinned_methods = {"gpu", "gpuw"};
 
-
 std::vector<std::string> activation_functions = {"gelu", "relu", "softmax"};
 
-
 std::vector<std::string> tensor_inits = {"randint", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
+
 
 // Universal
 std::vector<std::string> vararg_methods = {"view"};
@@ -206,7 +206,7 @@ std::vector<std::string> string_methods = {"split", "split_idx"};
 
 // tensor + string + ...
 std::vector<std::string> native_methods = {"view","permute", "onehot", "mean", "sum", "max", "min",
-                                           "split", "split_idx"};
+                                           "split", "split_idx", "first_nonzero"};
 
 
 PointerType *floatPtrTy, *int8PtrTy;
@@ -390,6 +390,7 @@ std::map<int, std::string> token_to_string = {
 
 };
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal};
+std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class};
 
 
 static std::string IdentifierStr; // Filled in if tok_identifier
@@ -583,7 +584,7 @@ static int get_token() {
   if (ThisChar==10 || LastChar==tok_tab)
   {
     //std::cout << "Gotcha\n";
-    //std::cout << "ThisChar: " << ThisChar << " LastChar " << LastChar << "\n";
+    
 
     int seen_spaces=0;
 
@@ -607,7 +608,8 @@ static int get_token() {
 
       ThisChar = (int)LastChar;
       LastChar = getchar(); 
-    } 
+    }
+    //std::cout << "\nThisChar: " << ThisChar << " LastChar " << LastChar << "\n";
 
     //std::cout << "New seen tabs: " << SeenTabs << "\n";
     return tok_space;
@@ -648,7 +650,9 @@ public:
   std::string Type = "None";
   std::string ReturnType = "None";
   std::string Name = "Unnamed";
-  std::string isSelf = "false";
+  bool isSelf = false;
+  bool isAttribute = false;
+  std::string _pre_dot = "";
   bool isVec = false;
 
   Value *TensorPtr, *DimsPtr;
@@ -665,12 +669,28 @@ public:
   virtual void SetReturnType(std::string ReturnType) {
     this->ReturnType=ReturnType;
   }
-  virtual void SetSelf(std::string Self) {
+
+  virtual void SetSelf(bool Self) {
     this->isSelf=Self;
   }
-  virtual std::string GetSelf() {
+  virtual bool GetSelf() {
     return isSelf;
   }
+
+  virtual void SetIsAttribute(bool Attribute) {
+    this->isAttribute=Attribute;
+  }
+  virtual bool GetIsAttribute() {
+    return isAttribute;
+  }
+
+  virtual void SetPreDot(std::string pre_dot) {
+    this->_pre_dot=pre_dot;
+  }
+  virtual std::string GetPreDot() {
+    return _pre_dot;
+  }
+
   virtual std::string GetName() {
     return Name;
   }
@@ -1176,7 +1196,7 @@ std::unique_ptr<ExprAST> LogError(std::string Str) {
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   LogErrorS(Str);
 
-  while(CurTok!=tok_space && CurTok!=';' && CurTok!=',' && CurTok!=')')
+  while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
     getNextToken();
   
   return nullptr;
@@ -1197,7 +1217,7 @@ std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   LogErrorS(Str);
 
-  while(CurTok!=tok_space && CurTok!=';')
+  while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
     getNextToken();
 
   if (CurTok==tok_space)
@@ -1216,9 +1236,9 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
-  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Error: \033[0mtoken " << ReverseToken(CurTok) << " inesperado. Esperava-se uma expressão.\n\n";
+  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
   
-  while(CurTok!=tok_space && CurTok!=';')
+  while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
     getNextToken();
 
   return nullptr;
@@ -1227,7 +1247,7 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
 
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
   LogError(Str);
-  while(CurTok!=tok_space && CurTok!=';')
+  while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
     getNextToken();
   return nullptr;
 }
@@ -1235,7 +1255,7 @@ std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
 
 std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str) {
   LogError(Str);
-  while(CurTok!=tok_space && CurTok!=';' && CurTok!=',' && CurTok!=')')
+  while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
   {
     std::cout << "LogErrorP: " << IdentifierStr << "\n";
     
@@ -1274,9 +1294,9 @@ static std::unique_ptr<ExprAST> ParseParenExpr(std::string class_name="") {
     return nullptr;
 
   if (CurTok != ')')
-    return LogError("Esperado ')' na expressão em paranteses");
+    return LogError("Expected ')' on parenthesis expression.");
   
-  std::cout << "Close brackets\n";
+
   getNextToken(); // eat ).
   return V;
 }
@@ -1318,7 +1338,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
   std::string IdName = IdentifierStr;
   
   
-  std::cout << "Identifier " << IdName <<  "\n";
+  //std::cout << "Identifier " << IdName <<  "\n";
 
   getNextToken(); // eat identifier.
   
@@ -1590,21 +1610,21 @@ static std::unique_ptr<ExprAST> ParseForExpr(std::string class_name="") {
 
 
   if (CurTok != tok_identifier)
-    return LogError("identificador da variável de controle esperado depois do for.");
+    return LogError("Expected for's control variable identifier.");
 
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
 
   if (CurTok != '=')
-    return LogError("Esperada atribuição do valor inicial do for.");
+    return LogError("Expected for's control variable initial value.");
   getNextToken(); // eat '='.
 
   auto Start = ParseExpression(class_name);
   if (!Start)
     return nullptr;
   if (CurTok != ',')
-    return LogError("Esperado ',' depois de atribuir valor inicial do for.");
+    return LogError("Expected ',' after for's control variable initial value.");
   getNextToken();
 
 
@@ -1699,7 +1719,7 @@ static std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name="") {
   getNextToken(); 
 
 
-  while(CurTok != ';')
+  while(!in_char(CurTok, terminal_tokens))
   {
 
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
@@ -1717,8 +1737,7 @@ static std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name="") {
       getNextToken();
     
 
-    //std::cout << "finish expression current token: " << ReverseToken(CurTok) << "\n";
-
+    /*
     if (CurTok == tok_async)
     {
       Bodies.push_back(std::move(ParseAsyncExpr(class_name)));
@@ -1729,6 +1748,9 @@ static std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name="") {
       Bodies.push_back(std::move(ParseExpression(class_name)));
       IsAsync.push_back(false);
     }
+    */
+    Bodies.push_back(std::move(ParseExpression(class_name)));
+    IsAsync.push_back(false);
   }
 
 
@@ -2188,10 +2210,10 @@ extern "C" float * split_str_to_float(char *in_string, int gather_position)
 //
 static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
-  std::string pre_dot = IdentifierStr;
+  std::string pre_dot = "";
   std::string object_class;
   bool is_class_attr=false;
-
+  bool is_self=false;
 
 
 
@@ -2200,25 +2222,31 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     is_class_attr = true;
     pre_dot="";
   } else 
+  {
+    is_self=true;
     getNextToken(); // eat self
+  }
+
   
 
-  std::cout << "\nCUR TOK on attr: " << ReverseToken(CurTok) << ", pre dot: " << pre_dot << "\n\n";
+  //std::cout << "\nCUR TOK on attr: " << ReverseToken(CurTok) << ", pre dot: " << pre_dot << "\n\n";
+
   while (CurTok==tok_class_attr)
   {
+    is_class_attr = true;
     object_class=IdentifierStr;
     pre_dot+=IdentifierStr;
     getNextToken();
   }
   
-  // substitute object name by class name upon object method call parsing
+  // Turns string from object model of class type Model into Model
   if (Object_toClass.find(object_class) != Object_toClass.end())
     object_class = Object_toClass[object_class]; 
   
   
   
   
-  std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
+  //std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
 
 
   std::string IdName = IdentifierStr;
@@ -2242,10 +2270,13 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetType("str");
 
 
+    if (is_self)
+      aux->SetSelf(true);
+    
     if (is_class_attr)
-      aux->SetSelf(pre_dot);
-    if (pre_dot=="self")
-      aux->SetSelf("true");
+      aux->SetIsAttribute(true);
+    
+    aux->SetPreDot(pre_dot);
     
     
 
@@ -2260,7 +2291,6 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
   if (CurTok=='[')
   {
-    std::cout << "PARSING INDEXATION" << "\n";
     getNextToken(); // eat [
 
 
@@ -2299,12 +2329,13 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetType("pinned_tensor");
 
 
-    if (pre_dot=="self")
-      aux->SetSelf("true");
+    if (is_self)
+      aux->SetSelf(true);
     
     if (is_class_attr)
-      aux->SetSelf(pre_dot);
-
+      aux->SetIsAttribute(true);
+    
+    aux->SetPreDot(pre_dot);
 
     getNextToken(); // eat ]
 
@@ -2363,7 +2394,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     callee_override = stringMethods[IdName];
 
   } else {
-    if (pre_dot=="self")
+    if (is_self && !is_class_attr)
       IdName = class_name + IdName;
   }
 
@@ -2384,6 +2415,14 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   
   if (CurTok==tok_space)
     getNextToken();
+
+  if (is_self)
+    aux->SetSelf(true);
+    
+  if (is_class_attr)
+    aux->SetIsAttribute(true);
+    
+  aux->SetPreDot(pre_dot);
   
   return aux;
 }
@@ -2437,14 +2476,17 @@ static std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
     getNextToken();
 
 
-  std::string pre_dot = "false";
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
   if (CurTok == tok_self)
   {
-    pre_dot = "true";
+    is_self=true;
     getNextToken();
   }
   if (CurTok == tok_class_attr)
   {
+    is_attr=true;
     pre_dot = IdentifierStr;
     std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
     getNextToken();
@@ -2475,7 +2517,9 @@ static std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
 
   auto aux = std::make_unique<PinnedTensorExprAST>(std::move(VarNames), "pinned_tensor",
                                              std::move(dims), init);
-  aux->SetSelf(pre_dot);
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
 
   
   if (CurTok==tok_space)
@@ -2537,16 +2581,19 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
     getNextToken();
 
 
-  std::string pre_dot = "false";
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
   if (CurTok == tok_self)
   {
-    pre_dot = "true";
+    is_self=true;
     getNextToken();
   }
   if (CurTok == tok_class_attr)
   {
+    is_attr=true;
     pre_dot = IdentifierStr;
-    std::cout << "Obj attr tensor: " << pre_dot << "\n";
     getNextToken();
   }
 
@@ -2575,8 +2622,9 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
 
   auto aux = std::make_unique<TensorExprAST>(std::move(VarNames), "tensor",
                                              std::move(dims), init);
-  aux->SetSelf(pre_dot);
-
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
   
   if (CurTok==tok_space)
     getNextToken();
@@ -2639,21 +2687,24 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
     return LogError("Convolução requer argumentos canais, canais de saída, kernel size, stride e padding.");
 
 
-  std::string pre_dot = "false";
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
   if (CurTok == tok_self)
   {
-    pre_dot = "true";
+    is_self=true;
     getNextToken();
   }
   if (CurTok == tok_class_attr)
   {
+    is_attr=true;
     pre_dot = IdentifierStr;
-    std::cout << "Obj attr tensor: " << pre_dot << "\n";
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
     getNextToken();
   }
 
   if (CurTok != tok_identifier)
-    return LogError("Esperado identificador após var.");
+    return LogError("Expected conv identifier name.");
 
 
 
@@ -2682,7 +2733,9 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
                                              std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
                                              std::move(dims[3]), std::move(dims[4]),
                                              init);
-  aux->SetSelf(pre_dot);
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
 
   
   if (CurTok==tok_space)
@@ -2765,6 +2818,7 @@ static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
 static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
   switch (CurTok) {
   default:
+    //return std::move(std::make_unique<NumberExprAST>(0.0f));
     return LogErrorT(CurTok);
   case tok_identifier:
     return ParseIdentifierExpr();
@@ -2792,6 +2846,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseWhileExpr(class_name);
   case tok_async_finish:
     return ParseFinishExpr(class_name);
+  case tok_async:
+    return ParseAsyncExpr(class_name);
   case tok_lock:
     return ParseLockExpr(class_name);
   case tok_var:
@@ -2958,11 +3014,9 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     }
 
 
-    std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
-    std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n";
-    
-
-    std::cout << "L type: " << L_cuda << " R type: " << R_cuda << "\n\n";
+    //std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
+    //std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n";
+    //std::cout << "L type: " << L_cuda << " R type: " << R_cuda << "\n\n";
 
 
     if (L_cuda==type_tensor && R_cuda==type_pinned_tensor)
@@ -3179,7 +3233,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition(std::string class_name="") {
   
   std::vector<std::unique_ptr<ExprAST>> Body;
 
-  while(CurTok!=';')
+  while(!in_char(CurTok, terminal_tokens))
   {
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
       break;
@@ -3187,6 +3241,9 @@ static std::unique_ptr<FunctionAST> ParseDefinition(std::string class_name="") {
 
     if (CurTok==tok_space)
       getNextToken();
+
+    if (SeenTabs <= cur_level_tabs)
+      break;
 
     Body.push_back(std::move(ParseExpression(class_name)));
   }
@@ -3211,7 +3268,7 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
 
   
   std::vector<std::unique_ptr<ExprAST>> Body;
-  while(CurTok!=';')
+  while(!in_char(CurTok, terminal_tokens))
   {
     Body.push_back(std::move(ParseExpression()));
     //std::cout << "\n\nTop level expr cur tok: " << ReverseToken(CurTok) <<  ".\n";
@@ -3462,7 +3519,7 @@ extern "C" float *gpu(char *tensor_name)
 
 extern "C" float *gpuw(char *tensor_name, float idx)
 {
-  std::cout << "\nGpu transfer for: " << tensor_name << " on worker " << idx << "\n";
+  //std::cout << "\nGpu transfer for: " << tensor_name << " on worker " << idx << "\n";
   
   float *tensor, *tensor_cpu;
 
@@ -3503,7 +3560,7 @@ extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdim
   std::vector<float> new_dims;
   if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
   {
-    LogError("A última dimensão dos tensors multiplicados precisa ser igual.");
+    LogError("The last dimension of multiplied tensors must be the same.");
     std::cout << "Dim LHS: ";
     PrintDims(Ldims);
     std::cout << "Dim RHS: ";
@@ -3567,6 +3624,28 @@ extern "C" float PrintFloatVec(std::vector<float> vec)
   std::cout << "]\n\n";
 
   return 0;
+}
+
+
+extern "C" float first_nonzero(char *self, int is_self)
+{
+  //std::cout << "first_nonzero call of: " << self << " and is self: " << is_self <<"\n";
+
+  std::vector<float> vec;
+  if (is_self)
+    vec = ClassFloatVecs[self];
+  //else
+  //  vec = NamedFloatVecs[self]; This one is of type alloca
+
+  float idx = -1;
+  for (int i=0; i<vec.size(); i++)
+    if (vec[i]!=0)
+    {
+      idx = i;
+      break;
+    }
+
+  return idx;
 }
 
 
@@ -3639,14 +3718,9 @@ extern "C" void *LoadDims(char* tensor_name) // TODO: invert this back
 
 extern "C" void *LoadBatchlessDims(char* tensor_name) // TODO: invert this back
 {
-  //std::cout << "LOADING batchless DIMS"  << "\n";
-  //PrintDims(NamedDims[tensor_name]);
-
   std::string random_str = RandomString(15);
   NamedDims[random_str] = BatchLessDims(NamedDims[tensor_name]);
   AuxRandomStrs[random_str] = "dim";
-
-  PrintDims(NamedDims[random_str]);
 
   return &NamedDims[random_str];
 }
@@ -3661,11 +3735,11 @@ extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self, char *
   return &NamedDimsConv[conv_name];
 }
 
-extern "C" void print(char* str, float x){
+extern "C" float print(char* str, float x){
   std::string _str = str;
-  std::cout << "\n\n\n" << _str << " " << x << "\n\n\n\n";
+  std::cout << "\n\n" << _str << " " << x << "\n\n\n";
 
-  //return 0;
+  return 0;
 }
 
 
@@ -4058,7 +4132,7 @@ extern "C" float view(char *self, float first_dim, ...)
 
     if ((float)((int)hidden_dim) != hidden_dim)
     {
-      LogErrorS("view das dimensões não é compatível");
+      LogErrorS("Incompatible view dimensions.");
       return 0;
     }
     
@@ -4069,11 +4143,11 @@ extern "C" float view(char *self, float first_dim, ...)
   } else {
     if (current_dims_prod != new_dims_prod)
     {
-      LogErrorS("view das dimensões não é compatível");
+      LogErrorS("Incompatible view dimensions.");
       PrintDims(current_dims);
-      std::cout << "Produto das dimensões atuais: " << current_dims_prod  << "\n";
+      std::cout << "Current dims product: " << current_dims_prod  << ".\n";
       PrintDims(new_dims);
-      std::cout << "Produto das novas dimensões: " << new_dims_prod  << "\n";
+      std::cout << "New dims product: " << new_dims_prod  << ".\n";
       return 0;
     }
   }
@@ -4387,7 +4461,7 @@ extern "C" float StoreStrVecOnDemand(char *self, char *object_var_name, std::vec
 extern "C" float StoreFloatVecOnDemand(char *self, char *object_var_name, std::vector<float> value){
 
   std::string _self = self;
-  std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
+  //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[_self + object_var_name] = value;
   
@@ -4397,7 +4471,7 @@ extern "C" float StoreFloatVecOnDemand(char *self, char *object_var_name, std::v
 extern "C" float StoreFloatVecOnDemandOnIdx(char *self, char *object_var_name, float idx, float value){
 
   std::string _self = self;
-  std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
+  //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[_self + object_var_name][(int)idx] = value;
   
@@ -4491,11 +4565,14 @@ Value *VariableExprAST::codegen(Value *first_arg) {
     std::cout << "NamedClassValues: " << entry.first << "\n";
   */
 
-  std::string pre_dot = GetSelf();
-  if (pre_dot!="false")
+  std::string pre_dot = GetPreDot();
+  bool is_self = GetSelf();
+  bool is_attr = GetIsAttribute();
+
+  if (is_self||is_attr)
   {
     // Gets from FirstArg if it is self
-    if (pre_dot=="true")
+    if (is_self)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
     // Gets from pre_dot if it is a class attribute
@@ -4547,8 +4624,8 @@ Value *VariableExprAST::codegen(Value *first_arg) {
 
   } else if (NamedStrs.count(Name)>0) {
 
-    std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n";
-    std::cout << "Type: " << Type << "\n\n";
+    //std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n";
+    //std::cout << "Type: " << Type << "\n\n";
 
     for (const auto &entry : NamedTensors)
       if (ends_with(entry.first, Name))
@@ -4652,7 +4729,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
   var_name = Builder->CreateGlobalString(Name);
   
 
-  std::string pre_dot = GetSelf();
+  
 
   /*  
   Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("str_vec[idx] self is:")});
@@ -4663,11 +4740,14 @@ Value *VecIdxExprAST::codegen(Value *first_arg) {
                       {Builder->CreateGlobalString(pre_dot)});
   */
 
+  std::string pre_dot = GetPreDot();
+  bool is_self = GetSelf();
+  bool is_attr = GetIsAttribute();
 
-  if (pre_dot!="false")
+  if (is_self||is_attr)
   {
     // Gets from FirstArg if it is self
-    if (pre_dot=="true")
+    if (is_self)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
     // Gets from pre_dot if it is a class attribute
@@ -4789,12 +4869,17 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg) {
 
   DimsPtr = Builder->CreateAlloca(int8PtrTy);
 
-  std::string pre_dot = LHS->GetSelf();
-  if (pre_dot=="true")
+
+
+  std::string pre_dot = LHS->GetPreDot();
+  bool is_self = LHS->GetSelf();
+  bool is_attr = LHS->GetIsAttribute();
+
+  if (is_self)
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
     // Gets from pre_dot if it is a class attribute
-  else if (pre_dot!="false") {
+  else if (is_attr) {
     Value * object_name = Builder->CreateGlobalString(pre_dot);
 
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -4909,12 +4994,15 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg) {
 
   DimsPtr = Builder->CreateAlloca(int8PtrTy);
 
-  std::string pre_dot = LHS->GetSelf();
-  if (pre_dot=="true")
+  std::string pre_dot = LHS->GetPreDot();
+  bool is_self = LHS->GetSelf();
+  bool is_attr = LHS->GetIsAttribute();
+
+  if (is_self)
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
     // Gets from pre_dot if it is a class attribute
-  else if (pre_dot!="false") {
+  else if (is_attr) {
     Value * object_name = Builder->CreateGlobalString(pre_dot);
 
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -6512,23 +6600,31 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg) {
 
 
   // Concat self or obj name to tensor name
-  std::string pre_dot = LHS->GetSelf();
-  if (pre_dot=="true")
+  std::string pre_dot = LHS->GetPreDot();
+  bool is_self = LHS->GetSelf();
+  bool is_attr = LHS->GetIsAttribute();
+
+  if (is_self)
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), LtensorName});
     // Gets from pre_dot if it is a class attribute
-  else if (pre_dot!="false") {
+  else if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
 
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, LtensorName});
   }
-  pre_dot = RHS->GetSelf();
-  if (pre_dot=="true")
+
+
+  pre_dot = RHS->GetPreDot();
+  is_self = RHS->GetSelf();
+  is_attr = RHS->GetIsAttribute();
+
+  if (is_self)
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), RtensorName});
     // Gets from pre_dot if it is a class attribute
-  else if (pre_dot!="false") {
+  else if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
 
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -6627,14 +6723,12 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg) {
   {
   case '@':
   {
-    std::cout << "Create store dims at cuda mult\n";
     new_dims = Builder->CreateCall(TheModule->getFunction("NewDimsOnMult"),
                                     {LdimsPtr, RdimsPtr});
     
     Builder->CreateStore(new_dims, DimsPtr);
 
 
-    std::cout << "Create call for mult\n";
     return Builder->CreateCall(TheModule->getFunction("CudaMult"),
                                     {LtensorName, RtensorName, is_forward_func,
                                      LtensorPtr, RtensorPtr,
@@ -6694,23 +6788,31 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg) {
 
 
   // Concat self or obj name to tensor name
-  std::string pre_dot = LHS->GetSelf();
-  if (pre_dot=="true")
+  std::string pre_dot = LHS->GetPreDot();
+  bool is_self = LHS->GetSelf();
+  bool is_attr = LHS->GetIsAttribute();
+
+  if (is_self)
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), LtensorName});
     // Gets from pre_dot if it is a class attribute
-  else if (pre_dot!="false") {
+  else if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
 
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, LtensorName});
   }
-  pre_dot = RHS->GetSelf();
-  if (pre_dot=="true")
+
+
+  pre_dot = RHS->GetPreDot();
+  is_self = RHS->GetSelf();
+  is_attr = RHS->GetIsAttribute();
+
+  if (is_self)
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), RtensorName});
     // Gets from pre_dot if it is a class attribute
-  else if (pre_dot!="false") {
+  else if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
 
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -6796,7 +6898,7 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
       Value *Variable = NamedValues[Lname];
 
 
-      if(LHS->GetSelf()=="true")
+      if(LHS->GetSelf())
         Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
                                                   {Builder->CreateLoad(int8PtrTy, first_arg),
                                                    Builder->CreateGlobalString(Lname),
@@ -6810,7 +6912,7 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
       //std::cout << "ATTRIBUTING TO STRING: " << Lname << "\n";
       Value *Variable = NamedStrs[Lname];
       
-      if(LHS->GetSelf()=="true")
+      if(LHS->GetSelf())
         Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
                                                   {Builder->CreateLoad(int8PtrTy, first_arg),
                                                    Builder->CreateGlobalString(Lname),
@@ -6824,7 +6926,7 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
       //std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
       Value *Variable = NamedStrVecs[Lname];
       
-      if(LHS->GetSelf()=="true")
+      if(LHS->GetSelf())
         Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
                                                   {Builder->CreateLoad(int8PtrTy, first_arg),
                                                    Builder->CreateGlobalString(Lname),
@@ -6834,11 +6936,12 @@ Value *BinaryExprAST::codegen(Value *first_arg) {
 
     } else if (NamedFloatVecs.count(Lname) != 0 ) {
 
-      std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
+      //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
+
       Value *Variable = NamedFloatVecs[Lname];
       
 
-      if(LHS->GetSelf()=="true")
+      if(LHS->GetSelf())
       {
         if(LHS->GetIsVec())
         {
@@ -7089,13 +7192,17 @@ Value *ForExprAST::codegen(Value *first_arg) {
 
   // Make the new basic block for the loop header, inserting after current
   // block.
-  BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
+  BasicBlock *CondBB = BasicBlock::Create(*TheContext, "cond", TheFunction);
+  BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "loop");
+  BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "after");
+
+
 
   // Insert an explicit fall through from the current block to the LoopBB.
-  Builder->CreateBr(LoopBB);
+  Builder->CreateBr(CondBB);
 
   
-  Builder->SetInsertPoint(LoopBB);
+  Builder->SetInsertPoint(CondBB);
 
   // Within the loop, the variable is defined equal to the PHI node.  If it
   // shadows an existing variable, we have to restore it outside this scope
@@ -7107,9 +7214,6 @@ Value *ForExprAST::codegen(Value *first_arg) {
   // allow an error.
   
   
-  for (auto &body : Body)
-    body->codegen(first_arg);
-
 
   // Emit the step value.
   Value *StepVal = nullptr;
@@ -7119,10 +7223,31 @@ Value *ForExprAST::codegen(Value *first_arg) {
       return nullptr;
   } 
 
+
   // Compute the end condition.
   Value *EndCond = End->codegen(first_arg);
   if (!EndCond)
     return nullptr;
+
+  // Convert condition to a bool by comparing equal to 0.0.
+  EndCond = Builder->CreateFCmpONE(
+      EndCond, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
+
+
+
+
+  // conditional goto branch
+  Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
+
+
+
+
+  // codegen body and increment
+  TheFunction->insert(TheFunction->end(), LoopBB);
+  Builder->SetInsertPoint(LoopBB);
+
+  for (auto &body : Body)
+    body->codegen(first_arg);
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
@@ -7131,22 +7256,14 @@ Value *ForExprAST::codegen(Value *first_arg) {
   Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar"); // Increment
   Builder->CreateStore(NextVar, Alloca);
 
-  // Convert condition to a bool by comparing equal to 0.0.
-  EndCond = Builder->CreateFCmpONE(
-      EndCond, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
+  Builder->CreateBr(CondBB);
 
 
 
-  // Create the "after loop" block and insert it.
-  BasicBlock *AfterBB =
-      BasicBlock::Create(*TheContext, "afterloop", TheFunction);
 
-  // goto branch
-  Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
-
-  // Any new code will be inserted in AfterBB.
+  // when the loop body is done, return the insertion point to outside the for loop
+  TheFunction->insert(TheFunction->end(), AfterBB);
   Builder->SetInsertPoint(AfterBB);
-
 
 
   // Restore the unshadowed variable.
@@ -7303,6 +7420,7 @@ extern "C" void pthread_join_aux(pthread_t thread)
 
 
 
+std::vector<Value *> thread_pointers;
 
 
 Value *AsyncExprAST::codegen(Value *first_arg) {
@@ -7359,6 +7477,8 @@ Value *AsyncExprAST::codegen(Value *first_arg) {
   Builder->SetInsertPoint(PostAsyncBB);
   */
 
+  thread_pointers.push_back(pthreadPtr);
+
   return pthreadPtr;
 }
 
@@ -7371,6 +7491,8 @@ Value *FinishExprAST::codegen(Value *first_arg) {
   
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
+
+
   //BasicBlock *FinishBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
   //BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "afterbb", TheFunction);
 
@@ -7381,23 +7503,21 @@ Value *FinishExprAST::codegen(Value *first_arg) {
 
   std::cout << "\n\nFinish codegen for: " << functionName <<  "\n";
 
-  std::vector<Value *> thread_pointers;
+
+  //std::vector<Value *> thread_pointers;
   
 
   for (int i=0; i < Bodies.size(); i++)
   {
-    //BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "currentbb", TheFunction);
 
-
+    /*
     if (IsAsync[i])
       thread_pointers.push_back(Bodies[i]->codegen(first_arg));
     else
       Bodies[i]->codegen(first_arg);
-
-    //Builder->CreateBr(CurrentBB);
-    //Builder->SetInsertPoint(CurrentBB);
+    */
+    Bodies[i]->codegen(first_arg);
   }
-
 
   
   //Builder->CreateBr(AfterBB);
@@ -7407,6 +7527,9 @@ Value *FinishExprAST::codegen(Value *first_arg) {
   PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
 
   Function *pthread_join = TheModule->getFunction("pthread_join_aux");
+
+
+  std::cout << "\n\n\n\nFINISH HAS " << thread_pointers.size() << " ASYNC EXPRESSIONS "  << "\n\n\n\n\n";
 
 
   for (Value *pthreadPtr : thread_pointers)
@@ -7769,7 +7892,7 @@ Value *TensorExprAST::codegen(Value *first_arg) {
 
     
     int is_obj_attr_or_self = 0;
-    if (GetSelf()!="false")
+    if (GetSelf() || GetIsAttribute())
       is_obj_attr_or_self=1;
     
     Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
@@ -7832,7 +7955,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg) {
 
     
     int is_obj_attr_or_self = 0;
-    if (GetSelf()!="false")
+    if (GetSelf() || GetIsAttribute())
       is_obj_attr_or_self=1;
     
     Builder->CreateCall(TheModule->getFunction("CreatePinnedTensorOnDemand"),
@@ -7881,7 +8004,7 @@ Value *Conv2dExprAST::codegen(Value *first_arg) {
 
     
     int is_obj_attr_or_self = 0;
-    if (GetSelf()!="false")
+    if (GetSelf() || GetIsAttribute())
       is_obj_attr_or_self=1;
     
     std::cout << "Parsing Conv2d var for: " << VarName << "\n";
@@ -7923,12 +8046,12 @@ Value *CallExprAST::codegen(Value *first_arg) {
     nested_function=1;
 
 
-  //std::cout << "CREATE CALL FOR class: " << Class << ", pre-dot: "  << PreDot << " and function name: " << tgt_function <<  "\nParent function " << functionName << ".\n";
+  //std::cout << "\n\nCREATE CALL FOR class: " << Class << " with self " << isSelf << ", pre-dot: "  << PreDot << ", function name: " << tgt_function << " and class " << Class << "\nParent function " << functionName << ".\n\n\n";
+ 
+  
+  
 
-  bool is_class_attr = (PreDot!="self" && PreDot!="None");
-  bool is_self_of_nested_function = (nested_function==1 && PreDot=="self");
-
-  if (is_class_attr) // e.g: x.view()
+  if (isAttribute && !isSelf) // e.g: x.view()
   {
     first_arg = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(Builder->CreateGlobalString(PreDot), first_arg);
@@ -7942,11 +8065,12 @@ Value *CallExprAST::codegen(Value *first_arg) {
 
   std::vector<Value *> ArgsV;
 
-
+  bool is_self_of_nested_function = (nested_function==1 && isSelf);
+  
   // Handle self or object attribute expressions
-  if(Class!="None")
+  if(isSelf || isAttribute)
   {
-    bool not_coding_language_method = (!in_str(tgt_function, tensor_methods) && !in_str(tgt_function, string_methods));
+    bool not_coding_language_method = (!in_str(tgt_function, native_methods));    
 
     if (not_coding_language_method)
       tgt_function = Class+tgt_function;
@@ -7978,9 +8102,19 @@ Value *CallExprAST::codegen(Value *first_arg) {
     
     
     if (CalleeOverride!="none" || in_str(Callee, native_methods))
+    {
       ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
+      if (isSelf && isAttribute)
+      {
+        ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                        {ArgsV[0], Builder->CreateGlobalString(_pre_dot)});
+        ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
+        target_args_size+=1;
+      }
+    
+    }
     else
-      ArgsV.push_back(first_arg);
+      ArgsV.push_back(first_arg); // Pass first_arg's reference for the derived AST nodes.
 
 
     target_args_size+=1;
@@ -8019,18 +8153,18 @@ Value *CallExprAST::codegen(Value *first_arg) {
 
 
 
-  std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
+  //std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
 
-    std::cout << "\nCall codegen for argument n°: " << i << ".\n";
+    //std::cout << "\nCall codegen for argument n°: " << i << ".\n";
 
     Value * arg;
-    std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
+    //std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
     if (Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor")
     {
       arg = Builder->CreateGlobalString(Args[i]->GetName());
-      if (Args[i]->GetSelf()=="true")
+      if (Args[i]->GetSelf())
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), arg});
     }
@@ -8044,8 +8178,8 @@ Value *CallExprAST::codegen(Value *first_arg) {
     if (!ArgsV.back())
       return nullptr;
   }
-  std::cout << "Passing " << ArgsV.size() << " args." << "\n";
-  std::cout << "\n\n\n\n\n";
+  //std::cout << "Passing " << ArgsV.size() << " args." << "\n";
+  //std::cout << "\n\n\n\n\n";
   
 
 
@@ -8055,7 +8189,8 @@ Value *CallExprAST::codegen(Value *first_arg) {
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   
-  std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
+  //std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
+
   if (CalleeOverride=="none")
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
   else
@@ -8065,13 +8200,12 @@ Value *CallExprAST::codegen(Value *first_arg) {
     {
       CalleeF = getFunction("ConvForward2d");
       Value *conv_name = Builder->CreateGlobalString(tgt_function);
-      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(PreDot=="self"));
+      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
       ArgsV.push_back(conv_name);
       ArgsV.push_back(is_attr);
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
 
 
-      //std::cout << "Load dims for conv: " << tgt_function << "\n";
       
       Value *dims_ptr = Builder->CreateCall(getFunction("LoadDimsConv"), 
                           {conv_name, is_attr, Builder->CreateLoad(int8PtrTy, first_arg)});
@@ -8103,7 +8237,6 @@ Value *CallExprAST::codegen(Value *first_arg) {
     
   }
 
-  //std::cout << "\n\n\nTGT FUNCTION NAME IS: " << tgt_function_name  << ".\n";
   if (in_str(tgt_function_name, return_dims_methods))
   {
     // Get resulting tensor dims.
@@ -8973,6 +9106,15 @@ static void InitializeModule() {
   
 
   //
+  FunctionType *first_nonzeroTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("first_nonzero", first_nonzeroTy);
+
+
+  //
   FunctionType *LoadStrVecOnDemandTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy},
@@ -9227,7 +9369,7 @@ static void InitializeModule() {
   
   // char *
   FunctionType *printTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
+      Type::getFloatTy(*TheContext),
       {int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false 
   );
@@ -9346,7 +9488,7 @@ static void HandleTopLevelExpression() {
 static void MainLoop() {
   while (true) {
     //if (CurTok!=tok_space)
-    //  std::cout << "MAIN LOOP, reading token: " << CurTok << "\n";
+    //  std::cout << "MAIN LOOP, reading token: " << ReverseToken(CurTok) << "\n";
     
 
     switch (CurTok) {
