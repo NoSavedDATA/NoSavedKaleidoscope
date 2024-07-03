@@ -2100,7 +2100,7 @@ extern "C" float * gload_img(char* tensor_name, char *img_name, float batch_idx)
 
 
 
-extern "C" float * wload_img(char* tensor_name, char *img_name, float batch_idx, float worker_idx)
+extern "C" float * wload_img(char* tensor_name, char *img_name, float worker_idx, float batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
@@ -4376,40 +4376,30 @@ extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
 }
 
 
-extern "C" char * FirstArgOnDemand(char *pre_dotc, char *_class, char *method, int nested_function)
+extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class, char *method, int nested_function, int isSelf, int isAttribute)
 {
-  
+
+  std::string _first_arg = first_arg;
   std::string pre_dot = pre_dotc;
 
+  std::cout << "\n\n\n\nIncoming first arg: " << FirstArg << " from pre-dot: " << pre_dot << ";\n   class: " << _class << ", method: " << method << "\n   is nested: " << nested_function <<".\n";
+  std::cout << "   is self: " << isSelf << ", is attribute: " << isAttribute << "\n\n\n";
+
+  if (!isSelf && isAttribute)
+    return pre_dotc;
   
   if (pre_dot!="self")
   {
     if (nested_function)
-      FirstArg = FirstArg+pre_dot;
+      _first_arg = _first_arg+pre_dot;
     else
-      FirstArg = pre_dot;
+      _first_arg = pre_dot; 
   }
-  //std::cout << "\n\n\n\nResulting first arg: " << FirstArg << " from pre-dot: " << pre_dot << ";\n   class: " << _class << ", method: " << method <<".\n\n\n\n";
-  
-  return const_cast<char*>(FirstArg.c_str());
+
+  return const_cast<char*>(_first_arg.c_str());
 }
 
 
-extern "C" float DimnishFirstArgOnDemand(char *pre_dot, int nested_function)
-{
-  
-  //std::cout << "\n\nDIMNISH FIRST ARG" << "\n\n\n";
-  if (nested_function)
-    if(ends_with(FirstArg, pre_dot))
-    {
-      size_t pos = FirstArg.find(pre_dot);
-
-      FirstArg.erase(pos, std::strlen(pre_dot));
-    }
-  
-  
-  return 0;
-}
 
 
 extern "C" char * ConcatStr(char *lc, char *rc)
@@ -5325,7 +5315,7 @@ __global__ void onehot_kernel(const float* tensor,
     }
 }
 
-extern "C" float *onehot(char *self, float num_classes) //TODO: update self for all methods
+extern "C" float *onehot(char *self, float num_classes)
 {
   std::string tensor_name = self;
 
@@ -5363,9 +5353,9 @@ extern "C" float *onehot(char *self, float num_classes) //TODO: update self for 
 
 
 //TODO: mean, sum, max over axis
-extern "C" float mean() 
+extern "C" float mean(char *self)
 {
-  std::string tensor_name = FirstArg;
+  std::string tensor_name = self;
 
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
@@ -5387,9 +5377,10 @@ extern "C" float mean()
   return 0;
 }
 
-extern "C" float sum()
+extern "C" float sum(char *self)
 {
-  std::string tensor_name = FirstArg;
+  std::string tensor_name = self;
+  
 
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
@@ -5411,10 +5402,10 @@ extern "C" float sum()
   return 0;
 }
 
-extern "C" float max()
+extern "C" float max(char *self)
 {
-  std::string tensor_name = FirstArg;
-
+  std::string tensor_name = self;
+  
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
   
@@ -5422,16 +5413,16 @@ extern "C" float max()
 
 
 
-  float max=-999;
-  float *summed = new float[B];
+  float max=-9999;
+  float *_max = new float[B];
 
-  cudaMemcpy(summed, tensor, B*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(_max, tensor, B*sizeof(float), cudaMemcpyDeviceToHost);
   
   float tensor_sum=0;
   for(int i=0; i<B; i++)
   {
-    if(summed[i]>max)
-      max = summed[i];
+    if(_max[i]>max)
+      max = _max[i];
   }
 
   std::cout << "Max: " << max << "\n";
@@ -6187,13 +6178,14 @@ extern "C" float *ConvForward2d(char *self, char *tensor_name, char *conv_namec,
 
 
 
-extern "C" float CreateConv2dOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init,
+extern "C" float CreateConv2dOnDemand(char *first_arg, char *tensor_name, int is_obj_attr_or_self, char *init,
                                       float C, float OC, float ks, float stride, float padding, float H, float W)
 {
   
+  std::string _first_arg = first_arg;
   std::string objectTensorName = tensor_name;
   if (is_obj_attr_or_self)
-    objectTensorName = FirstArg + tensor_name;
+    objectTensorName = _first_arg + tensor_name;
 
 
   char * cObjectTensorName = new char[objectTensorName.length() + 1];
@@ -7746,12 +7738,12 @@ extern "C" float StoreDimsOnDemand(float d)
   return 0;
 }
 
-extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init)
+extern "C" void CreatePinnedTensorOnDemand(char *first_arg, char *tensor_name, int is_obj_attr_or_self, char *init)
 {
-  
+  std::string _first_arg = first_arg;
   std::string objectTensorName = tensor_name;
   if (is_obj_attr_or_self)
-    objectTensorName = FirstArg + tensor_name;
+    objectTensorName = _first_arg + tensor_name;
 
   std::cout << "CREATING PINNED TENSOR:" << objectTensorName << "\n";
 
@@ -7793,11 +7785,13 @@ extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, int is_obj_attr_or
 }
 
 
-extern "C" float CreateTensorOnDemand(char *tensor_name, int is_obj_attr_or_self, char *init)
+extern "C" float CreateTensorOnDemand(char *first_arg, char *tensor_name, int is_obj_attr_or_self, char *init)
 {
+  std::string _first_arg = first_arg;
   std::string objectTensorName = tensor_name;
   if (is_obj_attr_or_self)
-    objectTensorName = FirstArg + tensor_name;
+    objectTensorName = _first_arg + tensor_name;
+
 
   char * cObjectTensorName = new char[objectTensorName.length() + 1];
   std::strcpy(cObjectTensorName, objectTensorName.c_str());
@@ -7894,9 +7888,11 @@ Value *TensorExprAST::codegen(Value *first_arg) {
     int is_obj_attr_or_self = 0;
     if (GetSelf() || GetIsAttribute())
       is_obj_attr_or_self=1;
+
     
     Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
-                                              {Builder->CreateGlobalString(VarName),
+                                              {Builder->CreateLoad(int8PtrTy, first_arg),
+                                               Builder->CreateGlobalString(VarName),
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
                                                Builder->CreateGlobalString(TensorInit)});
 
@@ -7959,7 +7955,8 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg) {
       is_obj_attr_or_self=1;
     
     Builder->CreateCall(TheModule->getFunction("CreatePinnedTensorOnDemand"),
-                                              {Builder->CreateGlobalString(VarName),
+                                              {Builder->CreateLoad(int8PtrTy, first_arg),
+                                               Builder->CreateGlobalString(VarName),
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
                                                Builder->CreateGlobalString(TensorInit)});
 
@@ -8010,7 +8007,8 @@ Value *Conv2dExprAST::codegen(Value *first_arg) {
     std::cout << "Parsing Conv2d var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
-                                              {Builder->CreateGlobalString(VarName),
+                                              {Builder->CreateLoad(int8PtrTy, first_arg),
+                                               Builder->CreateGlobalString(VarName),
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
                                                Builder->CreateGlobalString(TensorInit),
                                                C->codegen(first_arg), OC->codegen(first_arg), Ks->codegen(first_arg), Stride->codegen(first_arg),
@@ -8046,17 +8044,14 @@ Value *CallExprAST::codegen(Value *first_arg) {
     nested_function=1;
 
 
-  //std::cout << "\n\nCREATE CALL FOR class: " << Class << " with self " << isSelf << ", pre-dot: "  << PreDot << ", function name: " << tgt_function << " and class " << Class << "\nParent function " << functionName << ".\n\n\n";
- 
-  
-  
+
 
   if (isAttribute && !isSelf) // e.g: x.view()
   {
     first_arg = Builder->CreateAlloca(int8PtrTy);
-    Builder->CreateStore(Builder->CreateGlobalString(PreDot), first_arg);
-    //first_arg = Builder->CreateGlobalString(PreDot);
+    Builder->CreateStore(Builder->CreateGlobalString(_pre_dot), first_arg);
   }
+  
   
   
 
@@ -8078,12 +8073,14 @@ Value *CallExprAST::codegen(Value *first_arg) {
 
     if (!is_self_of_nested_function && not_coding_language_method)
     {
-      first_arg = Builder->CreateAlloca(int8PtrTy);
       Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
-                                                    {Builder->CreateGlobalString(PreDot),
+                                                    {Builder->CreateLoad(int8PtrTy, first_arg),
+                                                     Builder->CreateGlobalString(_pre_dot),
                                                      Builder->CreateGlobalString(Class),
                                                      Builder->CreateGlobalString(Callee),
-                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)}),
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function),
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), isSelf),
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), isAttribute)}),
                                                     first_arg);
     }
     if (is_self_of_nested_function)
@@ -8148,12 +8145,10 @@ Value *CallExprAST::codegen(Value *first_arg) {
     }
   }
 
-
-
-
-
-
   //std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
+
+
+
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
 
@@ -8254,12 +8249,7 @@ Value *CallExprAST::codegen(Value *first_arg) {
   }
   
   
-    
-  if(Class!="None")
-    Builder->CreateCall(TheModule->getFunction("DimnishFirstArgOnDemand"),
-                                                  {Builder->CreateGlobalString(PreDot),
-                                                   ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function)});
-                                            
+  
   return ret;
 }
 
@@ -8441,7 +8431,9 @@ Function *FunctionAST::codegen() {
     
 
   FunctionProtos[Proto->getName()] = std::move(Proto);
-  Function *TheFunction = getFunction(P.getName());
+  std::string function_name = P.getName();
+
+  Function *TheFunction = getFunction(function_name);
   if (!TheFunction)
     return nullptr;
 
@@ -8457,6 +8449,10 @@ Function *FunctionAST::codegen() {
   // Record the function arguments in the NamedValues map.
 
   Value *first_arg = Builder->CreateAlloca(int8PtrTy);
+  if (function_name=="__anon_expr")
+    Builder->CreateStore(Builder->CreateGlobalString(""), first_arg);
+
+  std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
 
   NamedValues.clear();
 
@@ -8490,7 +8486,7 @@ Function *FunctionAST::codegen() {
       Builder->CreateStore(&Arg, Alloca);
 
       // Add arguments to variable symbol table.
-      std::cout << "Create function alloca for " << std::string(Arg.getName()) << "\n";
+      std::cout << "Create function alloca for TENSOR: " << std::string(Arg.getName()) << "\n";
 
 
       //Builder->CreateCall(TheModule->getFunction("print"),
@@ -9236,20 +9232,12 @@ static void InitializeModule() {
   // char *, int
   FunctionType *FirstArgOnDemandTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
   
 
-  // char *, int
-  FunctionType *DimnishFirstArgOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
-      false // Not vararg
-  );
-  TheModule->getOrInsertFunction("DimnishFirstArgOnDemand", DimnishFirstArgOnDemandTy);
-  
 
 
   // char *, char *
@@ -9298,6 +9286,7 @@ static void InitializeModule() {
   FunctionType *CreatePinnedTensorOnDemandTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {int8PtrTy,
+       int8PtrTy,
        Type::getInt32Ty(*TheContext),
        int8PtrTy},
       false // Not vararg
@@ -9309,6 +9298,7 @@ static void InitializeModule() {
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
+       int8PtrTy,
        Type::getInt32Ty(*TheContext),
        int8PtrTy},
       false // Not vararg
@@ -9321,6 +9311,7 @@ static void InitializeModule() {
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
+       int8PtrTy,
        Type::getInt32Ty(*TheContext),
        int8PtrTy,
        Type::getFloatTy(*TheContext),
