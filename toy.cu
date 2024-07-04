@@ -251,6 +251,7 @@ enum Token {
   tok_unlock = -27,
   tok_tab = 9,
   tok_return = -32,
+  tok_as = -33,
 
   // operators
   tok_binary = -11,
@@ -314,6 +315,7 @@ std::map<int, std::string> token_to_string = {
   { tok_async_finish, "finish" },
   { tok_tab, "tok tab" },
   { tok_return, "tok return"},
+  { tok_as, "tok as"},
 
   // operators
   { tok_binary, "tok binary" },
@@ -547,6 +549,8 @@ static int get_token() {
       return tok_float_vec;
     if (IdentifierStr == "return")
       return tok_return;
+    if (IdentifierStr == "as")
+      return tok_as;
     return tok_identifier;
   }
 
@@ -1014,9 +1018,12 @@ class ReturnExprAST : public ExprAST {
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Vars;
+    std::vector<bool> IsAs;
+    std::vector<std::unique_ptr<ExprAST>> Destiny;
     
-    ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars)
-        : Vars(std::move(Vars)) {}
+    ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
+                  std::vector<std::unique_ptr<ExprAST>> Destiny)
+        : Vars(std::move(Vars)), IsAs(std::move(IsAs)), Destiny(std::move(Destiny)) {}
 
   Value *codegen(Value *first_arg, Value *scope_str) override;
 };
@@ -1361,6 +1368,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
       aux->SetType("pinned_tensor");
     if (in_str(IdentifierStr, tensorVars))
       aux->SetType("tensor");
+    aux->SetIsVec(false);
     //std::cout << "call arg identifier type: " << aux->GetType() <<  "\n";
     
   if (CurTok==tok_space)
@@ -1385,7 +1393,6 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
       Idx.push_back(ParseExpression(class_name));
     }
     Idx.push_back(std::make_unique<NumberExprAST>(-40370000000.0f));
-
 
     auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
     aux->SetIsVec(true);
@@ -1822,38 +1829,6 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
   return std::make_unique<VarExprAST>(std::move(VarNames), "var");
 }
 
-
-
-static std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="") {
-  getNextToken(); // eat the return
-  std::cout << "Parsing var expr\n";
-
-  std::vector<std::unique_ptr<ExprAST>> Vars;
-
-  // At least one variable name is required.
-  if (CurTok != tok_identifier)
-    return LogError("Expected identifier after return.");
-
-  while (true) {
-    auto expr = ParseExpression();
-
-    Vars.push_back(std::move(expr));
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected identifier after comma at return expression");
-  }
-
-  if (CurTok==tok_space)
-    getNextToken();
-
-
-  return std::make_unique<ReturnExprAST>(std::move(Vars));
-}
 
 
 static std::unique_ptr<ExprAST> ParseStrExpr() {
@@ -2325,14 +2300,12 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetType("tensor");
     if (stringMethods.find(IdName) != stringMethods.end())
       aux->SetType("str");
-
+    aux->SetIsVec(false);
 
     if (is_self)
       aux->SetSelf(true);
-    
     if (is_class_attr)
       aux->SetIsAttribute(true);
-    
     aux->SetPreDot(pre_dot);
     
     
@@ -2826,6 +2799,65 @@ static std::unique_ptr<ExprAST> ParseLogExpr() {
   return aux;
 }
 
+
+
+
+static std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="") {
+  getNextToken(); // eat return
+  std::cout << "Parsing var expr\n";
+
+  std::vector<std::unique_ptr<ExprAST>> Vars, Destiny;
+  std::vector<bool> IsAs;
+
+  // At least one variable name is required.
+  if (CurTok != tok_identifier)
+    return LogError("Expected identifier after return.");
+
+  while (true) {
+    std::unique_ptr<ExprAST> expr, aux;
+
+    if (CurTok==tok_class_attr||CurTok==tok_self)
+      expr = ParseSelfExpr(class_name);
+    else if (CurTok==tok_identifier)
+      expr = ParseIdentifierExpr(class_name);
+    else
+      LogError("Returned type must be a simple identifier, not an expression.");
+    
+
+    
+    if (CurTok == tok_as)
+    {
+      getNextToken(); // eat as
+      aux = std::move(expr);
+
+      expr = ParseExpression(class_name);
+
+      IsAs.push_back(true);
+      Vars.push_back(std::move(aux));
+      Destiny.push_back(std::move(expr));
+
+    } else {
+      Destiny.push_back(std::move(expr));
+
+      expr = std::make_unique<NumberExprAST>(0.0f);
+      IsAs.push_back(false);
+      Vars.push_back(std::move(expr));
+    }
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    
+  }
+
+  if (CurTok==tok_space)
+    getNextToken();
+
+
+  return std::make_unique<ReturnExprAST>(std::move(Vars), std::move(IsAs), std::move(Destiny));
+}
 
 
 static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
@@ -4374,7 +4406,7 @@ extern "C" float *logE(char *tensorName) {
 
 
 extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
-  std::cout << "CalculateIdxOffset " << tensor_name << "\n";
+  //std::cout << "CalculateIdxOffset " << tensor_name << "\n";
 
   std::vector<float> idxs, new_dims_no_minus, dims;
   int current_dims_prod;
@@ -4402,7 +4434,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   idx_at += (int)(current_dims_prod*first_idx);
 
 
-  std::cout << "CalculateIdxOffset pushing dim: " << first_idx << "\n";
+  //std::cout << "CalculateIdxOffset pushing dim: " << first_idx << "\n";
 
   for (int i=0; i<10; i++)
   {
@@ -4424,7 +4456,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
     idx_at += (int)(current_dims_prod*idx);
 
-    std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
+    //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
     
 
     if (idx!=-1)
@@ -4935,35 +4967,80 @@ extern "C" float CopyArgTensor(char *tensor_name, char *scope)
 }
 
 
-extern "C" float RemoveTensorScope(char *tensor_name, char *scope)
+extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_tensor)
 {
+  std::string scope_tensor_name = scope;
+  scope_tensor_name = scope_tensor_name + tensor_name;
 
+  std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";  
 
-  std::string arg_tensor_name = scope;
-  arg_tensor_name = arg_tensor_name + tensor_name;
-
-  //std::cout << "\n\n\nRETURNING " << arg_tensor_name << " into " << tensor_name << "\n\n\n\n";  
-
-  std::vector<float> dims = NamedDims[arg_tensor_name];
+  std::vector<float> dims = NamedDims[scope_tensor_name];
   int dims_prod = DimsProd(dims);
 
-  float *arg_tensor;
+  float *scope_tensor;
 
-  arg_tensor = NamedTensors[arg_tensor_name];
-
-
-  cudaCheck(cudaFree(NamedTensors[tensor_name]));
+  scope_tensor = NamedTensors[scope_tensor_name];
 
 
-
-  NamedTensors[tensor_name] = arg_tensor;
-  NamedDims[tensor_name] = dims;
-
-  
+  cudaCheck(cudaFree(NamedTensors[tgt_tensor]));
+  NamedTensors[tgt_tensor] = scope_tensor;
+  NamedDims[tgt_tensor] = dims;
   
   return 0;
 }
 
+
+extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, char *tgt_tensor, float idx_at)
+{
+  std::string scope_tensor_name = scope;
+  scope_tensor_name = scope_tensor_name + tensor_name;
+
+  std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";  
+
+  std::vector<float> scope_dims = NamedDims[scope_tensor_name];
+  int scope_dims_prod = DimsProd(scope_dims);
+
+  float *scope_tensor;
+
+  scope_tensor = NamedTensors[scope_tensor_name];
+
+  std::vector<float> dims = NamedDims[tgt_tensor];
+  int dims_prod = DimsProd(dims);
+  if (idx_at>(dims_prod-1))
+  {
+    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)idx_at);
+    _error = _error + "\033[0m on tensor \033[95m"+std::string(tgt_tensor);
+    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
+
+    LogErrorS(_error);
+    std::cout << "Dimensions:" << "\n";
+    PrintDims(dims);
+    std::cout << "\n";
+
+    return -1;
+  }
+
+  if ((idx_at+scope_dims_prod)>(dims_prod))
+  {
+    std::string _error = "\n\t- Attributing at pos: \033[32m"+std::to_string((int)idx_at)+"\033[0m with a tensor of size \033[32m"+std::to_string(scope_dims_prod)+"\033[0m";
+    _error = _error + "\033[0m on tensor \033[95m"+std::string(tgt_tensor);
+    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
+
+    LogErrorS(_error);
+    std::cout << "Dimensions:" << "\n";
+    PrintDims(dims);
+    std::cout << "\n";
+
+    return -1;
+  }
+
+  float *base_address = NamedTensors[tgt_tensor];
+  float *device_x = base_address + static_cast<int>(idx_at);
+
+  cudaCheck(cudaMemcpy(device_x, scope_tensor, scope_dims_prod*sizeof(float), cudaMemcpyHostToHost));
+  
+  return 0;
+}
 
 
 extern "C" float AttrTensor(char *tensor_name, float *tensor, std::vector<float> new_dims)
@@ -5028,7 +5105,6 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, float *tensor, std::vector<f
     return -1;
   }
 
-
   int R_dims_prod = DimsProd(Rdims);
   if ((idx_at+R_dims_prod)>(dims_prod))
   {
@@ -5047,10 +5123,8 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, float *tensor, std::vector<f
   float *base_address = NamedTensors[tensor_name];
   float *device_x = base_address + static_cast<int>(idx_at);
 
-
   cudaCheck(cudaMemcpy(device_x, tensor, R_dims_prod*sizeof(float), cudaMemcpyHostToHost));
-  
-  
+    
   return 0;
 }
 
@@ -6880,7 +6954,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
       
       std::cout << "1 1 attr\n";
       
-      std::cout << "L is vec " << LHS->GetIsVec() << " R is vec: " << RHS->GetIsVec() << "\n";
+      //std::cout << "L is vec " << LHS->GetIsVec() << " R is vec: " << RHS->GetIsVec() << "\n";
 
 
 
@@ -6914,9 +6988,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(LtensorName);
       for (int i=0; i<LHSE->Idx.size(); i++)
-      {
         idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str));
-      }
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                             idx_calc_args);
 
@@ -7837,21 +7909,62 @@ Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str){
 
 Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str) {
 
-  for (int i=0; i<Vars.size(); i++)
+  for (int i=0; i<Destiny.size(); i++)
   {
     //TODO: add self and attr to return
     
-    std::string name, type;
-    name = Vars[i]->GetName();
-    type = Vars[i]->GetType();
+    std::string name, type, l_name, l_type;
+    bool is_vec, l_is_vec;
+    name   = Destiny[i]->GetName();
+    type   = Destiny[i]->GetType();
+    is_vec = Destiny[i]->GetIsVec();
 
-    //std::cout << "\nRETURNING: " << name << ", type " << type <<  "\n\n";
+    Value *_name = Builder->CreateGlobalString(name);
 
-    if(type=="tensor")
+    std::cout << "\nRETURNING: " << name << ", type: " << type << ", is vec: " << is_vec <<  "\n\n";
+
+    if (!IsAs[i])
     {
-      
-      Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                          {Builder->CreateGlobalString(name), Builder->CreateLoad(int8PtrTy, scope_str)});
+      if(type=="tensor")
+      {
+        Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
+                                            {_name, Builder->CreateLoad(int8PtrTy, scope_str), _name});
+      }
+    } else {
+      l_name   = Vars[i]->GetName();
+      l_type   = Vars[i]->GetType();
+      l_is_vec = Vars[i]->GetIsVec();
+
+      std::cout << "l_name: " << l_name << " l_type: " << l_type << ", l_is_vec: " << l_is_vec << "\n";
+
+      if (!is_vec)
+      {
+        if (type=="tensor")
+        {
+          Value *_l_name = Builder->CreateGlobalString(l_name);
+          Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
+                                              {_l_name, Builder->CreateLoad(int8PtrTy, scope_str), _name});
+        }
+      } else {
+
+        VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(Destiny[i].get());
+        if (!LHSE)
+          return LogErrorV("Could not deal with return expression");
+
+
+        std::vector<Value *> idx_calc_args;
+        idx_calc_args.push_back(_name);
+        for (int i=0; i<LHSE->Idx.size(); i++)
+          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str));
+        Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                              idx_calc_args);
+
+        
+        Value *_l_name = Builder->CreateGlobalString(l_name);
+        Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
+                                              {_l_name, Builder->CreateLoad(int8PtrTy, scope_str),
+                                               _name, idx_at});
+      }
     }
   }
 
@@ -9703,10 +9816,23 @@ static void InitializeModule() {
   FunctionType *RemoveTensorScopeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
+       int8PtrTy,
        int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("RemoveTensorScope", RemoveTensorScopeTy);
+
+
+  //
+  FunctionType *RemoveTensorScopeAttrOnIndexTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       int8PtrTy,
+       int8PtrTy,
+       Type::getFloatTy(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("RemoveTensorScopeAttrOnIndex", RemoveTensorScopeAttrOnIndexTy);
 
 
   //
