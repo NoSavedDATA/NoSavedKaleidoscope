@@ -204,7 +204,10 @@ std::vector<std::string> vararg_methods = {"view"};
 std::vector<std::string> string_methods = {"split", "split_idx"};
 
 
+
+
 // tensor + string + ...
+// e.g: x.view(), str.split()
 std::vector<std::string> native_methods = {"view","permute", "onehot", "mean", "sum", "max", "min",
                                            "split", "split_idx", "first_nonzero"};
 
@@ -316,6 +319,7 @@ std::map<int, std::string> token_to_string = {
   { tok_tab, "tok tab" },
   { tok_return, "tok return"},
   { tok_as, "tok as"},
+
 
   // operators
   { tok_binary, "tok binary" },
@@ -666,7 +670,7 @@ public:
   Value *TensorPtr, *DimsPtr;
 
 
-  virtual Value *codegen(Value *first_arg, Value *scope_str) = 0;
+  virtual Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) = 0;
   virtual void SetType(std::string Type) {
     this->Type=Type;
     this->ReturnType=Type;
@@ -737,7 +741,7 @@ class NumberExprAST : public ExprAST {
     NumberExprAST(float Val) : Val(Val) {} //{std::cout << "number created";}
   std::string Type = "num";
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -749,7 +753,7 @@ class StringExprAST : public ExprAST {
     StringExprAST(std::string Val) : Val(Val) {} //{std::cout << "string created";}
   std::string Type = "str";
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -763,7 +767,7 @@ class ObjAttrExprAST : public ExprAST {
     ObjAttrExprAST(std::unique_ptr<ExprAST> Body, const std::string &PreDot)
                 : Body(std::move(Body)), PreDot(PreDot) {}
 
-    Value *codegen(Value *first_arg, Value *scope_str) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -774,7 +778,7 @@ class VariableExprAST : public ExprAST {
   public:
     VariableExprAST(const std::string &Name) : Name(Name) {}
 
-    Value *codegen(Value *first_arg, Value *scope_str) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override {
     return Name;
@@ -791,7 +795,7 @@ class VecIdxExprAST : public ExprAST {
     VecIdxExprAST(const std::string &Name, std::vector<std::unique_ptr<ExprAST>> Idx)
                   : Name(Name), Idx(std::move(Idx)) {}
 
-    Value *codegen(Value *first_arg, Value *scope_str) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override {
     return Name;
@@ -810,7 +814,7 @@ class VarExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 class StrExprAST : public ExprAST {
@@ -824,7 +828,7 @@ class StrExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -839,7 +843,7 @@ class StrVecExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -859,7 +863,7 @@ class TensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -876,7 +880,7 @@ class PinnedTensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -897,7 +901,7 @@ class Conv2dExprAST : public VarExprAST {
                    Stride(std::move(Stride)), Padding(std::move(Padding)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 class LogExprAST : public ExprAST {
@@ -906,7 +910,7 @@ class LogExprAST : public ExprAST {
   public:
     LogExprAST(const std::string &Name) : Name(Name) {}
 
-    Value *codegen(Value *first_arg, Value *scope_str) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
     std::string GetName() override {
       return Name;
     }
@@ -923,7 +927,7 @@ public:
   UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
       : Opcode(Opcode), Operand(std::move(Operand)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -938,7 +942,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -951,7 +955,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -964,7 +968,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -977,7 +981,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 class BinaryTensorPinnedExprAST : public ExprAST {
@@ -989,8 +993,9 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
+
 
 
 /// CallExprAST - Expression class for function calls.
@@ -1011,7 +1016,7 @@ class CallExprAST : public ExprAST {
                 const std::string &CalleeOverride)
         : Callee(Callee), Args(std::move(Args)), Class(Class), PreDot(PreDot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 class ReturnExprAST : public ExprAST {
@@ -1025,8 +1030,9 @@ class ReturnExprAST : public ExprAST {
                   std::vector<std::unique_ptr<ExprAST>> Destiny)
         : Vars(std::move(Vars)), IsAs(std::move(IsAs)), Destiny(std::move(Destiny)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
+
 
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
@@ -1039,7 +1045,7 @@ class IfExprAST : public ExprAST {
               std::vector<std::unique_ptr<ExprAST>> Else)
         : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 /// ForExprAST - Expression class for for.
@@ -1055,7 +1061,7 @@ class ForExprAST : public ExprAST {
         : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
           Step(std::move(Step)), Body(std::move(Body)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 /// WhileExprAST - Expression class for while.
@@ -1067,7 +1073,7 @@ class WhileExprAST : public ExprAST {
     WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
       : Cond(std::move(Cond)), Body(std::move(Body)) {}
 
-	Value* codegen(Value *first_arg, Value *scope_str) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -1079,7 +1085,7 @@ class AsyncExprAST : public ExprAST {
     AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
       : Body(std::move(Body)) {}
 
-	Value* codegen(Value *first_arg, Value *scope_str) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -1094,7 +1100,7 @@ class FinishExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), IsAsync(std::move(IsAsync)) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -1109,7 +1115,7 @@ class LockExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), Name(Name) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 class UnlockExprAST : public ExprAST {
@@ -1119,7 +1125,7 @@ class UnlockExprAST : public ExprAST {
     UnlockExprAST(std::string Name) : Name(Name) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 
@@ -1368,7 +1374,6 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
       aux->SetType("pinned_tensor");
     if (in_str(IdentifierStr, tensorVars))
       aux->SetType("tensor");
-    aux->SetIsVec(false);
     //std::cout << "call arg identifier type: " << aux->GetType() <<  "\n";
     
   if (CurTok==tok_space)
@@ -1386,17 +1391,18 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     
 
     std::vector<std::unique_ptr<ExprAST>> Idx;
+    
     Idx.push_back(ParseExpression(class_name));
+
     while(CurTok==',')
     {
       getNextToken(); // eat ,
       Idx.push_back(ParseExpression(class_name));
     }
-    Idx.push_back(std::make_unique<NumberExprAST>(-40370000000.0f));
+
 
     auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
     aux->SetIsVec(true);
-    
     
     if (in_str(IdName, str_vecVars))
     {
@@ -1415,6 +1421,8 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     }
 
 
+    
+    
     getNextToken(); // eat ]
     
     return std::move(aux);
@@ -1469,15 +1477,15 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     is_var_forward = true;
   }
   
-
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
 
-  //aux->SetType("function_call");
+  
+  
   if (in_str(IdName, return_dims_methods) || in_str(IdName, return_batchless_dims_methods) || return_tensor)
     aux->SetType("tensor");
   if (in_str(IdName, return_pinned_methods))
     aux->SetType("pinned_tensor");
-  
+
   return aux;
 }
 
@@ -1795,7 +1803,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
 
   // At least one variable name is required.
   if (CurTok != tok_identifier)
-    return LogError("Expected identifier after float.");
+    return LogError("Esperado identificador após var.");
 
   while (true) {
     std::string Name = IdentifierStr;
@@ -1819,7 +1827,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
     getNextToken(); // eat the ','.
 
     if (CurTok != tok_identifier)
-      return LogError("Expected identifier after comma at float expression");
+      return LogError("Esperado um ou mais identificadores após var.");
   }
 
   if (CurTok==tok_space)
@@ -1828,7 +1836,6 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
 
   return std::make_unique<VarExprAST>(std::move(VarNames), "var");
 }
-
 
 
 static std::unique_ptr<ExprAST> ParseStrExpr() {
@@ -1937,16 +1944,8 @@ static std::unique_ptr<ExprAST> ParseStrVecExpr() {
 
 
 
-struct Tensor {
-  float *tensor;
-  std::vector<float> dims;
-  float idx;
-};
-
-
 // Tensors
 static std::map<std::string, float *> NamedTensors;
-static std::map<std::string, Tensor> Tensors;
 static std::map<std::string, float *> NamedPinnedTensors;
 static std::map<std::string, std::vector<float>> NamedDims;
 static std::map<std::string, std::vector<float>> NamedDimsConv;
@@ -2146,7 +2145,6 @@ extern "C" float * wload_img(char* tensor_name, char *img_name, float worker_idx
     std::vector<float> dims = NamedDims[tensor_name];
 
     //std::cout << "GLOAD IMG, dims of " << tensor_name << "\n";
-    //PrintDims(dims);
     
 
     std::vector<float> workerless_dims = BatchLessDims(dims);
@@ -2300,7 +2298,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetType("tensor");
     if (stringMethods.find(IdName) != stringMethods.end())
       aux->SetType("str");
-    aux->SetIsVec(false);
+
 
     if (is_self)
       aux->SetSelf(true);
@@ -2326,7 +2324,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
     std::unique_ptr<ExprAST> aux;
     std::vector<std::unique_ptr<ExprAST>> Idx;
-
+    
     Idx.push_back(ParseExpression(class_name));
     while(CurTok==',')
     {
@@ -2338,7 +2336,6 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
     aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
     aux->SetIsVec(true);
-
 
     if (in_str(IdName, str_vecVars))
     {
@@ -2364,7 +2361,6 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     if (is_class_attr)
       aux->SetIsAttribute(true);
     aux->SetPreDot(pre_dot);
-
 
     getNextToken(); // eat ]
 
@@ -2433,9 +2429,9 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   //if (IdName == "len")
 
 
+
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 
-  //aux->SetType("function_call");
   if (in_str(IdName, return_dims_methods) || in_str(IdName, return_batchless_dims_methods) || return_tensor)
     aux->SetType("tensor");
   if (return_string)
@@ -2447,10 +2443,9 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
 
   if (is_self)
-    aux->SetSelf(true);
+    aux->SetSelf(true);    
   if (is_class_attr)
     aux->SetIsAttribute(true);
-    
   aux->SetPreDot(pre_dot);
   
   return aux;
@@ -2801,6 +2796,43 @@ static std::unique_ptr<ExprAST> ParseLogExpr() {
 
 
 
+static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
+  int cur_level_tabs = SeenTabs;
+  getNextToken(); // eat the lock.
+
+
+  std::string Name = "mutex";
+  if (CurTok==tok_str)
+  {
+    Name = IdentifierStr;
+    getNextToken(); // eat lock string "" name
+  }
+
+
+
+  if (lockVars.count(Name) == 0)
+  {
+    pthread_mutex_t* _mutex = new pthread_mutex_t;
+    if (pthread_mutex_init(&mutex, NULL) != 0) {
+      printf("Mutex initialization failed\n");
+      return nullptr;
+    }
+    
+    lockVars[IdentifierStr] = _mutex;
+    
+  }
+  
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
+
+
+  Body.push_back(std::make_unique<UnlockExprAST>(Name));
+
+  return std::make_unique<LockExprAST>(std::move(Body), Name);
+}
+
+
+
+
 
 static std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="") {
   getNextToken(); // eat return
@@ -2859,40 +2891,6 @@ static std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="") {
   return std::make_unique<ReturnExprAST>(std::move(Vars), std::move(IsAs), std::move(Destiny));
 }
 
-
-static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
-  int cur_level_tabs = SeenTabs;
-  getNextToken(); // eat the lock.
-
-
-  std::string Name = "mutex";
-  if (CurTok==tok_str)
-  {
-    Name = IdentifierStr;
-    getNextToken(); // eat lock string "" name
-  }
-
-
-
-  if (lockVars.count(Name) == 0)
-  {
-    pthread_mutex_t* _mutex = new pthread_mutex_t;
-    if (pthread_mutex_init(&mutex, NULL) != 0) {
-      printf("Mutex initialization failed\n");
-      return nullptr;
-    }
-    
-    lockVars[IdentifierStr] = _mutex;
-    
-  }
-  
-  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
-
-
-  Body.push_back(std::make_unique<UnlockExprAST>(Name));
-
-  return std::make_unique<LockExprAST>(std::move(Body), Name);
-}
 
 
 
@@ -3002,8 +3000,6 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     L_cuda = type_tensor;
   if (LHS->GetType()=="pinned_tensor")
     L_cuda = type_pinned_tensor;
-  if (LHS->GetType()=="function_call")
-    L_cuda = type_tensor;
 
   while (true)
   {
@@ -3081,8 +3077,6 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       R_cuda=type_tensor;
     if (RHS->GetType()=="pinned_tensor")
       R_cuda=type_pinned_tensor;
-    if (RHS->GetType()=="function_call")
-      R_cuda=type_tensor;
     
     
     
@@ -3174,8 +3168,6 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 }
 
 
-
-
 /// expression
 ///   ::= unary binoprhs
 ///
@@ -3251,12 +3243,14 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
   std::vector<std::string> ArgNames, Types;
 
 
-  if (class_name!="") // If it is a class method, add self and scope
+  if (class_name!="") // If it is a class method, add self
   {
-    Types.push_back("self");
+    Types.push_back("s");
     ArgNames.push_back("self");
-    Types.push_back("self");
+    Types.push_back("s");
     ArgNames.push_back("scope_str");
+    Types.push_back("s");
+    ArgNames.push_back("previous_scope");
   }
 
   while (CurTok != ')')
@@ -3395,12 +3389,11 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 
 
 
+
+
 //===----------------------------------------------------------------------===//
 // Code Generation
 //===----------------------------------------------------------------------===//
-
-
-
 
 //global
 static std::unique_ptr<KaleidoscopeJIT> TheJIT;
@@ -3415,8 +3408,6 @@ static std::unique_ptr<Module> GlobalModule;
 
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 static ExitOnError ExitOnErr;
-
-
 
 
 // Vars
@@ -3437,12 +3428,10 @@ std::map<std::string, std::vector<char *>> StrVecAuxHash;
 std::map<std::string, std::vector<float>>  FloatVecAuxHash;
 
 
-//TODO: check this on parallelism
 // Cuda Parallellism
 constexpr int num_parallel_streams = 2;
 cudaStream_t parallel_streams[num_parallel_streams];
 cudaEvent_t parallel_events[num_parallel_streams];
-
 
 // Optimizer
 static std::map<std::string, float *> NamedParamGrads;
@@ -3452,6 +3441,9 @@ static std::map<std::string, float *> NamedParamGrads;
 std::vector<char *> glob_str_files;
 
 
+
+
+// Handle Class self with phantom argument
 
 
 
@@ -3727,9 +3719,9 @@ extern "C" float PrintFloatVec(std::vector<float> vec)
 }
 
 
-extern "C" float first_nonzero(char *self, char *scope_str, int is_self)
+extern "C" float first_nonzero(char *self, int is_self)
 {
-  //std::cout << "first_nonzero call of: " << self << " and is self: " << is_self <<", scope: " << scope_str << "\n";
+  //std::cout << "first_nonzero call of: " << self << " and is self: " << is_self <<"\n";
 
   std::vector<float> vec;
   if (is_self)
@@ -3737,16 +3729,14 @@ extern "C" float first_nonzero(char *self, char *scope_str, int is_self)
   //else
   //  vec = NamedFloatVecs[self]; This one is of type alloca
 
-
   float idx = -1;
   for (int i=0; i<vec.size(); i++)
-  {
     if (vec[i]!=0)
     {
       idx = i;
       break;
     }
-  }
+
   return idx;
 }
 
@@ -3799,37 +3789,20 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
-extern "C" void AuxTensor(Tensor tensor){
-  std::cout << "AuxTensor: " << tensor.tensor  << "\n";
-  PrintDims(tensor.dims);
-  std::cout << "\n\n\n";
-}
-
-extern "C" void * LoadTensor(char* tensor_name){
-  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
-
-  //PrintDims(Tensors[tensor_name].dims);
-  //std::cout << "\n";
+extern "C" float * LoadTensor(char* tensor_name){
+  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
 
   return NamedTensors[tensor_name];
-  //return &Tensors[tensor_name];
 }
 
 
 extern "C" void *LoadDims(char* tensor_name) // TODO: invert this back
 {
+  //std::cout << "LOADING DIMS"  << "\n";
+  //PrintDims(NamedDims[tensor_name]);
+
   std::string random_str = RandomString(15);
   NamedDims[random_str] = NamedDims[tensor_name];
-  AuxRandomStrs[random_str] = "dim";
-
-  return &NamedDims[random_str];
-}
-
-extern "C" void *LoadAuxDims()
-{
-  std::vector<float> dims = {2.0f, 2.0f};
-  std::string random_str = RandomString(15);
-  NamedDims[random_str] = dims;
   AuxRandomStrs[random_str] = "dim";
 
   return &NamedDims[random_str];
@@ -3856,7 +3829,7 @@ extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self, char *
 
 extern "C" float print(char* str, float x){
   std::string _str = str;
-  std::cout << "\n\n" << _str << " " << x << "\n\n\n";
+  std::cout << "\n" << _str << " " << x << "\n";
 
   return 0;
 }
@@ -4078,14 +4051,14 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
   return TmpB.CreateAlloca(Type::getFloatTy(*TheContext), nullptr, VarName);
 }
 
-Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   //std::cout << "Codegen for Number: " << Val << "\n";
   return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
-Value *StringExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *StringExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
@@ -4196,13 +4169,11 @@ extern "C" float load_preprocess_img(char *tensor_name, char *img_name)
 //===----------------------------------------------------------------------===//
 
 
-extern "C" float view(char *self, char *scope_str, float first_dim, ...)
+extern "C" float view(char *self, float first_dim, ...)
 {
-  //std::cout << "Executing: " << self << "." << "view at scope " << scope_str << "\n";
+  std::cout << "Executing: " << self << "." << "view" << "\n";
   
   std::string tensor_name = self;
-  tensor_name = scope_str + tensor_name;
-
   std::vector<float> new_dims, new_dims_no_minus, current_dims;
   bool has_minus = false;
   current_dims = NamedDims[tensor_name];
@@ -4253,13 +4224,7 @@ extern "C" float view(char *self, char *scope_str, float first_dim, ...)
 
     if ((float)((int)hidden_dim) != hidden_dim)
     {
-      std::string _error = "View has non integer dims prod: " + std::to_string(hidden_dim);
-      LogErrorS(_error);
-      std::cout << " Current dims:" << "\n";
-      PrintDims(current_dims);
-      std::cout << " New dims:" << "\n";
-      PrintDims(new_dims);
-      std::cout << "\n";
+      LogErrorS("Incompatible view dimensions.");
       return 0;
     }
     
@@ -4406,8 +4371,7 @@ extern "C" float *logE(char *tensorName) {
 
 
 extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
-  //std::cout << "CalculateIdxOffset " << tensor_name << "\n";
-
+  
   std::vector<float> idxs, new_dims_no_minus, dims;
   int current_dims_prod;
   bool has_minus = false;
@@ -4432,6 +4396,8 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   current_dims_prod = DimsProd(dims);
 
   idx_at += (int)(current_dims_prod*first_idx);
+
+
 
 
   //std::cout << "CalculateIdxOffset pushing dim: " << first_idx << "\n";
@@ -4575,6 +4541,7 @@ extern "C" float StoreStrVecOnDemand(char *self, char *object_var_name, std::vec
 }
 
 extern "C" float StoreFloatVecOnDemand(char *self, char *object_var_name, std::vector<float> value){
+
   std::string _self = self;
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
@@ -4629,7 +4596,7 @@ extern "C" void * LoadFloatVecOnDemand(char *object_var_name) {
 }
 
 
-Value *ObjAttrExprAST::codegen(Value *ignored_first_arg, Value *scope_str) {
+Value *ObjAttrExprAST::codegen(Value *ignored_first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -4639,14 +4606,14 @@ Value *ObjAttrExprAST::codegen(Value *ignored_first_arg, Value *scope_str) {
   Builder->CreateStore(Builder->CreateGlobalString(PreDot), first_arg);
 
 
-  ret = Body->codegen(first_arg, scope_str);
+  ret = Body->codegen(first_arg, scope_str, previous_scope);
 
   return ret;
 }
 
 
 bool seen_var_attr = false;
-Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -4686,7 +4653,6 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str) {
 
   if (is_self||is_attr)
   {
-    // Gets from FirstArg if it is self
     if (is_self)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
@@ -4721,11 +4687,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str) {
         Builder->CreateCall(TheModule->getFunction("PrintFloatVec"), {V});
         return V;
       }
-  } else
-    var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
-
-
+  }
 
   if (NamedValues.count(Name)>0) 
   {
@@ -4790,6 +4752,9 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str) {
     return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   } else if (NamedTensors.count(Name)>0) {
     //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
 
 
     if (!seen_var_attr)
@@ -4802,13 +4767,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str) {
     Builder->CreateStore(dims_ptr, DimsPtr);
     
 
-    /*
-    Value *tensor_ptr = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
-    TensorPtr = Builder->CreateAlloca(int8PtrTy);
-    Builder->CreateStore(tensor_ptr, TensorPtr);
-    
-    Builder->CreateCall(TheModule->getFunction("AuxTensor"), {Builder->CreateLoad(int8PtrTy, TensorPtr)});
-    */
+    //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
 
     return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   }
@@ -4832,7 +4791,7 @@ extern "C" char * AuxFn(char * arg1)
 
 
 
-Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -4847,7 +4806,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str) {
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   Value *V, *idx;
 
-  idx = Idx[0]->codegen(first_arg, scope_str);
+  idx = Idx[0]->codegen(first_arg, scope_str, previous_scope);
 
 
   Value *var_name, *object_name, *object_var_name;
@@ -4856,14 +4815,6 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str) {
 
   
 
-  /*  
-  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("str_vec[idx] self is:")});
-  Builder->CreateCall(TheModule->getFunction("PrintStr"),
-                      {first_arg});
-  Builder->CreateCall(TheModule->getFunction("PrintStr"), {Builder->CreateGlobalString("str_vec[idx] pre_dot is:")});
-  Builder->CreateCall(TheModule->getFunction("PrintStr"),
-                      {Builder->CreateGlobalString(pre_dot)});
-  */
 
   std::string pre_dot = GetPreDot();
   bool is_self = GetSelf();
@@ -4889,7 +4840,6 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str) {
     if (Type=="str_vec"){
       
       V = Builder->CreateCall(TheModule->getFunction("IndexClassStrVec"), {var_name, idx});
-      //V = Builder->CreateCall(TheModule->getFunction("AuxFn"), {V});  
       
       return V;
     }
@@ -4908,7 +4858,6 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
     V = Builder->CreateCall(TheModule->getFunction("IndexStrVec"), {V, idx});
-    //V = Builder->CreateCall(TheModule->getFunction("AuxFn"), {V});
 
     return V;
   }
@@ -4919,7 +4868,6 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
     V = Builder->CreateCall(TheModule->getFunction("IndexStrVec"), {V, idx});
-    //V = Builder->CreateCall(TheModule->getFunction("AuxFn"), {V});
 
     return V;
   }
@@ -4935,10 +4883,9 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-
-
 extern "C" float CopyArgTensor(char *tensor_name, char *scope)
 {
+  std::cout << "COPY ARG TENSOR OF " << tensor_name << " on scope " << scope << "\n";
 
   std::string arg_tensor_name = scope;
   arg_tensor_name = arg_tensor_name + tensor_name;
@@ -4965,6 +4912,7 @@ extern "C" float CopyArgTensor(char *tensor_name, char *scope)
   
   return 0;
 }
+
 
 
 extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_tensor)
@@ -5043,6 +4991,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 }
 
 
+
 extern "C" float AttrTensor(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
   //std::cout << "Attributing to tensor: " << tensor_name << "\n";
@@ -5051,7 +5000,6 @@ extern "C" float AttrTensor(char *tensor_name, float *tensor, std::vector<float>
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
 
   //PrintDims(NamedDims[tensor_name]);
-  //PrintDims(new_dims);
 
 
   cudaCheck(cudaGetLastError());
@@ -5087,51 +5035,10 @@ extern "C" float AttrTensorNoFree(char *tensor_name, float *tensor, std::vector<
 }
 
 
-extern "C" float AttrTensorOnIdx(char *tensor_name, float *tensor, std::vector<float> Rdims, float idx_at)
-{ 
-  std::vector<float> dims = NamedDims[tensor_name];
-  int dims_prod = DimsProd(dims);
-  if (idx_at>(dims_prod-1))
-  {
-    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)idx_at);
-    _error = _error + "\033[0m on tensor \033[95m"+std::string(tensor_name);
-    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
-
-    LogErrorS(_error);
-    std::cout << "Dimensions:" << "\n";
-    PrintDims(dims);
-    std::cout << "\n";
-
-    return -1;
-  }
-
-  int R_dims_prod = DimsProd(Rdims);
-  if ((idx_at+R_dims_prod)>(dims_prod))
-  {
-    std::string _error = "\n\t- Attributing at pos: \033[32m"+std::to_string((int)idx_at)+"\033[0m with a tensor of size \033[32m"+std::to_string(R_dims_prod)+"\033[0m";
-    _error = _error + "\033[0m on tensor \033[95m"+std::string(tensor_name);
-    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
-
-    LogErrorS(_error);
-    std::cout << "Dimensions:" << "\n";
-    PrintDims(dims);
-    std::cout << "\n";
-
-    return -1;
-  }
-
-  float *base_address = NamedTensors[tensor_name];
-  float *device_x = base_address + static_cast<int>(idx_at);
-
-  cudaCheck(cudaMemcpy(device_x, tensor, R_dims_prod*sizeof(float), cudaMemcpyHostToHost));
-    
-  return 0;
-}
 
 
 
-
-Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -5145,7 +5052,6 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
   bool is_self = LHS->GetSelf();
   bool is_attr = LHS->GetIsAttribute();
 
-  
   if (is_attr) { // Gets from pre_dot if it is a class attribute
     Value * object_name = Builder->CreateGlobalString(pre_dot);
 
@@ -5159,7 +5065,6 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {Builder->CreateLoad(int8PtrTy, scope_str), tensor_name});
     
-  
 
 
 
@@ -5175,7 +5080,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
       return LogErrorV("Destino do '=' deve ser uma variável.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope);
     if (!Val)
       return nullptr;
 
@@ -5199,8 +5104,8 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
   std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str);
-  Value *R = RHS->codegen(first_arg, scope_str);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope);
   std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
 
 
@@ -5261,7 +5166,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -5273,19 +5178,16 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
   bool is_self = LHS->GetSelf();
   bool is_attr = LHS->GetIsAttribute();
 
-  // Gets from pre_dot if it is a class attribute
-  if (is_attr) {
+  if (is_self)
+    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
+    // Gets from pre_dot if it is a class attribute
+  else if (is_attr) {
     Value * object_name = Builder->CreateGlobalString(pre_dot);
 
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, tensor_name});
   }
-  if (is_self)
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
-  if (!(is_self||is_attr))
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), tensor_name});
 
   
 
@@ -5293,7 +5195,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
     seen_var_attr=true;
 
     
-    Value *Val = RHS->codegen(first_arg, scope_str);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope);
     if (!Val)
       return nullptr;
     
@@ -5304,18 +5206,21 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
     
 
 
-    VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+    VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
     if (!LHSE)
-      return LogErrorV("'=' left side expression must be a var.");
+      return LogErrorV("'=' destiny must be a variable.");
 
     
 
     std::vector<Value *> idx_calc_args;
+
     idx_calc_args.push_back(tensor_name);
+
     for (int i=0; i<LHSE->Idx.size(); i++)
     {
-      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str));
+      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
     }
+
     Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                           idx_calc_args);
 
@@ -5332,7 +5237,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
       std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
 
       Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
-                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str), Val});
+                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope), Val});
     }
       
     else
@@ -5364,8 +5269,8 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
   
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str);
-  Value *R = RHS->codegen(first_arg, scope_str);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope);
   
 
 
@@ -5435,7 +5340,7 @@ void matmul_forward2(float* out,
                      const float* inp, const float* weight,
                      int B, int C, int OC) {
                      //const int sqrt_block_size
-
+                     
     
     const float alpha = 1.0f;
     const float beta = 0.0f;
@@ -5487,7 +5392,7 @@ extern "C" float *CudaMult(char *LtensorName, char *RtensorName, int is_forward_
                           std::vector<float> Ldims, std::vector<float> Rdims) {
   
   
-  //std::cout << "    L: " << LtensorName << "\n    R: " << RtensorName << "\n\n\n";
+  //std::cout << "      L " << LtensorName << "  &  R " << RtensorName << "\n";
   
 
   
@@ -5600,9 +5505,11 @@ __global__ void onehot_kernel(const float* tensor,
     }
 }
 
-extern "C" float *onehot(char *self, char *scope_str, float num_classes)
+extern "C" float *onehot(char *self, float num_classes)
 {
+  std::cout << "ONEHOT OF " << self << "\n";
   std::string tensor_name = self;
+
 
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
@@ -5638,7 +5545,7 @@ extern "C" float *onehot(char *self, char *scope_str, float num_classes)
 
 
 //TODO: mean, sum, max over axis
-extern "C" float mean(char *self, char *scope_str)
+extern "C" float mean(char *self)
 {
   std::string tensor_name = self;
 
@@ -5662,7 +5569,7 @@ extern "C" float mean(char *self, char *scope_str)
   return 0;
 }
 
-extern "C" float sum(char *self, char *scope_str)
+extern "C" float sum(char *self)
 {
   std::string tensor_name = self;
   
@@ -5687,7 +5594,7 @@ extern "C" float sum(char *self, char *scope_str)
   return 0;
 }
 
-extern "C" float max(char *self, char *scope_str)
+extern "C" float max(char *self)
 {
   std::string tensor_name = self;
   
@@ -5724,16 +5631,12 @@ __global__ void gelu_forward_kernel1(const float* inp, float* out, int N) {
     }
 }
 
-extern "C" float *gelu(char *scope_str, char * tensor_namec) {
-  
-  std::string tensor_name = tensor_namec;
-  tensor_name = scope_str + tensor_name;
+extern "C" float *gelu(char * tensor_name) {
 
+  std::cout << "\n\nGELU OF " << tensor_name << "\n\n\n";
 
   float *tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
-
-
   
 
   float dims_prod = DimsProd(dims);
@@ -5770,10 +5673,11 @@ extern "C" float *gelu(char *scope_str, char * tensor_namec) {
                                            "gelu", "none"));
   }
 
+
   
+
   return y;
 }
-
 
 __global__ void gelu_backward1(float* dinp, const float* inp, const float* dout, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -5810,11 +5714,8 @@ __global__ void relu_forward(float* Z, float* A,
     }
 }
 
-extern "C" float *relu(char *scope_str, char *tensor_namec)
+extern "C" float *relu(char *tensor_name)
 {
-  std::string tensor_name = tensor_namec;
-  tensor_name = scope_str + tensor_name;
-
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
@@ -5970,12 +5871,8 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
 
 
 
-extern "C" float *softmax(char *scope_str, char *tensor_namec)
+extern "C" float *softmax(char * tensor_name)
 {
-  std::string tensor_name = tensor_namec;
-  tensor_name = scope_str + tensor_name;
-
-  
 
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
@@ -6270,7 +6167,7 @@ float *Conv2d::Forward(float *tensor, int H, int W, int B)
   //std::cout << "\nConv2d Forward with H: " << H << " W: " << W << "\n";
 
 
-  if (H != this->H || W != this->W || B != this->B) // TODO: Allow changing B with a dict
+  if (H != this->H || W != this->W || B != this->B)
     this->SetDescriptors(H, W, B);
 
   // Initialize weights.
@@ -6392,12 +6289,11 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-extern "C" float *ConvForward2d(char *self, char *scope_str, char *tensor_namec, char *conv_namec, int is_obj_attr_or_self)
+extern "C" float *ConvForward2d(char *self, char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
 {
-
-  std::string tensor_name = tensor_namec;
-  tensor_name = scope_str + tensor_name;
   
+  std::cout << "Conv forward of " << self << "." << conv_namec << " and " << tensor_name << "\n";
+
   std::string _self = self;
   std::string conv_name = conv_namec;
   if (is_obj_attr_or_self)
@@ -6877,7 +6773,7 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
 
 
 
-Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -6896,7 +6792,6 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
   bool is_self = LHS->GetSelf();
   bool is_attr = LHS->GetIsAttribute();
 
-
   // Gets from pre_dot if it is a class attribute
   if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
@@ -6911,14 +6806,11 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {Builder->CreateLoad(int8PtrTy, scope_str), LtensorName});
     
-  
-
 
   pre_dot = RHS->GetPreDot();
   is_self = RHS->GetSelf();
   is_attr = RHS->GetIsAttribute();
 
-  // Gets from pre_dot if it is a class attribute
   if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
 
@@ -6932,8 +6824,6 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {Builder->CreateLoad(int8PtrTy, scope_str), RtensorName});
   
-
-
   
 
 
@@ -6942,63 +6832,28 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
   
     seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str);
-    Value *rDimsPtr = RHS->GetDimsPtr();
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    if (!LHSE)
+      return LogErrorV("Destino do '=' deve ser uma variável.");
+    
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
+    std::cout << "1 1 attr\n";
+    
 
-    if (!LHS->GetIsVec())
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-      
-      
-      std::cout << "1 1 attr\n";
-      
-      //std::cout << "L is vec " << LHS->GetIsVec() << " R is vec: " << RHS->GetIsVec() << "\n";
+    //float *Variable = NamedTensors[LHSE->getName()];
+    //if (!Variable)
+    //  return LogErrorV("O nome do tensor/variável é desconhecido.");
 
+    
+    std::cout << "Pre dims\n";
+    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+    std::cout << "Post dims\n";
 
+    Builder->CreateCall(TheModule->getFunction("AttrTensor"),
+                        {LtensorName, RtensorPtr,
+                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
+    std::cout << "Post attr call\n";
 
-      //float *Variable = NamedTensors[LHSE->getName()];
-      //if (!Variable)
-      //  return LogErrorV("O nome do tensor/variável é desconhecido.");
-
-
-
-      /*
-      std::cout << "Pre dims\n";
-      Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
-      std::cout << "Post dims\n";
-      */
-
-      std::cout << "RHS PREDOT: " << RHS->_pre_dot << "\n";
-
-      Builder->CreateCall(TheModule->getFunction("AttrTensor"),
-                          {LtensorName, RtensorPtr,
-                           Builder->CreateLoad(int8PtrTy, rDimsPtr)});
-      std::cout << "Post attr call\n\n";
-    } else
-    {
-      std::cout << "1 1 INDEXED attr\n";
-
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-
-
-      std::vector<Value *> idx_calc_args;
-      idx_calc_args.push_back(LtensorName);
-      for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str));
-      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                            idx_calc_args);
-
-      
-      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-                          {LtensorName, RtensorPtr,
-                           Builder->CreateLoad(int8PtrTy, rDimsPtr),
-                           idx_at});
-      
-    }
 
 
     seen_var_attr=false;
@@ -7021,9 +6876,8 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
   
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str);
-  Value *RtensorPtr = RHS->codegen(first_arg, scope_str);
-
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope);
+  Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
 
   std::cout << "Create load for dims\n";
 
@@ -7035,7 +6889,6 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
 
   //Builder->CreateCall(TheModule->getFunction("PrintDims"),
   //                    {LdimsPtr});
-
 
 
   if (!LtensorPtr || !RtensorPtr)
@@ -7076,7 +6929,9 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
   }
   /*
   case '*':
-    return;
+    CudaFn = TheModule->getFunction("CudaMult");
+    return Builder->CreateCall(CudaFn,{LtensorName, RtensorName, is_forward_func, LLVMValue},
+                               "cudamult");
   */
   case '/':
     CudaFn = TheModule->getFunction("CudaDiv");
@@ -7108,7 +6963,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   std::cout << "Binary Tensor Pinned codegen" << "\n";
 
   if (not ShallCodegen)
@@ -7132,7 +6987,6 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str) {
   // Gets from pre_dot if it is a class attribute
   if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
-
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, LtensorName});
   }
@@ -7144,15 +6998,14 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str) {
                                             {Builder->CreateLoad(int8PtrTy, scope_str), LtensorName});
 
 
-
   pre_dot = RHS->GetPreDot();
   is_self = RHS->GetSelf();
   is_attr = RHS->GetIsAttribute();
 
+
   // Gets from pre_dot if it is a class attribute
   if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
-
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, RtensorName});
   }
@@ -7163,63 +7016,39 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str) {
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {Builder->CreateLoad(int8PtrTy, scope_str), RtensorName});
 
-
   // if is attribution
   if (Op == '=') {
   
     seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str);
-    Value *rDimsPtr = RHS->GetDimsPtr();
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    if (!LHSE)
+      return LogErrorV("Destino do '=' deve ser uma variável.");
+    
 
-    if (!LHS->GetIsVec())
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-      std::cout << "1 2 attr\n";
-      
-      
-      std::cout << "Pre dims\n";
-      Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
-      std::cout << "Post dims\n";
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
+    std::cout << "1 2 attr\n";
 
-      Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-                          {LtensorName, RtensorPtr,
-                          Builder->CreateLoad(int8PtrTy, rDimsPtr)});
-      std::cout << "Post attr call\n";
-    } else
-    {
-      std::cout << "1 2 INDEXED attr\n";
+    
+    std::cout << "Pre dims\n";
+    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+    std::cout << "Post dims\n";
 
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
+    Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
+                        {LtensorName, RtensorPtr,
+                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
+    std::cout << "Post attr call\n";
 
 
-      std::vector<Value *> idx_calc_args;
-      idx_calc_args.push_back(LtensorName);
-      for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str));
-      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                            idx_calc_args);
 
-      
-      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-                          {LtensorName, RtensorPtr,
-                           Builder->CreateLoad(int8PtrTy, rDimsPtr),
-                           idx_at});
-      
-    }
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   }
-  
 }
 
 
 
-Value *LogExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *LogExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   
@@ -7232,7 +7061,7 @@ Value *LogExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
@@ -7252,7 +7081,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str) {
       return LogErrorV("Destino do '=' deve ser uma variável.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope);
 
     if (!Val)
     {
@@ -7319,7 +7148,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str) {
           Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
                                                   {Builder->CreateLoad(int8PtrTy, first_arg),
                                                    Builder->CreateGlobalString(Lname),
-                                                   LHSV->Idx[0]->codegen(first_arg, scope_str),
+                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope),
                                                    Val});
 
         } else
@@ -7340,6 +7169,8 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str) {
 
     } else {
       
+      seen_var_attr=false;
+      
       
       Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
                                                   {Builder->CreateLoad(int8PtrTy, first_arg), Builder->CreateGlobalString(Lname),
@@ -7357,8 +7188,8 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str) {
 
   
 
-  Value *L = LHS->codegen(first_arg, scope_str);
-  Value *R = RHS->codegen(first_arg, scope_str);
+  Value *L = LHS->codegen(first_arg, scope_str, previous_scope);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope);
   
   if (!L || !R)
     return nullptr;
@@ -7406,10 +7237,10 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str) {
 }
 
 
-Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *OperandV = Operand->codegen(first_arg, scope_str);
+  Value *OperandV = Operand->codegen(first_arg, scope_str, previous_scope);
   if (!OperandV)
     return nullptr;
   
@@ -7451,12 +7282,12 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str) {
 }
 
 
-Value *IfExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
 
-  Value *CondV = Cond->codegen(first_arg, scope_str);
+  Value *CondV = Cond->codegen(first_arg, scope_str, previous_scope);
   if (!CondV)
     return nullptr;
 
@@ -7480,7 +7311,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str) {
   
   Value *ThenV;
   for (auto &then_body : Then)
-    ThenV = then_body->codegen(first_arg, scope_str);
+    ThenV = then_body->codegen(first_arg, scope_str, previous_scope);
   
 
   if (!ThenV)
@@ -7498,7 +7329,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str) {
 
   Value *ElseV;
   for (auto &else_body : Else)
-    ElseV = else_body->codegen(first_arg, scope_str);
+    ElseV = else_body->codegen(first_arg, scope_str, previous_scope);
 
   if (!ElseV)
     return nullptr;
@@ -7540,7 +7371,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str) {
 //   br endcond, loop, endloop
 // outloop:
 
-Value *ForExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -7549,7 +7380,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str) {
   AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
 
   // Emit the start code first, without 'variable' in scope.
-  Value *StartVal = Start->codegen(first_arg, scope_str);
+  Value *StartVal = Start->codegen(first_arg, scope_str, previous_scope);
   if (!StartVal)
     return nullptr;
 
@@ -7584,14 +7415,14 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str) {
   // Emit the step value.
   Value *StepVal = nullptr;
   if (Step) {
-    StepVal = Step->codegen(first_arg, scope_str);
+    StepVal = Step->codegen(first_arg, scope_str, previous_scope);
     if (!StepVal)
       return nullptr;
   } 
 
 
   // Compute the end condition.
-  Value *EndCond = End->codegen(first_arg, scope_str);
+  Value *EndCond = End->codegen(first_arg, scope_str, previous_scope);
   if (!EndCond)
     return nullptr;
 
@@ -7613,7 +7444,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str) {
   Builder->SetInsertPoint(LoopBB);
 
   for (auto &body : Body)
-    body->codegen(first_arg, scope_str);
+    body->codegen(first_arg, scope_str, previous_scope);
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
@@ -7644,7 +7475,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 	Function* TheFunction = Builder->GetInsertBlock()->getParent();
@@ -7661,11 +7492,11 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str) {
 	Value* bodyVal;
 
   for (auto &body : Body)
-    bodyVal = body->codegen(first_arg, scope_str);
+    bodyVal = body->codegen(first_arg, scope_str, previous_scope);
 
 	// Handle Cond
 
-	Value* condVal = Cond->codegen(first_arg, scope_str);
+	Value* condVal = Cond->codegen(first_arg, scope_str, previous_scope);
 	if (! condVal)
     return nullptr;
 
@@ -7686,7 +7517,7 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str) {
 }
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg, Value *scope_str) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg, Value *scope_str, Value *previous_scope) {
   
 
   // find unique function name (_async 0, _async1, _async2 etc)
@@ -7721,7 +7552,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   Value *V;
 
   for (auto &body : asyncBody)
-    V = body->codegen(first_arg, scope_str);
+    V = body->codegen(first_arg, scope_str, previous_scope);
 
 
 
@@ -7789,7 +7620,7 @@ extern "C" void pthread_join_aux(pthread_t thread)
 std::vector<Value *> thread_pointers;
 
 
-Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -7809,7 +7640,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str) {
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
-  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str);
+  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str, previous_scope);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -7850,7 +7681,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -7878,11 +7709,11 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str) {
 
     /*
     if (IsAsync[i])
-      thread_pointers.push_back(Bodies[i]->codegen(first_arg, scope_str));
+      thread_pointers.push_back(Bodies[i]->codegen(first_arg, scope_str, previous_scope));
     else
-      Bodies[i]->codegen(first_arg, scope_str);
+      Bodies[i]->codegen(first_arg, scope_str, previous_scope);
     */
-    Bodies[i]->codegen(first_arg, scope_str);
+    Bodies[i]->codegen(first_arg, scope_str, previous_scope);
   }
 
   
@@ -7913,24 +7744,26 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str) {
 }
 
 
-Value *LockExprAST::codegen(Value *first_arg, Value *scope_str){
+Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope){
   
   Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
 
   Value *V;
   for (auto &body : Bodies)
-    V = body->codegen(first_arg, scope_str);
+    V = body->codegen(first_arg, scope_str, previous_scope);
 
   return V;
 }
 
-Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str){
+Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope){
   Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
 
 
-Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str) {
+
+
+Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
 
   for (int i=0; i<Destiny.size(); i++)
   {
@@ -7978,7 +7811,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str) {
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(_name);
         for (int i=0; i<LHSE->Idx.size(); i++)
-          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str));
+          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                               idx_calc_args);
 
@@ -7995,8 +7828,10 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str) {
 }
 
 
+
+
 // Create Var
-Value *VarExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
@@ -8015,7 +7850,7 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str) {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -8045,7 +7880,7 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *StrExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -8065,7 +7900,7 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str) {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -8098,7 +7933,7 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str) {
 }
 
 
-Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -8118,7 +7953,7 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str) {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -8269,8 +8104,6 @@ extern "C" float CreateTensorOnDemand(char *first_arg, char *tensor_name, int is
   NamedDims[cObjectTensorName] = cur_dim;
 
 
-  //Tensors[cObjectTensorName] = {tensor, cur_dim, 0};
-
 
 
 
@@ -8282,7 +8115,7 @@ extern "C" float CreateTensorOnDemand(char *first_arg, char *tensor_name, int is
 
 
 
-Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
@@ -8301,7 +8134,7 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str) {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -8316,7 +8149,7 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str) {
 
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen(first_arg, scope_str);
+      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {aux});
     }
@@ -8344,7 +8177,7 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<AllocaInst *> OldBindings;
@@ -8365,7 +8198,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -8380,7 +8213,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
 
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen(first_arg, scope_str);
+      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {aux});
                                                   
@@ -8409,7 +8242,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -8429,7 +8262,7 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str) {
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -8449,8 +8282,8 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str) {
                                                Builder->CreateGlobalString(VarName),
                                                ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
                                                Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str), OC->codegen(first_arg, scope_str), Ks->codegen(first_arg, scope_str), Stride->codegen(first_arg, scope_str),
-                                               Padding->codegen(first_arg, scope_str)});
+                                               C->codegen(first_arg, scope_str, previous_scope), OC->codegen(first_arg, scope_str, previous_scope), Ks->codegen(first_arg, scope_str, previous_scope), Stride->codegen(first_arg, scope_str, previous_scope),
+                                               Padding->codegen(first_arg, scope_str, previous_scope)});
 
 
   }
@@ -8463,8 +8296,7 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str) {
 
 
 
-
-Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
+Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look up the name in the global module table.
@@ -8475,27 +8307,47 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
   std::string functionName = TheFunction->getName().str();
   std::string tgt_function_name;
 
+
+
   int nested_function;
   if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
+  {
     nested_function=0;
+  }
   else
     nested_function=1;
 
 
+  
+  if (starts_with(functionName.c_str(), "__async_"))
+  {
+    //TODO: Solve scope_str discontinuity on async functions
+    scope_str = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(Builder->CreateGlobalString(""), scope_str);
+  }
+
+  previous_scope = Builder->CreateAlloca(int8PtrTy);
+  Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                       {Builder->CreateLoad(int8PtrTy, scope_str)}), previous_scope);
 
 
-  if (isAttribute && !isSelf) // e.g: x.view()
+
+
+
+  if (isAttribute && !isSelf) // e.g: x.view() / native_methods
   {
     first_arg = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(Builder->CreateGlobalString(_pre_dot), first_arg);
+
+    Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                      {Builder->CreateLoad(int8PtrTy, previous_scope), Builder->CreateLoad(int8PtrTy, first_arg)});
+    Builder->CreateStore(arg, first_arg);
   }
   
   
   
 
   int target_args_size = Args.size();
-  
-
   std::vector<Value *> ArgsV;
 
   bool is_self_of_nested_function = (nested_function==1 && isSelf);
@@ -8503,7 +8355,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
   // Handle self or object attribute expressions
   if(isSelf || isAttribute)
   {
-
     bool not_coding_language_method = (!in_str(tgt_function, native_methods));    
 
     if (not_coding_language_method)
@@ -8511,10 +8362,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
 
     if (not_coding_language_method && CalleeOverride=="none")
     {
+      std::cout << "CREATING STORE OF SCOPE"  << "\n";
       scope_str = Builder->CreateAlloca(int8PtrTy);
       Builder->CreateStore(Builder->CreateGlobalString(RandomString(4)), scope_str);
     }
-      
 
 
     if (!is_self_of_nested_function && not_coding_language_method)
@@ -8530,56 +8381,38 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
                                                     first_arg);
     }
     if (is_self_of_nested_function)
-    {
-      /*
-      Builder->CreateCall(TheModule->getFunction("PrintStr"),
-        {Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-         {Builder->CreateGlobalString("\n\n\nFirst arg of nested function " + tgt_function +", with parent " + functionName + " is: "),
-                                                          Builder->CreateLoad(int8PtrTy, first_arg)})
-        
-        });
-      */
-    }
+    { }
     
     
     
     
     if (CalleeOverride!="none" || in_str(Callee, native_methods))
-    {
+    { // self.conv(),  x.view()
       ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
-      ArgsV.push_back(Builder->CreateLoad(int8PtrTy, scope_str));
+      //target_args_size-=1; // as it will load scope_str directly on the args
 
       if (isSelf && isAttribute)
-      {
+      { // self.can_load_.first_nonzero()
+        // Extend first arg
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                         {ArgsV[0], Builder->CreateGlobalString(_pre_dot)});
-                                         // concat substituted self to predot
-                                         //TODO: revert this order
-
         ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
-        
         target_args_size+=1;
       }
+      target_args_size+=1;
     }
     else
     {
+      std::cout << "Adding first arg and scope  for " << tgt_function << "\n";
       ArgsV.push_back(first_arg); // Pass first_arg's reference for the derived AST nodes.  
       ArgsV.push_back(scope_str);
+      //target_args_size+=2;
+
+      ArgsV.push_back(previous_scope);
+      target_args_size+=3;
     }
 
-
-    target_args_size+=2; // add size for first_arg and scope
   }
-
-
-  std::cout << "TGT FUNCTION: " << tgt_function << "\n";
-  if (in_str(tgt_function, activation_functions))
-  {
-    ArgsV.push_back(Builder->CreateLoad(int8PtrTy, scope_str));
-    target_args_size+=1;
-  }
-
-
 
 
 
@@ -8606,27 +8439,39 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
       return LogErrorV(_error);
     }
   }
-
   //std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
+
+
+
+
+
+
 
 
 
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
-
     //std::cout << "\nCall codegen for argument n°: " << i << ".\n";
 
     Value * arg;
-    std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
+    //std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
     if (Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor")
     {
       arg = Builder->CreateGlobalString(Args[i]->GetName());
       if (Args[i]->GetSelf())
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), arg});
+      if (!(Args[i]->GetSelf() || Args[i]->GetIsAttribute()) || in_str(tgt_function, native_methods))
+      {
+        std::cout << "" << Args[i]->GetName() << " IS NOT SELF NOR ATTR ON FUNCTION " << tgt_function << " WITH PARENT " << functionName << "\n";
+        //Builder->CreateLoad(int8PtrTy, previous_scope);
+        arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateLoad(int8PtrTy, previous_scope), arg});
+      }
+
     }
     else
-      arg = Args[i]->codegen(first_arg, scope_str);
+      arg = Args[i]->codegen(first_arg, scope_str, previous_scope);
 
   
     ArgsV.push_back(arg);
@@ -8635,22 +8480,16 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
     if (!ArgsV.back())
       return nullptr;
   }
-  //std::cout << "Passing " << ArgsV.size() << " args." << "\n";
-  //std::cout << "\n\n\n\n\n";
-  
 
 
 
-  
-  //Value *aux = Builder->CreateCall(getFunction("LoadAuxDims"), {});
-  //Builder->CreateStore(aux, DimsPtr);
+
+
+
 
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
-  //_pre_dot="DAWBDYUABDUABDllulululu";
-  
   //std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
-
   if (CalleeOverride=="none")
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
   else
@@ -8671,50 +8510,44 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str) {
                           {conv_name, is_attr, Builder->CreateLoad(int8PtrTy, first_arg)});
       DimsPtr = Builder->CreateAlloca(int8PtrTy);
       Builder->CreateStore(dims_ptr, DimsPtr);
-
-
+      
     }
     if (CalleeOverride=="SplitString")
     {
       Value *V = NamedStrs[PreDot];
       
       ret = Builder->CreateCall(getFunction("SplitString"), 
-                          {Builder->CreateLoad(int8PtrTy, V), ArgsV[2]});
+                          {Builder->CreateLoad(int8PtrTy, V), ArgsV[1]});
+
     }
     if (CalleeOverride=="SplitStringIndexate")
     {
       Value *V = NamedStrs[PreDot];
       
       ret = Builder->CreateCall(getFunction("SplitStringIndexate"), 
-                          {Builder->CreateLoad(int8PtrTy, V), ArgsV[2], ArgsV[3]});
+                          {Builder->CreateLoad(int8PtrTy, V), ArgsV[1], ArgsV[2]});
+
     }
     if (CalleeOverride=="ToFloat")
     {
       if (Args[0]->GetType()=="str")
         ret = Builder->CreateCall(getFunction("StrToFloat"), 
                           {ArgsV[0]});
+
     }
-    
   }
 
-  if (in_str(tgt_function_name, return_dims_methods)) //activation_functions
+  if (in_str(tgt_function_name, return_dims_methods))
   {
     // Get resulting tensor dims.
-    
-    if (!(Args[0]->GetSelf()||Args[0]->GetIsAttribute()))
-      ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                        {Builder->CreateLoad(int8PtrTy, scope_str), ArgsV[1]});
-    
     Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {ArgsV[0]});
     DimsPtr = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(dims_ptr, DimsPtr);
+
   }
 
   if (in_str(tgt_function_name, return_batchless_dims_methods))
   {
-    
-    
-    //TODO: gpuw(self.p_x, w)
     // Get resulting tensor dims.
     Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadBatchlessDims"), {ArgsV[0]});
     DimsPtr = Builder->CreateAlloca(int8PtrTy);
@@ -8742,12 +8575,11 @@ Function *PrototypeAST::codegen() {
 
   for (auto &type : Types)
   {
-    if (type=="s" || type=="self")
+    if (type=="s")
       types.push_back(int8PtrTy);
     else
       types.push_back(Type::getFloatTy(*TheContext));
   }
-
 
 
   FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
@@ -8864,8 +8696,8 @@ extern "C" float IndexClassFloatVec(char * vec_name, float _idx)
 
 extern "C" float StrToFloat(char *in_str)
 {
-  //std::cout << "StrToFloat" << "\n";
   //std::cout << "str to float of " << in_str << "\n";
+
   char *copied = (char*)malloc(strlen(in_str) + 1);
   strcpy(copied, in_str);
   char *end;
@@ -8921,16 +8753,17 @@ Function *FunctionAST::codegen() {
   
   // Record the function arguments in the NamedValues map.
 
-  Value *first_arg, *scope_str;
+  Value *first_arg, *scope_str, *previous_scope;
   first_arg = Builder->CreateAlloca(int8PtrTy);
   scope_str = Builder->CreateAlloca(int8PtrTy);
+  previous_scope = Builder->CreateAlloca(int8PtrTy);
 
   if (function_name=="__anon_expr")
   {
     Builder->CreateStore(Builder->CreateGlobalString(""), first_arg);
     Builder->CreateStore(Builder->CreateGlobalString(""), scope_str);
+    Builder->CreateStore(Builder->CreateGlobalString(""), previous_scope);
   }
-
 
 
   std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
@@ -8978,10 +8811,11 @@ Function *FunctionAST::codegen() {
 
       NamedValues[std::string(Arg.getName())] = Alloca;
     }
-    else 
+    else
     {
       if (in_str(arg_name, tensorVars))
       {
+        //TODO: pass &Arg instead of arg_name
         Builder->CreateCall(TheModule->getFunction("CopyArgTensor"),
                           {Builder->CreateGlobalString(arg_name),
                            Builder->CreateLoad(int8PtrTy, scope_str)});
@@ -8993,7 +8827,7 @@ Function *FunctionAST::codegen() {
 
   Value *RetVal;
   for (auto &body : Body)
-    RetVal = body->codegen(first_arg, scope_str);
+    RetVal = body->codegen(first_arg, scope_str, previous_scope);
 
   if (RetVal) {
     // Finish off the function.
@@ -9107,12 +8941,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("CudaMult", CudaMultTy);
 
 
-  FunctionType *AuxTensorTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy}, 
-      false // Not vararg
-  );
-  TheModule->getOrInsertFunction("AuxTensor", AuxTensorTy);
 
 
   FunctionType *LoadTensorTy = FunctionType::get(
@@ -9134,14 +8962,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("PrintTensorF", PrintTensorFTy);
   
 
-
-
-  FunctionType *LoadAuxDimsTy = FunctionType::get(
-      int8PtrTy,
-      {},
-      false
-  );
-  TheModule->getOrInsertFunction("LoadAuxDims", LoadAuxDimsTy);
 
 
   FunctionType *LoadDimsTy = FunctionType::get(
@@ -9230,7 +9050,7 @@ static void InitializeModule() {
   // char *
   FunctionType *softmaxTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("softmax", softmaxTy);
@@ -9239,7 +9059,7 @@ static void InitializeModule() {
   //char *
   FunctionType *reluTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("relu", reluTy);
@@ -9248,7 +9068,7 @@ static void InitializeModule() {
   //char *
   FunctionType *geluTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("gelu", geluTy);
@@ -9257,7 +9077,7 @@ static void InitializeModule() {
   //char *, char *, int
   FunctionType *conv2dForwardTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("ConvForward2d", conv2dForwardTy);
@@ -9266,7 +9086,7 @@ static void InitializeModule() {
   // float
   FunctionType *onehotTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("onehot", onehotTy);
@@ -9275,7 +9095,7 @@ static void InitializeModule() {
   // 
   FunctionType *sumTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {},
       false
   );
   TheModule->getOrInsertFunction("sum", sumTy);
@@ -9283,7 +9103,7 @@ static void InitializeModule() {
   // 
   FunctionType *meanTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {},
       false
   );
   TheModule->getOrInsertFunction("mean", meanTy);
@@ -9292,22 +9112,21 @@ static void InitializeModule() {
   // 
   FunctionType *maxTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {},
       false
   );
   TheModule->getOrInsertFunction("max", maxTy);
 
   
-  //
+  // char *, floats, Vararg
   FunctionType *viewTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // Vararg
   );
   TheModule->getOrInsertFunction("view", viewTy);
 
 
-  //
   FunctionType *CalculateIdxOffsetTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
@@ -9601,7 +9420,7 @@ static void InitializeModule() {
   //
   FunctionType *first_nonzeroTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("first_nonzero", first_nonzeroTy);
@@ -9822,8 +9641,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("CreateConv2dOnDemand", CreateConv2dOnDemandTy);
 
-
-
   //
   FunctionType *CopyArgTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -9868,8 +9685,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("AttrTensor", AttrTensorTy);
 
-
-  //
   FunctionType *AttrTensorNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
@@ -9880,20 +9695,8 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
   
 
-  //
-  FunctionType *AttrTensorOnIdxTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       floatPtrTy,
-       int8PtrTy,
-       Type::getFloatTy(*TheContext)}, 
-      false 
-  );
-  TheModule->getOrInsertFunction("AttrTensorOnIdx", AttrTensorOnIdxTy);
 
-
-
-  //
+  // char *
   FunctionType *printTTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy},
@@ -10098,22 +9901,24 @@ int main() {
   // setup the (global) cuBLASLt workspace
   cudaCheck(cudaMalloc(&cublaslt_workspace, cublaslt_workspace_size));
 
-  
-  cudnnCreate(&cudnn);
 
-  
-  InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
-  InitializeNativeTargetAsmParser();
-
-  
   if (pthread_mutex_init(&mutex, NULL) != 0) {
     printf("Mutex initialization failed\n");
     return 1;
   }
 
+
   lockVars["mutex"] = &mutex;
   
+
+  
+  cudnnCreate(&cudnn);
+
+
+
+  InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
+  InitializeNativeTargetAsmParser();
 
   // Install standard binary operators.
   // 1 is lowest precedence.
