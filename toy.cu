@@ -4400,7 +4400,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
 
 
-  //std::cout << "CalculateIdxOffset pushing dim: " << first_idx << "\n";
+  std::cout << "CalculateIdxOffset pushing dim: " << first_idx << "\n";
 
   for (int i=0; i<10; i++)
   {
@@ -4422,7 +4422,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
     idx_at += (int)(current_dims_prod*idx);
 
-    //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
+    std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
     
 
     if (idx!=-1)
@@ -5034,6 +5034,48 @@ extern "C" float AttrTensorNoFree(char *tensor_name, float *tensor, std::vector<
   return 0;
 }
 
+
+
+extern "C" float AttrTensorOnIdx(char *tensor_name, float *tensor, std::vector<float> Rdims, float idx_at)
+{ 
+  std::vector<float> dims = NamedDims[tensor_name];
+  int dims_prod = DimsProd(dims);
+  if (idx_at>(dims_prod-1))
+  {
+    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)idx_at);
+    _error = _error + "\033[0m on tensor \033[95m"+std::string(tensor_name);
+    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
+
+    LogErrorS(_error);
+    std::cout << "Dimensions:" << "\n";
+    PrintDims(dims);
+    std::cout << "\n";
+
+    return -1;
+  }
+
+  int R_dims_prod = DimsProd(Rdims);
+  if ((idx_at+R_dims_prod)>(dims_prod))
+  {
+    std::string _error = "\n\t- Attributing at pos: \033[32m"+std::to_string((int)idx_at)+"\033[0m with a tensor of size \033[32m"+std::to_string(R_dims_prod)+"\033[0m";
+    _error = _error + "\033[0m on tensor \033[95m"+std::string(tensor_name);
+    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
+
+    LogErrorS(_error);
+    std::cout << "Dimensions:" << "\n";
+    PrintDims(dims);
+    std::cout << "\n";
+
+    return -1;
+  }
+
+  float *base_address = NamedTensors[tensor_name];
+  float *device_x = base_address + static_cast<int>(idx_at);
+
+  cudaCheck(cudaMemcpy(device_x, tensor, R_dims_prod*sizeof(float), cudaMemcpyHostToHost));
+    
+  return 0;
+}
 
 
 
@@ -6832,28 +6874,63 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   
     seen_var_attr=true;
 
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    if (!LHSE)
-      return LogErrorV("Destino do '=' deve ser uma variável.");
-    
     Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
-    std::cout << "1 1 attr\n";
-    
+    Value *rDimsPtr = RHS->GetDimsPtr();
 
-    //float *Variable = NamedTensors[LHSE->getName()];
-    //if (!Variable)
-    //  return LogErrorV("O nome do tensor/variável é desconhecido.");
+    if (!LHS->GetIsVec())
+    {
+      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
+      
+      
+      std::cout << "1 1 attr\n";
+      
+      //std::cout << "L is vec " << LHS->GetIsVec() << " R is vec: " << RHS->GetIsVec() << "\n";
 
-    
-    std::cout << "Pre dims\n";
-    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
-    std::cout << "Post dims\n";
 
-    Builder->CreateCall(TheModule->getFunction("AttrTensor"),
-                        {LtensorName, RtensorPtr,
-                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
-    std::cout << "Post attr call\n";
 
+      //float *Variable = NamedTensors[LHSE->getName()];
+      //if (!Variable)
+      //  return LogErrorV("O nome do tensor/variável é desconhecido.");
+
+
+
+      /*
+      std::cout << "Pre dims\n";
+      Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+      std::cout << "Post dims\n";
+      */
+
+      std::cout << "RHS PREDOT: " << RHS->_pre_dot << "\n";
+
+      Builder->CreateCall(TheModule->getFunction("AttrTensor"),
+                          {LtensorName, RtensorPtr,
+                           Builder->CreateLoad(int8PtrTy, rDimsPtr)});
+      std::cout << "Post attr call\n\n";
+    } else
+    {
+      std::cout << "1 1 INDEXED attr\n";
+
+      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
+
+
+      std::vector<Value *> idx_calc_args;
+      idx_calc_args.push_back(LtensorName);
+      for (int i=0; i<LHSE->Idx.size(); i++)
+        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                            idx_calc_args);
+
+      
+      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
+                          {LtensorName, RtensorPtr,
+                           Builder->CreateLoad(int8PtrTy, rDimsPtr),
+                           idx_at});
+      
+    }
 
 
     seen_var_attr=false;
@@ -6987,6 +7064,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
   // Gets from pre_dot if it is a class attribute
   if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
+
     LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, LtensorName});
   }
@@ -6998,14 +7076,15 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
                                             {Builder->CreateLoad(int8PtrTy, scope_str), LtensorName});
 
 
+
   pre_dot = RHS->GetPreDot();
   is_self = RHS->GetSelf();
   is_attr = RHS->GetIsAttribute();
 
-
   // Gets from pre_dot if it is a class attribute
   if (is_attr) {
     object_name = Builder->CreateGlobalString(pre_dot);
+
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, RtensorName});
   }
@@ -7016,34 +7095,58 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
     RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {Builder->CreateLoad(int8PtrTy, scope_str), RtensorName});
 
+
   // if is attribution
   if (Op == '=') {
   
     seen_var_attr=true;
 
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    if (!LHSE)
-      return LogErrorV("Destino do '=' deve ser uma variável.");
-    
-
     Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
-    std::cout << "1 2 attr\n";
+    Value *rDimsPtr = RHS->GetDimsPtr();
 
-    
-    std::cout << "Pre dims\n";
-    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
-    std::cout << "Post dims\n";
+    if (!LHS->GetIsVec())
+    {
+      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
+      std::cout << "1 2 attr\n";
+      
+      
+      std::cout << "Pre dims\n";
+      Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+      std::cout << "Post dims\n";
 
-    Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-                        {LtensorName, RtensorPtr,
-                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
-    std::cout << "Post attr call\n";
+      Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
+                          {LtensorName, RtensorPtr,
+                          Builder->CreateLoad(int8PtrTy, rDimsPtr)});
+      std::cout << "Post attr call\n";
+    } else
+    {
+      std::cout << "1 2 INDEXED attr\n";
+
+      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
 
 
+      std::vector<Value *> idx_calc_args;
+      idx_calc_args.push_back(LtensorName);
+      for (int i=0; i<LHSE->Idx.size(); i++)
+        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                            idx_calc_args);
 
+      
+      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
+                          {LtensorName, RtensorPtr,
+                           Builder->CreateLoad(int8PtrTy, rDimsPtr),
+                           idx_at});
+      
+    }
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   }
+  
 }
 
 
@@ -9695,8 +9798,19 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
   
 
+  //
+  FunctionType *AttrTensorOnIdxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       floatPtrTy,
+       int8PtrTy,
+       Type::getFloatTy(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("AttrTensorOnIdx", AttrTensorOnIdxTy);
 
-  // char *
+
+  //
   FunctionType *printTTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy},
@@ -9706,7 +9820,7 @@ static void InitializeModule() {
   
   
   
-  // char *
+  //
   FunctionType *printTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, Type::getFloatTy(*TheContext)}, 
