@@ -3619,7 +3619,7 @@ extern "C" float *gpu(char *tensor_name)
 
 extern "C" float *gpuw(char *tensor_name, float idx)
 {
-  //std::cout << "\nGpu transfer for: " << tensor_name << " on worker " << idx << "\n";
+  std::cout << "\nGpu transfer for: " << tensor_name << " on worker " << idx << "\n";
   
   float *tensor, *tensor_cpu;
 
@@ -7169,29 +7169,52 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str) {
   
     seen_var_attr=true;
 
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    if (!LHSE)
-      return LogErrorV("Destino do '=' deve ser uma variável.");
-    
-
     Value *RtensorPtr = RHS->codegen(first_arg, scope_str);
-    std::cout << "1 2 attr\n";
+    Value *rDimsPtr = RHS->GetDimsPtr();
 
-    
-    std::cout << "Pre dims\n";
-    Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
-    std::cout << "Post dims\n";
+    if (!LHS->GetIsVec())
+    {
+      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
+      std::cout << "1 2 attr\n";
+      
+      
+      std::cout << "Pre dims\n";
+      Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
+      std::cout << "Post dims\n";
 
-    Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-                        {LtensorName, RtensorPtr,
-                         Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr())});
-    std::cout << "Post attr call\n";
+      Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
+                          {LtensorName, RtensorPtr,
+                          Builder->CreateLoad(int8PtrTy, rDimsPtr)});
+      std::cout << "Post attr call\n";
+    } else
+    {
+      std::cout << "1 2 INDEXED attr\n";
+
+      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
 
 
+      std::vector<Value *> idx_calc_args;
+      idx_calc_args.push_back(LtensorName);
+      for (int i=0; i<LHSE->Idx.size(); i++)
+        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str));
+      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                            idx_calc_args);
 
+      
+      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
+                          {LtensorName, RtensorPtr,
+                           Builder->CreateLoad(int8PtrTy, rDimsPtr),
+                           idx_at});
+      
+    }
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   }
+  
 }
 
 
