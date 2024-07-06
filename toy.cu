@@ -188,6 +188,8 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 
 
+
+
 // Tensor related
 std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
 std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu", "log"};
@@ -1399,6 +1401,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
       getNextToken(); // eat ,
       Idx.push_back(ParseExpression(class_name));
     }
+    Idx.push_back(std::make_unique<NumberExprAST>(-40370000000.0f));
 
 
     auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
@@ -3239,7 +3242,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
   getNextToken();
 
 
-  std::string is_tensor="no";
+  std::string is_tensor;
   std::vector<std::string> ArgNames, Types;
 
 
@@ -3255,7 +3258,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
 
   while (CurTok != ')')
   {
-
+    is_tensor="no";
     if (IdentifierStr=="t")
       is_tensor="tensor";
     if (IdentifierStr=="c")
@@ -3268,6 +3271,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
       getNextToken(); // eat arg type
 
       ArgNames.push_back(IdentifierStr);
+
       if (is_tensor=="tensor")
         tensorVars.push_back(IdentifierStr);
       if (is_tensor=="function")
@@ -3275,7 +3279,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
       
       getNextToken(); // eat arg name
     }
-    is_tensor="no";
+    
 
 
     if (CurTok == ')')
@@ -4224,7 +4228,11 @@ extern "C" float view(char *self, float first_dim, ...)
 
     if ((float)((int)hidden_dim) != hidden_dim)
     {
-      LogErrorS("Incompatible view dimensions.");
+      LogErrorS("Automatic view dimension calculus resulted on a non-integer dimension.");
+      PrintDims(current_dims);
+      std::cout << "Current dims product: " << current_dims_prod  << ".\n";
+      PrintDims(new_dims);
+      std::cout << "New dims product: " << std::to_string(DimsProd(new_dims_no_minus))  << ".\n";
       return 0;
     }
     
@@ -4399,8 +4407,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
 
 
-
-  std::cout << "CalculateIdxOffset pushing dim: " << first_idx << "\n";
+  //std::cout << "Get idx of " << tensor_name << "\nCalculateIdxOffset pushing dim: " << first_idx << "\n";
 
   for (int i=0; i<10; i++)
   {
@@ -4422,7 +4429,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
     idx_at += (int)(current_dims_prod*idx);
 
-    std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
+    //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
     
 
     if (idx!=-1)
@@ -4496,7 +4503,7 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
 
 extern "C" char * ConcatStr(char *lc, char *rc)
 {
-  //std::cout << "CONCAT STRS " << lc << " & " << rc << "\n";
+  //std::cout << "\nCONCAT STRS " << lc << " & " << rc << "\n";
 
   std::string l = lc;
   std::string r = rc;
@@ -4504,10 +4511,24 @@ extern "C" char * ConcatStr(char *lc, char *rc)
   std::string result_str = l + r;
   char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
   std::strcpy(result_cstr, result_str.c_str());
+
+  //std::cout << "Concatenated into " << result_cstr << "\n\n";
   
   return result_cstr;
 }
 
+
+extern "C" char * RandomStrOnDemand()
+{
+
+  std::string random_str = RandomString(4);
+
+  char* result_cstr = new char[random_str.length() + 1]; // +1 for null terminator
+  std::strcpy(result_cstr, random_str.c_str());
+
+  
+  return result_cstr;
+}
 
 
 extern "C" void StoreOnDemand(char *self, char *object_var_name, float value){
@@ -4883,12 +4904,12 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-extern "C" float CopyArgTensor(char *tensor_name, char *scope)
+extern "C" float CopyArgTensor(char *tensor_name, char *new_tensor_name, char *previous_scope, char *scope)
 {
-  std::cout << "COPY ARG TENSOR OF " << tensor_name << " on scope " << scope << "\n";
-
+  std::cout << "\n\n\nCOPY ARG TENSOR OF " << tensor_name << " on scope " << scope << " from previous scope " << previous_scope <<"\n";
+  
   std::string arg_tensor_name = scope;
-  arg_tensor_name = arg_tensor_name + tensor_name;
+  arg_tensor_name = arg_tensor_name + new_tensor_name;
   
 
   std::vector<float> dims = NamedDims[tensor_name];
@@ -4908,6 +4929,9 @@ extern "C" float CopyArgTensor(char *tensor_name, char *scope)
   NamedTensors[arg_tensor_name] = arg_tensor;
   NamedDims[arg_tensor_name] = dims;
 
+  std::cout << "Dims of " << arg_tensor_name << "\n";
+  PrintDims(NamedDims[arg_tensor_name]);
+  std::cout << "\n\n";
   
   
   return 0;
@@ -4994,7 +5018,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 extern "C" float AttrTensor(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
-  //std::cout << "Attributing to tensor: " << tensor_name << "\n";
+  std::cout << "Attributing to tensor: " << tensor_name << "\n";
 
   //std::cout << "Freeing tensor" << "\n";
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
@@ -5758,6 +5782,7 @@ __global__ void relu_forward(float* Z, float* A,
 
 extern "C" float *relu(char *tensor_name)
 {
+  std::cout << "RELU OF " << tensor_name << "\n";
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
@@ -6333,7 +6358,7 @@ void conv2d_backward(float *inp,  float *weight,
 
 extern "C" float *ConvForward2d(char *self, char *tensor_name, char *conv_namec, int is_obj_attr_or_self)
 {
-  
+  //TODO: remove self arg and concatenate it instead during the function call
   std::cout << "Conv forward of " << self << "." << conv_namec << " and " << tensor_name << "\n";
 
   std::string _self = self;
@@ -8467,7 +8492,14 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     {
       std::cout << "CREATING STORE OF SCOPE"  << "\n";
       scope_str = Builder->CreateAlloca(int8PtrTy);
-      Builder->CreateStore(Builder->CreateGlobalString(RandomString(4)), scope_str);
+
+      Value *scope_name;
+      if (starts_with(functionName.c_str(), "__async_")) //TODO: concatenate with previous scope
+        scope_name = Builder->CreateGlobalString("threaded_");
+      else 
+        scope_name = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
+
+      Builder->CreateStore(scope_name, scope_str);
     }
 
 
@@ -8567,7 +8599,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       if (!(Args[i]->GetSelf() || Args[i]->GetIsAttribute()) || in_str(tgt_function, native_methods))
       {
         std::cout << "" << Args[i]->GetName() << " IS NOT SELF NOR ATTR ON FUNCTION " << tgt_function << " WITH PARENT " << functionName << "\n";
-        //Builder->CreateLoad(int8PtrTy, previous_scope);
+        
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, previous_scope), arg});
       }
@@ -8678,7 +8710,7 @@ Function *PrototypeAST::codegen() {
 
   for (auto &type : Types)
   {
-    if (type=="s")
+    if (type=="s"||type=="t"||type=="c")
       types.push_back(int8PtrTy);
     else
       types.push_back(Type::getFloatTy(*TheContext));
@@ -8813,6 +8845,7 @@ extern "C" float StrToFloat(char *in_str)
 // alognswith the global variable FirstArg
 extern "C" char *CopyString(char *in_str)
 {
+  //std::cout << "\nCOPYING STRING " << in_str  << "\n\n";
   char* copied = (char*)malloc(strlen(in_str) + 1);
   strcpy(copied, in_str);
 
@@ -8877,50 +8910,56 @@ Function *FunctionAST::codegen() {
   int i = 0;
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
-
     // TODO: solve bugged shifted arguments when using tensors
-    //std::cout << "Function arg name: " << std::string(Arg.getName()) << "\n";
     
     std::string arg_name = Arg.getName().str();
+    std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
 
-    //std::string __print = "FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " HAS VALUE ";
+    std::string __print = "FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " ";
 
     if (arg_name == "self")
     {
       Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
                         {Builder->CreateLoad(int8PtrTy, &Arg)});
       Builder->CreateStore(self, first_arg);
+
     }
     else if (arg_name == "scope_str")
     {
       Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
                         {Builder->CreateLoad(int8PtrTy, &Arg)});
       Builder->CreateStore(self, scope_str);
+
+    }
+    else if (arg_name == "previous_scope")
+    {
+      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                        {Builder->CreateLoad(int8PtrTy, &Arg)});
+      Builder->CreateStore(self, previous_scope);
+
     }
     else if (!in_str(arg_name, tensorVars))
     {
       AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
-
-      // Store the initial value into the alloca.
       Builder->CreateStore(&Arg, Alloca);
-
-      // Add arguments to variable symbol table.
-      //std::cout << "Create function alloca for float: " << std::string(Arg.getName()) << "\n";
-      
 
       //Builder->CreateCall(TheModule->getFunction("print"),
       //  {Builder->CreateGlobalString(__print), &Arg});
 
-
       NamedValues[std::string(Arg.getName())] = Alloca;
+
     }
     else
     {
       if (in_str(arg_name, tensorVars))
       {
-        //TODO: pass &Arg instead of arg_name
+        Builder->CreateCall(TheModule->getFunction("print"),
+          {Builder->CreateGlobalString(__print), &Arg});
+
         Builder->CreateCall(TheModule->getFunction("CopyArgTensor"),
-                          {Builder->CreateGlobalString(arg_name),
+                          {&Arg,
+                           Builder->CreateGlobalString(arg_name),
+                           Builder->CreateLoad(int8PtrTy, previous_scope),
                            Builder->CreateLoad(int8PtrTy, scope_str)});
       }
     }
@@ -9668,6 +9707,18 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
 
 
+  
+  // char *, char *
+  FunctionType * RandomStrOnDemandTy = FunctionType::get(
+      int8PtrTy,
+      {},
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("RandomStrOnDemand", RandomStrOnDemandTy);
+
+  
+
+
   // char *, float
   FunctionType *StoreOnDemandTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
@@ -9747,8 +9798,7 @@ static void InitializeModule() {
   //
   FunctionType *CopyArgTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);
