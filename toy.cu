@@ -3690,6 +3690,26 @@ extern "C" void *NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdim
 }
 
 
+extern "C" void *NewDimsOnIdx(std::vector<float> dims)
+{
+  std::vector<float> new_dims;
+
+  for (int i = 0; i < dims.size()-1; i++)
+    new_dims.push_back(dims[i+1]);
+
+
+  // Aux to not lose pointers
+  std::string random_str = RandomString(15);
+  NamedDims[random_str] = new_dims; // Deal with new_dims being deleted after scope finished.
+  AuxRandomStrs[random_str] = "dim";
+
+
+  std::cout << "NewDimsOnIdx" << "\n";
+  PrintDims(NamedDims[random_str]);
+
+  return &NamedDims[random_str];
+}
+
 
 extern "C" float Add(float value, float v2)
 {
@@ -3805,7 +3825,7 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
-extern "C" float * LoadTensor(char* tensor_name){
+extern "C" float *LoadTensor(char* tensor_name){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
 
   return NamedTensors[tensor_name];
@@ -3824,6 +3844,7 @@ extern "C" void *LoadDims(char* tensor_name) // TODO: invert this back
   return &NamedDims[random_str];
 }
 
+
 extern "C" void *LoadBatchlessDims(char* tensor_name) // TODO: invert this back
 {
   std::string random_str = RandomString(15);
@@ -3832,6 +3853,7 @@ extern "C" void *LoadBatchlessDims(char* tensor_name) // TODO: invert this back
 
   return &NamedDims[random_str];
 }
+
 
 extern "C" void * LoadDimsConv(char *conv_namec, int is_obj_attr_or_self, char *self)
 {
@@ -4392,6 +4414,8 @@ extern "C" float *logE(char *tensorName) {
 
 extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   
+  //std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
+
   std::vector<float> idxs, new_dims_no_minus, dims;
   int current_dims_prod;
   bool has_minus = false;
@@ -4894,7 +4918,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     return V;
   }
-    if (Type=="float_vec")
+  if (Type=="float_vec")
   {
     V = NamedFloatVecs[Name];
     V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
@@ -4905,15 +4929,78 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     return V;
   }
 
+  if (Type=="tensor")
+  {
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+
+    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {var_name});
+    dims_ptr = Builder->CreateCall(TheModule->getFunction("NewDimsOnIdx"),
+                                    {dims_ptr});
+    DimsPtr = Builder->CreateAlloca(int8PtrTy);
+    Builder->CreateStore(dims_ptr, DimsPtr);
+
+    std::vector<Value *> idx_calc_args;
+    idx_calc_args.push_back(var_name);
+    for (int i=0; i<Idx.size(); i++)
+      idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope));
+    Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                          idx_calc_args);
+
+    return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at, dims_ptr});
+  }
 
   std::string _error = "Unknown vector: " + Name + ".";
   LogErrorS(_error);
+  std::cout << "Type " << Type << "\n";
 
   return ret;
 }
 
 
 
+
+
+extern "C" float *IdxTensor(char *tensor_name, float idx_at, std::vector<float> new_dims)
+{
+  
+  //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
+  //std::cout << "New dims from indexed:" << "\n";
+  PrintDims(new_dims);
+
+  int new_dims_prod = DimsProd(new_dims);
+
+  float *new_tensor;
+
+  std::vector<float> dims = NamedDims[tensor_name];
+
+  int dims_prod = DimsProd(dims);
+  if (idx_at>(dims_prod-1))
+  {
+    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)idx_at);
+    _error = _error + "\033[0m on tensor \033[95m"+std::string(tensor_name);
+    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
+
+    LogErrorS(_error);
+    std::cout << "Dimensions:" << "\n";
+    PrintDims(dims);
+    std::cout << "\n";
+
+    return nullptr;
+  }
+
+
+  float *base_address = NamedTensors[tensor_name];
+  float *device_x = base_address + static_cast<int>(idx_at);
+
+
+  cudaMalloc(&new_tensor, new_dims_prod*sizeof(float));
+  cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyHostToHost));
+
+  
+  return new_tensor;
+}
 
 
 extern "C" float CopyArgTensor(char *tensor_name, char *new_tensor_name, char *previous_scope, char *scope)
@@ -4985,7 +5072,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
   tgt_tensor = previous_scope + tgt_tensor;
 
 
-  std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";  
+  std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << " at idx\n\n\n\n";  
 
   std::vector<float> scope_dims = NamedDims[scope_tensor_name];
   int scope_dims_prod = DimsProd(scope_dims);
@@ -7941,7 +8028,8 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
         std::vector<Value *> idx_calc_args;
-        idx_calc_args.push_back(_name);
+        idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateLoad(int8PtrTy, previous_scope), _name}));
         for (int i=0; i<LHSE->Idx.size(); i++)
           idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
@@ -9093,8 +9181,18 @@ static void InitializeModule() {
       false // Not vararg
   );
   TheModule->getOrInsertFunction("LoadTensor", LoadTensorTy);
-  
 
+
+  
+  FunctionType *IdxTensorTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("IdxTensor", IdxTensorTy);
+
+  
+  
 
   FunctionType *PrintTensorFTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -9146,11 +9244,18 @@ static void InitializeModule() {
 
   FunctionType *NewDimsOnMultTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy,
-       int8PtrTy}, 
+      {int8PtrTy, int8PtrTy}, 
       false // Not vararg
   );
   TheModule->getOrInsertFunction("NewDimsOnMult", NewDimsOnMultTy);
+  
+
+  FunctionType *NewDimsOnIdxTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy}, 
+      false // Not vararg
+  );
+  TheModule->getOrInsertFunction("NewDimsOnIdx", NewDimsOnIdxTy);
   
 
   //===----------------------------------------------------------------------===//
