@@ -1369,17 +1369,18 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
 
   getNextToken(); // eat identifier.
   
+
   if (CurTok != '(' && CurTok != '[') // Simple variable ref.
   {
     auto aux = std::make_unique<VariableExprAST>(IdName);
-    if (in_str(IdentifierStr, pinnedTensorVars))
+    if (in_str(IdName, pinnedTensorVars))
       aux->SetType("pinned_tensor");
-    if (in_str(IdentifierStr, tensorVars))
+    if (in_str(IdName, tensorVars))
       aux->SetType("tensor");
-    //std::cout << "call arg identifier type: " << aux->GetType() <<  "\n";
     
-  if (CurTok==tok_space)
-    getNextToken();
+    if (CurTok==tok_space)
+      getNextToken();
+
     return aux;
   }
 
@@ -2834,6 +2835,22 @@ static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
 }
 
 
+static std::unique_ptr<ExprAST> ParseMustBeVar(std::string class_name="", std::string expr_name="") {
+
+  std::unique_ptr<ExprAST> expr;
+
+  if (CurTok==tok_class_attr||CurTok==tok_self)
+    expr = ParseSelfExpr(class_name);
+  else if (CurTok==tok_identifier)
+    expr = ParseIdentifierExpr(class_name);
+  else
+  {
+    std::string _error = expr_name + " expression expected a simple identifier, not another expression.";
+    LogError(_error);
+  }
+
+  return std::move(expr);
+}
 
 
 
@@ -2851,13 +2868,8 @@ static std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="") {
   while (true) {
     std::unique_ptr<ExprAST> expr, aux;
 
-    if (CurTok==tok_class_attr||CurTok==tok_self)
-      expr = ParseSelfExpr(class_name);
-    else if (CurTok==tok_identifier)
-      expr = ParseIdentifierExpr(class_name);
-    else
-      LogError("Returned type must be a simple identifier, not an expression.");
-    
+
+    expr = ParseMustBeVar(class_name, "return");
 
     
     if (CurTok == tok_as)
@@ -2865,7 +2877,7 @@ static std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="") {
       getNextToken(); // eat as
       aux = std::move(expr);
 
-      expr = ParseExpression(class_name);
+      expr = ParseMustBeVar(class_name, "return");
 
       IsAs.push_back(true);
       Vars.push_back(std::move(aux));
@@ -4938,11 +4950,13 @@ extern "C" float CopyArgTensor(char *tensor_name, char *new_tensor_name, char *p
 }
 
 
-
-extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_tensor)
+extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope)
 {
   std::string scope_tensor_name = scope;
   scope_tensor_name = scope_tensor_name + tensor_name;
+
+  std::string tgt_tensor = tgt_tensorc;
+  tgt_tensor = previous_scope + tgt_tensor;
 
   std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";  
 
@@ -4962,10 +4976,14 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 }
 
 
-extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, char *tgt_tensor, float idx_at)
+extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope, float idx_at)
 {
   std::string scope_tensor_name = scope;
   scope_tensor_name = scope_tensor_name + tensor_name;
+
+  std::string tgt_tensor = tgt_tensorc;
+  tgt_tensor = previous_scope + tgt_tensor;
+
 
   std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";  
 
@@ -5571,6 +5589,7 @@ __global__ void onehot_kernel(const float* tensor,
     }
 }
 
+
 extern "C" float *onehot(char *self, float num_classes)
 {
   std::cout << "ONEHOT OF " << self << "\n";
@@ -5698,9 +5717,6 @@ __global__ void gelu_forward_kernel1(const float* inp, float* out, int N) {
 }
 
 extern "C" float *gelu(char * tensor_name) {
-
-  std::cout << "\n\nGELU OF " << tensor_name << "\n\n\n";
-
   float *tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
   
@@ -5782,7 +5798,6 @@ __global__ void relu_forward(float* Z, float* A,
 
 extern "C" float *relu(char *tensor_name)
 {
-  std::cout << "RELU OF " << tensor_name << "\n";
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
@@ -5937,10 +5952,8 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
 }
 
 
-
 extern "C" float *softmax(char * tensor_name)
 {
-
   float * tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
   
@@ -6908,26 +6921,15 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
       
-      
       std::cout << "1 1 attr\n";
       
-      //std::cout << "L is vec " << LHS->GetIsVec() << " R is vec: " << RHS->GetIsVec() << "\n";
-
-
-
-      //float *Variable = NamedTensors[LHSE->getName()];
-      //if (!Variable)
-      //  return LogErrorV("O nome do tensor/variável é desconhecido.");
-
-
 
       /*
       std::cout << "Pre dims\n";
       Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
       std::cout << "Post dims\n";
       */
-
-      std::cout << "RHS PREDOT: " << RHS->_pre_dot << "\n";
+  
 
       Builder->CreateCall(TheModule->getFunction("AttrTensor"),
                           {LtensorName, RtensorPtr,
@@ -7899,6 +7901,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     
     std::string name, type, l_name, l_type;
     bool is_vec, l_is_vec;
+
     name   = Destiny[i]->GetName();
     type   = Destiny[i]->GetType();
     is_vec = Destiny[i]->GetIsVec();
@@ -7923,11 +7926,12 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (!is_vec)
       {
-        if (type=="tensor")
+        if (l_type=="tensor"||type=="tensor")
         {
           Value *_l_name = Builder->CreateGlobalString(l_name);
           Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                              {_l_name, Builder->CreateLoad(int8PtrTy, scope_str), _name});
+                                              {_l_name, Builder->CreateLoad(int8PtrTy, scope_str),
+                                               _name,   Builder->CreateLoad(int8PtrTy, previous_scope)});
         }
       } else {
 
@@ -7947,7 +7951,8 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         Value *_l_name = Builder->CreateGlobalString(l_name);
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
                                               {_l_name, Builder->CreateLoad(int8PtrTy, scope_str),
-                                               _name, idx_at});
+                                               _name, Builder->CreateLoad(int8PtrTy, previous_scope),
+                                               idx_at});
       }
     }
   }
@@ -8597,12 +8602,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, first_arg), arg});
       if (!(Args[i]->GetSelf() || Args[i]->GetIsAttribute()) || in_str(tgt_function, native_methods))
-      {
-        std::cout << "" << Args[i]->GetName() << " IS NOT SELF NOR ATTR ON FUNCTION " << tgt_function << " WITH PARENT " << functionName << "\n";
-        
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, previous_scope), arg});
-      }
+      
 
     }
     else
@@ -9810,6 +9812,7 @@ static void InitializeModule() {
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
        int8PtrTy,
+       int8PtrTy,
        int8PtrTy}, 
       false 
   );
@@ -9820,6 +9823,7 @@ static void InitializeModule() {
   FunctionType *RemoveTensorScopeAttrOnIndexTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
+       int8PtrTy,
        int8PtrTy,
        int8PtrTy,
        Type::getFloatTy(*TheContext)}, 
