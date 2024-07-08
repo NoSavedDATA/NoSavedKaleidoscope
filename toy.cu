@@ -191,7 +191,7 @@ bool in_str(std::string str, std::vector<std::string> list) {
 
 
 // Tensor related
-std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "max", "min"};
+std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin"};
 std::vector<std::string> return_dims_methods = {"gelu", "relu", "softmax", "gpu", "log"};
 std::vector<std::string> return_batchless_dims_methods = {"gpuw"};
 std::vector<std::string> return_pinned_methods = {"gpu", "gpuw"};
@@ -210,9 +210,13 @@ std::vector<std::string> string_methods = {"split", "split_idx"};
 
 // tensor + string + ...
 // e.g: x.view(), str.split()
-std::vector<std::string> native_methods = {"view","permute", "onehot", "mean", "sum", "max", "min",
+std::vector<std::string> native_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin",
                                            "split", "split_idx", "first_nonzero"};
 
+std::vector<std::string> native_functions = {"ShuffleStrVec", "wload_img", "silent_sleep", "sleep", "LenStrVec",
+                                            "gpu", "gpuw", "gelu", "relu", "softmax", "zeros_vec", "ones_vec",
+                                            "_glob_b_", "print", "cross_entropy", "backprop", "AdamW",
+                                            "load_preprocess_img", "log", "exp", "max", "tmax", "min", "tmin"};
 
 PointerType *floatPtrTy, *int8PtrTy;
 
@@ -279,8 +283,7 @@ enum Token {
   tok_attr_tensor = -19,
   tok_conv2d = -21,
 
-  // function ops
-  tok_log = -30
+
 };
 
 
@@ -543,8 +546,6 @@ static int get_token() {
       return tok_unary;
     if (IdentifierStr == "float")
       return tok_var;
-    if (IdentifierStr == "log")
-      return tok_log;
     if (IdentifierStr == "glob")
       IdentifierStr = "_glob_b_";
     if (IdentifierStr == "str")
@@ -906,19 +907,6 @@ class Conv2dExprAST : public VarExprAST {
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
-class LogExprAST : public ExprAST {
-  std::string Name;
-
-  public:
-    LogExprAST(const std::string &Name) : Name(Name) {}
-
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
-    std::string GetName() override {
-      return Name;
-    }
-};
-
-
 
 /// UnaryExprAST - Expression class for a unary operator.
 class UnaryExprAST : public ExprAST {
@@ -931,7 +919,6 @@ public:
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
-
 
 
 /// BinaryExprAST - Expression class for a binary operator.
@@ -2773,31 +2760,6 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
 }
 
 
-static std::unique_ptr<ExprAST> ParseLogExpr() {
-  getNextToken(); // eat the log.
-  
-
-  if (CurTok != '(')
-    return LogError("Esperado ( após a função log.");
-  getNextToken();
-  
-
-  if (CurTok != tok_identifier)
-    return LogError("Esperado tensor à função log.");
-  
-  std::string Name = IdentifierStr;
-  getNextToken();
-  
-
-  if (CurTok != ')')
-    return LogError("Esperado ) na função log.");
-  getNextToken();
-
-  auto aux = std::make_unique<LogExprAST>(std::move(Name));
-  aux->SetType("tensor");
-  return aux;
-}
-
 
 
 static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
@@ -2961,8 +2923,6 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParsePinnedTensorExpr();
   case tok_conv2d:
     return ParseConv2dExpr();
-  case tok_log:
-    return ParseLogExpr();
   case tok_space:
     getNextToken();
     return ParsePrimary(class_name);
@@ -3262,11 +3222,11 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
   {
     Types.push_back("s");
     ArgNames.push_back("self");
-    Types.push_back("s");
-    ArgNames.push_back("scope_str");
-    Types.push_back("s");
-    ArgNames.push_back("previous_scope");
   }
+  Types.push_back("s");
+  ArgNames.push_back("scope_str");
+  Types.push_back("s");
+  ArgNames.push_back("previous_scope");
 
   while (CurTok != ')')
   {
@@ -4319,6 +4279,7 @@ __global__ void vec_log(const float* x, float* y) {
 
 
 extern "C" float *CudaScalarMult(float *tensor, std::vector<float> dims, float R) {
+  std::cout << "CudaScalarMult by " << R << "\n";
 
   int kDataLen = DimsProd(dims);
 
@@ -4347,8 +4308,10 @@ extern "C" float *CudaScalarDiv(float *tensor, std::vector<float> dims, float R)
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
 
 
-  // Launch the kernel.
-  vec_div<<<1, kDataLen>>>(R, tensor, device_y);
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_div<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
 
   
   return device_y;
@@ -4362,9 +4325,11 @@ extern "C" float *CudaScalarAdd(float *tensor, std::vector<float> dims, float R)
   float* device_y;
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
   
-  // Launch the kernel.
   
-  vec_add<<<1, kDataLen>>>(R, tensor, device_y);
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_add<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
 
   return device_y;
 }
@@ -4378,8 +4343,10 @@ extern "C" float *CudaScalarSub(float *tensor, std::vector<float> dims, float R)
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
 
 
-  // Launch the kernel.
-  vec_sub<<<1, kDataLen>>>(R, tensor, device_y);
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_sub<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
 
 
 
@@ -4388,7 +4355,8 @@ extern "C" float *CudaScalarSub(float *tensor, std::vector<float> dims, float R)
 
 
 extern "C" float *logE(char *tensorName) {
-  
+  std::cout << "logE of: " << tensorName << "\n";
+
   float * device_x;
 
   
@@ -4403,8 +4371,10 @@ extern "C" float *logE(char *tensorName) {
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
 
 
-  // Launch the kernel.
-  vec_log<<<1, kDataLen>>>(device_x, device_y);
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_log<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y);
 
 
 
@@ -5045,7 +5015,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   std::string tgt_tensor = tgt_tensorc;
   tgt_tensor = previous_scope + tgt_tensor;
 
-  std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";  
+  std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";
 
   std::vector<float> dims = NamedDims[scope_tensor_name];
   int dims_prod = DimsProd(dims);
@@ -5502,6 +5472,20 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
+extern "C" float min(float l, float r)
+{
+  if (l<r)
+    return l;
+  return r;
+}
+
+extern "C" float max(float l, float r)
+{
+  if (l>r)
+    return l;
+  return r;
+}
+
 /*
 void matmul_forward2(float* out,
                      const float* inp, const float* weight, const float* bias,
@@ -5766,8 +5750,8 @@ extern "C" float sum(char *self)
   return 0;
 }
 
-extern "C" float max(char *self)
-{
+extern "C" float tmax(char *self) 
+{ //TODO: automatic type detection for max and min (float vs tensor)
   std::string tensor_name = self;
   
   float * tensor = NamedTensors[tensor_name];
@@ -6305,7 +6289,7 @@ void Conv2d::InitFilters()
     if (Init=="ones")
       filter = make_ones_float(ks*ks);
     if (Init=="randu")
-      filter = make_random_float(ks*ks);
+      filter = make_random_float_uniform(ks*ks);
 
 
     for (int i=0; i < ks*ks; i++)
@@ -6558,22 +6542,6 @@ extern "C" float CreateConv2dOnDemand(char *first_arg, char *tensor_name, int is
 
   std::cout << "\nCreate conv on demand:\n   C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << "\n";
 
-
-
-  /*
-  if (std::strcmp(init, "randu") == 0)
-    tensor_cpu = make_random_float(product);
-  else if (std::strcmp(init, "zeros") == 0)
-    tensor_cpu = make_zeros_float(product);
-  else if (std::strcmp(init, "ones") == 0)
-    tensor_cpu = make_ones_float(product);
-  else if (std::strcmp(init, "xavu") == 0)
-    tensor_cpu = make_xavier_uniform_float(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
-  else if (std::strcmp(init, "xavu_relu") == 0)
-    tensor_cpu = make_xavier_uniform_float_relu(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
-  else if (std::strcmp(init, "randint") == 0)
-    tensor_cpu = make_random_int(product, 10);
-  */
 
   auto conv = std::make_unique<Conv2d>((int)C, (int)OC, (int)ks, (int)stride, (int)padding, init);
 
@@ -7265,15 +7233,6 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *LogExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  
-  
-  return Builder->CreateCall(TheModule->getFunction("logE"),
-                             {Builder->CreateGlobalString(Name)}, "cudalog");
-}
-
 
 
 
@@ -7466,9 +7425,29 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   //std::cout << "Operand type: " << Operand->GetType();
   if (Opcode=='-')
   {
+    std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
     if (Operand->GetType()=="tensor")
     {
       Value *tensor_name = Builder->CreateGlobalString(Operand->GetName());
+
+      std::string pre_dot = Operand->GetPreDot();
+      bool is_self = Operand->GetSelf();
+      bool is_attr = Operand->GetIsAttribute();
+
+      if (is_attr) { // Gets from pre_dot if it is a class attribute
+        Value * object_name = Builder->CreateGlobalString(pre_dot);
+
+        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {object_name, tensor_name});
+      }
+      if (is_self)
+        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
+      if (!(is_self||is_attr))
+        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                {Builder->CreateLoad(int8PtrTy, scope_str), tensor_name});
+        
+
       Value *LtensorPtr = Builder->CreateCall(TheModule->getFunction("LoadTensor"),
                                               {tensor_name});
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
@@ -8002,7 +7981,8 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       if(type=="tensor")
       {
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                            {_name, Builder->CreateLoad(int8PtrTy, scope_str), _name});
+                                            {_name, Builder->CreateLoad(int8PtrTy, scope_str),
+                                             _name, Builder->CreateLoad(int8PtrTy, previous_scope)});
       }
     } else {
       l_name   = Vars[i]->GetName();
@@ -8224,27 +8204,26 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 std::vector<float> cur_dim;
 
-extern "C" float StoreDimsOnDemand(float d)
+extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
 {
-  cur_dim.push_back(d);
+  std::vector<float> dims;
+  
+  if (NamedDims.count(tensor_name)>0)
+    dims = NamedDims[tensor_name];
+
+  dims.push_back(d);
+
+  NamedDims[tensor_name] = dims;
   return 0;
 }
 
-extern "C" void CreatePinnedTensorOnDemand(char *first_arg, char *tensor_name, int is_obj_attr_or_self, char *init)
+
+
+extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
 {
-  std::string _first_arg = first_arg;
-  std::string objectTensorName = tensor_name;
-  if (is_obj_attr_or_self)
-    objectTensorName = _first_arg + tensor_name;
+  std::vector<float> dims = NamedDims[tensor_name];
 
-  std::cout << "CREATING PINNED TENSOR:" << objectTensorName << "\n";
-
-  char * cObjectTensorName = new char[objectTensorName.length() + 1];
-  std::strcpy(cObjectTensorName, objectTensorName.c_str());
-
-
-  //float * d = (float *) dims;
-  int product = DimsProd(cur_dim);
+  int product = DimsProd(dims);
   float * tensor;
   float * tensor_cpu;
 
@@ -8261,74 +8240,46 @@ extern "C" void CreatePinnedTensorOnDemand(char *first_arg, char *tensor_name, i
   //cudaCheck(cudaMemcpy(tensor, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
   
 
-  
-
-  NamedTensors[cObjectTensorName] = tensor;
-  NamedPinnedTensors[cObjectTensorName] = tensor_cpu;
-  NamedDims[cObjectTensorName] = cur_dim;
-
-
-  std::cout << "Pinned tensor created\n";
-
-
-
-  cur_dim.clear();
-
+  NamedTensors[tensor_name] = tensor;
+  NamedPinnedTensors[tensor_name] = tensor_cpu;
+  NamedDims[tensor_name] = dims;
 }
 
 
-extern "C" float CreateTensorOnDemand(char *first_arg, char *tensor_name, int is_obj_attr_or_self, char *init)
+
+extern "C" float CreateTensorOnDemand(char *tensor_name, char *init)
 {
-  std::string _first_arg = first_arg;
-  std::string objectTensorName = tensor_name;
-  if (is_obj_attr_or_self)
-    objectTensorName = _first_arg + tensor_name;
+  std::cout << "CREATING TENSOR " << tensor_name << "\n";
+  std::vector<float> dims = NamedDims[tensor_name];
 
-
-  char * cObjectTensorName = new char[objectTensorName.length() + 1];
-  std::strcpy(cObjectTensorName, objectTensorName.c_str());
-
-
-  //float * d = (float *) dims;
-  int product = DimsProd(cur_dim);
+  int product = DimsProd(dims);
   float *tensor;
   float *tensor_cpu;
 
 
   if (std::strcmp(init, "randu") == 0)
-    tensor_cpu = make_random_float(product);
+    tensor_cpu = make_random_float_uniform(product);
   else if (std::strcmp(init, "zeros") == 0)
     tensor_cpu = make_zeros_float(product);
   else if (std::strcmp(init, "ones") == 0)
     tensor_cpu = make_ones_float(product);
   else if (std::strcmp(init, "xavu") == 0)
-    tensor_cpu = make_xavier_uniform_float(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
+    tensor_cpu = make_xavier_uniform_float(product, dims[dims.size()-1], dims[dims.size()-2]);
   else if (std::strcmp(init, "xavu_relu") == 0)
-    tensor_cpu = make_xavier_uniform_float_relu(product, cur_dim[cur_dim.size()-1], cur_dim[cur_dim.size()-2]);
+    tensor_cpu = make_xavier_uniform_float_relu(product, dims[dims.size()-1], dims[dims.size()-2]);
   else if (std::strcmp(init, "randint") == 0)
     tensor_cpu = make_random_int(product, 10);
-  
-
-  
+    
 
   cudaMalloc(&tensor, product*sizeof(float));
   cudaCheck(cudaMemcpy(tensor, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
-  
-
   
   delete[] tensor_cpu;
 
   //if (NamedTensors.find(cObjectTensorName) != NamedTensors.end())
   //  cudaCheck(cudaFree(NamedTensors[cObjectTensorName]));
 
-  NamedTensors[cObjectTensorName] = tensor;
-  NamedDims[cObjectTensorName] = cur_dim;
-
-
-
-
-
-  cur_dim.clear();
+  NamedTensors[tensor_name] = tensor;
 
   return 0;
 }
@@ -8361,34 +8312,31 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     } else { // If not specified, use 0.0.
       InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
     }
+    
+    
+    Value *var_name = Builder->CreateGlobalString(VarName);
 
+    std::string pre_dot = GetPreDot();
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
 
-    std::vector<float> dims;
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+
     Value *aux;
-    std::vector<Value *> dim_values;
-
-
     for (int j=0; j<V_Dims.size(); j++)
     {
       aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
-                                                  {aux});
+                                                  {var_name, aux});
     }
-    //void * v_dims_ptr = &V_Dims;
 
-    
-    int is_obj_attr_or_self = 0;
-    if (GetSelf() || GetIsAttribute())
-      is_obj_attr_or_self=1;
-
-    
     Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
-                                              {Builder->CreateLoad(int8PtrTy, first_arg),
-                                               Builder->CreateGlobalString(VarName),
-                                               ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
-                                               Builder->CreateGlobalString(TensorInit)});
-
- 
+                                              {var_name, Builder->CreateGlobalString(TensorInit)});
   }
 
 
@@ -8427,30 +8375,29 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
     }
 
 
-    std::vector<float> dims;
+   Value *var_name = Builder->CreateGlobalString(VarName);
+
+    std::string pre_dot = GetPreDot();
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+
     Value *aux;
-    std::vector<Value *> dim_values;
-
-
     for (int j=0; j<V_Dims.size(); j++)
     {
       aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
-                                                  {aux});
-                                                  
+                                                  {var_name, aux});
     }
-    //void * v_dims_ptr = &V_Dims;
-
-    
-    int is_obj_attr_or_self = 0;
-    if (GetSelf() || GetIsAttribute())
-      is_obj_attr_or_self=1;
     
     Builder->CreateCall(TheModule->getFunction("CreatePinnedTensorOnDemand"),
-                                              {Builder->CreateLoad(int8PtrTy, first_arg),
-                                               Builder->CreateGlobalString(VarName),
-                                               ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
-                                               Builder->CreateGlobalString(TensorInit)});
+                                              {var_name, Builder->CreateGlobalString(TensorInit)});
 
  
   }
@@ -8581,20 +8528,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     if (not_coding_language_method)
       tgt_function = Class+tgt_function;
 
-    if (not_coding_language_method && CalleeOverride=="none")
-    {
-      std::cout << "CREATING STORE OF SCOPE"  << "\n";
-      scope_str = Builder->CreateAlloca(int8PtrTy);
-
-      Value *scope_name;
-      if (starts_with(functionName.c_str(), "__async_")) //TODO: concatenate with previous scope
-        scope_name = Builder->CreateGlobalString("threaded_");
-      else 
-        scope_name = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
-
-      Builder->CreateStore(scope_name, scope_str);
-    }
-
 
     if (!is_self_of_nested_function && not_coding_language_method)
     {
@@ -8617,31 +8550,38 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     if (CalleeOverride!="none" || in_str(Callee, native_methods))
     { // self.conv(),  x.view()
       ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
-      //target_args_size-=1; // as it will load scope_str directly on the args
 
       if (isSelf && isAttribute)
-      { // self.can_load_.first_nonzero()
+      { // e.g: self.can_load_.first_nonzero()
         // Extend first arg
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                         {ArgsV[0], Builder->CreateGlobalString(_pre_dot)});
         ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
         target_args_size+=1;
       }
-      target_args_size+=1;
     }
     else
     {
       std::cout << "Adding first arg and scope  for " << tgt_function << "\n";
-      ArgsV.push_back(first_arg); // Pass first_arg's reference for the derived AST nodes.  
-      ArgsV.push_back(scope_str);
-      //target_args_size+=2;
-
-      ArgsV.push_back(previous_scope);
-      target_args_size+=3;
+      ArgsV.push_back(first_arg); // Pass first_arg's reference for the derived AST nodes.
     }
-
+    target_args_size+=1;
   }
 
+  if (!(CalleeOverride!="none" || in_str(Callee, native_functions) || in_str(Callee, native_methods)))
+  {
+    scope_str = Builder->CreateAlloca(int8PtrTy);
+    Value *scope_name;
+    if (starts_with(functionName.c_str(), "__async_")) //TODO: concatenate with previous scope
+      scope_name = Builder->CreateGlobalString("threaded_");
+    else 
+      scope_name = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
+    Builder->CreateStore(scope_name, scope_str);
+    
+    ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
+    ArgsV.push_back(previous_scope);
+    target_args_size+=2;
+  }
 
 
 
@@ -8733,6 +8673,17 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       
       Value *dims_ptr = Builder->CreateCall(getFunction("LoadDimsConv"), 
                           {conv_name, is_attr, Builder->CreateLoad(int8PtrTy, first_arg)});
+      DimsPtr = Builder->CreateAlloca(int8PtrTy);
+      Builder->CreateStore(dims_ptr, DimsPtr);
+      
+    }
+    if (CalleeOverride=="logE")
+    {
+      CalleeF = getFunction("logE");
+      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+
+      Value *dims_ptr = Builder->CreateCall(getFunction("LoadDims"), 
+                          {ArgsV[0]});
       DimsPtr = Builder->CreateAlloca(int8PtrTy);
       Builder->CreateStore(dims_ptr, DimsPtr);
       
@@ -8935,7 +8886,6 @@ extern "C" float StrToFloat(char *in_str)
 // alognswith the global variable FirstArg
 extern "C" char *CopyString(char *in_str)
 {
-  //std::cout << "\nCOPYING STRING " << in_str  << "\n\n";
   char* copied = (char*)malloc(strlen(in_str) + 1);
   strcpy(copied, in_str);
 
@@ -9109,6 +9059,30 @@ static void InitializeModule() {
   ShallCodegen = true;
   seen_var_attr = false;
 
+
+
+  //===----------------------------------------------------------------------===//
+  // Scalar   Operations
+  //===----------------------------------------------------------------------===//
+
+  // 
+  FunctionType *fmaxTy = FunctionType::get( //TODO: automatic type detection for max and min
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("max", fmaxTy);
+
+
+  // 
+  FunctionType *fminTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("min", fminTy);
+
+
   //===----------------------------------------------------------------------===//
   // Tensor -- Scalar   Operations
   //===----------------------------------------------------------------------===//
@@ -9122,7 +9096,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("CudaScalarMult", CudaScalarMultTy);
 
 
-
   //
   FunctionType *CudaScalarDivTy = FunctionType::get(
       floatPtrTy,
@@ -9130,7 +9103,6 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("CudaScalarDiv", CudaScalarDivTy);
-
 
 
   //
@@ -9142,7 +9114,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("CudaScalarAdd", CudaScalarAddTy);
 
 
-
   //
   FunctionType *CudaScalarSubTy = FunctionType::get(
       floatPtrTy,
@@ -9152,11 +9123,9 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("CudaScalarSub", CudaScalarSubTy);
 
 
-
   //===----------------------------------------------------------------------===//
   // Tensor Tensor CUDA Ops
   //===----------------------------------------------------------------------===//
-
 
   //
   FunctionType *CudaMultTy = FunctionType::get(
@@ -9192,8 +9161,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("IdxTensor", IdxTensorTy);
 
   
-  
-
   FunctionType *PrintTensorFTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {floatPtrTy,
@@ -9203,8 +9170,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("PrintTensorF", PrintTensorFTy);
   
-
-
 
   FunctionType *LoadDimsTy = FunctionType::get(
       int8PtrTy,
@@ -9231,7 +9196,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("LoadDimsConv", LoadDimsConvTy);
 
 
-
   FunctionType *PrintDimsTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {int8PtrTy}, 
@@ -9239,8 +9203,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("PrintDims", PrintDimsTy);
 
-
-  
 
   FunctionType *NewDimsOnMultTy = FunctionType::get(
       int8PtrTy,
@@ -9282,19 +9244,19 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("AdamW", AdamWTy);
 
+
   //===----------------------------------------------------------------------===//
   // Unary CUDA Ops
   //===----------------------------------------------------------------------===//
 
   // char *, int
   FunctionType *CudaLogTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      floatPtrTy,
       {int8PtrTy},
       false // Not vararg
   );
   TheModule->getOrInsertFunction("logE", CudaLogTy);
   
-
 
   // char *
   FunctionType *softmaxTy = FunctionType::get(
@@ -9349,6 +9311,7 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("sum", sumTy);
 
+
   // 
   FunctionType *meanTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -9364,7 +9327,7 @@ static void InitializeModule() {
       {},
       false
   );
-  TheModule->getOrInsertFunction("max", maxTy);
+  TheModule->getOrInsertFunction("tmax", maxTy);
 
   
   // char *, floats, Vararg
@@ -9388,8 +9351,7 @@ static void InitializeModule() {
   // Loss CUDA Ops
   //===----------------------------------------------------------------------===//
 
-
-  // char *, char *
+  //
   FunctionType *cross_entropyTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
@@ -9399,30 +9361,10 @@ static void InitializeModule() {
   
 
   //===----------------------------------------------------------------------===//
-  // DATASET Ops
-  //===----------------------------------------------------------------------===//
-
-
-
-  
-
-  // float, char *, ... 
-  FunctionType *init_datasetTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
-      false
-  );
-  TheModule->getOrInsertFunction("Datasetinit_dataset", init_datasetTy);
-  
-
-
-  //===----------------------------------------------------------------------===//
   // File Handling Ops
   //===----------------------------------------------------------------------===//
   
-
-  
-  // char *
+  //
   FunctionType *load_imgTy = FunctionType::get(
       PointerType::get(Type::getFloatTy(*GlobalContext), 0),
       {PointerType::get(Type::getInt8Ty(*GlobalContext), 0)},
@@ -9431,7 +9373,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("load_img", load_imgTy);
   
 
-  // char *
+  //
   FunctionType *load_preprocess_imgTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy},
@@ -9440,12 +9382,11 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("load_preprocess_img", load_preprocess_imgTy);
   
 
-  
   //===----------------------------------------------------------------------===//
   // Pinned Tensor Ops
   //===----------------------------------------------------------------------===//
 
-
+  //
   FunctionType *gload_imgTy = FunctionType::get(
       floatPtrTy,
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -9453,6 +9394,8 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("gload_img", gload_imgTy);
 
+
+  //
   FunctionType *wload_imgTy = FunctionType::get(
       floatPtrTy,
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -9461,6 +9404,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("wload_img", wload_imgTy);
   
 
+  //
   FunctionType *AttrPinnedOnIdxTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -9469,6 +9413,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("AttrPinnedOnIdx", AttrPinnedOnIdxTy);
 
 
+  //
   FunctionType *gpuTy = FunctionType::get(
       floatPtrTy,
       {int8PtrTy},
@@ -9476,7 +9421,8 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("gpu", gpuTy);
 
-  
+
+  //  
   FunctionType *gpuwTy = FunctionType::get(
       floatPtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -9484,10 +9430,10 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("gpuw", gpuwTy);
 
+
   //===----------------------------------------------------------------------===//
   // Parallel Ops
   //===----------------------------------------------------------------------===//
-
 
   //  
   FunctionType *sleepTy = FunctionType::get(
@@ -9824,61 +9770,48 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("RandomStrOnDemand", RandomStrOnDemandTy);
 
   
-
-
-  // char *, float
+  // 
   FunctionType *StoreOnDemandTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-      false // Not vararg
+      false //
   );
   TheModule->getOrInsertFunction("StoreOnDemand", StoreOnDemandTy);
   
 
-
-  // char *
+  //
   FunctionType *LoadOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
       {Type::getInt8Ty(*TheContext)->getPointerTo()},
-      false // Not vararg
+      false
   );
   TheModule->getOrInsertFunction("LoadOnDemand", LoadOnDemandTy);
   
 
-
-  // char *
+  //
   FunctionType *StoreDimsOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext)},
-      //{Type::getInt8Ty(*TheContext)->getPointerTo()},
-      false // Not vararg
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
   );
   TheModule->getOrInsertFunction("StoreDimsOnDemand", StoreDimsOnDemandTy);
   
 
-
-  // char *, int, char *
+  //
   FunctionType *CreatePinnedTensorOnDemandTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy,
-       Type::getInt32Ty(*TheContext),
-       int8PtrTy},
-      false // Not vararg
+      {int8PtrTy, int8PtrTy},
+      false 
   );
   TheModule->getOrInsertFunction("CreatePinnedTensorOnDemand", CreatePinnedTensorOnDemandTy);
 
 
+  //
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
-       int8PtrTy,
-       Type::getInt32Ty(*TheContext),
        int8PtrTy},
-      false // Not vararg
+      false 
   );
   TheModule->getOrInsertFunction("CreateTensorOnDemand", CreateTensorOnDemandTy);
 
@@ -10208,6 +10141,8 @@ int main() {
   BinopPrecedence['^'] = 50;
   BinopPrecedence['@'] = 60;
 
+
+  functionVars["log"] = "logE";
 
   stringMethods["split"] = "SplitString";
   stringMethods["split_idx"] = "SplitStringIndexate";
