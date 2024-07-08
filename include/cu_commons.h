@@ -39,7 +39,7 @@ void cublasCheck(cublasStatus_t status, const char *file, int line)
 // ----------------------------------------------------------------------------
 // random utils
 
-float* make_random_float_01(size_t N) {
+float* make_random_float_uniform(size_t N) {
     float* arr = (float*)malloc(N * sizeof(float));
     for (size_t i = 0; i < N; i++) {
         arr[i] = ((float)rand() / RAND_MAX); // range 0..1
