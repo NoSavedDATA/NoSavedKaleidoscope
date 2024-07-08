@@ -192,23 +192,18 @@ bool in_float_vec(float value, const std::vector<float>& list) {
 
 
 
+//std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin"};
 
 
 // Tensor related
-std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin"};
 std::vector<std::string> return_dims_functions = {"gelu", "relu", "softmax", "gpu", "log", "clip"};
 std::vector<std::string> return_batchless_dims_functions = {"gpuw"};
 std::vector<std::string> return_pinned_methods = {"gpu", "gpuw"};
 
 
-std::vector<std::string> tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
-
-
 // Universal
 std::vector<std::string> vararg_methods = {"view", "sum"};
 std::vector<std::string> string_methods = {"split", "split_idx"};
-
-
 
 
 // tensor + string + ...
@@ -219,7 +214,17 @@ std::vector<std::string> native_methods = {"view","permute", "onehot", "mean", "
 std::vector<std::string> native_functions = {"ShuffleStrVec", "wload_img", "silent_sleep", "sleep", "LenStrVec",
                                             "gpu", "gpuw", "gelu", "relu", "softmax", "zeros_vec", "ones_vec",
                                             "_glob_b_", "print", "cross_entropy", "backprop", "AdamW",
-                                            "load_preprocess_img", "log", "exp", "max", "tmax", "min", "tmin"};
+                                            "load_preprocess_img", "log", "exp", "max", "tmax", "min", "tmin",
+                                            "sum"};
+
+
+
+
+
+
+
+std::vector<std::string> tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
+
 
 PointerType *floatPtrTy, *int8PtrTy;
 
@@ -3119,7 +3124,7 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
 
 
       if (BinOp==47)
-        return std::make_tuple(LogError("Tried to divide a tensor by a scalar."),0);
+        BinOp = 77; // scalar / tensor
 
       if (BinOp==45) // inversion of 1 - tensor
       {
@@ -3799,17 +3804,17 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
-extern "C" float *LoadTensor(char* tensor_name){
+extern "C" float *LoadTensor(char *tensor_name){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
 
   return NamedTensors[tensor_name];
 }
 
 
-extern "C" void *LoadDims(char* tensor_name) // TODO: invert this back
+extern "C" void *LoadDims(char *tensor_name) // TODO: invert this back
 {
-  //std::cout << "LOADING DIMS"  << "\n";
-  //PrintDims(NamedDims[tensor_name]);
+  std::cout << "LOADING DIMS"  << "\n";
+  PrintDims(NamedDims[tensor_name]);
 
   std::string random_str = RandomString(15);
   NamedDims[random_str] = NamedDims[tensor_name];
@@ -3818,8 +3823,44 @@ extern "C" void *LoadDims(char* tensor_name) // TODO: invert this back
   return &NamedDims[random_str];
 }
 
+extern "C" void *LoadDims_onehot(char *tensor_name, float num_classes)
+{
+  std::cout << "LOADING DIMS ONEHOT"  << "\n";
+  PrintDims(NamedDims[tensor_name]);
 
-extern "C" void *LoadBatchlessDims(char* tensor_name) // TODO: invert this back
+  std::string random_str = RandomString(15);
+  std::vector<float> dims = NamedDims[tensor_name];
+  dims.push_back(num_classes);
+  NamedDims[random_str] = dims;
+  AuxRandomStrs[random_str] = "dim";
+
+  return &NamedDims[random_str];
+}
+
+
+extern "C" void *LoadDims_sum(char *tensor_name, float dim)
+{
+  std::cout << "LOADING DIMS SUM"  << "\n";
+  PrintDims(NamedDims[tensor_name]);
+
+  std::string random_str = RandomString(15);
+  std::vector<float> dims, new_dims;
+  dims = NamedDims[tensor_name];
+
+  if (dim<0)
+    dim = dims.size() + dim;
+
+  for (int i=0; i<dims.size(); i++)
+    if (i!=dim)
+      new_dims.push_back(dims[i]);
+
+  NamedDims[random_str] = new_dims;
+  AuxRandomStrs[random_str] = "dim";
+
+  return &NamedDims[random_str];
+}
+
+extern "C" void *LoadBatchlessDims(char *tensor_name) // TODO: invert this back
 {
   std::string random_str = RandomString(15);
   NamedDims[random_str] = BatchLessDims(NamedDims[tensor_name]);
@@ -4273,36 +4314,60 @@ extern "C" float view(char *self, float first_dim, ...)
 //===----------------------------------------------------------------------===//
 
 
-__global__ void vec_mult(const float a, float* x, float* y) {
-  y[threadIdx.x] = x[threadIdx.x] * a;
+__global__ void vec_mult(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = x[idx] * a;
+  }
 }
-__global__ void vec_div(const float a, float* x, float* y) {
-  y[threadIdx.x] = x[threadIdx.x] / a;
+__global__ void vec_div(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = x[idx] / a;
+  }
 }
-__global__ void vec_add(const float a, float* x, float* y) {
-  y[threadIdx.x] = x[threadIdx.x] + a;
+__global__ void vec_add(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = x[idx] + a;
+  }
 }
-__global__ void vec_sub(const float a, float* x, float* y) {
-  y[threadIdx.x] = x[threadIdx.x] - a;
+__global__ void vec_sub(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = x[idx] - a;
+  }
 }
-__global__ void vec_log(const float* x, float* y) {
-  y[threadIdx.x] = logf(x[threadIdx.x]);
+__global__ void vec_log(const float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = logf(x[idx]);
+  }
 }
-__global__ void vec_log2(const float* x, float* y) {
-  y[threadIdx.x] = log2f(x[threadIdx.x]);
+__global__ void vec_log2(const float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = log2f(x[idx]);
+  }
 }
 
-__global__ void tensor_div(float *w, float *x, float *y) {
-  y[threadIdx.x] = x[threadIdx.x] / w[threadIdx.x];
+__global__ void tensor_div(float *w, float *x, float *y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = x[idx] / w[idx];
+  }
 }
 
-__global__ void tensor_clip(float* x, float *y, float _min, float _max) {
-  if (x[threadIdx.x]>_max)
-    y[threadIdx.x] = _max;
-  else if (x[threadIdx.x]<_min)
-    y[threadIdx.x] = _min;
-  else
-    y[threadIdx.x] = x[threadIdx.x];
+__global__ void tensor_clip(float* x, float *y, float _min, float _max, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    if (x[idx]>_max)
+      y[idx] = _max;
+    else if (x[idx]<_min)
+      y[idx] = _min;
+    else
+      y[idx] = x[idx];
+  }
 }
 
 
@@ -4321,7 +4386,7 @@ extern "C" float *CudaScalarMult(float *tensor, std::vector<float> dims, float R
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
+  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
 
   
   return device_y;
@@ -4340,7 +4405,7 @@ extern "C" float *CudaScalarDiv(float *tensor, std::vector<float> dims, float R)
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_div<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
+  vec_div<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
 
   
   return device_y;
@@ -4348,18 +4413,18 @@ extern "C" float *CudaScalarDiv(float *tensor, std::vector<float> dims, float R)
 
 extern "C" float *CudaScalarAdd(float *tensor, std::vector<float> dims, float R) {
   
-  int kDataLen = DimsProd(dims);
+  int dims_prod = DimsProd(dims);
 
 
   float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  cudaCheck(cudaMalloc(&device_y, dims_prod * sizeof(float)));
   
   
-  int grid_size = kDataLen;
+  int grid_size = dims_prod;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_add<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
-
+  vec_add<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, dims_prod);
+  
   return device_y;
 }
 
@@ -4375,7 +4440,7 @@ extern "C" float *CudaScalarSub(float *tensor, std::vector<float> dims, float R)
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_sub<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y);
+  vec_sub<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
 
 
 
@@ -4403,7 +4468,7 @@ extern "C" float *logE(char *tensorName) {
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_log<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y);
+  vec_log<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y, kDataLen);
 
 
 
@@ -4430,7 +4495,7 @@ extern "C" float *logE2(char *tensorName) {
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_log2<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y);
+  vec_log2<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y, kDataLen);
 
 
 
@@ -5149,9 +5214,9 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 extern "C" float AttrTensor(char *tensor_name, float *tensor, std::vector<float> new_dims)
 {
-  std::cout << "Attributing to tensor: " << tensor_name << "\n";
+  //std::cout << "Attributing to tensor: " << tensor_name << "\n";
 
-  //std::cout << "Freeing tensor" << "\n";
+  
   cudaCheck(cudaFree(NamedTensors[tensor_name]));
 
   //PrintDims(NamedDims[tensor_name]);
@@ -5337,6 +5402,9 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   case '/':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
                                {LtensorPtr, LdimsPtr, R}, "cudascalardiv");
+  case 77:
+    return Builder->CreateCall(TheModule->getFunction("CudaReverseScalarDiv"),
+                               {LtensorPtr, LdimsPtr, R}, "cudareversescalardiv");
   case '+':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
                                {LtensorPtr, LdimsPtr, R}, "cudascalaradd");
@@ -5701,7 +5769,7 @@ extern "C" float *CudaDiv(int is_forward_func,
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  tensor_div<<<grid_size, block_size, shared_mem_size>>>(device_w, device_x, device_y);
+  tensor_div<<<grid_size, block_size, shared_mem_size>>>(device_w, device_x, device_y, kDataLen);
 
   return device_y;
 }
@@ -5731,8 +5799,8 @@ __device__ float warpReduceSum(float val) {
 
 
 // Parallelizes over B, C
-__global__ void onehot_kernel(const float* tensor,
-                           float* probs,
+__global__ void onehot_kernel(const float *tensor,
+                           float *probs,
                            int B, int C) {
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -5743,11 +5811,10 @@ __global__ void onehot_kernel(const float* tensor,
         int b = i / (C);
         int v = i % C;
 
-        float* probs_b = probs + b * C;
+        float *probs_b = probs + b * C;
 
         int ix = tensor[b];
 
-        //float p = probs_b[v];
 
         float indicator = (v==ix) ? 1.0f : 0.0f;
 
@@ -5756,7 +5823,7 @@ __global__ void onehot_kernel(const float* tensor,
 }
 
 
-extern "C" float *onehot(char *self, float num_classes)
+extern "C" float *onehotE(char *self, float num_classes)
 {
   std::cout << "ONEHOT OF " << self << "\n";
   std::string tensor_name = self;
@@ -5771,6 +5838,7 @@ extern "C" float *onehot(char *self, float num_classes)
   float *probs;
 
   cudaMalloc(&probs, B*C*sizeof(float));
+  cudaMemset(probs, 0, B*C*sizeof(float));
   
 
 
@@ -5784,11 +5852,7 @@ extern "C" float *onehot(char *self, float num_classes)
   //grid_size = ceil_div(B*C, block_size);
   //onehot_kernel<<<grid_size, block_size>>>(tensor, probs, B, C);
 
-  dims.push_back(C);
-  NamedDims[tensor_name] = dims;
-
-  cudaFree(NamedTensors[tensor_name]);
-  NamedTensors[tensor_name] = probs;
+  
 
 
   return probs;
@@ -5820,12 +5884,62 @@ extern "C" float mean(char *self)
   return 0;
 }
 
-extern "C" float sum(char *tensor_name, float first_dim, ...)
+
+__global__ void sum_over_last_dim_kernel(const float *tensor,
+                           float *summed,
+                           int dims_prod, int summed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = summed_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / (C); // b updates only when v reaches it's maximum value
+        int v = i % C;
+        // i = b*C + v
+
+        float *summed_b = summed + b;
+
+        float ix = tensor[i];
+
+        atomicAdd(summed_b, ix);        
+    }
+}
+
+
+__global__ void sum_over_semilast_dim_kernel(const float *tensor,
+                           float *summed,
+                           int dims_prod, int last_dim_size, int summed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = last_dim_size;
+    int D = summed_dim_size*last_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C; // b updates only when v reaches it's maximum value
+        int d = i / D;
+        int v = i % C;
+        // i = b*C + v
+
+        float *summed_b = summed + v + d*C;
+
+        float ix = tensor[i];
+
+        atomicAdd(summed_b, ix);        
+    }
+}
+
+
+
+
+extern "C" float *sumE(char *tensor_name, float first_dim, ...)
 {
   std::cout << "SUM OF " << tensor_name << "\n";
 
-  float * tensor = NamedTensors[tensor_name];
+  float *tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
+  float *summed;
 
 
   va_list args;
@@ -5836,9 +5950,7 @@ extern "C" float sum(char *tensor_name, float first_dim, ...)
     va_end(args);
     int dims_prod = DimsProd(dims);
 
-
-    float *summed = new float[dims_prod];
-
+    cudaMalloc(&summed, dims_prod*sizeof(float));
     cudaMemcpy(summed, tensor, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
     
     float tensor_sum=0;
@@ -5848,11 +5960,13 @@ extern "C" float sum(char *tensor_name, float first_dim, ...)
 
     std::cout << "Sum: " << tensor_sum << "\n";
 
-    return 0;
+    return summed;
   }
 
 
-  std::vector<float> sum_dims;
+  std::vector<float> sum_dims, new_dims;
+  if (first_dim<0)
+    first_dim = dims.size()+first_dim;
   sum_dims.push_back(first_dim);
 
   for (int i=0; i<10; i++)
@@ -5860,7 +5974,7 @@ extern "C" float sum(char *tensor_name, float first_dim, ...)
     if (i==9)
     {
       LogErrorS("A tensor with 10 dimensions???");
-      return 0;
+      return nullptr;
     }
 
     float dim = va_arg(args, float);
@@ -5871,17 +5985,54 @@ extern "C" float sum(char *tensor_name, float first_dim, ...)
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
       LogErrorS(_error);
-      return 0;
+      return nullptr;
     }
+    if (dim<0)
+      dim = dims.size()+dim;
     sum_dims.push_back(dim);
   }
   va_end(args);
+  
 
-  std::cout << "Sum dims" << "\n";
+  
+  std::cout << "\n\nSum dims" << "\n";
   PrintDims(sum_dims);
 
-  return 0;
+  float summed_dim;
+  for (int i=0; i<dims.size(); i++)
+    if (!in_float_vec(i, sum_dims))
+      new_dims.push_back(dims[i]);
+    else
+      summed_dim=dims[i];
+
+  PrintDims(new_dims);
+  PrintDims(dims);
+
+  int dims_prod = DimsProd(dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+  
+  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  cudaMemset(summed, 0, new_dims_prod * sizeof(float));
+
+  std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
+
+  
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  if (sum_dims[0]==(dims.size()-1))
+    sum_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, summed, dims_prod, summed_dim);
+  if (sum_dims[0]==(dims.size()-2))
+    sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+
+
+
+
+  return summed;
 }
+
 
 extern "C" float tmax(char *self) 
 { //TODO: automatic type detection for max and min (float vs tensor)
@@ -5926,7 +6077,7 @@ extern "C" float *clip(char *tensor_name, float _min, float _max)
   int grid_size = B;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  tensor_clip<<<grid_size, block_size, shared_mem_size>>>(tensor, device_y, _min, _max);
+  tensor_clip<<<grid_size, block_size, shared_mem_size>>>(tensor, device_y, _min, _max, B);
 
   
 
@@ -5955,6 +6106,7 @@ extern "C" float *gelu(char * tensor_name) {
 
   float *y;
   cudaMalloc(&y, dims_prod*sizeof(float));
+  cudaMemset(y, 0, dims_prod * sizeof(float));
 
   const int grid_size = ceil_div(dims_prod, block_size);
   gelu_forward_kernel1<<<grid_size, block_size>>>(tensor, y, dims_prod);
@@ -6033,6 +6185,7 @@ extern "C" float *relu(char *tensor_name)
 
   float *y;
   cudaMalloc(&y, N*sizeof(float));
+  cudaMemset(y, 0, N * sizeof(float));
 
   const int grid_size = ceil_div(N, block_size);
   relu_forward<<<grid_size, block_size>>>(tensor, y, N);
@@ -6195,6 +6348,8 @@ extern "C" float *softmax(char * tensor_name)
 
   float *probs;
   cudaMalloc(&probs, B*C*sizeof(float));
+  cudaMemset(probs, 0, B*C*sizeof(float));
+  
 
   softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size>>>(tensor, probs, B, C);
 
@@ -7134,11 +7289,11 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::cout << "1 1 attr\n";
       
 
-      /*
+      
       std::cout << "Pre dims\n";
       Builder->CreateLoad(int8PtrTy, RHS->GetDimsPtr());
       std::cout << "Post dims\n";
-      */
+      
   
 
       Builder->CreateCall(TheModule->getFunction("AttrTensor"),
@@ -8844,6 +8999,24 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       Builder->CreateStore(dims_ptr, DimsPtr);
       
     }
+    if (CalleeOverride=="onehotE")
+    {
+      ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
+      // Get resulting tensor dims.
+      Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims_onehot"), {ArgsV});
+      DimsPtr = Builder->CreateAlloca(int8PtrTy);
+      Builder->CreateStore(dims_ptr, DimsPtr);
+
+    }
+    if (CalleeOverride=="sumE")
+    {
+      ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
+      // Get resulting tensor dims.
+      Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims_sum"), {ArgsV[0], ArgsV[1]});
+      DimsPtr = Builder->CreateAlloca(int8PtrTy);
+      Builder->CreateStore(dims_ptr, DimsPtr);
+
+    }
     if (CalleeOverride=="SplitString")
     {
       Value *V = NamedStrs[PreDot];
@@ -9375,7 +9548,24 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("LoadDims", LoadDimsTy);
 
+
+  //
+  FunctionType *LoadDims_onehotTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("LoadDims_onehot", LoadDims_onehotTy);
+
+
+  FunctionType *LoadDims_sumTy = FunctionType::get(
+    int8PtrTy,
+    {int8PtrTy, Type::getFloatTy(*TheContext)},
+    false
+  );
+  TheModule->getOrInsertFunction("LoadDims_sum", LoadDims_sumTy);
   
+
   //
   FunctionType *LoadBatchlessDimsTy = FunctionType::get(
       int8PtrTy,
@@ -9521,16 +9711,16 @@ static void InitializeModule() {
       {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
-  TheModule->getOrInsertFunction("onehot", onehotTy);
+  TheModule->getOrInsertFunction("onehotE", onehotTy);
   
 
   // 
   FunctionType *sumTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      floatPtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
-  TheModule->getOrInsertFunction("sum", sumTy);
+  TheModule->getOrInsertFunction("sumE", sumTy);
 
 
   // 
@@ -10373,6 +10563,10 @@ int main() {
 
   stringMethods["split"] = "SplitString";
   stringMethods["split_idx"] = "SplitStringIndexate";
+
+  functionVars["sum"] = "sumE";
+  functionVars["onehot"] = "onehotE";
+  
 
   // Prime the first token.
   //fprintf(stderr, "ready> ");
