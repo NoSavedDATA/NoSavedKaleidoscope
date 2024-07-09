@@ -203,20 +203,20 @@ std::vector<std::string> return_pinned_methods = {"gpu", "gpuw"};
 
 
 // Universal
-std::vector<std::string> vararg_methods = {"view", "sum", "tmax"};
+std::vector<std::string> vararg_methods = {"view", "sum", "tmax", "argmax"};
 std::vector<std::string> string_methods = {"split", "split_idx"};
 
 
 // tensor + string + ...
 // e.g: x.view(), str.split()
 std::vector<std::string> native_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin",
-                                           "split", "split_idx", "first_nonzero", "clip"};
+                                           "split", "split_idx", "first_nonzero", "clip", "argmax"};
 
 std::vector<std::string> native_functions = {"ShuffleStrVec", "wload_img", "silent_sleep", "sleep", "LenStrVec",
                                             "gpu", "gpuw", "gelu", "relu", "softmax", "zeros_vec", "ones_vec",
                                             "_glob_b_", "print", "cross_entropy", "backprop", "AdamW",
                                             "load_preprocess_img", "log", "exp", "max", "tmax", "min", "tmin",
-                                            "sum"};
+                                            "sum", "argmax"};
 
 
 
@@ -275,6 +275,9 @@ enum Token {
   tok_binary = -11,
   tok_unary = -12,
   tok_equal = -28,
+  tok_diff = -34,
+  tok_higher_eq = -35,
+  tok_minor_eq = -36,
   tok_mod = -29,
 
 
@@ -380,6 +383,9 @@ std::map<int, std::string> token_to_string = {
   { 93, "]" },
 
   { tok_equal, "==" },
+  { tok_diff, "!=" },
+  { tok_higher_eq, ">=" },
+  { tok_minor_eq, "<=" },
   { tok_mod, "//" },
 
 
@@ -411,7 +417,7 @@ std::map<int, std::string> token_to_string = {
   { static_cast<int>('z'), "z" },
 
 };
-std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal};
+std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
 std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class};
 
 
@@ -649,6 +655,21 @@ static int get_token() {
   {
     LastChar = getchar();
     return tok_equal;
+  }
+  if (ThisChar=='!' && otherChar=='=')
+  {
+    LastChar = getchar();
+    return tok_diff;
+  }
+  if (ThisChar=='>' && otherChar=='=')
+  {
+    LastChar = getchar();
+    return tok_higher_eq;
+  }
+  if (ThisChar=='<' && otherChar=='=')
+  {
+    LastChar = getchar();
+    return tok_minor_eq;
   }
 
   if((ThisChar=='/')&&(otherChar == '/')){
@@ -4345,6 +4366,42 @@ __global__ void vec_sub(const float a, float* x, float* y, int dims_prod) {
     y[idx] = x[idx] - a;
   }
 }
+__global__ void vec_equal(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = (x[idx]==a) ? 1.0f : 0.0f;
+  }
+}
+__global__ void vec_diff(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = (x[idx]!=a) ? 1.0f : 0.0f;
+  }
+}
+__global__ void vec_higher(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = (x[idx]>a) ? 1.0f : 0.0f;
+  }
+}
+__global__ void vec_higher_eq(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = (x[idx]>=a) ? 1.0f : 0.0f;
+  }
+}
+__global__ void vec_minor(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = (x[idx]<a) ? 1.0f : 0.0f;
+  }
+}
+__global__ void vec_minor_eq(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = (x[idx]<=a) ? 1.0f : 0.0f;
+  }
+}
 __global__ void vec_log(const float* x, float* y, int dims_prod) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < dims_prod) {
@@ -4471,6 +4528,104 @@ extern "C" float *CudaScalarSub(float *tensor, std::vector<float> dims, float R)
 
   return device_y;
 }
+
+extern "C" float *CudaScalarEqual(float *tensor, std::vector<float> dims, float R) {
+
+  int kDataLen = DimsProd(dims);
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+
+
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_equal<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
+
+  return device_y;
+}
+extern "C" float *CudaScalarDiff(float *tensor, std::vector<float> dims, float R) {
+
+  int kDataLen = DimsProd(dims);
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+
+
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_diff<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
+
+  return device_y;
+}
+extern "C" float *CudaScalarMinor(float *tensor, std::vector<float> dims, float R) {
+
+  int kDataLen = DimsProd(dims);
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+
+
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_minor<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
+
+  return device_y;
+}
+extern "C" float *CudaScalarMinorEq(float *tensor, std::vector<float> dims, float R) {
+
+  int kDataLen = DimsProd(dims);
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+
+
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_minor_eq<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
+
+  return device_y;
+}
+extern "C" float *CudaScalarHigher(float *tensor, std::vector<float> dims, float R) {
+
+  int kDataLen = DimsProd(dims);
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+
+
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_higher<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
+
+  return device_y;
+}
+extern "C" float *CudaScalarHigherEq(float *tensor, std::vector<float> dims, float R) {
+
+  int kDataLen = DimsProd(dims);
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+
+
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_higher_eq<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
+
+  return device_y;
+}
+
 
 
 extern "C" float *logE(char *tensorName) {
@@ -5436,6 +5591,24 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   case '-':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
                                {LtensorPtr, LdimsPtr, R}, "cudascalarsub");
+  case tok_equal:
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarEqual"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarequal");
+  case tok_diff:
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarDiff"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalardiff");
+  case '<':
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarMinor"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarminor");
+  case '>':
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarHigher"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarhigher");
+  case tok_minor_eq:
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarMinorEq"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarminoreq");
+  case tok_higher_eq:
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarHigherEq"),
+                               {LtensorPtr, LdimsPtr, R}, "cudascalarhighereq");
   case ':':
     return LtensorPtr;
   case tok_space:
@@ -6210,6 +6383,134 @@ extern "C" float *maxE(char *tensor_name, float first_dim, ...)
 
   return summed;
 }
+
+__global__ void argmax_over_last_dim_kernel(const float *tensor,
+                           float *maxed, float *argmaxed,
+                           int dims_prod, int maxed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = maxed_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C;
+        int v = i % C;
+        // i = b * C + v
+
+        float *max_b = maxed + b;
+        float *argmax_b = argmaxed + b;
+
+        float ix = tensor[i];
+
+        // max
+        int *addr_as_int = (int *)max_b;
+        int old_int = *addr_as_int, assumed_int;
+        float old_val;
+        do {
+            assumed_int = old_int;
+            old_val = __int_as_float(assumed_int);
+            if (old_val >= ix) break;
+            old_int = atomicCAS(addr_as_int, assumed_int, __float_as_int(ix));
+        } while (assumed_int != old_int);
+
+        // argmax
+        if (__int_as_float(old_int) < ix) {
+            int *addr_as_int_argmax = (int *)argmax_b;
+            atomicExch(addr_as_int_argmax, __float_as_int((float)v));
+        }
+      }
+
+}
+
+extern "C" float *argmaxE(char *tensor_name, float first_dim, ...) 
+{
+  
+  std::cout << "MAX OF " << tensor_name << "\n";
+
+  float *tensor = NamedTensors[tensor_name];
+  std::vector<float> dims = NamedDims[tensor_name];
+  float *maxed, *argmaxed;
+
+
+  va_list args;
+  va_start(args, first_dim);
+
+  if (first_dim==TERMINATE_VARARG)
+  {
+    va_end(args);
+    LogErrorS("Argmax is only supported at dim -1.");
+    return nullptr;
+  }
+
+
+  std::vector<float> sum_dims, new_dims;
+  if (first_dim<0)
+    first_dim = dims.size()+first_dim;
+  sum_dims.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions???");
+      return nullptr;
+    }
+
+    float dim = va_arg(args, float);
+    
+    if (dim==TERMINATE_VARARG)
+      break;
+    if (in_float_vec(dim, sum_dims))  
+    {
+      std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
+      LogErrorS(_error);
+      return nullptr;
+    }
+    if (dim<0)
+      dim = dims.size()+dim;
+    sum_dims.push_back(dim);
+  }
+  va_end(args);
+  
+  
+  float maxed_dim;
+  for (int i=0; i<dims.size(); i++)
+    if (!in_float_vec(i, sum_dims))
+      new_dims.push_back(dims[i]);
+    else
+      maxed_dim=dims[i];
+
+
+  int dims_prod = DimsProd(dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+  
+  cudaMalloc(&maxed, new_dims_prod*sizeof(float));
+  cudaMalloc(&argmaxed, new_dims_prod*sizeof(float));
+  cudaMemset(maxed, 0, new_dims_prod * sizeof(float));
+  cudaMemset(argmaxed, 0, new_dims_prod * sizeof(float));
+
+
+  //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nMaxed dim size: " << summed_dim << "\n\n";
+
+  
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  
+  vec_add<<<grid_size, block_size, shared_mem_size>>>(50000, tensor, tensor, dims_prod);
+  if (sum_dims[0]==(dims.size()-1))
+    argmax_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, maxed, argmaxed, dims_prod, maxed_dim);
+  //if (sum_dims[0]==(dims.size()-2))
+  //  max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, maxed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+  vec_sub<<<grid_size, block_size, shared_mem_size>>>(50000, tensor, tensor, dims_prod);
+
+  cudaCheck(cudaFree(maxed));
+
+  return argmaxed;
+}
+
 
 extern "C" float *clip(char *tensor_name, float _min, float _max)
 {
@@ -7857,6 +8158,10 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       L = Builder->CreateFCmpUEQ(L, R, "cmptmp");
       // Convert bool 0/1 to float 0.0 or 1.0
       return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+    case tok_diff:
+      L = Builder->CreateFCmpUNE(L, R, "cmptmp");
+      // Convert bool 0/1 to float 0.0 or 1.0
+      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
     default:
       break;
     }
@@ -7884,7 +8189,7 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   //std::cout << "Operand type: " << Operand->GetType();
   if (Opcode=='-')
   {
-    std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
+    //std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
     if (Operand->GetType()=="tensor")
     {
       Value *tensor_name = Builder->CreateGlobalString(Operand->GetName());
@@ -9157,7 +9462,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       Builder->CreateStore(dims_ptr, DimsPtr);
 
     }
-    if (CalleeOverride=="sumE"||CalleeOverride=="maxE")
+    if (CalleeOverride=="sumE"||CalleeOverride=="maxE"||CalleeOverride=="argmaxE")
     {
       ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
       // Get resulting tensor dims.
@@ -9637,6 +9942,61 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("CudaScalarSub", CudaScalarSubTy);
 
 
+  //
+  FunctionType *CudaScalarEqualTy = FunctionType::get(
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaScalarEqual", CudaScalarEqualTy);
+
+
+  //
+  FunctionType *CudaScalarDiffTy = FunctionType::get(
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaScalarDiff", CudaScalarDiffTy);
+
+
+  //
+  FunctionType *CudaScalarMinorTy = FunctionType::get(
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaScalarMinor", CudaScalarMinorTy);
+
+
+  //
+  FunctionType *CudaScalarHigherTy = FunctionType::get(
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaScalarHigher", CudaScalarHigherTy);
+
+  
+  //
+  FunctionType *CudaScalarHigherEqTy = FunctionType::get(
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaScalarHigherEq", CudaScalarHigherEqTy);
+
+
+  //
+  FunctionType *CudaScalarMinorEqTy = FunctionType::get(
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaScalarMinorEq", CudaScalarMinorEqTy);
+
+  
+
   //===----------------------------------------------------------------------===//
   // Tensor Tensor CUDA Ops
   //===----------------------------------------------------------------------===//
@@ -9898,7 +10258,16 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("maxE", maxTy);
 
+
+  // 
+  FunctionType *argmaxTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      true
+  );
+  TheModule->getOrInsertFunction("argmaxE", argmaxTy);
   
+
   //
   FunctionType *viewTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -10704,6 +11073,9 @@ int main() {
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
   BinopPrecedence[tok_equal] = 10;
+  BinopPrecedence[tok_diff] = 10;
+  BinopPrecedence[tok_minor_eq] = 10;
+  BinopPrecedence[tok_higher_eq] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['/'] = 39;
@@ -10724,6 +11096,7 @@ int main() {
 
   functionVars["sum"] = "sumE";
   functionVars["tmax"] = "maxE";
+  functionVars["argmax"] = "argmaxE";
   functionVars["onehot"] = "onehotE";
   
 
