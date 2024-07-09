@@ -42,6 +42,7 @@
 #include <chrono>
 #include <thread>
 #include <random>
+#include <float.h>
 
 
 // Cuda
@@ -202,7 +203,7 @@ std::vector<std::string> return_pinned_methods = {"gpu", "gpuw"};
 
 
 // Universal
-std::vector<std::string> vararg_methods = {"view", "sum"};
+std::vector<std::string> vararg_methods = {"view", "sum", "tmax"};
 std::vector<std::string> string_methods = {"split", "split_idx"};
 
 
@@ -4326,6 +4327,12 @@ __global__ void vec_div(const float a, float* x, float* y, int dims_prod) {
     y[idx] = x[idx] / a;
   }
 }
+__global__ void vec_reverse_div(const float a, float* x, float* y, int dims_prod) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < dims_prod) {
+    y[idx] = a / x[idx];
+  }
+}
 __global__ void vec_add(const float a, float* x, float* y, int dims_prod) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < dims_prod) {
@@ -4406,6 +4413,24 @@ extern "C" float *CudaScalarDiv(float *tensor, std::vector<float> dims, float R)
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
   vec_div<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
+
+  
+  return device_y;
+}
+
+extern "C" float *CudaReverseScalarDiv(float *tensor, std::vector<float> dims, float R) {
+
+  int kDataLen = DimsProd(dims);
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+
+
+  int grid_size = kDataLen;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  vec_reverse_div<<<grid_size, block_size, shared_mem_size>>>(R, tensor, device_y, kDataLen);
 
   
   return device_y;
@@ -5570,6 +5595,9 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   case '/':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
                                {LtensorPtr, LdimsPtr, R}, "cudascalardiv");
+  case 77:
+    return Builder->CreateCall(TheModule->getFunction("CudaReverseScalarDiv"),
+                               {LtensorPtr, LdimsPtr, R}, "cudareversescalardiv");
   case '+':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
                                {LtensorPtr, LdimsPtr, R}, "cudascalaradd");
@@ -5993,11 +6021,7 @@ extern "C" float *sumE(char *tensor_name, float first_dim, ...)
   }
   va_end(args);
   
-
   
-  std::cout << "\n\nSum dims" << "\n";
-  PrintDims(sum_dims);
-
   float summed_dim;
   for (int i=0; i<dims.size(); i++)
     if (!in_float_vec(i, sum_dims))
@@ -6005,8 +6029,6 @@ extern "C" float *sumE(char *tensor_name, float first_dim, ...)
     else
       summed_dim=dims[i];
 
-  PrintDims(new_dims);
-  PrintDims(dims);
 
   int dims_prod = DimsProd(dims);
   int new_dims_prod = DimsProd(new_dims);
@@ -6015,7 +6037,7 @@ extern "C" float *sumE(char *tensor_name, float first_dim, ...)
   cudaMalloc(&summed, new_dims_prod*sizeof(float));
   cudaMemset(summed, 0, new_dims_prod * sizeof(float));
 
-  std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
+  //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
 
   
   int grid_size = dims_prod;
@@ -6028,38 +6050,165 @@ extern "C" float *sumE(char *tensor_name, float first_dim, ...)
     sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
-
-
   return summed;
 }
 
 
-extern "C" float tmax(char *self) 
+__global__ void max_over_last_dim_kernel(const float *tensor,
+                           float *maxed,
+                           int dims_prod, int maxed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = maxed_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C;
+        int v = i % C;
+        // i = b * C + v
+
+        float *max_b = maxed + b;
+
+        float ix = tensor[i];
+
+
+        unsigned int *const addr_as_ui = (unsigned int *)max_b;
+        unsigned int old = *addr_as_ui, assumed;
+        do {
+          assumed = old;
+          if (__uint_as_float(assumed) >= ix) break;
+          old = atomicCAS(addr_as_ui, assumed, __float_as_uint(ix));
+        } while (assumed != old);
+    }
+}
+
+__global__ void max_over_semilast_dim_kernel(const float *tensor,
+                           float *maxed,
+                           int dims_prod, int last_dim_size, int maxed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = last_dim_size;
+    int D = maxed_dim_size*last_dim_size;
+    
+    
+    if (i < dims_prod) {
+        int b = i / C;
+        int d = i / D;
+        int v = i % C;
+        // i = b * C + v
+
+        float *max_b = maxed + v + d*C;
+
+        float ix = tensor[i];
+
+        unsigned int *const addr_as_ui = (unsigned int *)max_b;
+        unsigned int old = *addr_as_ui, assumed;
+        do {
+          assumed = old;
+          if (__uint_as_float(assumed) >= ix) break;
+          old = atomicCAS(addr_as_ui, assumed, __float_as_uint(ix));
+        } while (assumed != old);
+    }
+}
+
+
+extern "C" float *maxE(char *tensor_name, float first_dim, ...) 
 { //TODO: automatic type detection for max and min (float vs tensor)
-  std::string tensor_name = self;
   
-  float * tensor = NamedTensors[tensor_name];
+  std::cout << "MAX OF " << tensor_name << "\n";
+
+  float *tensor = NamedTensors[tensor_name];
   std::vector<float> dims = NamedDims[tensor_name];
-  
-  int B = DimsProd(dims);
+  float *summed;
 
 
+  va_list args;
+  va_start(args, first_dim);
 
-  float max=-9999;
-  float *_max = new float[B];
-
-  cudaMemcpy(_max, tensor, B*sizeof(float), cudaMemcpyDeviceToHost);
-  
-  float tensor_sum=0;
-  for(int i=0; i<B; i++)
+  if (first_dim==TERMINATE_VARARG)
   {
-    if(_max[i]>max)
-      max = _max[i];
+    va_end(args);
+    int dims_prod = DimsProd(dims);
+
+    cudaMalloc(&summed, dims_prod*sizeof(float));
+    cudaMemcpy(summed, tensor, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+    
+    float tensor_sum=0;
+    for(int i=0; i<dims_prod; i++)
+      tensor_sum += summed[i];
+    tensor_sum = tensor_sum;
+
+    std::cout << "Sum: " << tensor_sum << "\n";
+
+    return summed;
   }
 
-  std::cout << "Max: " << max << "\n";
 
-  return 0;
+  std::vector<float> sum_dims, new_dims;
+  if (first_dim<0)
+    first_dim = dims.size()+first_dim;
+  sum_dims.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions???");
+      return nullptr;
+    }
+
+    float dim = va_arg(args, float);
+    
+    if (dim==TERMINATE_VARARG)
+      break;
+    if (in_float_vec(dim, sum_dims))  
+    {
+      std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
+      LogErrorS(_error);
+      return nullptr;
+    }
+    if (dim<0)
+      dim = dims.size()+dim;
+    sum_dims.push_back(dim);
+  }
+  va_end(args);
+  
+  
+  float summed_dim;
+  for (int i=0; i<dims.size(); i++)
+    if (!in_float_vec(i, sum_dims))
+      new_dims.push_back(dims[i]);
+    else
+      summed_dim=dims[i];
+
+
+  int dims_prod = DimsProd(dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+  
+  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  cudaMemset(summed, 0, new_dims_prod * sizeof(float));
+
+
+  //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
+
+  
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  // AtomicMax does not handle negative numbers, so gambiarra. :D (1 hour for this)
+  vec_add<<<grid_size, block_size, shared_mem_size>>>(50000, tensor, tensor, dims_prod);
+  if (sum_dims[0]==(dims.size()-1))
+    max_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, summed, dims_prod, summed_dim);
+  if (sum_dims[0]==(dims.size()-2))
+    max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+  vec_sub<<<grid_size, block_size, shared_mem_size>>>(50000, summed, summed, new_dims_prod);
+  vec_sub<<<grid_size, block_size, shared_mem_size>>>(50000, tensor, tensor, dims_prod);
+
+
+  return summed;
 }
 
 extern "C" float *clip(char *tensor_name, float _min, float _max)
@@ -9008,7 +9157,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       Builder->CreateStore(dims_ptr, DimsPtr);
 
     }
-    if (CalleeOverride=="sumE")
+    if (CalleeOverride=="sumE"||CalleeOverride=="maxE")
     {
       ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
       // Get resulting tensor dims.
@@ -9462,6 +9611,15 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *CudaReverseScalarDivTy = FunctionType::get(
+      floatPtrTy,
+      {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaReverseScalarDiv", CudaReverseScalarDivTy);
+
+
+  //
   FunctionType *CudaScalarAddTy = FunctionType::get(
       floatPtrTy,
       {floatPtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
@@ -9725,7 +9883,7 @@ static void InitializeModule() {
 
   // 
   FunctionType *meanTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      floatPtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
@@ -9734,11 +9892,11 @@ static void InitializeModule() {
 
   // 
   FunctionType *maxTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {},
-      false
+      floatPtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      true
   );
-  TheModule->getOrInsertFunction("tmax", maxTy);
+  TheModule->getOrInsertFunction("maxE", maxTy);
 
   
   //
@@ -10565,6 +10723,7 @@ int main() {
   stringMethods["split_idx"] = "SplitStringIndexate";
 
   functionVars["sum"] = "sumE";
+  functionVars["tmax"] = "maxE";
   functionVars["onehot"] = "onehotE";
   
 
