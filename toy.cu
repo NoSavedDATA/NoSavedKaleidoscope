@@ -191,34 +191,21 @@ bool in_float_vec(float value, const std::vector<float>& list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }
 
+std::vector<std::string> concat_str_vec(std::vector<std::string> l, std::vector<std::string>r)
+{
+  std::vector<std::string> concatenated_vectors = l;
+  concatenated_vectors.insert(concatenated_vectors.end(), r.begin(), r.end());
+  return concatenated_vectors;
+}
+
 
 
 //std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin"};
 
 
 // Tensor related
-std::vector<std::string> return_tensor_functions = {"gelu", "relu", "softmax", "log", "clip",
-                                                     "sum", "tmax", "argmax", "log", "onehot"};
-
-std::vector<std::string> return_pinned_methods = {"gpu", "gpuw"};
-
-
-// Universal
-std::vector<std::string> vararg_methods = {"view", "sum", "tmax", "argmax"};
-std::vector<std::string> string_methods = {"split", "split_idx"};
-
-
-// tensor + string + ...
-// e.g: x.view(), str.split()
-std::vector<std::string> native_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin",
-                                           "split", "split_idx", "first_nonzero", "clip", "argmax"};
-
-std::vector<std::string> native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
-                                            "LenStrVec",
-                                            "gpu", "gpuw", "gelu", "relu", "softmax", "zeros_vec", "ones_vec",
-                                            "_glob_b_", "print", "cross_entropy", "backprop", "AdamW",
-                                            "load_preprocess_img", "log", "exp", "max", "tmax", "min", "tmin",
-                                            "sum", "argmax"};
+std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn,
+return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits;
 
 
 
@@ -226,7 +213,7 @@ std::vector<std::string> native_functions = {"ShuffleStrVec", "gload_img", "wloa
 
 
 
-std::vector<std::string> tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
+
 
 
 PointerType *floatPtrTy, *int8PtrTy;
@@ -1510,7 +1497,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
 
   
   
-  if (in_str(IdName, return_tensor_functions) || return_tensor)
+  if (in_str(IdName, return_tensor_fn) || return_tensor)
     aux->SetType("tensor");
   if (in_str(IdName, return_pinned_methods))
     aux->SetType("pinned_tensor");
@@ -1977,6 +1964,7 @@ struct Tensor {
   std::vector<float> dims;
   float dims_prod;
   bool leaf;
+  std::string view_of = "";
   std::string name;
 
   void NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
@@ -2475,7 +2463,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   bool return_tensor = false;
   bool return_string = false;
   std::string callee_override = "none";
-  if (functionVars.find(IdName) != functionVars.end())
+  if (functionVars.count(IdName) > 0)
   {
     is_var_forward = true;
     return_tensor = true;
@@ -2506,8 +2494,10 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
   auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
 
-  if (in_str(IdName, return_tensor_functions) || return_tensor)
+  if (in_str(IdName, return_tensor_fn) || return_tensor)
+  {
     aux->SetType("tensor");
+  }
   if (return_string)
     aux->SetType("str");
 
@@ -3598,7 +3588,7 @@ extern "C" void sleep(float id)
 }
 
 
-extern "C" void silent_sleep(float id)
+extern "C" float silent_sleep(float id)
 {
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -3610,7 +3600,7 @@ extern "C" void silent_sleep(float id)
   std::this_thread::sleep_for(std::chrono::seconds((int)id));
 
  
-  //return id;
+  return 0;
 }
 
 
@@ -4225,13 +4215,10 @@ extern "C" float load_preprocess_img(Tensor tensor, char *img_name)
 //===----------------------------------------------------------------------===//
 
 
-extern "C" float view(char *tensor_name, float first_dim, ...)
+extern "C" void *view(Tensor tensor, float first_dim, ...)
 {
-  Tensor tensor = NamedTensorsT[tensor_name];
-
-  //std::cout << "Executing: " << tensor_name << "." << "view" << "\n";
-  
-  
+  //std::cout << "Executing: " << tensor.name << "." << "view" << "\n";
+   
   std::vector<float> new_dims, new_dims_no_minus, current_dims;
   bool has_minus = false;
   current_dims = tensor.dims;
@@ -4310,9 +4297,10 @@ extern "C" float view(char *tensor_name, float first_dim, ...)
   NamedTensorsT[tensor.name] = tensor;
   
 
-  return  0;
+  Tensor *new_tensor = createTensor(tensor.tensor_ptr, new_dims, DimsProd(new_dims), false, "");
+  new_tensor->view_of = tensor.name;
+  return new_tensor;
 }
-
 
 
 //===----------------------------------------------------------------------===//
@@ -4618,58 +4606,42 @@ extern "C" void *CudaScalarHigherEq(Tensor tensor, float R) {
 
 
 //TODONOW
-extern "C" void *logE(char *tensorName) {
-  std::cout << "logE of: " << tensorName << "\n";
+extern "C" void *logE(Tensor tensor) {
+  std::cout << "logE of: " << tensor.name << "\n";
 
-  float * device_x;
-
-  
-  device_x = NamedTensors[tensorName];
-  std::vector<float> dims = NamedDims[tensorName];
-  
-
-  int kDataLen = DimsProd(dims);
-
+  float * device_x = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  int kDataLen = tensor.dims_prod;
 
   float* device_y;
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
-
 
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
   vec_log<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y, kDataLen);
 
-
-
-  return device_y;
+  Tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
+  return new_tensor;
 }
 
-extern "C" void *logE2(char *tensorName) {
-  std::cout << "logE2 of: " << tensorName << "\n";
+extern "C" void *logE2(Tensor tensor) {
+  std::cout << "logE2 of: " << tensor.name << "\n";
 
-  float * device_x;
-
-  
-  device_x = NamedTensors[tensorName];
-  std::vector<float> dims = NamedDims[tensorName];
-  
-
-  int kDataLen = DimsProd(dims);
-
+  float * device_x = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  int kDataLen = tensor.dims_prod;
 
   float* device_y;
   cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
-
 
   int grid_size = kDataLen;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
   vec_log2<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y, kDataLen);
 
-
-
-  return device_y;
+  Tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
+  return new_tensor;
 }
 
 
@@ -5186,13 +5158,6 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
 
-    /*
-    Value *dims_ptr = Builder->CreateCall(TheModule->getFunction("LoadDims"), {var_name});
-    dims_ptr = Builder->CreateCall(TheModule->getFunction("NewDimsOnIdx"),
-                                    {dims_ptr});
-    DimsPtr = Builder->CreateAlloca(int8PtrTy);
-    Builder->CreateStore(dims_ptr, DimsPtr);
-    */
 
     std::vector<Value *> idx_calc_args;
     idx_calc_args.push_back(var_name);
@@ -5389,8 +5354,12 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
   
   
   //PrintDims(tgt_tensor.dims);
-  
-  if (tensor->name=="") // Free current and point to operation result
+  if (tensor->view_of == tensor_name)
+  {
+    tgt_tensor.dims = tensor->dims;
+    delete tensor;
+  }
+  else if (tensor->name=="") // Free current and point to operation result
   {
     cudaCheck(cudaFree(tgt_tensor.tensor_ptr));
     tgt_tensor.AttrTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod);
@@ -5879,7 +5848,7 @@ std::vector<backward_tuple> todo_backwards;
 
 
 
-extern "C" Tensor *CudaMult(char *LtensorName, char *RtensorName, int is_forward_func,
+extern "C" Tensor *CudaMult(int is_forward_func,
                           Tensor tensor_x, Tensor tensor_w) {
 
   //std::cout << "      L " << LtensorName << "  &  R " << RtensorName << "\n";
@@ -5943,16 +5912,93 @@ extern "C" Tensor *CudaMult(char *LtensorName, char *RtensorName, int is_forward
 
     todo_backwards.push_back(std::make_tuple(B, C, OC,
                                              B*C, C*OC, inp, device_w, out,
-                                            "matmul", RtensorName));
+                                            "matmul", tensor_w.name));
   }
 
   std::vector<float> new_dims = NewDimsOnMult(Ldims, Rdims);
 
   //PrintTensorF(device_y, 2, 2);
-  Tensor *new_tensor = createTensor(device_y, new_dims, resultingDimsProd, false, "");
-  
+  Tensor *new_tensor = createTensor(device_y, new_dims, resultingDimsProd, false, "");  
   return new_tensor;
 }
+
+
+__global__ void add_forward(float *y, const float *x,
+                            const float *w, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = x[i] + w[i];
+}
+
+extern "C" Tensor *CudaAdd(int is_forward_func,
+                          Tensor tensor_x, Tensor tensor_w) {
+
+  //std::cout << "      L " << LtensorName << "  &  R " << RtensorName << "\n";
+    
+  std::vector<float> Ldims, Rdims;
+  Ldims = tensor_x.dims;
+  Rdims = tensor_w.dims;
+  float *device_x = tensor_x.tensor_ptr;
+  float *device_w = tensor_w.tensor_ptr;
+
+
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
+  float dims_prod = tensor_x.dims_prod;
+
+
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, dims_prod * sizeof(float)));
+
+  if (Ldims.size()<2)
+    LogErrorS("Tensors multiplication requires at least 2 dimensions.");
+
+
+
+  
+  matmul_forward2(device_y, device_x, device_w,
+                  linear_layer_dims[0], linear_layer_dims[1],
+                  Rdims[0]);
+
+
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  add_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
+  
+
+
+  /*
+  if (is_forward_func)
+  {
+    float *inp, *out;
+    float B  = linear_layer_dims[0];
+    float C  = linear_layer_dims[1];
+    float OC = Rdims[0];
+        
+
+    //oom
+    cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
+    cudaMemcpy(inp, device_x, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, device_y, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
+
+    todo_backwards.push_back(std::make_tuple(B, C, OC,
+                                             B*C, C*OC, inp, device_w, out,
+                                            "matmul", tensor_w.name));
+  }
+  */
+
+  
+
+
+  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  return new_tensor;
+}
+
+
 
 //TODONOW
 extern "C" float *CudaDiv(int is_forward_func,
@@ -6031,12 +6077,11 @@ __global__ void onehot_kernel(const float *tensor,
 }
 
 
-extern "C" void *onehot(char *tensor_name, float num_classes)
+extern "C" void *onehot(Tensor tensor, float num_classes)
 {
-  //std::cout << "ONEHOT OF " << tensor_name << "\n";
-  Tensor tensor = NamedTensorsT[tensor_name];
+  //std::cout << "ONEHOT OF " << tensor.name << "\n";
 
-  float * tensor_ptr = tensor.tensor_ptr;
+  float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims, new_dims;
   dims = tensor.dims;
   new_dims = tensor.dims;
@@ -6139,11 +6184,10 @@ __global__ void sum_over_semilast_dim_kernel(const float *tensor,
 
 
 
-extern "C" void *sum(char *tensor_name, float first_dim, ...)
+extern "C" void *sum(Tensor tensor, float first_dim, ...)
 {
-  std::cout << "SUM OF " << tensor_name << "\n";
+  std::cout << "SUM OF " << tensor.name << "\n";
 
-  Tensor tensor = NamedTensorsT[tensor_name];
 
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
@@ -6294,11 +6338,11 @@ __global__ void max_over_semilast_dim_kernel(const float *tensor,
 }
 
 
-extern "C" void *tmax(char *tensor_name, float first_dim, ...) 
+extern "C" void *tmax(Tensor tensor, float first_dim, ...) 
 { //TODO: automatic type detection for max and min (float vs tensor)
   
-  std::cout << "MAX OF " << tensor_name << "\n";
-  Tensor tensor = NamedTensorsT[tensor_name];
+  std::cout << "MAX OF " << tensor.name << "\n";
+  
 
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
@@ -6433,10 +6477,9 @@ __global__ void argmax_over_last_dim_kernel(const float *tensor,
 
 }
 
-extern "C" void *argmax(char *tensor_name, float first_dim, ...) 
+extern "C" void *argmax(Tensor tensor, float first_dim, ...) 
 {
-  std::cout << "MAX OF " << tensor_name << "\n";
-  Tensor tensor = NamedTensorsT[tensor_name];
+  std::cout << "MAX OF " << tensor.name << "\n";
 
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
@@ -6524,11 +6567,8 @@ extern "C" void *argmax(char *tensor_name, float first_dim, ...)
 }
 
 
-extern "C" void *clip(char *tensor_name, float _min, float _max)
+extern "C" void *clip(Tensor tensor, float _min, float _max)
 {
-  
-  Tensor tensor = NamedTensorsT[tensor_name];
-
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
   
@@ -7830,7 +7870,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   {
   case '@':
     return Builder->CreateCall(TheModule->getFunction("CudaMult"),
-                                    {LtensorName, RtensorName, is_forward_func,
+                                    {is_forward_func,
                                      LtensorPtr, RtensorPtr},
                                      "cudamult");
   case '/':
@@ -7843,9 +7883,10 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
     */
   }
   case '+':
-    CudaFn = TheModule->getFunction("CudaAdd");
-    return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
-                               "cudaadd");
+    return Builder->CreateCall(TheModule->getFunction("CudaAdd"),
+                                    {is_forward_func,
+                                     LtensorPtr, RtensorPtr},
+                                     "cudaadd");
   case '-':
     CudaFn = TheModule->getFunction("CudaSub");
     return Builder->CreateCall(CudaFn, {LtensorName, RtensorName},
@@ -8960,6 +9001,7 @@ extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
 extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
 {
   std::vector<float> dims = NamedDims[tensor_name];
+  NamedDims[tensor_name].clear();
   Tensor tensor;
 
   int product = DimsProd(dims);
@@ -8984,7 +9026,21 @@ extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
   
 }
 
+extern "C" void *rand_like(Tensor tensor)
+{
+  float dims_prod = tensor.dims_prod;
 
+  float *tensor_ptr, *tensor_cpu;
+
+  tensor_cpu = make_random_float_uniform(dims_prod);
+
+  cudaMalloc(&tensor_ptr, dims_prod*sizeof(float));
+  cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
+  delete[] tensor_cpu;
+
+  Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
+  return new_tensor;
+}
 
 extern "C" float CreateTensorOnDemand(char *tensor_name, char *init)
 {
@@ -8993,6 +9049,7 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *init)
   Tensor tensor;
 
   std::vector<float> dims = NamedDims[tensor_name];
+  NamedDims[tensor_name].clear();
   tensor.dims = dims;
   tensor.leaf = true;
 
@@ -9263,6 +9320,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                       {Builder->CreateLoad(int8PtrTy, previous_scope), Builder->CreateLoad(int8PtrTy, first_arg)});
+    
     Builder->CreateStore(arg, first_arg);
   }
   
@@ -9313,6 +9371,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
         ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
         target_args_size+=1;
       }
+
+      if (in_str(Callee, return_tensor_methods))
+        ArgsV[0] = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {ArgsV[0]});
+
     }
     else
     {
@@ -9322,7 +9384,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     target_args_size+=1;
   }
 
-  if (!(CalleeOverride!="none" || in_str(Callee, native_functions) || in_str(Callee, native_methods)))
+  if (!(CalleeOverride!="none" || in_str(Callee, native_fn)))
   {
     scope_str = Builder->CreateAlloca(int8PtrTy);
     Value *scope_name;
@@ -9336,6 +9398,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     ArgsV.push_back(previous_scope);
     target_args_size+=2;
   }
+
+
+
 
 
 
@@ -9434,17 +9499,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
     if (floatFunctions.count(tgt_function)>0)
       ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
-    if (CalleeOverride=="logE"||CalleeOverride=="logE2")
-    {
-      CalleeF = getFunction(CalleeOverride);
-      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-
-      Value *dims_ptr = Builder->CreateCall(getFunction("LoadDims"), 
-                          {ArgsV[0]});
-      DimsPtr = Builder->CreateAlloca(int8PtrTy);
-      Builder->CreateStore(dims_ptr, DimsPtr);
-      
-    }
     if (CalleeOverride=="SplitString")
     {
       Value *V = NamedStrs[PreDot];
@@ -9960,14 +10014,23 @@ static void InitializeModule() {
   //
   FunctionType *CudaMultTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy,
-       int8PtrTy,
-       Type::getInt32Ty(*TheContext),
+      {Type::getInt32Ty(*TheContext),
        int8PtrTy,
        int8PtrTy}, 
       false
   );
   TheModule->getOrInsertFunction("CudaMult", CudaMultTy);
+
+
+  //
+  FunctionType *CudaAddTy = FunctionType::get(
+      floatPtrTy,
+      {Type::getInt32Ty(*TheContext),
+       int8PtrTy,
+       int8PtrTy}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaAdd", CudaAddTy);
 
 
   //
@@ -10177,7 +10240,7 @@ static void InitializeModule() {
 
   //
   FunctionType *viewTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      int8PtrTy,
       {int8PtrTy,int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // Vararg
   );
@@ -10291,7 +10354,7 @@ static void InitializeModule() {
 
   
   FunctionType *silent_sleepTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
+      Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
       false
   );
@@ -10681,6 +10744,7 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("CreateConv2dOnDemand", CreateConv2dOnDemandTy);
 
+
   //
   FunctionType *CopyArgTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -10688,7 +10752,6 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);
-
 
   
   //
@@ -10755,6 +10818,14 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("PrintTensor", printTTy);
   
   
+  //
+  FunctionType *rand_likeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("rand_like", rand_likeTy);
+
   
   //
   FunctionType *printTy = FunctionType::get(
@@ -11000,7 +11071,39 @@ int main() {
   stringMethods["split_idx"] = "SplitStringIndexate";
 
 
-  
+
+
+  return_tensor_functions = {"gelu", "relu", "softmax", "log", "rand_like"};
+  return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "permute",
+                            "sum", "mean", "tmin", "argmin", "argtop"};
+
+  return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
+
+
+  return_pinned_methods = {"gpu", "gpuw"};
+
+
+  // Universal
+  vararg_methods = {"view", "sum", "tmax", "argmax"};
+  string_methods = {"split", "split_idx"};
+
+
+  // tensor + string + ...
+  // e.g: x.view(), str.split()
+  native_methods = {"split", "split_idx", "first_nonzero"};
+  native_methods = concat_str_vec(native_methods, return_tensor_methods);
+  //native_methods = concat_str_vec(native_methods, return_pinned_methods);
+
+  native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
+                      "LenStrVec", "gpu", "gpuw", "zeros_vec", "ones_vec",
+                      "_glob_b_", "print", "cross_entropy", "backprop", "AdamW",
+                      "load_preprocess_img", "max", "min"};
+  native_functions = concat_str_vec(native_functions, return_tensor_functions);
+  native_fn = concat_str_vec(native_methods, native_functions);
+
+
+  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
+
 
   // Prime the first token.
   //fprintf(stderr, "ready> ");
