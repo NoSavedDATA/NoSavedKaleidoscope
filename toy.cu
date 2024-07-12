@@ -199,10 +199,6 @@ std::vector<std::string> concat_str_vec(std::vector<std::string> l, std::vector<
 }
 
 
-
-//std::vector<std::string> tensor_methods = {"view","permute", "onehot", "mean", "sum", "tmax", "tmin"};
-
-
 // Tensor related
 std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn,
 return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits;
@@ -1809,7 +1805,7 @@ static std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name="") {
 //                    (',' identifier ('=' expression)?)* 'in' expression
 static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
   getNextToken(); // eat the var.
-  std::cout << "Parsing var expr\n";
+  std::cout << "Parsing float expr\n";
 
   // mem2reg is alloca-driven: it looks for allocas and if it can handle them, it promotes them. It DOES NOT APPLY TO GLOBAL variables or heap allocations.
   // mem2reg only promotes allocas whose uses are direct loads and stores. If the address of the stack object is passed to a function,
@@ -1819,7 +1815,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
 
   // At least one variable name is required.
   if (CurTok != tok_identifier)
-    return LogError("Esperado identificador após var.");
+    return LogError("Expected an identifier after float.");
 
   while (true) {
     std::string Name = IdentifierStr;
@@ -1827,7 +1823,8 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
 
     // Read the optional initializer.
     std::unique_ptr<ExprAST> Init = nullptr;
-    if (CurTok == '=') {
+    if (CurTok == '=')
+    {
       getNextToken(); // eat the '='.
 
       Init = ParseExpression(class_name);
@@ -1843,7 +1840,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
     getNextToken(); // eat the ','.
 
     if (CurTok != tok_identifier)
-      return LogError("Esperado um ou mais identificadores após var.");
+      return LogError("Expected one or more identifiers after float.");
   }
 
   if (CurTok==tok_space)
@@ -2048,6 +2045,20 @@ std::vector<float> BatchLessDims(std::vector<float> dims)
 
   for (int i=0; i<dims.size()-1;i++)
     new_dims.push_back(dims[i+1]);
+
+  return new_dims;
+}
+
+std::vector<float> RemoveLastDim(std::vector<float> dims)
+{
+  // Removes first dim (batch dim).
+  if (dims.size()<=1)
+    LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+
+  std::vector<float> new_dims;
+
+  for (int i=0; i<dims.size()-1;i++)
+    new_dims.push_back(dims[i]);
 
   return new_dims;
 }
@@ -3900,7 +3911,7 @@ extern "C" float PrintTensor(char* tensorName){
   cudaCheck(cudaMemcpy(tensor_cpu, tensor.tensor_ptr, arr_size*sizeof(float), cudaMemcpyDeviceToHost));
 
 
-  std::cout << "\nTensor \033[95m" << tensorName << "\033[0m:\n";
+  std::cout << "\nTensor \033[95m" << tensorName << "\033[0m:\n\n";
   PrintDims(dims);
   std::cout << "\n";
   std::vector<float> ends;
@@ -3968,9 +3979,8 @@ extern "C" float PrintTensor(char* tensorName){
 
   }
   
-  std::cout << "\n";
   PrintDims(dims);
-  std::cout << "\n";
+  std::cout << "\n\n";
 
   delete[] tensor_cpu;
 
@@ -4607,7 +4617,7 @@ extern "C" void *CudaScalarHigherEq(Tensor tensor, float R) {
 
 //TODONOW
 extern "C" void *logE(Tensor tensor) {
-  std::cout << "logE of: " << tensor.name << "\n";
+  //std::cout << "logE of: " << tensor.name << "\n";
 
   float * device_x = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
@@ -4857,6 +4867,7 @@ extern "C" float StoreFloatVecOnDemandOnIdx(char *self, char *object_var_name, f
 
 extern "C" float LoadOnDemand(char *object_var_name) {
   //std::cout << "Load on demand for: " << object_var_name << "\n";
+  //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n\n\n";
 
   return NamedClassValues[object_var_name];
 }
@@ -4919,6 +4930,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   Value *V;
+  AllocaInst *A;
 
 
   Value *var_name, *object_name, *object_var_name;
@@ -4985,9 +4997,9 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   {
     //std::cout << "\nVariable Float " << Name << " codegen.\n";
 
-    V = NamedValues[Name];
+    A = NamedValues[Name];
 
-    V = Builder->CreateLoad(Type::getFloatTy(*TheContext), V, Name.c_str());
+    V = Builder->CreateLoad(Type::getFloatTy(*TheContext), A, Name.c_str());
     
     
     if (!seen_var_attr) //TODO: Solve this bug
@@ -5902,7 +5914,7 @@ extern "C" Tensor *CudaMult(int is_forward_func,
     float B  = linear_layer_dims[0];
     float C  = linear_layer_dims[1];
     float OC = Rdims[0];
-        
+    //std::cout << "B " << B << " C " << C << " OC " << OC << "\n";
 
     //oom
     cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
@@ -6060,19 +6072,15 @@ __global__ void onehot_kernel(const float *tensor,
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     //int i = threadIdx.x;
     
-    
     if (i < B * C) {
         int b = i / (C);
         int v = i % C;
 
         float *probs_b = probs + b * C;
-
         int ix = tensor[b];
 
-
         float indicator = (v==ix) ? 1.0f : 0.0f;
-
-        probs_b[v] = indicator;       
+        probs_b[v] = indicator;
     }
 }
 
@@ -6474,7 +6482,6 @@ __global__ void argmax_over_last_dim_kernel(const float *tensor,
             atomicExch(addr_as_int_argmax, __float_as_int((float)v));
         }
       }
-
 }
 
 extern "C" void *argmax(Tensor tensor, float first_dim, ...) 
@@ -6565,6 +6572,132 @@ extern "C" void *argmax(Tensor tensor, float first_dim, ...)
   Tensor *new_tensor = createTensor(argmaxed, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
 }
+
+__global__ void topk_kernel(const float *tensor, float *topk,
+                           float *maxed, float *argmaxed,
+                           int dims_prod, int maxed_dim_size,
+                           int j, int k) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = maxed_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C;
+        int v = i % C;
+        // i = b * C + v
+
+        float *max_b = maxed + b;
+        float *argmax_b = argmaxed + b;
+        float *topk_b = topk + b*k + j;
+
+        float ix = tensor[i];
+
+        // max
+        int *addr_as_int = (int *)max_b;
+        int old_int = *addr_as_int, assumed_int;
+        float old_val;
+        do {
+            assumed_int = old_int;
+            old_val = __int_as_float(assumed_int);
+            if (old_val >= ix) break;
+            old_int = atomicCAS(addr_as_int, assumed_int, __float_as_int(ix));
+        } while (assumed_int != old_int);
+
+        // argmax & topk
+        if (__int_as_float(old_int) < ix) {
+            int *addr_as_int_argmax = (int *)argmax_b;
+            atomicExch(addr_as_int_argmax, __float_as_int((float)v));
+
+            int *addr_as_int_topk = (int *)topk_b;
+            atomicExch(addr_as_int_topk, __float_as_int((float)v));
+        }
+      }
+}
+
+__global__ void topk_erase_argmax_aux_kernel(float *tensor,
+                           float *argmaxed, int dims_prod, int maxed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = maxed_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C;
+        int v = i % C;
+        // i = b * C + v
+
+        float *tensor_b = tensor + b * C;
+
+        float ix = argmaxed[b];
+
+        float indicator = (v==ix) ? 0 : ix;
+        if (v==ix)
+          tensor_b[v] = 0;
+      }
+}
+
+extern "C" void *topk(Tensor tensor, float k) 
+{
+  std::cout << "TOPK OF " << tensor.name << "\n";
+
+  float *tensor_ptr = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  float *maxed, *argmaxed, *topk, *tensor_copy;
+
+
+  std::vector<float> new_dims = RemoveLastDim(dims);
+  std::vector<float> topk_dims = RemoveLastDim(dims);
+  float new_dims_prod = DimsProd(new_dims);
+  int dims_prod = DimsProd(dims);
+  topk_dims.push_back(k);
+  float topk_dims_prod = DimsProd(topk_dims);
+
+  float maxed_dim = dims[dims.size()-1];
+
+  
+  cudaMalloc(&maxed, new_dims_prod*sizeof(float));
+  cudaMalloc(&argmaxed, new_dims_prod*sizeof(float));
+  cudaMalloc(&topk, topk_dims_prod * sizeof(float));
+  cudaMalloc(&tensor_copy, dims_prod*sizeof(float));
+  cudaMemset(maxed, 0, new_dims_prod*sizeof(float));
+  cudaMemset(argmaxed, 0, new_dims_prod*sizeof(float));
+  cudaMemset(topk, 0, topk_dims_prod * sizeof(float));
+  cudaMemcpy(tensor_copy, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);
+
+
+  //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nMaxed dim size: " << summed_dim << "\n\n";
+
+  
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  
+  vec_add<<<grid_size, block_size, shared_mem_size>>>(50000, tensor_copy, tensor_copy, dims_prod);
+  
+  for (int i=0; i<k; i++)
+  {
+    //std::cout << "Top k at iter:" << i << "\n";
+    topk_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_copy, topk, maxed, argmaxed, dims_prod, maxed_dim, i, k);
+    //PrintTensorF(maxed, 3, 1);
+    //PrintTensorF(argmaxed, 3, 1);
+    //std::cout << "Topk" << "\n";
+    //PrintTensorF(topk, 3, k);
+    topk_erase_argmax_aux_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_copy, argmaxed, dims_prod, maxed_dim);
+    cudaMemset(maxed, 0, new_dims_prod*sizeof(float));
+    //std::cout << "\n\n\n\n";
+  }
+  cudaCheck(cudaFree(tensor_copy));
+  cudaCheck(cudaFree(maxed));
+  cudaCheck(cudaFree(argmaxed));
+
+  Tensor *new_tensor = createTensor(topk, topk_dims, topk_dims_prod, false, "");
+  return new_tensor;
+}
+
+
+
 
 
 extern "C" void *clip(Tensor tensor, float _min, float _max)
@@ -7252,7 +7385,6 @@ void conv2d_backward(float *inp,  float *weight,
 extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
-  
   //std::cout << "Conv forward of " << conv_namec << " and tensor " << tensor.name << "\n";
   
   std::string _self = self;
@@ -7315,23 +7447,26 @@ extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int 
 
   std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)conv->OC};
   
-  NamedTensors[conv_name] = conv->d_filter;
+  //NamedTensors[conv_name] = conv->d_filter;
 
   //for backprop:
-  NamedDims[conv_name] = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks}; 
+  std::vector<float> kernel_dims = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks}; 
+  //NamedDims[conv_name] = kernel_dims;
 
   //for forward resulting dims:
   NamedDimsConv[conv_name] = new_dims;
   
   //if (conv_name=="modelconv1")
   //  PrintTensorF(conv->d_filter, 1, conv->ks*conv->ks);
-  NamedConv2d[conv_name] = std::move(conv);
 
-
+  Tensor conv_tensor;
+  conv_tensor.NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
+  NamedTensorsT[conv_name] = conv_tensor;
 
   //PrintTensorF(device_y, 2, 2);
+  NamedConv2d[conv_name] = std::move(conv);
+
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  
   return new_tensor;
 }
 
@@ -7702,14 +7837,16 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
   if (optimizer==nullptr)
     optimizer = std::make_unique<AdamW_optim>(lr, beta1, beta2, weight_decay);
 
+  
   for (auto& pair : NamedParamGrads)
   {
     std::string param_name = pair.first;
 
     if (param_name!="none")
     {
-      optimizer->init_states(param_name, DimsProd(NamedDims[param_name]));
-      optimizer->step(NamedTensors[param_name], pair.second, NamedDims[param_name], param_name);
+      Tensor tensor = NamedTensorsT[param_name];
+      optimizer->init_states(param_name, tensor.dims_prod);
+      optimizer->step(tensor.tensor_ptr, pair.second, tensor.dims, param_name);
     }
   }
   optimizer->count_step();
@@ -7836,7 +7973,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   int forward_func = 0;
   if(ends_with(functionName, "forward"))
     forward_func = 1;
-  forward_func = 1; // TODO: Remove this line
+  forward_func = 1; // TODO: RemoveLastDim this line
 
 
 
@@ -8047,18 +8184,16 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     // Look up the name.
     if (NamedValues.count(Lname) != 0) {
-      
-      Value *Variable = NamedValues[Lname];
-
-
       if(LHS->GetSelf())
         Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
                                                   {Builder->CreateLoad(int8PtrTy, first_arg),
                                                    Builder->CreateGlobalString(Lname),
                                                    Val});
       else
+      {
+        AllocaInst *Variable = NamedValues[Lname];
         Builder->CreateStore(Val, Variable);
-      
+      }
     
     } else if (NamedStrs.count(Lname) != 0 ) {
 
@@ -8848,8 +8983,6 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     // Remember this binding.
     NamedValues[VarName] = Alloca;
     
-    
-    
   }
 
 
@@ -8976,6 +9109,21 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
+extern "C" void *rand_like(Tensor tensor)
+{
+  float dims_prod = tensor.dims_prod;
+
+  float *tensor_ptr, *tensor_cpu;
+
+  tensor_cpu = make_random_float_uniform(dims_prod);
+
+  cudaMalloc(&tensor_ptr, dims_prod*sizeof(float));
+  cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
+  delete[] tensor_cpu;
+
+  Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
+  return new_tensor;
+}
 
 
 
@@ -9024,22 +9172,6 @@ extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
 
   NamedTensorsT[tensor_name] = tensor;
   
-}
-
-extern "C" void *rand_like(Tensor tensor)
-{
-  float dims_prod = tensor.dims_prod;
-
-  float *tensor_ptr, *tensor_cpu;
-
-  tensor_cpu = make_random_float_uniform(dims_prod);
-
-  cudaMalloc(&tensor_ptr, dims_prod*sizeof(float));
-  cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
-  delete[] tensor_cpu;
-
-  Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
-  return new_tensor;
 }
 
 extern "C" float CreateTensorOnDemand(char *tensor_name, char *init)
@@ -9315,6 +9447,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
   if (isAttribute && !isSelf) // e.g: x.view() / native_methods
   {
+    //TODO: This is true only for the pre_dot arg, other arguments are handled incorrectly.
     first_arg = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(Builder->CreateGlobalString(_pre_dot), first_arg);
 
@@ -9458,7 +9591,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       arg = tensor;
       */
       arg = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {arg});
-      
 
     }
     else
@@ -9746,7 +9878,7 @@ Function *FunctionAST::codegen() {
     // TODO: solve bugged shifted arguments when using tensors
     
     std::string arg_name = Arg.getName().str();
-    std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
+    //std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
 
     std::string __print = "FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " ";
 
@@ -10204,7 +10336,7 @@ static void InitializeModule() {
 
   // 
   FunctionType *sumTy = FunctionType::get(
-      floatPtrTy,
+      int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
@@ -10213,7 +10345,7 @@ static void InitializeModule() {
 
   // 
   FunctionType *meanTy = FunctionType::get(
-      floatPtrTy,
+      int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
@@ -10222,7 +10354,7 @@ static void InitializeModule() {
 
   // 
   FunctionType *maxTy = FunctionType::get(
-      floatPtrTy,
+      int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true
   );
@@ -10231,12 +10363,21 @@ static void InitializeModule() {
 
   //
   FunctionType *argmaxTy = FunctionType::get(
-      floatPtrTy,
+      int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true
   );
   TheModule->getOrInsertFunction("argmax", argmaxTy);
   
+
+  //
+  FunctionType *topkTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      true
+  );
+  TheModule->getOrInsertFunction("topk", topkTy);
+
 
   //
   FunctionType *viewTy = FunctionType::get(
@@ -11075,10 +11216,8 @@ int main() {
 
   return_tensor_functions = {"gelu", "relu", "softmax", "log", "rand_like"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "permute",
-                            "sum", "mean", "tmin", "argmin", "argtop"};
-
+                            "sum", "mean", "tmin", "argmin", "topk"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
-
 
   return_pinned_methods = {"gpu", "gpuw"};
 
