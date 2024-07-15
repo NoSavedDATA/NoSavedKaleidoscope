@@ -279,6 +279,7 @@ enum Token {
   tok_attr_var = -18,
   tok_attr_tensor = -19,
   tok_conv2d = -21,
+  tok_vec = -37,
 
 
 };
@@ -321,6 +322,7 @@ std::map<int, std::string> token_to_string = {
   { tok_tab, "tok tab" },
   { tok_return, "tok return"},
   { tok_as, "tok as"},
+  { tok_vec, "tok vec"},
 
 
   // operators
@@ -558,6 +560,8 @@ static int get_token() {
       return tok_return;
     if (IdentifierStr == "as")
       return tok_as;
+    if (IdentifierStr == "vec")
+      return tok_vec;
     return tok_identifier;
   }
 
@@ -877,6 +881,16 @@ class StrVecExprAST : public ExprAST {
 };
 
 
+class ObjectExprAST : public VarExprAST {
+
+public:
+  ObjectExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type)
+      : VarExprAST(std::move(VarNames), std::move(Type)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
 
 
 
@@ -1345,6 +1359,7 @@ static std::unique_ptr<ExprAST> ParseParenExpr(std::string class_name="") {
 //global
 std::vector<std::string> tensorVars;
 std::vector<std::string> pinnedTensorVars;
+std::vector<std::string> objectVars;
 std::map<std::string, std::string> functionVars;
 std::map<std::string, std::string> floatFunctions;
 std::map<std::string, std::string> stringMethods;
@@ -1357,6 +1372,7 @@ std::map<std::string, pthread_mutex_t *> lockVars;
 //global
 static std::vector<std::string> Classes;
 static std::map<std::string, std::string> Object_toClass;
+static std::map<std::string, std::string> Object_toClassVec;
 
 
 /// identifierexpr
@@ -1369,10 +1385,58 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     {
       getNextToken();
       //std::cout << "Object name: " << IdentifierStr << " and Class: " << Classes[i]<< "\n";
-      Object_toClass[IdentifierStr] = Classes[i];
+      bool is_vec=false;
+      bool is_self=false;
+      bool is_attr=false;
+      std::string pre_dot="";
       
-      getNextToken();
-      return std::move(std::make_unique<NumberExprAST>(0.0f));
+      if (CurTok==tok_vec)
+      {
+        //if(CurTok!='[')
+        //  LogError("vec requires size declared by [size]");
+        getNextToken();
+        Object_toClassVec[IdentifierStr] = Classes[i];
+        is_vec=true;
+      }
+
+
+      if (CurTok==tok_self)
+      {
+        getNextToken();
+        is_self=true;
+      }
+
+
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+      while (true) {
+        std::string Name = IdentifierStr;
+        objectVars.push_back(Name);
+        if (!is_vec)
+          Object_toClass[IdentifierStr] = Classes[i];
+        getNextToken(); // eat identifier.
+
+        
+        std::unique_ptr<ExprAST> Init = nullptr;
+        VarNames.push_back(std::make_pair(Name, std::move(Init)));
+
+        // End of var list, exit loop.
+        if (CurTok != ',')
+          break;
+        getNextToken(); // eat the ','.
+
+        if (CurTok != tok_identifier)
+          return LogError("Expected object identifier names.");
+      }
+
+      auto aux = std::make_unique<ObjectExprAST>(std::move(VarNames), "object");
+      aux->SetSelf(is_self);
+      aux->SetIsAttribute(is_attr);
+      aux->SetPreDot(pre_dot);
+
+      if (CurTok==tok_space)
+        getNextToken();
+
+      return aux;
     }
 
     
@@ -2020,6 +2084,8 @@ static std::map<std::string, std::vector<float>> NamedDimsConv;
 unsigned char* current_data_attr;
 std::vector<float> current_data_attr_dims;
 
+static std::map<std::string, std::string> NamedObjects;
+
 
 
 
@@ -2350,7 +2416,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   }
   
   // Turns string from object model of class type Model into Model
-  if (Object_toClass.find(object_class) != Object_toClass.end())
+  if (Object_toClass.count(object_class)>0)
     object_class = Object_toClass[object_class]; 
   
   
@@ -2698,7 +2764,7 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
   bool is_attr = false;
   if (CurTok == tok_self)
   {
-    is_self=true;
+    is_self=true; //TODO: set self per VarName instead.
     getNextToken();
   }
   if (CurTok == tok_class_attr)
@@ -2718,7 +2784,7 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
 
     
     std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    VarNames.push_back(std::make_pair(Name, std::move(Init))); 
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -3813,13 +3879,12 @@ extern "C" float PrintFloatVec(std::vector<float> vec)
 }
 
 
-extern "C" float first_nonzero(char *self, int is_self)
+extern "C" float first_nonzero(char *self)
 {
   //std::cout << "first_nonzero call of: " << self << " and is self: " << is_self <<"\n";
 
   std::vector<float> vec;
-  if (is_self)
-    vec = ClassFloatVecs[self];
+  vec = ClassFloatVecs[self];
   //else
   //  vec = NamedFloatVecs[self]; This one is of type alloca
 
@@ -4991,17 +5056,17 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
   if (is_self||is_attr)
   {
-    if (is_self)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
     // Gets from pre_dot if it is a class attribute
-    else {
+    if (is_attr) {
       object_name = Builder->CreateGlobalString(pre_dot);
       var_name = Builder->CreateGlobalString(Name);
 
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {object_name, var_name});
     }
+    if (is_self)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
 
     for (const auto &entry : NamedClassValues)
     {
@@ -6699,7 +6764,7 @@ __global__ void max_over_semilast_dim_kernel(const float *tensor,
 extern "C" void *tmax(Tensor tensor, float first_dim, ...) 
 { //TODO: automatic type detection for max and min (float vs tensor)
   
-  std::cout << "MAX OF " << tensor.name << "\n";
+  //std::cout << "MAX OF " << tensor.name << "\n";
   
 
   float *tensor_ptr = tensor.tensor_ptr;
@@ -6836,7 +6901,7 @@ __global__ void argmax_over_last_dim_kernel(const float *tensor,
 
 extern "C" void *argmax(Tensor tensor, float first_dim, ...) 
 {
-  std::cout << "MAX OF " << tensor.name << "\n";
+  //std::cout << "ARGMAX OF " << tensor.name << "\n";
 
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
@@ -9462,7 +9527,52 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
+extern "C" float ObjectVarOnDemand(char *name)
+{
+  std::cout << "ObjectVarOnDemand of " << name << "\n\n\n\n";
 
+  return 0;
+}
+
+
+Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+
+    
+    Value *var_name = Builder->CreateGlobalString(VarName);
+
+    std::string pre_dot = GetPreDot();
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+
+    Value *object_hash = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
+    var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {object_hash, var_name});
+
+    Builder->CreateCall(TheModule->getFunction("ObjectVarOnDemand"),
+                                              {var_name});
+    
+  }
+
+
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
 
 
 
@@ -9588,8 +9698,6 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *init)
 }
 
 
-
-
 Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -9600,20 +9708,6 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   // Register all variables and emit their initializer.
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-    // Emit the initializer before adding the variable to scope, this prevents
-    // the initializer from referencing the variable itself, and permits stuff
-    // like this:
-    //  var a = 1 in
-    Value *InitVal;
-    if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
-      if (!InitVal)
-        return nullptr;
-    } else { // If not specified, use 0.0.
-      InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
-    }
     
     
     Value *var_name = Builder->CreateGlobalString(VarName);
@@ -9769,6 +9863,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look up the name in the global module table.
   std::string tgt_function = Callee;
+  
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
@@ -9798,12 +9893,13 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
                                        {Builder->CreateLoad(int8PtrTy, scope_str)}), previous_scope);
 
 
+  Value *_pre_dot_str = Builder->CreateGlobalString(_pre_dot);
 
 
   if (isAttribute && !isSelf && !in_str(tgt_function, native_methods)) 
   { // e.g: model.forward()
     first_arg = Builder->CreateAlloca(int8PtrTy);
-    Builder->CreateStore(Builder->CreateGlobalString(_pre_dot), first_arg);
+    Builder->CreateStore(_pre_dot_str, first_arg);
 
     Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                       {Builder->CreateLoad(int8PtrTy, previous_scope), Builder->CreateLoad(int8PtrTy, first_arg)});
@@ -9832,7 +9928,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     {
       Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
                                                     {Builder->CreateLoad(int8PtrTy, first_arg),
-                                                     Builder->CreateGlobalString(_pre_dot),
+                                                     _pre_dot_str,
                                                      Builder->CreateGlobalString(Class),
                                                      Builder->CreateGlobalString(Callee),
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function),
@@ -9840,20 +9936,29 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), isAttribute)}),
                                                     first_arg);
     }
-    if (is_self_of_nested_function)
-    { }
+    if (is_self_of_nested_function && not_coding_language_method)
+    {
+      Value *first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                                    {Builder->CreateLoad(int8PtrTy, first_arg)});
+      first_arg = Builder->CreateAlloca(int8PtrTy);
+      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                    {first_arg_copy,
+                                                     _pre_dot_str}),
+                                                    first_arg);
+    }
     
     
     if (CalleeOverride!="none"||in_str(Callee, native_methods))
     { // e.g: x.view()
       //ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
       
+      
       if (isSelf&&!isAttribute)
         ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
       if (!isSelf&&isAttribute)
       {
         Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                        {Builder->CreateLoad(int8PtrTy, previous_scope), Builder->CreateGlobalString(_pre_dot)});
+                        {Builder->CreateLoad(int8PtrTy, previous_scope), _pre_dot_str});
         ArgsV.push_back(arg);
       }
       
@@ -9862,9 +9967,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
         // Extend first arg
         ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                        {ArgsV[0], Builder->CreateGlobalString(_pre_dot)});
-        ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
-        target_args_size+=1;
+                                        {ArgsV[0], _pre_dot_str});
+        //ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
+        //target_args_size+=1;
       }
 
       if (in_str(Callee, return_tensor_methods))
@@ -9873,6 +9978,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
     else
     {
+      
       std::cout << "Adding first arg and scope  for " << tgt_function << "\n";
       ArgsV.push_back(first_arg); // Pass first_arg's reference for the derived AST nodes.
     }
@@ -10177,6 +10283,16 @@ extern "C" char *CopyString(char *in_str)
   strcpy(copied, in_str);
 
   return copied;
+}
+
+extern "C" char *append(char *self, char *in_str)
+{
+  //char* copied = (char*)malloc(strlen(in_str) + 1);
+  //strcpy(copied, in_str);
+
+  std::cout << "APPEND OF " << in_str << " with self: " << self << "\n";
+
+  return in_str;
 }
 
 
@@ -11011,6 +11127,7 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("SplitString", SplitStringTy);
 
 
+  //
   FunctionType *SplitStringIndexateTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -11019,6 +11136,7 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("SplitStringIndexate", SplitStringIndexateTy);
 
 
+  //
   FunctionType *StrToFloatTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy},
@@ -11027,6 +11145,7 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
 
 
+  //
   FunctionType *CopyStringTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy},
@@ -11035,7 +11154,16 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("CopyString", CopyStringTy);
 
 
-  // char *
+  //
+  FunctionType *appendTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("append", appendTy);
+
+
+  //
   FunctionType *PrintStrTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy}, 
@@ -11065,7 +11193,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *first_nonzeroTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("first_nonzero", first_nonzeroTy);
@@ -11185,6 +11313,15 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
 
 
+  //
+  FunctionType *ObjectVarOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("ObjectVarOnDemand", ObjectVarOnDemandTy);
+
+
   //===----------------------------------------------------------------------===//
   // Other Ops
   //===----------------------------------------------------------------------===//
@@ -11266,7 +11403,7 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("CreateTensorOnDemand", CreateTensorOnDemandTy);
 
 
-// char *, int, char *, int, int, int, int, int
+  //
   FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
       //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
@@ -11625,7 +11762,7 @@ int main() {
 
   // tensor + string + ...
   // e.g: x.view(), str.split()
-  native_methods = {"split", "split_idx", "first_nonzero"};
+  native_methods = {"split", "split_idx", "first_nonzero", "append"};
   native_methods = concat_str_vec(native_methods, return_tensor_methods);
   //native_methods = concat_str_vec(native_methods, return_pinned_methods);
 
