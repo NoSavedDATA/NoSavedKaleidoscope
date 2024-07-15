@@ -132,7 +132,20 @@ bool ends_with(std::string str_input, std::string str_end)
 {
   return str_input.size() >= str_end.size() && str_input.compare(str_input.size() - str_end.size(), str_end.size(), str_end) == 0;
 }
-
+bool begins_with(const std::string& str_input, const std::string& str_start) {
+    return str_input.size() >= str_start.size() && str_input.compare(0, str_start.size(), str_start) == 0;
+}
+bool contains_str(const std::string& str_input, const std::string& str_sub) {
+    return str_input.find(str_sub) != std::string::npos;
+}
+std::string remove_substring(const std::string& str, const std::string& substr) {
+    std::string result = str;  // Copy the original string
+    size_t pos = result.find(substr);
+    if (pos != std::string::npos) {
+        result.erase(pos, substr.length());
+    }
+    return result;
+}
 bool starts_with(const char* str, const char* sub) {
   return strncmp(str, sub, strlen(sub)) == 0;
 }
@@ -280,6 +293,8 @@ enum Token {
   tok_attr_tensor = -19,
   tok_conv2d = -21,
   tok_vec = -37,
+  tok_post_class_attr_attr = -38,
+  tok_post_class_attr_identifier = -39,
 
 
 };
@@ -332,6 +347,8 @@ std::map<int, std::string> token_to_string = {
 
   { tok_space, "tok_space" },
 
+  { tok_post_class_attr_attr, ".attr." },
+  { tok_post_class_attr_identifier, ".identifier" },
   
   // var definition
   { tok_var, "float" },
@@ -475,6 +492,32 @@ static int get_token() {
     return tok_str;
   }
 
+  
+  if (LastChar=='.')
+  {
+    LastChar = getchar(); // eat .
+    IdentifierStr = LastChar;
+    bool name_ok=true;
+    while (name_ok)
+    {
+      LastChar = getchar();
+      
+      
+      if(isalnum(LastChar) || LastChar=='_')
+        IdentifierStr += LastChar;
+      else
+        name_ok = false;
+
+      
+      if (LastChar=='.')
+      {
+        LastChar = getchar();
+        return tok_post_class_attr_attr;
+      }
+    }
+    
+    return tok_post_class_attr_identifier;
+  }
 
   if (isalpha(LastChar) || LastChar=='_') { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
@@ -831,9 +874,23 @@ class VecIdxExprAST : public ExprAST {
 
     Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
     const std::string &getName() const { return Name; }
-    std::string GetName() override {
-    return Name;
-  }
+    std::string GetName() override { return Name; }
+};
+
+
+
+class ObjectVecIdxExprAST : public ExprAST {
+
+  public:
+    std::unique_ptr<ExprAST> Vec;
+    std::string _post_dot;
+
+    ObjectVecIdxExprAST(std::unique_ptr<ExprAST> Vec, std::string _post_dot)
+                  : Vec(std::move(Vec)), _post_dot(_post_dot) {
+      this->isVarLoad = true;
+    }
+
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
 /// VarExprAST - Expression class for var/in
@@ -2075,7 +2132,6 @@ Tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kD
 
 
 // Tensors
-static std::map<std::string, float *> NamedTensors;
 static std::map<std::string, Tensor> NamedTensorsT;
 static std::map<std::string, float *> NamedPinnedTensors;
 static std::map<std::string, std::vector<float>> NamedDims;
@@ -2084,9 +2140,8 @@ static std::map<std::string, std::vector<float>> NamedDimsConv;
 unsigned char* current_data_attr;
 std::vector<float> current_data_attr_dims;
 
-static std::map<std::string, std::string> NamedObjects;
 
-
+static std::map<std::string, std::vector<std::string>> objectVecs;
 
 
 extern "C" void PrintDims(std::vector<float> dims)
@@ -2413,6 +2468,8 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     object_class=IdentifierStr;
     pre_dot+=IdentifierStr;
     getNextToken();
+    if (CurTok=='[')
+      std::cout << "\n\n\nCUR CLASS TOK " << ReverseToken(CurTok) << "\n\n\n\n";
   }
   
   // Turns string from object model of class type Model into Model
@@ -2422,7 +2479,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   
   
   
-  //std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
+  std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
 
 
   std::string IdName = IdentifierStr;
@@ -2446,14 +2503,10 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       aux->SetType("str");
 
 
-    if (is_self)
-      aux->SetSelf(true);
-    if (is_class_attr)
-      aux->SetIsAttribute(true);
+    aux->SetSelf(is_self);
+    aux->SetIsAttribute(is_class_attr);
     aux->SetPreDot(pre_dot);
     
-    
-
     
     if (CurTok==tok_space)
       getNextToken();
@@ -2480,6 +2533,7 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     Idx.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
 
 
+    
     aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
     aux->SetIsVec(true);
 
@@ -2502,13 +2556,39 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     }
 
 
-    if (is_self)
-      aux->SetSelf(true);
-    if (is_class_attr)
-      aux->SetIsAttribute(true);
+    aux->SetSelf(is_self);
+    aux->SetIsAttribute(is_class_attr);
     aux->SetPreDot(pre_dot);
 
+
+    std::cout << "\n\n\nVEC CURRENT TOKEN pre " << ReverseToken(CurTok) << ", type " << aux->GetType() << "\n";
     getNextToken(); // eat ]
+
+    std::cout << "\nTOKEN post " << ReverseToken(CurTok) << ", type " << aux->GetType() << "\n";
+
+    if (CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
+    {
+      
+      std::string post_dot="";
+
+      while(CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
+      {
+        std::cout << "tok_post_class_attr_attr token " << ReverseToken(CurTok) << "\n";
+        post_dot += IdentifierStr;
+        getNextToken();
+      }
+
+      std::cout << "POST DOT " << post_dot <<  "\n\n\n";
+
+      aux = std::make_unique<ObjectVecIdxExprAST>(std::move(aux), post_dot);
+
+      aux->SetSelf(is_self);
+      aux->SetIsAttribute(is_class_attr);
+      aux->SetPreDot(pre_dot);
+
+      if (in_str(post_dot, tensorVars))
+        aux->SetType("tensor");
+    }
 
     return std::move(aux);
   }
@@ -5038,8 +5118,6 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     std::cout << "NamedStr: " << entry.first << "\n";
   for (const auto &entry : NamedValues)
     std::cout << "NamedValues: " << entry.first << "\n";
-  for (const auto &entry : NamedTensors)
-    std::cout << "NamedTensors: " << entry.first << "\n";
   for (const auto &entry : NamedClassValues)
     std::cout << "NamedClassValues: " << entry.first << "\n";
   */
@@ -5106,12 +5184,15 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
     return V;
 
+  } else if (in_str(Name, objectVars)) {
+    return var_name;
+
   } else if (NamedStrs.count(Name)>0) {
 
     //std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n";
     //std::cout << "Type: " << Type << "\n\n";
 
-    for (const auto &entry : NamedTensors)
+    for (const auto &entry : NamedTensorsT)
     {
       std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
       if (ends_with(entry.first, Name))
@@ -5292,6 +5373,50 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   return ret;
 }
 
+
+Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // Look this variable up in the function.
+  std::cout << "ObjectVecIdxExprAST codegen" << "\n";
+  
+  VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(Vec.get());
+  std::cout << "vec name " << vec->GetName() << "\n";
+
+  Value *idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope);
+
+
+  Value *var_name, *object_name, *object_var_name, *post_dot_str;
+  var_name = Builder->CreateGlobalString(vec->GetName());
+  post_dot_str = Builder->CreateGlobalString(_post_dot);
+  
+  std::string pre_dot = GetPreDot();
+  bool is_self = GetSelf();
+  bool is_attr = GetIsAttribute();
+  
+  
+  if (is_self||is_attr)
+  {
+    // Gets from pre_dot if it is a class attribute
+    if (is_attr) {
+      object_name = Builder->CreateGlobalString(pre_dot);
+      var_name = Builder->CreateGlobalString(Name);
+
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {object_name, var_name});
+    }
+    if (is_self)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+  }
+
+  if (Type=="tensor")
+    return Builder->CreateCall(TheModule->getFunction("object_vec_idxTensor"),
+                                                      {var_name, idx, post_dot_str});
+
+
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
 
 
 
@@ -5484,7 +5609,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
 {
-  //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n";
+  //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
 
   Tensor tgt_tensor = NamedTensorsT[tensor_name];
   
@@ -5510,6 +5635,9 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
       tgt_tensor.dims_prod = tensor->dims_prod;
     }
     cudaCheck(cudaMemcpy(tgt_tensor.tensor_ptr, tensor->tensor_ptr, tgt_tensor.dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+   
+    if (tensor->name=="object_tensor")
+      delete tensor;
   }
   
   NamedTensorsT[tensor_name] = tgt_tensor;
@@ -5643,12 +5771,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
     
     
     std::cout << "1 0 attr\n";
-    /*
-    float *Variable = NamedTensors[LHSE->getName()];
-    if (!Variable)
-      return LogErrorV("O nome do tensor/variável é desconhecido.");
-    */
-
+    
 
 
     //LogErrorS("Attribution from float into tensor is not possible.");    
@@ -5823,13 +5946,6 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
     
 
 
-    
-    
-    /*
-    float *Variable = NamedTensors[LHSE->getName()];
-    if (!Variable)
-      return LogErrorV("O nome do tensor/variável é desconhecido.");
-    */
     
     
     
@@ -6514,7 +6630,8 @@ extern "C" float mean(char *self)
 {
   std::string tensor_name = self;
 
-  float * tensor = NamedTensors[tensor_name];
+  Tensor tensor = NamedTensorsT[tensor_name];
+  float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = NamedDims[tensor_name];
   
   int B = DimsProd(dims);
@@ -6522,7 +6639,7 @@ extern "C" float mean(char *self)
 
   float *meaned = new float[B];
 
-  cudaMemcpy(meaned, tensor, B*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(meaned, tensor_ptr, B*sizeof(float), cudaMemcpyDeviceToHost);
   
   float tensor_mean=0;
   for(int i=0; i<B; i++)
@@ -7862,7 +7979,6 @@ extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int 
 
   std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)conv->OC};
   
-  //NamedTensors[conv_name] = conv->d_filter;
 
   //for backprop:
   std::vector<float> kernel_dims = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks}; 
@@ -8284,7 +8400,6 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   //TensorPtr = Builder->CreateAlloca(floatPtrTy, nullptr);
-  //Builder->CreateStore(FloatPtr_toValue(NamedTensors[Name]), TensorPtr);
   
 
 
@@ -9547,7 +9662,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
 
-    
+    /*
     Value *var_name = Builder->CreateGlobalString(VarName);
 
     std::string pre_dot = GetPreDot();
@@ -9565,9 +9680,10 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {object_hash, var_name});
 
+
     Builder->CreateCall(TheModule->getFunction("ObjectVarOnDemand"),
                                               {var_name});
-    
+    */
   }
 
 
@@ -9691,7 +9807,7 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *init)
   }
   */
 
-  NamedTensors[tensor_name] = tensor_ptr;
+  
   NamedTensorsT[tensor_name] = tensor;
 
   return 0;
@@ -10285,15 +10401,86 @@ extern "C" char *CopyString(char *in_str)
   return copied;
 }
 
-extern "C" char *append(char *self, char *in_str)
+extern "C" char *append(char *self, char *obj_name)
 {
   //char* copied = (char*)malloc(strlen(in_str) + 1);
   //strcpy(copied, in_str);
 
-  std::cout << "APPEND OF " << in_str << " with self: " << self << "\n";
+  std::cout << "\n\nAPPEND OF " << obj_name << " with self: " << self << "\n";
+  std::string random_str = RandomString(4);
 
-  return in_str;
+  std::vector<std::string> vars_to_convert;
+
+  std::string obj_name_str = obj_name;
+
+
+  for (auto &pair: NamedTensorsT)
+  {
+    //std::cout << "Tensor: " << pair.first << "\n";
+    if (begins_with(pair.first, obj_name_str))
+      vars_to_convert.push_back(pair.first); 
+  }
+  for (std::string tensor : vars_to_convert)
+  {
+      std::string idx_obj = random_str + tensor;
+      //std::cout << "Converting tensor " << tensor << " into " << idx_obj << "\n";
+
+      Tensor t = NamedTensorsT[tensor];
+      NamedTensorsT.erase(tensor);
+      NamedTensorsT[idx_obj] = t;
+
+  }
+  vars_to_convert.clear();
+
+  for (auto &pair: NamedClassValues)
+    if (begins_with(pair.first, obj_name_str))
+      vars_to_convert.push_back(pair.first);
+  for (std::string float_var : vars_to_convert)
+  {
+    std::string idx_obj = random_str + float_var;
+      
+    //std::cout << "Converting float " << pair.first << " into " << idx_obj << "\n";
+
+    float f = NamedClassValues[float_var];
+    NamedClassValues.erase(float_var);
+    NamedClassValues[idx_obj] = f;
+  }
+  
+
+  objectVecs[self].push_back(random_str+obj_name);
+  
+  /*
+  std::string _aux = random_str+"nodex";
+  Tensor tensor = NamedTensorsT[_aux];
+  PrintTensorF(tensor.tensor_ptr,2,2);
+  */
+
+  return obj_name;
 }
+
+
+extern "C" void *object_vec_idxTensor(char *self, float idx, char *post_dot)
+{
+  //char* copied = (char*)malloc(strlen(in_str) + 1);
+  //strcpy(copied, in_str);
+
+  std::cout << "\n\nobject_vec_idx OF " << self << " at idx " << idx <<  "\n";
+  
+
+  std::vector<std::string> vec_aux = objectVecs[self];
+  std::string obj_scope = vec_aux[idx];
+
+  std::cout << "obj_scope " << obj_scope << "\n";
+
+  std::string tensor_name = obj_scope+post_dot;
+  std::cout << "Tensor name: " << tensor_name << "\n";
+  Tensor tensor = NamedTensorsT[tensor_name];
+
+
+  Tensor *new_tensor = createTensor(tensor.tensor_ptr, tensor.dims, tensor.dims_prod, false, "object_tensor");
+  return new_tensor;
+}
+
 
 
 const PrototypeAST& FunctionAST::getProto() const {
@@ -11161,6 +11348,24 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("append", appendTy);
+
+
+  //
+  FunctionType *object_vec_idxTensorTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("object_vec_idxTensor", object_vec_idxTensorTy);
+
+
+  //
+  FunctionType *object_vec_idxValueTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("object_vec_idxValue", object_vec_idxValueTy);
 
 
   //
