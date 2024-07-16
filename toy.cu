@@ -525,12 +525,9 @@ static int get_token() {
     while (name_ok)
     {
       LastChar = getchar();
-      
 
       if (LastChar=='[')
-      {
-        return tok_identifier;
-      }
+        break;
       
       if(isalnum(LastChar) || LastChar=='_')
         IdentifierStr += LastChar;
@@ -941,10 +938,13 @@ class StrVecExprAST : public ExprAST {
 class ObjectExprAST : public VarExprAST {
 
 public:
+  std::unique_ptr<ExprAST> Init;
+
   ObjectExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::string Type)
-      : VarExprAST(std::move(VarNames), std::move(Type)) {}
+      std::string Type,
+      std::unique_ptr<ExprAST> Init)
+      : VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)) {}
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -1382,6 +1382,7 @@ Value *LogErrorV(std::string Str) {
 }
 
 static std::unique_ptr<ExprAST> ParseExpression(std::string class_name="");
+static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name);
 
 /// numberexpr ::= number
 static std::unique_ptr<ExprAST> ParseNumberExpr() {
@@ -1446,14 +1447,24 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
       bool is_self=false;
       bool is_attr=false;
       std::string pre_dot="";
+      std::unique_ptr<ExprAST> VecInitSize = nullptr;
       
+      //std::cout << "\n\n\n\nCUR TOK IS: " << ReverseToken(CurTok) << "\n\n\n\n\n\n";
       if (CurTok==tok_vec)
       {
-        //if(CurTok!='[')
-        //  LogError("vec requires size declared by [size]");
         getNextToken();
         Object_toClassVec[IdentifierStr] = Classes[i];
         is_vec=true;
+        
+        if(CurTok=='[')
+        {
+          getNextToken();
+          std::cout << "\n\n\n\n\n\n\nCUR TOK after [ IS: " << ReverseToken(CurTok) << "\n\n\n\n\n\n\n\n\n";
+          VecInitSize = ParsePrimary(class_name);
+          if (CurTok!=']')
+            LogError("Expected ] at object vec");
+          getNextToken();
+        } 
       }
 
 
@@ -1485,10 +1496,11 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
           return LogError("Expected object identifier names.");
       }
 
-      auto aux = std::make_unique<ObjectExprAST>(std::move(VarNames), "object");
+      auto aux = std::make_unique<ObjectExprAST>(std::move(VarNames), "object", std::move(VecInitSize));
       aux->SetSelf(is_self);
       aux->SetIsAttribute(is_attr);
       aux->SetPreDot(pre_dot);
+      aux->SetIsVec(is_vec);
 
       if (CurTok==tok_space)
         getNextToken();
@@ -1496,13 +1508,9 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
       return aux;
     }
 
-    
-
+  
   std::string IdName = IdentifierStr;
-  
-  
   //std::cout << "Identifier " << IdName <<  "\n";
-
   getNextToken(); // eat identifier.
   
 
@@ -2561,10 +2569,10 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     aux->SetPreDot(pre_dot);
 
 
-    std::cout << "\n\n\nVEC CURRENT TOKEN pre " << ReverseToken(CurTok) << ", type " << aux->GetType() << "\n";
+    
     getNextToken(); // eat ]
 
-    std::cout << "\nTOKEN post " << ReverseToken(CurTok) << ", type " << aux->GetType() << "\n";
+    //std::cout << "\nTOKEN post " << ReverseToken(CurTok) << ", type " << aux->GetType() << "\n";
 
     if (CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
     {
@@ -2573,12 +2581,12 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
       while(CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
       {
-        std::cout << "tok_post_class_attr_attr token " << ReverseToken(CurTok) << "\n";
+        //std::cout << "tok_post_class_attr_attr token " << ReverseToken(CurTok) << "\n";
         post_dot += IdentifierStr;
         getNextToken();
       }
 
-      std::cout << "POST DOT " << post_dot <<  "\n\n\n";
+      
 
       aux = std::make_unique<ObjectVecIdxExprAST>(std::move(aux), post_dot);
 
@@ -5065,7 +5073,7 @@ extern "C" void * LoadStrVecOnDemand(char *object_var_name) {
 
 
 extern "C" void * LoadFloatVecOnDemand(char *object_var_name) {
-  //std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+  std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
     
   return &ClassFloatVecs[object_var_name];
 }
@@ -5149,8 +5157,11 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     for (const auto &entry : NamedClassValues)
     {
       if (ends_with(entry.first, Name))
-        return Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),
-                                                      {var_name});
+      {
+        V = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"), {var_name});
+        V = Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
+        return V;
+      }
     }
     for (const auto &entry : ClassStrVecs)
       if (ends_with(entry.first, Name))
@@ -9642,9 +9653,9 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-extern "C" float ObjectVarOnDemand(char *name)
+extern "C" float ObjectVarOnDemand(char *name, float vec_size)
 {
-  std::cout << "ObjectVarOnDemand of " << name << "\n\n\n\n";
+  std::cout << "ObjectVarOnDemand of " << name << " with vec_size " << vec_size << "\n\n\n\n";
 
   return 0;
 }
@@ -9657,33 +9668,38 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
+  Value *init;
+  if (Init)
+    init = Init->codegen(first_arg, scope_str, previous_scope);
+
   // Register all variables and emit their initializer.
 
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
 
-    /*
     Value *var_name = Builder->CreateGlobalString(VarName);
+    
+    if (Init)
+    {
+      std::string pre_dot = GetPreDot();
+      bool is_self = GetSelf();
+      bool is_attr = GetIsAttribute();
 
-    std::string pre_dot = GetPreDot();
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
+      if (is_self||is_attr)
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                              {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+      if (!(is_self||is_attr))
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                              {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
 
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
-
-    Value *object_hash = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
-    var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {object_hash, var_name});
+      //Value *object_hash = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
+      //var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      //                                        {object_hash, var_name});
 
 
-    Builder->CreateCall(TheModule->getFunction("ObjectVarOnDemand"),
-                                              {var_name});
-    */
+      Builder->CreateCall(TheModule->getFunction("ObjectVarOnDemand"),
+                                                {var_name, init});
+    }
   }
 
 
@@ -10010,10 +10026,14 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
 
   Value *_pre_dot_str = Builder->CreateGlobalString(_pre_dot);
+  Value *first_arg_copy = Builder->CreateAlloca(int8PtrTy);
 
-
-  if (isAttribute && !isSelf && !in_str(tgt_function, native_methods)) 
+  if (isAttribute && !isSelf && !in_str(tgt_function, native_methods))
   { // e.g: model.forward()
+    if (nested_function)
+      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                                    {Builder->CreateLoad(int8PtrTy, first_arg)}),
+                                               first_arg_copy);
     first_arg = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(_pre_dot_str, first_arg);
 
@@ -10054,11 +10074,12 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
     if (is_self_of_nested_function && not_coding_language_method)
     {
-      Value *first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                                    {Builder->CreateLoad(int8PtrTy, first_arg)});
+      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                                    {Builder->CreateLoad(int8PtrTy, first_arg)}),
+                                               first_arg_copy);
       first_arg = Builder->CreateAlloca(int8PtrTy);
       Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                    {first_arg_copy,
+                                                    {Builder->CreateLoad(int8PtrTy, first_arg_copy),
                                                      _pre_dot_str}),
                                                     first_arg);
     }
@@ -10094,7 +10115,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
     else
     {
-      
       std::cout << "Adding first arg and scope  for " << tgt_function << "\n";
       ArgsV.push_back(first_arg); // Pass first_arg's reference for the derived AST nodes.
     }
@@ -10157,6 +10177,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     //std::cout << "\nCall codegen for argument n°: " << i << ".\n";
 
+    Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
+
     Value * arg;
     std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
     if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
@@ -10164,7 +10186,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       arg = Builder->CreateGlobalString(Args[i]->GetName());
       if (Args[i]->GetSelf())
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, first_arg), arg});
+                                                      {Builder->CreateLoad(int8PtrTy, fa), arg});
       if (!(Args[i]->GetSelf() || Args[i]->GetIsAttribute()) || in_str(tgt_function, native_methods))
         arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, previous_scope), arg});
@@ -10178,7 +10200,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     }
     else
-      arg = Args[i]->codegen(first_arg, scope_str, previous_scope);
+      arg = Args[i]->codegen(fa, scope_str, previous_scope);
 
   
     ArgsV.push_back(arg);
@@ -10468,6 +10490,11 @@ extern "C" void *object_vec_idxTensor(char *self, float idx, char *post_dot)
   
 
   std::vector<std::string> vec_aux = objectVecs[self];
+  if (idx>=vec_aux.size())
+  {
+    std::string _error = "Index "+std::to_string(idx)+" is higher than the vector "+self+" size.";
+    LogErrorS(_error);
+  }
   std::string obj_scope = vec_aux[idx];
 
   std::cout << "obj_scope " << obj_scope << "\n";
@@ -11521,7 +11548,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *ObjectVarOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("ObjectVarOnDemand", ObjectVarOnDemandTy);
