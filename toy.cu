@@ -150,6 +150,15 @@ bool starts_with(const char* str, const char* sub) {
   return strncmp(str, sub, strlen(sub)) == 0;
 }
 
+char *str_to_char(std::string str)
+{
+    char *c_str = new char[str.length() + 1]; // +1 for the null terminator
+    std::strcpy(c_str, str.c_str());
+
+    return c_str;
+}
+
+
 
 
 
@@ -1459,7 +1468,6 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
         if(CurTok=='[')
         {
           getNextToken();
-          std::cout << "\n\n\n\n\n\n\nCUR TOK after [ IS: " << ReverseToken(CurTok) << "\n\n\n\n\n\n\n\n\n";
           VecInitSize = ParsePrimary(class_name);
           if (CurTok!=']')
             LogError("Expected ] at object vec");
@@ -2112,6 +2120,7 @@ struct Tensor {
     dims_prod = new_dims_prod;
     leaf = new_is_leaf;
     name = new_name;
+    cpu_tensor_ptr = nullptr;
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -2418,7 +2427,49 @@ extern "C" float * wload_img(Tensor tensor, char *img_name, float worker_idx, fl
 }
 
 
+extern "C" float cpu(Tensor *tensor)
+{
 
+  float *tensor_ptr, *tensor_cpu;
+  tensor_ptr = tensor->tensor_ptr;
+  tensor_cpu = tensor->cpu_tensor_ptr;
+
+  if (tensor_ptr==nullptr)
+    LogErrorS("Cannot load tensor to cpu from an null tensor.");
+
+  if (tensor_cpu!=nullptr)
+    cudaCheck(cudaFree(tensor_cpu));
+
+  float dims_prod = tensor->dims_prod;
+
+  cudaMallocHost(&tensor_cpu, dims_prod*sizeof(float));
+  cudaMemcpy(tensor_cpu, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+
+  tensor->cpu_tensor_ptr = tensor_cpu;
+
+  //NamedTensorsT[tensor.name] = tensor;
+
+  return 0;
+}
+
+extern "C" float cpu_idx(Tensor *tensor, float idx)
+{
+
+  float *tensor_cpu;
+  tensor_cpu = tensor->cpu_tensor_ptr;
+
+
+  if (tensor_cpu==nullptr)
+    LogErrorS("Cannot idx a null cpu tensor.");
+
+  float dims_prod = tensor->dims_prod;
+  if (idx>dims_prod)
+    LogErrorS("Idx higher than dims prod at cpu_idx().");
+
+  
+
+  return tensor_cpu[(int)idx];
+}
 
 
 
@@ -2596,6 +2647,8 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
       if (in_str(post_dot, tensorVars))
         aux->SetType("tensor");
+      if (in_str(post_dot, objectVars))
+        aux->SetType("object");
     }
 
     return std::move(aux);
@@ -5423,6 +5476,9 @@ Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
 
   if (Type=="tensor")
     return Builder->CreateCall(TheModule->getFunction("object_vec_idxTensor"),
+                                                      {var_name, idx, post_dot_str});
+  if (Type=="object")
+    return Builder->CreateCall(TheModule->getFunction("object_vec_idxObject"),
                                                       {var_name, idx, post_dot_str});
 
 
@@ -9657,6 +9713,17 @@ extern "C" float ObjectVarOnDemand(char *name, float vec_size)
 {
   std::cout << "ObjectVarOnDemand of " << name << " with vec_size " << vec_size << "\n\n\n\n";
 
+  for (int i=0; i<vec_size; i++)
+    objectVecs[name].push_back("nullptr");
+
+  return 0;
+}
+extern "C" float is_null(char *name, float idx)
+{
+  std::cout << "\n\nIS NULL OF: " << name << "\n\n\n";
+
+  if (objectVecs[name][idx]=="nullptr")
+    return 1;
   return 0;
 }
 
@@ -10467,6 +10534,21 @@ extern "C" char *append(char *self, char *obj_name)
     NamedClassValues.erase(float_var);
     NamedClassValues[idx_obj] = f;
   }
+  vars_to_convert.clear();
+
+  for (auto &pair: objectVecs)
+    if (begins_with(pair.first, obj_name_str))
+      vars_to_convert.push_back(pair.first);
+  for (std::string obj : vars_to_convert)
+  {
+    std::string idx_obj = random_str + obj;
+      
+    //std::cout << "Converting float " << pair.first << " into " << idx_obj << "\n";
+
+    std::vector<std::string> o = objectVecs[obj];
+    objectVecs.erase(obj);
+    objectVecs[idx_obj] = o;
+  }
   
 
   objectVecs[self].push_back(random_str+obj_name);
@@ -10486,7 +10568,7 @@ extern "C" void *object_vec_idxTensor(char *self, float idx, char *post_dot)
   //char* copied = (char*)malloc(strlen(in_str) + 1);
   //strcpy(copied, in_str);
 
-  std::cout << "\n\nobject_vec_idx OF " << self << " at idx " << idx <<  "\n";
+  //std::cout << "\n\nobject_vec_idx OF " << self << " at idx " << idx <<  "\n";
   
 
   std::vector<std::string> vec_aux = objectVecs[self];
@@ -10508,6 +10590,24 @@ extern "C" void *object_vec_idxTensor(char *self, float idx, char *post_dot)
   return new_tensor;
 }
 
+extern "C" char *object_vec_idxObject(char *self, float idx, char *post_dot)
+{
+  //std::cout << "\n\nobject_vec_idx OBJECT OF " << self << " at idx " << idx << " with post dot " << post_dot <<  "\n";
+
+  std::vector<std::string> vec_aux = objectVecs[self];
+  if (idx>=vec_aux.size())
+  {
+    std::string _error = "Index "+std::to_string(idx)+" is higher than the vector "+self+" size.";
+    LogErrorS(_error);
+  }
+  std::string obj_scope = vec_aux[idx];
+
+  obj_scope = obj_scope + post_dot;
+
+  //std::cout << "object_vec_idx returning " << obj_scope <<  "\n";
+
+  return str_to_char(obj_scope);
+}
 
 
 const PrototypeAST& FunctionAST::getProto() const {
@@ -11387,6 +11487,15 @@ FunctionType *unbugTy = FunctionType::get(
 
 
   //
+  FunctionType *object_vec_idxObjectTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("object_vec_idxObject", object_vec_idxObjectTy);
+
+
+  //
   FunctionType *object_vec_idxValueTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -11554,12 +11663,21 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("ObjectVarOnDemand", ObjectVarOnDemandTy);
 
 
+  //
+  FunctionType *is_nullTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("is_null", is_nullTy);
+
+
   //===----------------------------------------------------------------------===//
   // Other Ops
   //===----------------------------------------------------------------------===//
 
 
-  // char *, int
+  // 
   FunctionType *FirstArgOnDemandTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -11568,9 +11686,7 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
   
 
-
-
-  // char *, char *
+  //
   FunctionType * ConcatStrTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy},
@@ -11578,9 +11694,8 @@ FunctionType *unbugTy = FunctionType::get(
   );
   TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
 
-
   
-  // char *, char *
+  //
   FunctionType * RandomStrOnDemandTy = FunctionType::get(
       int8PtrTy,
       {},
@@ -11717,6 +11832,25 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("AttrTensorOnIdx", AttrTensorOnIdxTy);
+  
+
+  //
+  FunctionType *cpuTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("cpu", cpuTy);
+  
+
+  //
+  FunctionType *cpu_idxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       Type::getFloatTy(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("cpu_idx", cpu_idxTy);
 
 
   //
@@ -12001,7 +12135,8 @@ int main() {
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
                       "LenStrVec", "gpu", "gpuw", "zeros_vec", "ones_vec",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW",
-                      "load_preprocess_img", "max", "min", "unbug"};
+                      "load_preprocess_img", "max", "min", "unbug", "is_null",
+                      "cpu", "cpu_idx"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
