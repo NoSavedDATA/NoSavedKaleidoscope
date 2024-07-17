@@ -235,7 +235,6 @@ return_pinned_methods, vararg_methods, string_methods, native_methods, native_fu
 
 
 PointerType *floatPtrTy, *int8PtrTy;
-
 bool ShallCodegen = true;
 
 //===----------------------------------------------------------------------===//
@@ -316,6 +315,13 @@ enum Types {
   type_object = 3
 };
 
+enum NameSolverTypes {
+  type_self = 0,
+  type_attr = 1,
+  type_vec = 2,
+  type_var = 3
+};
+
 
 std::map<int, std::string> token_to_string = {
   { tok_eof, "eof" },
@@ -369,6 +375,10 @@ std::map<int, std::string> token_to_string = {
   { tok_conv2d, "Conv2d" },
 
   { 10, "tok space"},
+
+  
+  { 40, "(" },
+  { 41, ")" },
 
   { 42, "*" },
   { 43, "+" },
@@ -738,6 +748,7 @@ public:
   std::string _pre_dot = "";
   bool isVec = false;
   bool isVarLoad = false;
+  bool SolverIncludeScope = true;
 
   Value *TensorPtr, *DimsPtr;
 
@@ -766,6 +777,13 @@ public:
   }
   virtual bool GetSelf() {
     return isSelf;
+  }
+
+  virtual void SetSolverIncludeScope(bool SolverIncludeScope) {
+    this->SolverIncludeScope=SolverIncludeScope;
+  }
+  virtual bool GetSolverIncludeScope() {
+    return SolverIncludeScope;
   }
 
   virtual void SetIsAttribute(bool Attribute) {
@@ -813,13 +831,28 @@ public:
   }
 };
 
+
+
+class NameSolverAST : public ExprAST {
+
+  public:
+    std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
+    NameSolverAST(std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names)
+                    : Names(std::move(Names)) {} 
+  
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
+
+
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST {
   float Val;
 
   public:
-    NumberExprAST(float Val) : Val(Val) {} 
-  std::string Type = "num";
+    NumberExprAST(float Val) : Val(Val) {
+      this->SetType("float");
+    } 
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -830,8 +863,9 @@ class StringExprAST : public ExprAST {
   std::string Val;
 
   public:
-    StringExprAST(std::string Val) : Val(Val) {} 
-  std::string Type = "str";
+    StringExprAST(std::string Val) : Val(Val) {
+      this->SetType("str");
+    } 
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -853,11 +887,14 @@ class ObjAttrExprAST : public ExprAST {
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {
-  std::string Name;
 
   public:
-    VariableExprAST(const std::string &Name) : Name(Name) {
+    std::unique_ptr<ExprAST> NameSolver;
+    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type) {
       this->isVarLoad = true;
+      this->NameSolver = std::move(NameSolver);
+      this->SetType(Type);
+      this->NameSolver->SetType(Type);
     }
 
     Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
@@ -869,14 +906,17 @@ class VariableExprAST : public ExprAST {
 
 
 class VecIdxExprAST : public ExprAST {
-  std::string Name;
-
+  
   public:
+    std::unique_ptr<ExprAST> NameSolver;
     std::vector<std::unique_ptr<ExprAST>> Idx;
 
-    VecIdxExprAST(const std::string &Name, std::vector<std::unique_ptr<ExprAST>> Idx)
-                  : Name(Name), Idx(std::move(Idx)) {
+    VecIdxExprAST(std::unique_ptr<ExprAST> NameSolver, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type)
+                  : Idx(std::move(Idx)) {
       this->isVarLoad = true;
+      this->NameSolver = std::move(NameSolver);
+      this->SetType(Type);
+      this->NameSolver->SetType(Type);
     }
 
     Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
@@ -919,12 +959,11 @@ class StrExprAST : public ExprAST {
 
   public:
     std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-    std::string Type;
-
     StrExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type)
-        : VarNames(std::move(VarNames)), Type(Type) {}
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames)
+        : VarNames(std::move(VarNames)) {
+          this->SetType("str");
+        }
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -1439,6 +1478,8 @@ static std::unique_ptr<ExprAST> ParseParenExpr(std::string class_name="") {
 //global
 std::vector<std::string> tensorVars;
 std::vector<std::string> pinnedTensorVars;
+std::vector<std::string> floatVars;
+std::vector<std::string> strVars;
 std::vector<std::string> objectVars;
 std::map<std::string, std::string> functionVars;
 std::map<std::string, std::string> floatFunctions;
@@ -1523,6 +1564,23 @@ static std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(std::string _class,
 }
 
 
+static std::vector<std::unique_ptr<ExprAST>> ParseIdx(std::string class_name="") {
+
+  std::vector<std::unique_ptr<ExprAST>> Idx;
+    
+  Idx.push_back(ParseExpression(class_name));
+  while(CurTok==',')
+  {
+    getNextToken(); // eat ,
+    Idx.push_back(ParseExpression(class_name));
+  }
+  Idx.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+
+  return Idx;
+}
+
+
+
 /// identifierexpr
 ///   ::= identifier
 ///   ::= identifier '(' expression* ')'
@@ -1532,21 +1590,30 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     if(IdentifierStr==Classes[i])  // Object object
       return ParseObjectInstantiationExpr(Classes[i], class_name);
 
-  
-  std::string IdName = IdentifierStr;
+  std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
+  std::string IdName, type;
+  IdName = IdentifierStr;
   //std::cout << "Identifier " << IdName <<  "\n";
   getNextToken(); // eat identifier.
   
-
+  Names.push_back(std::make_tuple(IdName, type_var, std::vector<std::unique_ptr<ExprAST>>{}));
   if (CurTok != '(' && CurTok != '[') // Simple variable ref.
   {
-    auto aux = std::make_unique<VariableExprAST>(IdName);
     if (in_str(IdName, pinnedTensorVars))
-      aux->SetType("pinned_tensor");
+      type = "pinned_tensor";
     if (in_str(IdName, tensorVars))
-      aux->SetType("tensor");
+      type = "tensor";
+    if (in_str(IdName, floatVars))
+      type = "float";
+    if (in_str(IdName, strVars))
+      type = "str";
     if (in_str(IdName, objectVars))
-      aux->SetType("object");
+      type = "object";
+
+
+    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+    auto aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
+    
     
     if (CurTok==tok_space)
       getNextToken();
@@ -1560,38 +1627,19 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
   {
     getNextToken(); // eat [
     
-
     std::vector<std::unique_ptr<ExprAST>> Idx;
-    
-    Idx.push_back(ParseExpression(class_name));
-
-    while(CurTok==',')
-    {
-      getNextToken(); // eat ,
-      Idx.push_back(ParseExpression(class_name));
-    }
-    Idx.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
-
-
-    auto aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
-    aux->SetIsVec(true);
+    Idx = ParseIdx(class_name);
     
     if (in_str(IdName, str_vecVars))
-    {
-      aux->SetType("str_vec");
-      aux->SetReturnType("str");
-    }
+      type = "str_vec";
     if (in_str(IdName, float_vecVars))
-    {
-      aux->SetType("float_vec");
-      aux->SetReturnType("float");
-    }
+      type = "float_vec";
     if (in_str(IdName, tensorVars))
-    {
-      aux->SetType("tensor");
-      aux->SetReturnType("tensor");
-    }
+      type = "tensor";
 
+    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+    auto aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
+    aux->SetIsVec(true);
     
     getNextToken(); // eat ]
     
@@ -1815,6 +1863,7 @@ static std::unique_ptr<ExprAST> ParseForExpr(std::string class_name="") {
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
+  floatVars.push_back(IdName);
 
   if (CurTok != '=')
     return LogError("Expected for's control variable initial value.");
@@ -1977,6 +2026,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
 
   while (true) {
     std::string Name = IdentifierStr;
+    floatVars.push_back(IdentifierStr);
     getNextToken(); // eat identifier.
 
     // Read the optional initializer.
@@ -2021,6 +2071,7 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
 
   while (true) {
     std::string Name = IdentifierStr;
+    strVars.push_back(Name);
     getNextToken(); // eat identifier.
 
     // Read the optional initializer.
@@ -2047,7 +2098,7 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
   if (CurTok==tok_space)
     getNextToken();
 
-  return std::make_unique<StrExprAST>(std::move(VarNames), "str");
+  return std::make_unique<StrExprAST>(std::move(VarNames));
 }
 
 
@@ -2503,16 +2554,17 @@ extern "C" float * split_str_to_float(char *in_string, int gather_position)
 
 
 
-
-
-
 //
 static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
   std::string pre_dot = "";
+  std::string type = "None";
   std::string object_class;
   bool is_class_attr=false;
   bool is_self=false;
+  bool is_vec=false;
+  std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
+  std::string IdName;
 
 
 
@@ -2524,21 +2576,58 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   {
     is_self=true;
     getNextToken(); // eat self
+    Names.push_back(std::make_tuple("_", type_self, std::vector<std::unique_ptr<ExprAST>>{}));
   }
 
-  
 
-  //std::cout << "\nCUR TOK on attr: " << ReverseToken(CurTok) << ", pre dot: " << pre_dot << "\n\n";
+  if (CurTok==tok_class_attr||CurTok==tok_post_class_attr_attr)
+    while (CurTok==tok_class_attr||CurTok==tok_post_class_attr_attr)
+    {
+      is_class_attr = true;
+      object_class=IdentifierStr;
+      pre_dot+=IdentifierStr;
 
-  while (CurTok==tok_class_attr)
-  {
-    is_class_attr = true;
-    object_class=IdentifierStr;
-    pre_dot+=IdentifierStr;
-    getNextToken();
+      Names.push_back(std::make_tuple(IdentifierStr, type_attr, std::vector<std::unique_ptr<ExprAST>>{}));
+      getNextToken(); // eat attr
+      std::cout << "tok pre vec: " << ReverseToken(CurTok) << "\n";
+
+      if (CurTok==tok_identifier) // Need to handle vector
+      {
+        IdName = IdentifierStr;
+        getNextToken();
+      }
+      
+      is_vec=false;
+      if (CurTok=='[')
+      {
+        std::cout << "tokvec: " << ReverseToken(CurTok) << "\n";
+        getNextToken(); // eat [
+        std::vector<std::unique_ptr<ExprAST>> idx = ParseIdx(class_name);
+        getNextToken(); // eat ]
+        Names.push_back(std::make_tuple(IdName, type_vec, std::move(idx)));
+        is_vec=true;
+      } else
+        Names.push_back(std::make_tuple(IdName, type_attr, std::vector<std::unique_ptr<ExprAST>>{}));
+
+      std::cout << "tok: " << ReverseToken(CurTok) << "\n";
+    }
+   else {
+    IdName = IdentifierStr;
+    getNextToken(); // eat identifier.
+    
     if (CurTok=='[')
-      std::cout << "\n\n\nCUR CLASS TOK " << ReverseToken(CurTok) << "\n\n\n\n";
+    {
+      std::cout << "tokvec: " << ReverseToken(CurTok) << "\n";
+      getNextToken(); // eat [
+      std::vector<std::unique_ptr<ExprAST>> idx = ParseIdx(class_name);
+      getNextToken(); // eat ]
+      Names.push_back(std::make_tuple(IdName, type_vec, std::move(idx)));
+      is_vec=true;
+    } else
+      Names.push_back(std::make_tuple(IdName, type_attr, std::vector<std::unique_ptr<ExprAST>>{}));
   }
+  
+  std::cout << "Post tok: " << ReverseToken(CurTok) << "\n";
   
   // Turns string from object model of class type Model into Model
   if (Object_toClass.count(object_class)>0)
@@ -2550,26 +2639,35 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
 
 
-  std::string IdName = IdentifierStr;
-
-
-  getNextToken(); // eat identifier.
 
   
 
-  if (CurTok != '(' && CurTok != '[') // Simple variable ref.
+  if (!is_vec&&CurTok!='(') // Simple variable ref.
   {
-    auto aux = std::make_unique<VariableExprAST>(IdName);
+    std::cout << "Parsing a var" << "\n";
     
     if (in_str(IdName, pinnedTensorVars))
-      aux->SetType("pinned_tensor");
+      type = "pinned_tensor";
     if (in_str(IdName, tensorVars))
-      aux->SetType("tensor");
+      type = "tensor";
+    if (in_str(IdName, objectVars))
+      type = "object";
     if (functionVars.find(IdName) != functionVars.end())
-      aux->SetType("tensor");
+      type = "tensor";
     if (stringMethods.find(IdName) != stringMethods.end())
-      aux->SetType("str");
+      type = "str";
+    if (in_str(IdName, floatVars))
+      type = "float";
+    if (in_str(IdName, float_vecVars))
+      type = "float_vec";
+    if (in_str(IdName, strVars))
+      type = "str";
+    if (in_str(IdName, str_vecVars))
+      type = "str_vec";
 
+
+    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+    auto aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
 
     aux->SetSelf(is_self);
     aux->SetIsAttribute(is_class_attr);
@@ -2584,96 +2682,34 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
 
 
-  if (CurTok=='[')
+  if (is_vec)
   {
-    getNextToken(); // eat [
-
-
     std::unique_ptr<ExprAST> aux;
     std::vector<std::unique_ptr<ExprAST>> Idx;
     
-    Idx.push_back(ParseExpression(class_name));
-    while(CurTok==',')
-    {
-      getNextToken(); // eat ,
-      Idx.push_back(ParseExpression(class_name));
-    }
-    Idx.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
-
-
     
-    aux = std::make_unique<VecIdxExprAST>(IdName, std::move(Idx));
-    aux->SetIsVec(true);
-
+    
     if (in_str(IdName, str_vecVars))
-    {
-      aux->SetType("str_vec");
-      aux->SetReturnType("str");
-    }
+      type= "str_vec";
     if (in_str(IdName, float_vecVars))
-    {
-      aux->SetType("float_vec");
-      aux->SetReturnType("float");
-    }
+      type = "float_vec";
     if (in_str(IdName, pinnedTensorVars))
-      aux->SetType("pinned_tensor");
+      type = "pinned_tensor";
     if (in_str(IdName, tensorVars))
-    {
-      aux->SetType("tensor");
-      aux->SetReturnType("tensor");
-    }
+      type= "tensor";
     if (in_str(IdName, objectVars))
-      aux->SetType("object_vec");
+      type = "object_vec";
     
+    Idx = std::move(std::get<2>(Names[Names.size()-1]));
+    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+    aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
+    aux->SetIsVec(true);
 
 
     aux->SetSelf(is_self);
     aux->SetIsAttribute(is_class_attr);
     aux->SetPreDot(pre_dot);
 
-
-    
-    getNextToken(); // eat ]
-
-    //std::cout << "\nTOKEN post " << ReverseToken(CurTok) << ", type " << aux->GetType() << "\n";
-
-    if (CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
-    {
-      bool isVec=false;
-      std::string post_dot="";
-      std::unique_ptr<ExprAST> Idx = nullptr;
-
-      while(CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
-      {
-        std::cout << "tok_post_class_attr_attr token " << ReverseToken(CurTok) << "\n";
-        post_dot += IdentifierStr;
-        getNextToken();
-
-        if (CurTok=='[')
-        {
-          isVec = true;
-          getNextToken();
-          Idx = ParsePrimary(class_name);
-          if (CurTok!=']')
-            return LogError("Expected ]");
-          getNextToken();
-        }
-      }
-      
-      
-
-      aux = std::make_unique<ObjectVecIdxExprAST>(std::move(aux), post_dot, std::move(Idx));
-
-      aux->SetSelf(is_self);
-      aux->SetIsAttribute(is_class_attr);
-      aux->SetPreDot(pre_dot);
-      aux->SetIsVec(isVec);
-
-      if (in_str(post_dot, tensorVars))
-        aux->SetType("tensor");
-      if (in_str(post_dot, objectVars))
-        aux->SetType("object");
-    }
 
     return std::move(aux);
   }
@@ -2688,7 +2724,11 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   if (CurTok != ')') {
     while (true) {
       if (auto Arg = ParseExpression(class_name))
+      {
+        std::cout << "Parsed arg " << Arg->GetName() << "\n";
         Args.push_back(std::move(Arg));
+      }
+        
       else
         return nullptr;
 
@@ -3552,7 +3592,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
   getNextToken();
 
 
-  std::string is_tensor;
+  std::string type;
   std::vector<std::string> ArgNames, Types;
 
 
@@ -3568,11 +3608,13 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
 
   while (CurTok != ')')
   {
-    is_tensor="no";
+    type="no";
     if (IdentifierStr=="t")
-      is_tensor="tensor";
+      type="tensor";
     if (IdentifierStr=="c")
-      is_tensor="function";
+      type="function";
+    if (IdentifierStr=="f")
+      type="float";
 
     if (IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="s" && IdentifierStr!="c")
       LogErrorP_to_comma("Prototype var type must be t, f, s or c");
@@ -3582,9 +3624,11 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
 
       ArgNames.push_back(IdentifierStr);
 
-      if (is_tensor=="tensor")
+      if (type=="float")
+        floatVars.push_back(IdentifierStr);
+      if (type=="tensor")
         tensorVars.push_back(IdentifierStr);
-      if (is_tensor=="function")
+      if (type=="function")
         functionVars[IdentifierStr] = "Conv2d";
       
       getNextToken(); // eat arg name
@@ -4052,12 +4096,18 @@ extern "C" float PrintFloatVec(std::vector<float> vec)
 
 extern "C" float first_nonzero(char *self)
 {
-  //std::cout << "first_nonzero call of: " << self << " and is self: " << is_self <<"\n";
+  //std::cout << "first_nonzero call of: " << self <<"\n";
 
   std::vector<float> vec;
   vec = ClassFloatVecs[self];
-  //else
-  //  vec = NamedFloatVecs[self]; This one is of type alloca
+
+
+  /*
+  std::cout << "[";
+  for (int i=0; i<vec.size(); i++)
+    std::cout << vec[i] << ", ";
+  std::cout << "]" << "\n";
+  */
 
   float idx = -1;
   for (int i=0; i<vec.size(); i++)
@@ -4121,7 +4171,6 @@ extern "C" char * shuffle_str(char *string_list)
 
 extern "C" void *LoadTensor(char *tensor_name){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
-
   return &NamedTensorsT[tensor_name];
 }
 
@@ -4369,6 +4418,72 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
   IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
                    TheFunction->getEntryBlock().begin());
   return TmpB.CreateAlloca(Type::getFloatTy(*TheContext), nullptr, VarName);
+}
+
+
+
+Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  std::cout << "\n\n\nName solver type: " << Type << "\n\n\n\n";
+
+
+  Value *name;
+  int type;
+  std::vector<std::unique_ptr<ExprAST>> idx;
+
+  
+  bool include_scope = GetSolverIncludeScope();
+  Value *var_name = Builder->CreateGlobalString("");
+
+
+  if(Names.size()>1)
+    for (int i=0; i<Names.size()-1;i++)
+    {
+      name = Builder->CreateGlobalString(std::get<0>(Names[i]));
+      type = std::get<1>(Names[i]);
+      idx = std::move(std::get<2>(Names[i]));
+
+      if (i==0)
+      {
+        if (type==type_self)
+          var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {var_name, Builder->CreateLoad(int8PtrTy, first_arg)});
+        else
+        {
+          if((Type=="object"||Type=="tensor")&&include_scope)
+            var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
+        }
+      }
+
+      if (type==type_attr||type==type_var)
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                        {var_name, name});
+
+      if (type==type_vec)
+      {
+        Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                        {var_name, name});
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStr"),
+                                                        {var_name, _idx});
+      }
+    }
+
+  if(Names.size()==1)
+    if((Type=="object"||Type=="tensor")&&include_scope)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                        {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
+
+
+  name = Builder->CreateGlobalString(std::get<0>(Names[Names.size()-1]));
+  var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                    {var_name, name});
+
+  
+  return var_name;
 }
 
 Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
@@ -4993,6 +5108,8 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
 extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
   Tensor tensor = NamedTensorsT[tensor_name];
+  //std::cout << "AttrPinnedOnIdx for " << tensor_name << " at index " << idx_at << "\n";
+  //std::cout << "Value: " << val <<"\n";
 
   std::vector<float> dims = tensor.dims;
   int dims_prod = DimsProd(dims);
@@ -5061,6 +5178,21 @@ extern "C" char * ConcatStr(char *lc, char *rc)
   return result_cstr;
 }
 
+extern "C" char * ConcatNumToStr(char *lc, float r)
+{
+  //std::cout << "\nCONCAT NUM TO STR " << lc << " & " << std::to_string(r) << "\n";
+
+  std::string l = lc;
+  int _r = r;
+
+  std::string result_str = l + std::to_string(_r);
+  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
+  std::strcpy(result_cstr, result_str.c_str());
+
+  //std::cout << "Concatenated into " << result_cstr << "\n\n";
+  
+  return result_cstr;
+}
 
 extern "C" char * RandomStrOnDemand()
 {
@@ -5075,15 +5207,14 @@ extern "C" char * RandomStrOnDemand()
 }
 
 
-extern "C" void StoreOnDemand(char *self, char *object_var_name, float value){
-  std::string _self = self;
-  //std::cout << "StoreOnDemand: " << _self << "." << object_var_name << " " << value << "\n";
-  NamedClassValues[_self + object_var_name] = value;
+extern "C" void StoreOnDemand(char *name, float value){
+  //std::cout << "StoreOnDemand: " << name  << " " << value << "\n";
+  NamedClassValues[name] = value;
 }
 
 
-extern "C" float StoreStrOnDemand(char *self, char *object_var_name, char * value){
-  std::string _self = self;
+extern "C" float StoreStrOnDemand(char *name, char * value){
+  
 
   //std::cout << "STORING " << object_var_name << " on demand.\n";
   
@@ -5092,35 +5223,28 @@ extern "C" float StoreStrOnDemand(char *self, char *object_var_name, char * valu
 
   //NamedClassValues[_self + object_var_name] = Builder->CreateGlobalString(value);
 
-  std::cout << "Stored successfuly.\n";
+  std::cout << "StoreStrOnDemand not implemented yet.\n";
   return 0;
 }
 
-extern "C" float StoreStrVecOnDemand(char *self, char *object_var_name, std::vector<char *> value){
-  std::string _self = self;
+extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as StrVec type.\n";
+  ClassStrVecs[name] = value;
+  return 0;
+}
 
-  ClassStrVecs[_self + object_var_name] = value;
+extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value){
+  //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
+
+  ClassFloatVecs[name] = value;
   
   return 0;
 }
 
-extern "C" float StoreFloatVecOnDemand(char *self, char *object_var_name, std::vector<float> value){
-
-  std::string _self = self;
+extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
-  ClassFloatVecs[_self + object_var_name] = value;
-  
-  return 0;
-}
-
-extern "C" float StoreFloatVecOnDemandOnIdx(char *self, char *object_var_name, float idx, float value){
-
-  std::string _self = self;
-  //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
-
-  ClassFloatVecs[_self + object_var_name][(int)idx] = value;
+  ClassFloatVecs[name][(int)idx] = value;
   
   return 0;
 }
@@ -5184,7 +5308,6 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
 
-  //std::cout << "Now Loading Var "<< Name <<" to Context" << "  \n";
 
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -5196,10 +5319,8 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
 
   Value *var_name, *object_name, *object_var_name;
-  var_name = Builder->CreateGlobalString(Name);
   
-  std::cout << "Loading var: " << Name << "\n";
-  
+
 
   /*
   std::cout << "\nVARIABLE EXPR CODEGEN: " << Name << "\n";
@@ -5213,8 +5334,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     std::cout << "NamedClassValues: " << entry.first << "\n";
   */
 
-  
-
+  std::string type = GetType();
   std::string pre_dot = GetPreDot();
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
@@ -5223,51 +5343,43 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   //Builder->CreateCall(TheModule->getFunction("print"),
   //    {Builder->CreateGlobalString(__print), ConstantFP::get(*TheContext, APFloat(0.0f))});
 
+  
+
+  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope);
+
+  NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
+  std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
+  
+
   if (is_self||is_attr)
   {
-    // Gets from pre_dot if it is a class attribute
-    if (is_attr) {
-      object_name = Builder->CreateGlobalString(pre_dot);
-      var_name = Builder->CreateGlobalString(Name);
-
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, var_name});
-    }
-    if (is_self)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
-
-    for (const auto &entry : NamedClassValues)
+    if (type=="float")
     {
-      if (ends_with(entry.first, Name))
-      {
         V = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"), {var_name});
         V = Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
         return V;
-      }
+      
     }
-    for (const auto &entry : ClassStrVecs)
-      if (ends_with(entry.first, Name))
-      {
-        V = Builder->CreateCall(TheModule->getFunction("LoadStrVecOnDemand"),
+    if (type=="str_vec")
+    {
+      V = Builder->CreateCall(TheModule->getFunction("LoadStrVecOnDemand"),
                                                       {var_name});
-        //Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
-        return V;
-      }
-
-    for (const auto &entry : ClassFloatVecs)
-      if (ends_with(entry.first, Name))
-      {
-        V = Builder->CreateCall(TheModule->getFunction("LoadFloatVecOnDemand"),
+      //Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
+      return V;
+      
+    }
+    if (type=="float_vec"){
+      V = Builder->CreateCall(TheModule->getFunction("LoadFloatVecOnDemand"),
                                                       {var_name});
-        Builder->CreateCall(TheModule->getFunction("PrintFloatVec"), {V});
-        return V;
-      }
+      Builder->CreateCall(TheModule->getFunction("PrintFloatVec"), {V});
+      return V;
+    }
   }
 
-  if (NamedValues.count(Name)>0) 
+  if (type=="float")
   {
-    //std::cout << "\nVariable Float " << Name << " codegen.\n";
+    std::cout << "\nVariable Float " << Name << " codegen.\n";
+    
 
     V = NamedValues[Name];
 
@@ -5278,14 +5390,10 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
     return V;
 
-  } else if (in_str(Name, objectVars)) {
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
-
+  } else if (type=="object") {
     return var_name;
 
-  } else if (NamedStrs.count(Name)>0) {
+  } else if (type=="str") {
 
     //std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n";
     //std::cout << "Type: " << Type << "\n\n";
@@ -5296,6 +5404,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
       if (ends_with(entry.first, Name))
         return ret;
     }
+    
 
     V = NamedStrs[Name];
     
@@ -5305,7 +5414,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     //  Builder->CreateCall(TheModule->getFunction("PrintStr"), {V});
     
     return V;
-  } else if (NamedStrVecs.count(Name)>0) {
+  } else if (type=="str_vec") {
 
     //std::cout << "\nVariable Str Vector " << Name << " Codegen. \nNamedStrVecs.count(Name): " << NamedStrVecs.count(Name) <<"\n\n";
 
@@ -5329,11 +5438,8 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
 
     return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
-  } else if (in_str(Name, tensorVars)) {
+  } else if (type=="tensor") {
     //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
 
 
     if (!seen_var_attr)
@@ -5385,9 +5491,10 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
   Value *var_name, *object_name, *object_var_name;
-  var_name = Builder->CreateGlobalString(Name);
+  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope);
   
-
+  NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
+  std::string Name = std::get<0>(name_solver->Names[0]);
   
 
 
@@ -5397,21 +5504,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   if (is_self||is_attr)
   {
-    // Gets from FirstArg if it is self
-    if (is_self)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
-    // Gets from pre_dot if it is a class attribute
-    else {
-      object_name = Builder->CreateGlobalString(pre_dot);
-      var_name = Builder->CreateGlobalString(Name);
-
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, var_name});
-    }
-
-
-
+    
     if (Type=="str_vec"){
       
       V = Builder->CreateCall(TheModule->getFunction("IndexClassStrVec"), {var_name, idx});
@@ -5967,24 +6060,9 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
-  Value *tensor_name = Builder->CreateGlobalString(LHS->GetName());
+  Value *tensor_name;
 
   DimsPtr = Builder->CreateAlloca(int8PtrTy);
-
-  std::string pre_dot = LHS->GetPreDot();
-  bool is_self = LHS->GetSelf();
-  bool is_attr = LHS->GetIsAttribute();
-
-  if (is_self)
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
-    // Gets from pre_dot if it is a class attribute
-  else if (is_attr) {
-    Value * object_name = Builder->CreateGlobalString(pre_dot);
-
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, tensor_name});
-  }
 
   
 
@@ -6004,6 +6082,8 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
     VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+
     if (!LHSE)
       return LogErrorV("'=' destiny must be a variable.");
 
@@ -8501,50 +8581,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   Value *object_name;
 
 
-  //TensorPtr = Builder->CreateAlloca(floatPtrTy, nullptr);
   
-
-
-  // Concat self or obj name to tensor name
-  std::string pre_dot = LHS->GetPreDot();
-  bool is_self = LHS->GetSelf();
-  bool is_attr = LHS->GetIsAttribute();
-
-  // Gets from pre_dot if it is a class attribute
-  if (is_attr) {
-    object_name = Builder->CreateGlobalString(pre_dot);
-
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, LtensorName});
-  }
-  if (is_self)
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), LtensorName});
-  if (!(is_self||is_attr))
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), LtensorName});
-    
-
-  pre_dot = RHS->GetPreDot();
-  is_self = RHS->GetSelf();
-  is_attr = RHS->GetIsAttribute();
-
-  if (is_attr) {
-    object_name = Builder->CreateGlobalString(pre_dot);
-
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, RtensorName});
-  }
-  if (is_self)
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), RtensorName});
-  if (!(is_self||is_attr))
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), RtensorName});
-  
-  
-
-
   // if is attribution
   if (Op == '=') {
   
@@ -8556,15 +8593,13 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
     if (!LHS->GetIsVec())
     {
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
       
       std::cout << "1 1 attr\n";
-      
 
-      
-      
-  
 
       Builder->CreateCall(TheModule->getFunction("AttrTensor"),
                           {LtensorName, RtensorPtr});
@@ -8574,6 +8609,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::cout << "1 1 INDEXED attr\n";
 
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
 
@@ -8688,49 +8724,8 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
   std::cout << "Binary Tensor Pinned codegen" << "\n";
 
   Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
-  Value *RtensorName = Builder->CreateGlobalString(RHS->GetName());
   Value *object_name;
 
-
-
-  // Concat self or obj name to tensor name
-  std::string pre_dot = LHS->GetPreDot();
-  bool is_self = LHS->GetSelf();
-  bool is_attr = LHS->GetIsAttribute();
-
-  // Gets from pre_dot if it is a class attribute
-  if (is_attr) {
-    object_name = Builder->CreateGlobalString(pre_dot);
-
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, LtensorName});
-  }
-  if (is_self)
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), LtensorName});
-  if (!(is_self||is_attr))
-    LtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), LtensorName});
-
-
-
-  pre_dot = RHS->GetPreDot();
-  is_self = RHS->GetSelf();
-  is_attr = RHS->GetIsAttribute();
-
-  // Gets from pre_dot if it is a class attribute
-  if (is_attr) {
-    object_name = Builder->CreateGlobalString(pre_dot);
-
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, RtensorName});
-  }
-  if (is_self)
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), RtensorName});
-  if (!(is_self||is_attr))
-    RtensorName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), RtensorName});
 
 
   // if is attribution
@@ -8744,6 +8739,8 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
     if (!LHS->GetIsVec())
     {
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
       std::cout << "1 2 attr\n";
@@ -8758,6 +8755,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::cout << "1 2 INDEXED attr\n";
 
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
 
@@ -9052,10 +9050,16 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     // default.  If you build LLVM with RTTI this can be changed to a
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    std::string Lname = LHSE->getName();
+    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+
+
+    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+    std::string Lname = std::get<0>(name_solver->Names[0]);
+    std::string LType = LHS->GetType();
+
 
     if (!LHSE)
-      return LogErrorV("Destino do '=' deve ser uma variável.");
+      return LogErrorV("'=' destiny must be a variable.");
     // Codegen the RHS.
     
     Value *Val = RHS->codegen(first_arg, scope_str, previous_scope);
@@ -9067,17 +9071,12 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     }
 
     // Look up the name.
-    if (NamedValues.count(Lname) != 0) {
+    if (LType=="float") {
       
-      /*
-      std::string __print = "ALLOCA OF " + std::string(Lname) + " ";
-      Builder->CreateCall(TheModule->getFunction("print"),
-          {Builder->CreateGlobalString(__print), ConstantFP::get(*TheContext, APFloat(0.0f))});
-      */
+      
       if(LHS->GetSelf())
         Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
-                                                   Builder->CreateGlobalString(Lname),
+                                                  {Lvar_name,
                                                    Val});
       else
       {
@@ -9085,34 +9084,34 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         Builder->CreateStore(Val, Variable);
       }
     
-    } else if (NamedStrs.count(Lname) != 0 ) {
+    } else if (LType=="str") {
 
       //std::cout << "ATTRIBUTING TO STRING: " << Lname << "\n";
-      Value *Variable = NamedStrs[Lname];
       
       if(LHS->GetSelf())
         Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
-                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
-                                                   Builder->CreateGlobalString(Lname),
+                                                  {Lvar_name,
                                                    Val});
       else
+      {
+        Value *Variable = NamedStrs[Lname];
         Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"), {Val}),
                              Variable);
+      }
 
-    } else if (NamedStrVecs.count(Lname) != 0 ) {
+    } else if (LType=="str_vec") {
 
       //std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
       Value *Variable = NamedStrVecs[Lname];
       
       if(LHS->GetSelf())
         Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
-                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
-                                                   Builder->CreateGlobalString(Lname),
+                                                  {Lvar_name,
                                                    Val});
       else
         Builder->CreateStore(Val, Variable);
 
-    } else if (NamedFloatVecs.count(Lname) != 0 ) {
+    } else if (LType=="float_vec") {
 
       //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
 
@@ -9127,15 +9126,13 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
           
 
           Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
-                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
-                                                   Builder->CreateGlobalString(Lname),
+                                                  {Lvar_name,
                                                    LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope),
                                                    Val});
 
         } else
           Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
-                                                  {Builder->CreateLoad(int8PtrTy, first_arg),
-                                                   Builder->CreateGlobalString(Lname),
+                                                  {Lvar_name,
                                                    Val});
       }
       else
@@ -9154,7 +9151,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       
       
       Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Builder->CreateLoad(int8PtrTy, first_arg), Builder->CreateGlobalString(Lname),
+                                                  {Lvar_name,
                                                    Val});
       
 
@@ -9785,6 +9782,11 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     {
       if(type=="tensor")
       {
+        
+        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
+        destiny->NameSolver->SetSolverIncludeScope(false);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
+
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
                                             {_name, Builder->CreateLoad(int8PtrTy, scope_str),
                                              _name, Builder->CreateLoad(int8PtrTy, previous_scope)});
@@ -10354,7 +10356,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   std::string functionName = TheFunction->getName().str();
   std::string tgt_function_name;
 
-
+  std::cout << "\n\nFunction: " << tgt_function << "\n";
 
   int nested_function;
   if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
@@ -10536,30 +10538,20 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     // deal with self.mcts(self.actions)
     Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
+    Value *_scope = (isAttribute && !isSelf && !in_str(tgt_function, native_methods)) ? previous_scope : scope_str;
     
 
     Value * arg;
     std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
     if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
     {
-      arg = Builder->CreateGlobalString(Args[i]->GetName());
-      if (Args[i]->GetSelf())
-        arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, fa), arg});
-      if (!(Args[i]->GetSelf() || Args[i]->GetIsAttribute()) || in_str(tgt_function, native_methods))
-        arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, previous_scope), arg});
-      
-      /*
-      Value *tensor = Builder->CreateAlloca(int8PtrTy);
-      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("LoadTensor"), {arg}), tensor);
-      arg = tensor;
-      */
-      arg = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {arg});
+      VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
+      arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope);
 
+      arg = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {arg});
     }
     else
-      arg = Args[i]->codegen(fa, scope_str, previous_scope);
+      arg = Args[i]->codegen(fa, _scope, previous_scope);
 
   
     ArgsV.push_back(arg);
@@ -10577,7 +10569,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
-  //std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
+  std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
   if (CalleeOverride=="none")
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
   else
@@ -10614,6 +10606,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
     if (CalleeOverride=="ToFloat")
     {
+      std::cout << "\n\nTO FLOAT HAS TYPE " << Args[0]->GetType() << "\n";
       if (Args[0]->GetType()=="str")
         ret = Builder->CreateCall(getFunction("StrToFloat"), 
                           {ArgsV[0]});
@@ -10762,7 +10755,7 @@ extern "C" float IndexClassFloatVec(char * vec_name, float _idx)
 
 extern "C" float StrToFloat(char *in_str)
 {
-  //std::cout << "str to float of " << in_str << "\n";
+  //std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
 
   char *copied = (char*)malloc(strlen(in_str) + 1);
   strcpy(copied, in_str);
@@ -12069,7 +12062,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *StoreStrOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
@@ -12078,7 +12071,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *StoreStrVecOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("StoreStrVecOnDemand", StoreStrVecOnDemandTy);
@@ -12087,14 +12080,14 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *StoreFloatVecOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("StoreFloatVecOnDemand", StoreFloatVecOnDemandTy);
 
   FunctionType *StoreFloatVecOnDemandOnIdxTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("StoreFloatVecOnDemandOnIdx", StoreFloatVecOnDemandOnIdxTy);
@@ -12203,6 +12196,15 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
 
   
+  //
+  FunctionType * ConcatNumToStrTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("ConcatNumToStr", ConcatNumToStrTy);
+  
+
   //
   FunctionType * RandomStrOnDemandTy = FunctionType::get(
       int8PtrTy,
