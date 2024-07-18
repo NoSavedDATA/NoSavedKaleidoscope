@@ -4101,7 +4101,6 @@ extern "C" float first_nonzero(char *self)
   std::vector<float> vec;
   vec = ClassFloatVecs[self];
 
-
   /*
   std::cout << "[";
   for (int i=0; i<vec.size(); i++)
@@ -4452,7 +4451,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                                           {var_name, Builder->CreateLoad(int8PtrTy, first_arg)});
         else
         {
-          if((Type=="object"||Type=="tensor")&&include_scope)
+          if((Type=="object"||Type=="tensor"||Type=="float")&&include_scope)
             var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                           {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
         }
@@ -4473,7 +4472,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     }
 
   if(Names.size()==1)
-    if((Type=="object"||Type=="tensor")&&include_scope)
+    if((Type=="object"||Type=="tensor"||Type=="float")&&include_scope)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                         {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
 
@@ -5036,6 +5035,7 @@ extern "C" void *logE2(Tensor tensor) {
 extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   
   //std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
+
   Tensor tensor = NamedTensorsT[tensor_name];
 
   std::vector<float> idxs, new_dims_no_minus, dims;
@@ -5212,6 +5212,10 @@ extern "C" void StoreOnDemand(char *name, float value){
   NamedClassValues[name] = value;
 }
 
+extern "C" void StoreArgOnDemand(char *name, float value){
+  //std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
+  NamedClassValues[name] = value;
+}
 
 extern "C" float StoreStrOnDemand(char *name, char * value){
   
@@ -5254,7 +5258,7 @@ extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
 
 extern "C" float LoadOnDemand(char *object_var_name) {
   //std::cout << "Load on demand for: " << object_var_name << "\n";
-  //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n\n\n";
+  //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n";
 
   return NamedClassValues[object_var_name];
 }
@@ -5380,13 +5384,11 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   {
     std::cout << "\nVariable Float " << Name << " codegen.\n";
     
+    V = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),{var_name});
+    
 
-    V = NamedValues[Name];
-
-    V = Builder->CreateLoad(Type::getFloatTy(*TheContext), V);
-
-    if (!seen_var_attr) //TODO: Solve this bug
-      V = Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
+    //if (!seen_var_attr) //TODO: Solve this bug
+    //  V = Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
 
     return V;
 
@@ -5872,6 +5874,8 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor)
 
 extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor tensor, float idx_at)
 { 
+  //std::cout << "AttrTensorOnIdx of" << tensor_name << " at idx " << idx_at << "\n";
+
   std::vector<float> dims, Rdims;
   Tensor tgt_tensor = NamedTensorsT[tensor_name];
   dims = tgt_tensor.dims;
@@ -9072,18 +9076,10 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     // Look up the name.
     if (LType=="float") {
-      
-      
-      if(LHS->GetSelf())
-        Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
                                                   {Lvar_name,
                                                    Val});
-      else
-      {
-        Value *Variable = NamedValues[Lname];
-        Builder->CreateStore(Val, Variable);
-      }
-    
+
     } else if (LType=="str") {
 
       //std::cout << "ATTRIBUTING TO STRING: " << Lname << "\n";
@@ -9381,8 +9377,17 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
   if (!StartVal)
     return nullptr;
 
+
+
+  Value *var_name = Builder->CreateGlobalString(VarName);
+  var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                    {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+
+  Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+                                                  {var_name, StartVal});
+
   // Store the value into the alloca.
-  Builder->CreateStore(StartVal, Alloca);
+  //Builder->CreateStore(StartVal, Alloca);
 
   // Make the new basic block for the loop header, inserting after current
   // block.
@@ -9400,8 +9405,10 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
   // Within the loop, the variable is defined equal to the PHI node.  If it
   // shadows an existing variable, we have to restore it outside this scope
-  Value *OldVal = NamedValues[VarName];
-  NamedValues[VarName] = Alloca;
+  //Value *OldVal = NamedValues[VarName];
+  //NamedValues[VarName] = Alloca;
+
+
 
   // Emit the body of the loop.  This, like any other expr, can change the
   // current BB.  Note that we ignore the value computed by the body, but don't
@@ -9446,11 +9453,13 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
-  Value *CurVar = Builder->CreateLoad(Type::getFloatTy(*TheContext), Alloca,
-                                      VarName.c_str());
+  Value *CurVar = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),{var_name});
   Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar"); // Increment
-  Builder->CreateStore(NextVar, Alloca);
+  Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+                                                  {var_name, NextVar});
 
+                                                  std::string __print = "\n\nLOAD OF " + std::string(Name) + " ";
+  
   Builder->CreateBr(CondBB);
 
 
@@ -9462,10 +9471,10 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
 
   // Restore the unshadowed variable.
-  if (OldVal)
-    NamedValues[VarName] = OldVal;
-  else
-    NamedValues.erase(VarName);
+  //if (OldVal)
+  //  NamedValues[VarName] = OldVal;
+  //else
+  //  NamedValues.erase(VarName);
 
   // for expr always returns 0.0.
   return Constant::getNullValue(Type::getFloatTy(*TheContext));
@@ -9866,15 +9875,13 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     }
 
 
-    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
-    Builder->CreateStore(InitVal, Alloca);
-      
-    // Remember the old variable binding so that we can restore the binding when
-    // we unrecurse.
-    OldBindings.push_back(NamedValues[VarName]);
 
-    // Remember this binding.
-    NamedValues[VarName] = Alloca;
+    Value *var_name = Builder->CreateGlobalString(VarName);
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                        {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+
+    Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+                                                  {var_name, InitVal});
     
   }
 
@@ -10485,9 +10492,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   {
     scope_str = Builder->CreateAlloca(int8PtrTy);
     Value *scope_name;
-    if (starts_with(functionName.c_str(), "__async_")) //TODO: concatenate with previous scope
-      scope_name = Builder->CreateGlobalString("threaded_");
-    else 
+    //if (starts_with(functionName.c_str(), "__async_"))
+    //  scope_name = Builder->CreateGlobalString("threaded_");
+    //else 
       scope_name = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
     Builder->CreateStore(scope_name, scope_str);
     
@@ -10536,15 +10543,19 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     //std::cout << "\nCall codegen for argument n°: " << i << ".\n";
 
-    // deal with self.mcts(self.actions)
+    // deal with firstarg on self.mcts(self.actions)
     Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
-    Value *_scope = (isAttribute && !isSelf && !in_str(tgt_function, native_methods)) ? previous_scope : scope_str;
+
+    //deal with scope on model.forward()
+    Value *_scope = (!in_str(tgt_function, native_methods)) ? previous_scope : scope_str;
     
 
     Value * arg;
     std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
     if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
     {
+      if (starts_with(functionName.c_str(), "__async_"))
+        Builder->CreateStore(Builder->CreateGlobalString("threaded_"), _scope);
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope);
 
@@ -11159,6 +11170,14 @@ Function *FunctionAST::codegen() {
                         {Builder->CreateLoad(int8PtrTy, &Arg)});
       Builder->CreateStore(self, previous_scope);
 
+    } else if (in_str(arg_name, floatVars))
+    {
+      Value *var_name = Builder->CreateGlobalString(arg_name);
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                    {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+
+      Builder->CreateCall(TheModule->getFunction("StoreArgOnDemand"),
+                                                  {var_name, &Arg});
     }
     else if (!in_str(arg_name, tensorVars))
     {
@@ -12221,6 +12240,15 @@ FunctionType *unbugTy = FunctionType::get(
       false //
   );
   TheModule->getOrInsertFunction("StoreOnDemand", StoreOnDemandTy);
+
+  
+  // 
+  FunctionType *StoreArgOnDemandTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      false //
+  );
+  TheModule->getOrInsertFunction("StoreArgOnDemand", StoreArgOnDemandTy);
   
 
   //
