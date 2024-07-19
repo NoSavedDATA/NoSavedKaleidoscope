@@ -320,7 +320,8 @@ enum NameSolverTypes {
   type_attr = 1,
   type_vec = 2,
   type_var = 3,
-  type_object_vec = 4
+  type_object_name = 4,
+  type_object_vec = 5
 };
 
 
@@ -1510,7 +1511,6 @@ static std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(std::string _class,
   if (CurTok==tok_vec)
   {
     getNextToken();
-    Object_toClassVec[IdentifierStr] = _class;
     is_vec=true;
         
     if(CurTok=='[')
@@ -1520,7 +1520,8 @@ static std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(std::string _class,
       if (CurTok!=']')
         LogError("Expected ] at object vec");
       getNextToken();
-    } 
+    }
+    Object_toClassVec[IdentifierStr] = _class; //todo: this doesn't deal with self. expr
   }
 
 
@@ -2586,10 +2587,25 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   int i=0;
   while (CurTok==tok_identifier||CurTok==tok_class_attr||CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
   {
+    int _type = type_attr;
+    
+    if (in_str(IdentifierStr, objectVars))
+    {
+      for (int j=0; j<objectVars.size();j++)
+        std::cout << "objectVars: " << objectVars[j] << "\n";
+      std::cout << "\n\n" << IdentifierStr << " IS ON OBJECT VARS" <<  "\n\n";
+      _type = type_object_name;
+    }
+      
     if (i==0&&CurTok==(tok_class_attr))
-      Names.push_back(std::make_tuple(IdentifierStr, type_attr, std::vector<std::unique_ptr<ExprAST>>{}));
+    {
+      Names.push_back(std::make_tuple(IdentifierStr, _type, std::vector<std::unique_ptr<ExprAST>>{}));
+      _type = type_attr;
+    }
+      
     if (i>0)
       is_class_attr = true;
+
     if (CurTok!=tok_identifier&&CurTok!=tok_post_class_attr_identifier)
     {
       object_class=IdentifierStr;
@@ -2601,7 +2617,8 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       IdName = IdentifierStr;
 
     std::cout << "\n\ntok pre vec: " << ReverseToken(CurTok) << "\n";
-    getNextToken(); // eat attr
+
+    getNextToken(); // eat attr/identifier
 
       
     if (CurTok=='[')
@@ -2610,12 +2627,12 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       getNextToken(); // eat [
       std::vector<std::unique_ptr<ExprAST>> idx = ParseIdx(class_name);
       getNextToken(); // eat ]
-      int _type = type_vec;
+      _type = type_vec;
       //int _type = (Object_toClassVec.count(IdName)>0) ? type_object_vec : type_vec;
       Names.push_back(std::make_tuple(IdName, _type, std::move(idx)));
       is_vec=true;
     } else
-      Names.push_back(std::make_tuple(IdName, type_attr, std::vector<std::unique_ptr<ExprAST>>{}));
+      Names.push_back(std::make_tuple(IdName, _type, std::vector<std::unique_ptr<ExprAST>>{}));
 
     std::cout << "tok: " << ReverseToken(CurTok) << "\n";
     i+=1;
@@ -2696,8 +2713,12 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
       type= "tensor";
     if (in_str(IdName, objectVars))
       type = "object_vec";
-    
-    Idx = std::move(std::get<2>(Names[Names.size()-1]));
+
+    if(type=="object_vec")
+      Idx = std::vector<std::unique_ptr<ExprAST>>{};
+    else
+      Idx = std::move(std::get<2>(Names[Names.size()-1]));
+
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
     aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
     aux->SetIsVec(true);
@@ -3773,6 +3794,7 @@ static std::map<std::string, AllocaInst *> NamedFloatVecs;
 static std::map<std::string, std::vector<char *>> ClassStrVecs;
 static std::map<std::string, std::vector<float>> ClassFloatVecs;
 static std::map<std::string, float> NamedClassValues;
+static std::map<std::string, std::string> NamedObjects;
 
 
 
@@ -4441,7 +4463,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       type = std::get<1>(Names[i]);
       idx = std::move(std::get<2>(Names[i]));
 
-      
+      std::cout << "NameSolver[" << i<< "]:  " << std::get<0>(Names[i]) << ", type: " << type << "\n";
 
       if (i==0)
       {
@@ -4450,10 +4472,19 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                                           {var_name, Builder->CreateLoad(int8PtrTy, first_arg)});
         else
         {
-          if((Type=="object"||Type=="tensor"||Type=="float")&&include_scope)
+          if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name)&&include_scope)
             var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                           {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
         }
+      }
+
+      if (type==type_object_name)
+      {
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                        {var_name, name});
+        var_name = Builder->CreateCall(TheModule->getFunction("LoadObject"),
+                                                        {var_name});
+
       }
 
       if (type==type_attr||type==type_var)
@@ -4472,15 +4503,26 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       }
     }
 
-  if(Names.size()==1)
+  if(Names.size()==1)// Concat scope only
     if((Type=="object"||Type=="tensor"||Type=="float")&&include_scope)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                         {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
 
 
   name = Builder->CreateGlobalString(std::get<0>(Names[Names.size()-1]));
+  idx = std::move(std::get<2>(Names[Names.size()-1]));
+
+  //std::cout << "\n\n\nNAMESOLVER TYPE OF LAST: " << type << "\n";
+  //std::cout << "For: " << std::get<0>(Names[Names.size()-1]) << "\n";
+  //std::cout << "Type: " << Type << "\n";
   var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                     {var_name, name});
+  if (Type=="object_vec")
+  {
+    Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
+    var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStr"),
+                                                      {var_name, _idx});
+  }
 
   
   return var_name;
@@ -5143,11 +5185,14 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
   std::string _first_arg = first_arg;
   std::string pre_dot = pre_dotc;
 
-  //std::cout << "\n\n\n\nIncoming first arg: " << first_arg << " from pre-dot: " << pre_dot << ";\n   class: " << _class << ", method: " << method << "\n   is nested: " << nested_function <<".\n";
+  //std::cout << "\n\n\nIncoming first arg: " << first_arg << " from pre-dot: " << pre_dot << ";\n   class: " << _class << ", method: " << method << "\n   is nested: " << nested_function <<".\n";
   //std::cout << "   is self: " << isSelf << ", is attribute: " << isAttribute << "\n\n\n";
 
   if (!isSelf && isAttribute)
-    return pre_dotc;
+  {
+    std::string ret = NamedObjects[pre_dot];
+    return str_to_char(ret);
+  }
   
   if (pre_dot!="self")
   {
@@ -5161,6 +5206,34 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
 }
 
 
+extern "C" void InstantiateObject(char *scope, char *obj_name)
+{
+  std::cout << "\n\nInstantiateObject of: " << scope << obj_name << "\n";
+  std::string _obj_name = obj_name;
+
+  NamedObjects[scope+_obj_name] = _obj_name + RandomString(5);
+  std::cout << "Saving " << NamedObjects[scope+_obj_name]  << "\n\n";
+
+  //std::cout << "Created " << NamedObjects[scope+_obj_name] << "\n";
+
+}
+
+
+extern "C" char *objHash(char *scope, char *obj_name)
+{
+  std::string _obj_name = obj_name;
+  std::string ret = NamedObjects[scope+_obj_name];
+  return str_to_char(ret);
+}
+
+
+extern "C" char *LoadObject(char *obj_name)
+{
+  //std::cout << "LOADING OBJECT FROM " << obj_name << "\n";
+  std::string ret = NamedObjects[obj_name];
+  //std::cout << "Load object of: " << ret << "\n";
+  return str_to_char(ret);
+}
 
 
 extern "C" char * ConcatStr(char *lc, char *rc)
@@ -5490,7 +5563,8 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   Value *V, *idx;
 
-  idx = Idx[0]->codegen(first_arg, scope_str, previous_scope);
+  if (Type!="object_vec")
+    idx = Idx[0]->codegen(first_arg, scope_str, previous_scope);
 
 
   Value *var_name, *object_name, *object_var_name;
@@ -5504,6 +5578,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   std::string pre_dot = GetPreDot();
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
+  std::cout << "is self: " << is_self << ", is_attr: " << is_attr << "\n";
 
   if (is_self||is_attr)
   {
@@ -5519,6 +5594,9 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       V = Builder->CreateCall(TheModule->getFunction("IndexClassFloatVec"), {var_name, idx});
       return V;
     }
+
+    if (Type=="object_vec")
+      return var_name;
   }
 
 
@@ -5807,7 +5885,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
 {
-  //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
+  std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
 
   Tensor tgt_tensor = NamedTensorsT[tensor_name];
   
@@ -8797,237 +8875,69 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
   Value *RName = Builder->CreateGlobalString(RHS->GetName());
   Value *object_name;
 
-
-
-  // Concat self or obj name to tensor name
-  std::string pre_dot = RHS->GetPreDot();
-  bool is_self = RHS->GetSelf();
-  bool is_attr = RHS->GetIsAttribute();
   
-  // Gets from pre_dot if it is a class attribute
-  if (!RHS->GetIsVec())
-  {
-    if (is_attr) {
-      object_name = Builder->CreateGlobalString(pre_dot);
 
-      RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                        {object_name, RName});
-    }
-    if (is_self)
-      RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                              {Builder->CreateLoad(int8PtrTy, first_arg), RName});
-    if (!(is_self||is_attr))
-      RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                              {Builder->CreateLoad(int8PtrTy, scope_str), RName});
-  }
 
   // if is attribution
   if (Op == '=') {
   
     seen_var_attr=true;
 
-    //Value *RobjectHash = RHS->codegen(first_arg, scope_str, previous_scope);
-    
 
     if (!LHS->GetIsVec())
     {
+      std::cout << "\n\n3 3 attr\n";
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
-      std::cout << "\n\n3 3 attr\n";
+      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
       
-      
-      std::string pre_dot = LHS->GetPreDot();
-      bool is_self = LHS->GetSelf();
-      bool is_attr = LHS->GetIsAttribute();
-
-      if (is_attr) {
-        object_name = Builder->CreateGlobalString(pre_dot);
-
-        LName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {object_name, LName});
-        
-      }
-      if (is_self)
-        LName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                {Builder->CreateLoad(int8PtrTy, first_arg), LName});
-      if (!(is_self))
-        LName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                {Builder->CreateLoad(int8PtrTy, scope_str), LName});
-
-      if(RHS->GetType()=="object_vec")
+      if (RHS->GetIsVec())
       {
+        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
         VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        if (!RHSE)
-          return LogErrorV("'=' object attribution destiny must be an object variable.");
-
-        pre_dot = RHS->GetPreDot();
-        is_self = RHS->GetSelf();
-        is_attr = RHS->GetIsAttribute();
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
         
+        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
+                                                        {LName, RName});
+      } else {
+        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
         
-        if (is_self||is_attr)
-        {
-          if (is_attr) {
-            object_name = Builder->CreateGlobalString(pre_dot);
-            RName = Builder->CreateGlobalString(RHS->GetName());
+        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
+                                                        {LName, RName});
 
-            RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                            {object_name, RName});
-          }
-          if (is_self)
-            RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                            {Builder->CreateLoad(int8PtrTy, first_arg), RName});
-        }
-
-        Value *R_idx = RHSE->Idx[0]->codegen(first_arg, scope_str, previous_scope);
-        
-        Builder->CreateCall(TheModule->getFunction("Attr_object_from_objectVec"),
-                                                 {LName, R_idx, RName});
       }
-      
-
-      //Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-      //                    {LtensorName, RtensorPtr});
-      
-    } else if (LHS->GetType()=="object")
-    {
-      std::cout << "\n\n3 3 INDEXED attr\n";
-      std::cout << "" << LHS->GetType() << "\n";
-
-      ObjectVecIdxExprAST *LHSE = static_cast<ObjectVecIdxExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' object attribution destiny must be an object variable.");
-
-      pre_dot = LHS->GetPreDot();
-      is_self = LHS->GetSelf();
-      is_attr = LHS->GetIsAttribute();
-      VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(LHSE->Vec.get());
-      
-      LName = Builder->CreateGlobalString(vec->GetName());
-      
-      if (is_self||is_attr)
-      {
-        // Gets from pre_dot if it is a class attribute
-        if (is_attr) {
-          object_name = Builder->CreateGlobalString(pre_dot);
-          LName = Builder->CreateGlobalString(LHS->GetName());
-
-          LName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {object_name, LName});
-        }
-        if (is_self)
-          LName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {Builder->CreateLoad(int8PtrTy, first_arg), LName});
-      }
-
-      Value *objects_idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope);
-      Value *obj_vec_idx = LHSE->Idx->codegen(first_arg, scope_str, previous_scope);
-      Value *post_dot_str = Builder->CreateGlobalString(LHSE->_post_dot);
-      
-      
-      Builder->CreateCall(TheModule->getFunction("Attr_object_vec_idxObject"),
-                                                 {LName, objects_idx, post_dot_str, obj_vec_idx, RName});
-      
-      //Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-      //                    {LtensorName, RtensorPtr,
-      //                     idx_at});
-      
+    
     } else {
       std::cout << "\n\n3 3 other INDEXED attr\n";
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
+      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
 
-      pre_dot = LHS->GetPreDot();
-      is_self = LHS->GetSelf();
-      is_attr = LHS->GetIsAttribute();
-      
-      
-      if (is_self||is_attr)
-      {
-        if (is_attr) {
-          object_name = Builder->CreateGlobalString(pre_dot);
-          LName = Builder->CreateGlobalString(LHS->GetName());
 
-          LName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {object_name, LName});
-        }
-        if (is_self)
-          LName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {Builder->CreateLoad(int8PtrTy, first_arg), LName});
-      }
-
-      Value *L_idx = LHSE->Idx[0]->codegen(first_arg, scope_str, previous_scope);
       std::cout << "ok" << "\n";
       
-      if (RHS->GetIsVec() && RHS->GetType()=="object")
+      if (RHS->GetIsVec())
       {
-        ObjectVecIdxExprAST *RHSE = static_cast<ObjectVecIdxExprAST *>(RHS.get());
+        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
+        VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
         
-        pre_dot = RHS->GetPreDot();
-        is_self = RHS->GetSelf();
-        is_attr = RHS->GetIsAttribute();
-        VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(RHSE->Vec.get());
+        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
+                                                        {LName, RName});
+      } else {
+        std::cout << "3 3 VEC FROM VAR" << "\n";
+        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
         
-        RName = Builder->CreateGlobalString(vec->GetName());
-        
-        if (is_self||is_attr)
-        {
-          // Gets from pre_dot if it is a class attribute
-          if (is_attr) {
-            object_name = Builder->CreateGlobalString(pre_dot);
-            RName = Builder->CreateGlobalString(RHS->GetName());
+        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
+                                                        {LName, RName});
 
-            RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                            {object_name, RName});
-          }
-          if (is_self)
-            RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                            {Builder->CreateLoad(int8PtrTy, first_arg), RName});
-        }
-
-        Value *objects_idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope);
-        Value *obj_vec_idx = RHSE->Idx->codegen(first_arg, scope_str, previous_scope);
-        Value *post_dot_str = Builder->CreateGlobalString(RHSE->_post_dot);
-        
-        Builder->CreateCall(TheModule->getFunction("Attr_object_vecvec_vec_idxObject"),
-                                                 {LName, L_idx, objects_idx, post_dot_str, obj_vec_idx, RName});
       }
 
-      if (!RHS->GetIsVec() && RHS->GetType()=="object")
-      {
-        ObjectVecIdxExprAST *RHSE = static_cast<ObjectVecIdxExprAST *>(RHS.get());
-        
-        pre_dot = RHS->GetPreDot();
-        is_self = RHS->GetSelf();
-        is_attr = RHS->GetIsAttribute();
-        VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(RHSE->Vec.get());
-        
-        RName = Builder->CreateGlobalString(vec->GetName());
-        
-        if (is_self||is_attr)
-        {
-          // Gets from pre_dot if it is a class attribute
-          if (is_attr) {
-            object_name = Builder->CreateGlobalString(pre_dot);
-            RName = Builder->CreateGlobalString(RHS->GetName());
 
-            RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                            {object_name, RName});
-          }
-          if (is_self)
-            RName = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                            {Builder->CreateLoad(int8PtrTy, first_arg), RName});
-        }
-
-        Value *objects_idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope);
-        Value *post_dot_str = Builder->CreateGlobalString(RHSE->_post_dot);
-        
-        Builder->CreateCall(TheModule->getFunction("Attr_object_vec_postdot__vec_idxObject"),
-                                                 {LName, L_idx, objects_idx, post_dot_str, RName});
-
-      }
     }
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -10018,9 +9928,9 @@ extern "C" float InitObjectVecWithNull(char *name, float vec_size)
 
   return 0;
 }
-extern "C" float is_null(char *name, float idx)
+extern "C" float is_null(char *name)
 {
-  std::cout << "\n\nIS NULL OF: " << name << " at idx " << idx << "\n\n\n";
+  std::cout << "\n\nIS NULL OF: " << name << "\n\n\n";
 
   if (objectVecs[name]=="nullptr")
     return 1;
@@ -10046,7 +9956,12 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Value *var_name = Builder->CreateGlobalString(VarName);
     
-    if (Init)
+    if (!GetIsVec())
+    {
+      Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
+                                              {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+    }
+    else if (Init) // init of vec[size]
     {
       std::string pre_dot = GetPreDot();
       bool is_self = GetSelf();
@@ -10066,7 +9981,8 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       Builder->CreateCall(TheModule->getFunction("InitObjectVecWithNull"),
                                                 {var_name, init});
-    }
+    } else
+    {}
   }
 
 
@@ -10401,8 +10317,15 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
                                                     {Builder->CreateLoad(int8PtrTy, first_arg)}),
                                                first_arg_copy);
+
+    
+
     first_arg = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(_pre_dot_str, first_arg);
+
+    //Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("objHash"),
+    //                                    {Builder->CreateLoad(int8PtrTy, scope_str), _pre_dot_str}), first_arg);
+
 
     
     Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -10559,8 +10482,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
     if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
     {
-      if (starts_with(functionName.c_str(), "__async_"))
-        Builder->CreateStore(Builder->CreateGlobalString("threaded_"), _scope);
+      //if (starts_with(functionName.c_str(), "__async_"))
+      //  Builder->CreateStore(Builder->CreateGlobalString("threaded_"), _scope);
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope);
 
@@ -10791,65 +10714,65 @@ extern "C" char *CopyString(char *in_str)
   return copied;
 }
 
+extern "C" void objAttr_var_from_var(char *LName, char *RName)
+{
+  std::cout << "objAttr_var_from_var of " << LName << " from " << RName << "\n";
+
+  std::cout << "Loading: " << NamedObjects[RName] << "\n";
+  std::cout << "Replacing: " << NamedObjects[LName] << "\n";
+
+  NamedObjects[LName] = NamedObjects[RName];
+
+  
+}
+
+extern "C" void objAttr_var_from_vec(char *LName, char *RName)
+{
+  std::cout << "objAttr_var_from_vec of " << LName << " from " << RName << "\n";
+
+  std::cout << "Loading: " << objectVecs[RName] << "\n";
+  std::cout << "Replacing: " << NamedObjects[LName] << "\n";
+
+  NamedObjects[LName] = objectVecs[RName];
+
+  
+}
+
+extern "C" void objAttr_vec_from_var(char *LName, char *RName)
+{
+  std::cout << "objAttr_vec_from_var of " << LName << " from " << RName << "\n";
+
+  std::cout << "Loading: " << NamedObjects[RName] << "\n";
+  std::cout << "Replacing: " << objectVecs[LName] << "\n";
+
+  objectVecs[LName] = NamedObjects[RName];
+
+  
+}
+
+
+extern "C" void objAttr_vec_from_vec(char *LName, char *RName)
+{
+  std::cout << "objAttr_vec_from_vec of " << LName << " from " << RName << "\n";
+
+  std::cout << "Loading: " << objectVecs[RName] << "\n";
+  std::cout << "Replacing: " << objectVecs[LName] << "\n";
+
+  objectVecs[LName] = objectVecs[RName];
+
+  
+}
+
 extern "C" char *append(char *self, char *obj_name)
 {
   //char* copied = (char*)malloc(strlen(in_str) + 1);
   //strcpy(copied, in_str);
 
-  std::cout << "\n\nAPPEND OF " << obj_name << " with self: " << self << "\n";
-  std::string random_str = RandomString(4);
+  std::cout << "\n\nAPPEND OF " << obj_name << " into: " << self << "\n";
+  
   std::string obj_name_str = obj_name;
 
-  std::vector<std::string> vars_to_convert;
 
-
-
-  for (auto &pair: NamedTensorsT)
-  {
-    //std::cout << "Tensor: " << pair.first << "\n";
-    if (begins_with(pair.first, obj_name_str))
-      vars_to_convert.push_back(pair.first); 
-  }
-  for (std::string tensor : vars_to_convert)
-  {
-      std::string idx_obj = random_str + tensor;
-      //std::cout << "Converting tensor " << tensor << " into " << idx_obj << "\n";
-
-      Tensor t = NamedTensorsT[tensor];
-      NamedTensorsT.erase(tensor);
-      NamedTensorsT[idx_obj] = t;
-
-  }
-  vars_to_convert.clear();
-
-  for (auto &pair: NamedClassValues)
-    if (begins_with(pair.first, obj_name_str))
-      vars_to_convert.push_back(pair.first);
-  for (std::string float_var : vars_to_convert)
-  {
-    std::string idx_obj = random_str + float_var;
-      
-    //std::cout << "Converting float " << pair.first << " into " << idx_obj << "\n";
-
-    float f = NamedClassValues[float_var];
-    NamedClassValues.erase(float_var);
-    NamedClassValues[idx_obj] = f;
-  }
-  vars_to_convert.clear();
-
-  for (auto &pair: objectVecs)
-    if (begins_with(pair.first, obj_name_str))
-      vars_to_convert.push_back(pair.first);
-  for (std::string obj : vars_to_convert)
-  {
-    std::string idx_obj = random_str + obj;
-      
-    //std::cout << "Converting float " << pair.first << " into " << idx_obj << "\n";
-
-    std::string o = objectVecs[obj];
-    objectVecs.erase(obj);
-    objectVecs[idx_obj] = o;
-  }
   
 
 
@@ -10862,7 +10785,7 @@ extern "C" char *append(char *self, char *obj_name)
   objectVecsLastId[self] = obj_vec_last_id;
 
   std::string indexed_self = self + std::to_string(obj_vec_last_id);
-  objectVecs[indexed_self] = random_str+obj_name;
+  objectVecs[indexed_self] = NamedObjects[obj_name];
 
   
   /*
@@ -11768,6 +11691,42 @@ FunctionType *unbugTy = FunctionType::get(
 
 
   //
+  FunctionType *objAttr_var_from_varTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("objAttr_var_from_var", objAttr_var_from_varTy);
+
+
+  //
+  FunctionType *objAttr_var_from_vecTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("objAttr_var_from_vec", objAttr_var_from_vecTy);
+
+
+  //
+  FunctionType *objAttr_vec_from_varTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("objAttr_vec_from_var", objAttr_vec_from_varTy);
+
+
+  //
+  FunctionType *objAttr_vec_from_vecTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("objAttr_vec_from_vec", objAttr_vec_from_vecTy);
+
+
+  //
   FunctionType *LoadObjectScopeNameTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy},
@@ -11939,7 +11898,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *is_nullTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("is_null", is_nullTy);
@@ -11957,6 +11916,33 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
+  
+
+  // 
+  FunctionType *objHashTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("objHash", objHashTy);
+  
+
+  // 
+  FunctionType *LoadObjectTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("LoadObject", LoadObjectTy);
+  
+
+  //
+  FunctionType *InstantiateObjectTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("InstantiateObject", InstantiateObjectTy);
   
 
   //
