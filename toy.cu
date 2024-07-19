@@ -2933,14 +2933,14 @@ static std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
 
 
 //
-static std::unique_ptr<ExprAST> ParseTensorExpr() {
+static std::unique_ptr<ExprAST> ParseTensorExpr(std::string class_name="") {
   
   getNextToken(); // eat the tensor.
 
   
   if (CurTok != '[')
     return LogError("tensor declaration expected [");
-    getNextToken();
+  getNextToken();
   
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
@@ -2966,7 +2966,8 @@ static std::unique_ptr<ExprAST> ParseTensorExpr() {
       } else
         dims.push_back(std::move(ParseIdentifierExpr()));
     else {
-      dims.push_back(std::move(ParseSelfExpr()));
+      //dims.push_back(std::move(ParseExpression(class_name)));
+      dims.push_back(std::move(ParsePrimary(class_name)));
     }
 
     
@@ -3303,7 +3304,7 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
   case tok_var:
     return ParseVarExpr(class_name);
   case tok_tensor:
-    return ParseTensorExpr();
+    return ParseTensorExpr(class_name);
   case tok_pinned_tensor:
     return ParsePinnedTensorExpr();
   case tok_conv2d:
@@ -5208,14 +5209,11 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
 
 extern "C" void InstantiateObject(char *scope, char *obj_name)
 {
-  std::cout << "\n\nInstantiateObject of: " << scope << obj_name << "\n";
+  //std::cout << "\n\nInstantiateObject of: " << scope << obj_name << "\n";
   std::string _obj_name = obj_name;
 
   NamedObjects[scope+_obj_name] = _obj_name + RandomString(5);
-  std::cout << "Saving " << NamedObjects[scope+_obj_name]  << "\n\n";
-
-  //std::cout << "Created " << NamedObjects[scope+_obj_name] << "\n";
-
+  //std::cout << "Saving " << NamedObjects[scope+_obj_name]  << "\n\n";
 }
 
 
@@ -5553,7 +5551,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
 
-  std::cout << "Now Loading Vec indexation for " << Name << ", type: " << Type << "  \n";
+  std::cout << "Now Loading Vec indexation for type: " << Type << "  \n";
 
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -5623,19 +5621,26 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   if (Type=="tensor")
   {
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+    std::cout << "vec idx of tensor, idx type: " << Idx[0]->GetType() << "\n";
 
-
-    std::vector<Value *> idx_calc_args;
-    idx_calc_args.push_back(var_name);
-    for (int i=0; i<Idx.size(); i++)
-      idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope));
-    Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+    if (Idx[0]->GetType()!="tensor")
+    {
+      std::vector<Value *> idx_calc_args;
+      idx_calc_args.push_back(var_name);
+      for (int i=0; i<Idx.size(); i++)
+        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope));
+      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                           idx_calc_args);
 
-    return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at});
+      return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at});
+    } else {
+      VariableExprAST *idx = static_cast<VariableExprAST *>(Idx[0].get());
+      Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      
+      return Builder->CreateCall(TheModule->getFunction("IdxTensorWithTensor"), {var_name, idx_tensor_name});
+      
+    }
+    
   }
 
   std::string _error = "Unknown vector: " + Name + ".";
@@ -5721,7 +5726,7 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
 {
   
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
-  //std::cout << "New dims from indexed:" << "\n";
+  
   
   Tensor tensor = NamedTensorsT[tensor_name];
 
@@ -5729,11 +5734,13 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
   float *new_tensor;
 
   std::vector<float> dims = tensor.dims;
+  std::vector<float> new_dims;
 
-    std::vector<float> new_dims;
-
-  for (int i = 0; i < dims.size()-1; i++)
-    new_dims.push_back(dims[i+1]);
+  if (dims.size()==1)
+    new_dims = {1.0f};
+  else
+    for (int i = 0; i < dims.size()-1; i++)
+      new_dims.push_back(dims[i+1]);
   int new_dims_prod = DimsProd(new_dims);
 
   int dims_prod = DimsProd(dims);
@@ -5750,6 +5757,7 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
 
     return nullptr;
   }
+  //std::cout << "IDX AT: " << idx_at << "\n";
 
 
   float *base_address = tensor.tensor_ptr;
@@ -5759,10 +5767,97 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
   cudaMalloc(&new_tensor, new_dims_prod*sizeof(float));
   cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyHostToHost));
 
-  
+  /*
+  PrintTensorF(new_tensor, 1, 1);
+  PrintDims(new_dims);
+  std::cout << "dims prod:" << new_dims_prod  << "\n";
+  */
+
   Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, false, "");
   return indexed;
 }
+
+
+__global__ void idx_last_dim_kernel(float *tgt,
+                           const float *tensor, const float *idx_tensor, 
+                           int dims_prod, int last_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int C = last_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C;
+        int v = i % C;
+        // i = b * C + v
+
+        float *tgt_b = tgt + b;
+        float idx_b = idx_tensor[b];
+
+        if (v==idx_b)
+        {
+          float ix = tensor[i];
+          tgt[b] = ix;
+        }
+    }
+}
+
+extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name)
+{
+  std::cout << "Idx tensor " << tensor_name << " with tensor " << idx_tensor_name << "\n";
+
+  //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
+  
+  
+  Tensor tensor = NamedTensorsT[tensor_name];
+  Tensor idx_tensor = NamedTensorsT[idx_tensor_name];
+
+
+  float *tensor_ptr, *idx_tensor_ptr, *new_tensor;
+  float new_dims_prod;
+  std::vector<float> dims, idx_dims, new_dims;
+
+  tensor_ptr = tensor.tensor_ptr;
+  idx_tensor_ptr = idx_tensor.tensor_ptr;
+
+  dims = tensor.dims;
+  idx_dims = idx_tensor.dims;
+
+
+  //TODO: gather with smaller dimensions
+  /*
+  if (dims.size()==1)
+    new_dims = {1.0f};
+  else
+    for (int i = 0; i < dims.size()-1; i++)
+      new_dims.push_back(dims[i+1]);
+  */
+  
+
+  std::cout << "dim size diff: " << dims.size()-idx_dims.size()  << "\n";
+  if((dims.size()-idx_dims.size())==1)
+  {
+    new_dims_prod = idx_tensor.dims_prod;
+    new_dims = idx_tensor.dims;
+
+    std::cout << "INDEX OVER LAST DIM" << "\n";
+
+    cudaMalloc(&new_tensor, new_dims_prod*sizeof(float));
+    cudaMemset(new_tensor, 0, new_dims_prod*sizeof(float));
+    
+    int grid_size = tensor.dims_prod;
+    int block_size = 32;
+    size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+    idx_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(new_tensor, tensor_ptr, idx_tensor_ptr, tensor.dims_prod, tensor.dims_prod/idx_tensor.dims_prod);
+  }
+
+  
+  //cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyHostToHost));
+
+
+  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, false, "");
+  return indexed;
+}
+
 
 
 extern "C" float CopyArgTensor(Tensor tensor, char *new_tensor_name, char *previous_scope, char *scope)
@@ -5885,7 +5980,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
 {
-  std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
+  //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
 
   Tensor tgt_tensor = NamedTensorsT[tensor_name];
   
@@ -5998,6 +6093,90 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor tensor, float idx_at)
     
   return 0;
 }
+
+
+__global__ void idx_attr_last_dim_kernel(float *tgt,
+                           const float *tensor, const float *idx_tensor, 
+                           int dims_prod, int last_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int C = last_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C;
+        int v = i % C;
+        // i = b * C + v
+
+        float *tgt_b = tgt + b;
+        float idx_b = idx_tensor[b];
+
+        if (v==idx_b)
+        {
+          float ix = tensor[b];
+          tgt[i] = ix;
+        }
+    }
+}
+
+extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name, Tensor *R_tensor)
+{ 
+  std::cout << "ATTR Idx tensor " << tensor_name << " at index tensor " << idx_tensor_name << " with tensor " << R_tensor->name << "\n";
+
+  //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
+  
+  
+  Tensor tensor = NamedTensorsT[tensor_name];
+  Tensor idx_tensor = NamedTensorsT[idx_tensor_name];
+
+
+  float *tensor_ptr, *idx_tensor_ptr, *r_tensor_ptr;
+  float new_dims_prod;
+  std::vector<float> dims, idx_dims, new_dims;
+
+  tensor_ptr = tensor.tensor_ptr;
+  idx_tensor_ptr = idx_tensor.tensor_ptr;
+  r_tensor_ptr = R_tensor->tensor_ptr;
+
+  dims = tensor.dims;
+  idx_dims = idx_tensor.dims;
+
+
+  //TODO: gather with smaller dimensions
+  /*
+  if (dims.size()==1)
+    new_dims = {1.0f};
+  else
+    for (int i = 0; i < dims.size()-1; i++)
+      new_dims.push_back(dims[i+1]);
+  */
+
+  if (dims.size()<=idx_dims.size())
+  {
+    LogErrorS("Index tensor must have less dimensions than the indexed tensor.");
+    return 0;
+  }
+
+  
+
+  std::cout << "dim size diff: " << dims.size()-idx_dims.size()  << "\n";
+  if((dims.size()-idx_dims.size())==1)
+  {
+    new_dims_prod = idx_tensor.dims_prod;
+    new_dims = idx_tensor.dims;
+
+    std::cout << "INDEX ATTR OVER LAST DIM" << "\n";
+
+    
+    int grid_size = tensor.dims_prod;
+    int block_size = 32;
+    size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+    idx_attr_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, r_tensor_ptr, idx_tensor_ptr, tensor.dims_prod, tensor.dims_prod/idx_tensor.dims_prod);
+  }
+
+
+  return 0;
+}
+
 
 
 
@@ -7077,6 +7256,190 @@ extern "C" void *sum(Tensor tensor, float first_dim, ...)
     sum_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, summed_dim);
   if (sum_dims[0]==(dims.size()-2))
     sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+
+
+  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  return new_tensor;
+}
+
+__device__ float atomicMul(float* address, float val) {
+    int *addr_as_int = (int *)address;
+    int old = *addr_as_int, assumed;
+    do {
+        assumed = old;
+        old = atomicCAS(addr_as_int, assumed,
+                        __float_as_int(val * __int_as_float(assumed)));
+    } while (assumed != old);
+    return __int_as_float(old);
+}
+
+
+__global__ void prod_single_dim_kernel(const float *tensor,
+                           float *summed,
+                           int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = dims_prod;
+    
+    if (i < dims_prod) {
+        int b = i / (C); // b updates only when v reaches it's maximum value
+        int v = i % C;
+        // i = b*C + v
+
+
+        float ix = tensor[i];
+
+        atomicMul(summed, ix);        
+    }
+}
+
+__global__ void prod_over_last_dim_kernel(const float *tensor,
+                           float *summed,
+                           int dims_prod, int summed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = summed_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / (C); // b updates only when v reaches it's maximum value
+        int v = i % C;
+        // i = b*C + v
+
+        float *summed_b = summed + b;
+
+        float ix = tensor[i];
+
+        atomicMul(summed_b, ix);        
+    }
+}
+
+__global__ void prod_over_semilast_dim_kernel(const float *tensor,
+                           float *summed,
+                           int dims_prod, int last_dim_size, int summed_dim_size) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = last_dim_size;
+    int D = summed_dim_size*last_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / C; // b updates only when v reaches it's maximum value
+        int d = i / D;
+        int v = i % C;
+        // i = b*C + v
+
+        float *summed_b = summed + v + d*C;
+
+        float ix = tensor[i];
+
+        atomicMul(summed_b, ix);        
+    }
+}
+
+extern "C" void *prod(Tensor tensor, float first_dim, ...)
+{
+  std::cout << "PROD OF " << tensor.name << "\n";
+
+
+  float *tensor_ptr = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  float *summed;
+
+
+  va_list args;
+  va_start(args, first_dim);
+
+  if (first_dim==TERMINATE_VARARG)
+  {
+    va_end(args);
+    int dims_prod = DimsProd(dims);
+
+    cudaMalloc(&summed, dims_prod*sizeof(float));
+    cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+    
+    float tensor_sum=0;
+    for(int i=0; i<dims_prod; i++)
+      tensor_sum += summed[i];
+    tensor_sum = tensor_sum;
+
+    std::cout << "prod: " << tensor_sum << "\n";
+
+    return summed;
+  }
+
+
+  std::vector<float> sum_dims, new_dims;
+  if (first_dim<0)
+    first_dim = dims.size()+first_dim;
+  sum_dims.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions???");
+      return nullptr;
+    }
+
+    float dim = va_arg(args, float);
+    
+    if (dim==TERMINATE_VARARG)
+      break;
+    if (in_float_vec(dim, sum_dims))  
+    {
+      std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
+      LogErrorS(_error);
+      return nullptr;
+    }
+    if (dim<0)
+      dim = dims.size()+dim;
+    sum_dims.push_back(dim);
+  }
+  va_end(args);
+  
+  
+  float summed_dim;
+  for (int i=0; i<dims.size(); i++)
+    if (!in_float_vec(i, sum_dims))
+      new_dims.push_back(dims[i]);
+    else
+      summed_dim=dims[i];
+
+
+  int dims_prod = DimsProd(dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+  
+  float *init_prod = new float[new_dims_prod];
+  init_prod = make_ones_float(new_dims_prod);
+  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  cudaMemcpy(summed, init_prod, new_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+  delete[] init_prod;
+
+  PrintTensorF(summed, new_dims_prod,1);
+
+  //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
+
+  
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  
+  if (dims.size()==1)
+  {
+    prod_single_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod);
+    new_dims = {1.0f};
+  }
+  else if (sum_dims[0]==(dims.size()-1))
+  {
+    prod_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, summed_dim);
+    std::cout << "prod_over_last_dim_kernel" << "\n";
+  }
+  if (sum_dims[0]==(dims.size()-2))
+    prod_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
   Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
@@ -8697,20 +9060,26 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
         return LogErrorV("'=' left side expression must be a var.");
 
 
-      std::vector<Value *> idx_calc_args;
-      idx_calc_args.push_back(LtensorName);
-      for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
-      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                            idx_calc_args);
+      if(LHSE->Idx[0]->GetType()!="tensor")
+      {
+        std::vector<Value *> idx_calc_args;
+        idx_calc_args.push_back(LtensorName);
+        for (int i=0; i<LHSE->Idx.size(); i++)
+          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+        Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                              idx_calc_args);
 
-      
-      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-                          {LtensorName, RtensorPtr,
-                           idx_at});
-      
+        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
+                            {LtensorName, RtensorPtr,
+                            idx_at});
+      } else {
+        VariableExprAST *idx = static_cast<VariableExprAST *>(LHSE->Idx[0].get());
+        Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        
+        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdxTensor"), {LtensorName, idx_tensor_name, RtensorPtr});
+
+      }
     }
-
 
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -9702,7 +10071,6 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     {
       if(type=="tensor")
       {
-        
         VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
         destiny->NameSolver->SetSolverIncludeScope(false);
         _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
@@ -9720,25 +10088,35 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (!is_vec)
       {
+        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
+        destiny->NameSolver->SetSolverIncludeScope(false);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
+
+        
+        VariableExprAST *var = static_cast<VariableExprAST *>(Vars[i].get());
+        var->NameSolver->SetSolverIncludeScope(false);
+        Value *_l_name = var->NameSolver->codegen(first_arg, scope_str, previous_scope);
+
         if (l_type=="tensor"||type=="tensor")
         {
-          Value *_l_name = Builder->CreateGlobalString(l_name);
           Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
                                               {_l_name, Builder->CreateLoad(int8PtrTy, scope_str),
                                                _name,   Builder->CreateLoad(int8PtrTy, previous_scope)});
         }
       } else {
 
-        VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(Destiny[i].get());
-        if (!LHSE)
+        VecIdxExprAST *destiny = static_cast<VecIdxExprAST *>(Destiny[i].get());
+        if (!destiny)
           return LogErrorV("Could not deal with return expression");
-
+        destiny->NameSolver->SetSolverIncludeScope(false);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        
 
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {Builder->CreateLoad(int8PtrTy, previous_scope), _name}));
-        for (int i=0; i<LHSE->Idx.size(); i++)
-          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+        for (int i=0; i<destiny->Idx.size(); i++)
+          idx_calc_args.push_back(destiny->Idx[i]->codegen(first_arg, scope_str, previous_scope));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                               idx_calc_args);
 
@@ -9925,12 +10303,12 @@ extern "C" float InitObjectVecWithNull(char *name, float vec_size)
     objectVecs[indexed_name] = "nullptr";
   }
     
-
   return 0;
 }
+
 extern "C" float is_null(char *name)
 {
-  std::cout << "\n\nIS NULL OF: " << name << "\n\n\n";
+  //std::cout << "\n\nIS NULL OF: " << name << "\n\n\n";
 
   if (objectVecs[name]=="nullptr")
     return 1;
@@ -10716,10 +11094,10 @@ extern "C" char *CopyString(char *in_str)
 
 extern "C" void objAttr_var_from_var(char *LName, char *RName)
 {
-  std::cout << "objAttr_var_from_var of " << LName << " from " << RName << "\n";
+  //std::cout << "objAttr_var_from_var of " << LName << " from " << RName << "\n";
 
-  std::cout << "Loading: " << NamedObjects[RName] << "\n";
-  std::cout << "Replacing: " << NamedObjects[LName] << "\n";
+  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
+  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
 
   NamedObjects[LName] = NamedObjects[RName];
 
@@ -10728,10 +11106,10 @@ extern "C" void objAttr_var_from_var(char *LName, char *RName)
 
 extern "C" void objAttr_var_from_vec(char *LName, char *RName)
 {
-  std::cout << "objAttr_var_from_vec of " << LName << " from " << RName << "\n";
+  //std::cout << "objAttr_var_from_vec of " << LName << " from " << RName << "\n";
 
-  std::cout << "Loading: " << objectVecs[RName] << "\n";
-  std::cout << "Replacing: " << NamedObjects[LName] << "\n";
+  //std::cout << "Loading: " << objectVecs[RName] << "\n";
+  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
 
   NamedObjects[LName] = objectVecs[RName];
 
@@ -10740,10 +11118,10 @@ extern "C" void objAttr_var_from_vec(char *LName, char *RName)
 
 extern "C" void objAttr_vec_from_var(char *LName, char *RName)
 {
-  std::cout << "objAttr_vec_from_var of " << LName << " from " << RName << "\n";
+  //std::cout << "objAttr_vec_from_var of " << LName << " from " << RName << "\n";
 
-  std::cout << "Loading: " << NamedObjects[RName] << "\n";
-  std::cout << "Replacing: " << objectVecs[LName] << "\n";
+  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
+  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
 
   objectVecs[LName] = NamedObjects[RName];
 
@@ -10753,17 +11131,17 @@ extern "C" void objAttr_vec_from_var(char *LName, char *RName)
 
 extern "C" void objAttr_vec_from_vec(char *LName, char *RName)
 {
-  std::cout << "objAttr_vec_from_vec of " << LName << " from " << RName << "\n";
+  //std::cout << "objAttr_vec_from_vec of " << LName << " from " << RName << "\n";
 
-  std::cout << "Loading: " << objectVecs[RName] << "\n";
-  std::cout << "Replacing: " << objectVecs[LName] << "\n";
+  //std::cout << "Loading: " << objectVecs[RName] << "\n";
+  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
 
   objectVecs[LName] = objectVecs[RName];
 
   
 }
 
-extern "C" char *append(char *self, char *obj_name)
+extern "C" float append(char *self, char *obj_name)
 {
   //char* copied = (char*)malloc(strlen(in_str) + 1);
   //strcpy(copied, in_str);
@@ -10794,7 +11172,7 @@ extern "C" char *append(char *self, char *obj_name)
   PrintTensorF(tensor.tensor_ptr,2,2);
   */
 
-  return obj_name;
+  return 0;
 }
 
 extern "C" char *LoadObjectScopeName(char *self)
@@ -11222,6 +11600,15 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *IdxTensorWithTensorTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, int8PtrTy}, 
+      false
+  );
+  TheModule->getOrInsertFunction("IdxTensorWithTensor", IdxTensorWithTensorTy);
+
+
+  //
   FunctionType *PrintTensorFTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {floatPtrTy,
@@ -11386,6 +11773,15 @@ static void InitializeModule() {
       true // vararg
   );
   TheModule->getOrInsertFunction("sum", sumTy);
+  
+
+  // 
+  FunctionType *prodTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("prod", prodTy);
 
 
   // 
@@ -11683,7 +12079,7 @@ FunctionType *unbugTy = FunctionType::get(
 
   //
   FunctionType *appendTy = FunctionType::get(
-      int8PtrTy,
+      Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy},
       false 
   );
@@ -12112,6 +12508,15 @@ FunctionType *unbugTy = FunctionType::get(
   
 
   //
+  FunctionType *AttrTensorOnIdxTensorTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("AttrTensorOnIdxTensor", AttrTensorOnIdxTensorTy);
+  
+
+  //
   FunctionType *cpuTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy},
@@ -12392,14 +12797,14 @@ int main() {
 
   return_tensor_functions = {"gelu", "relu", "softmax", "log", "rand_like", "print_tensor"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "permute","cpu",
-                            "sum", "mean", "tmin", "argmin", "topk", "repeat_interleave"};
+                            "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
 
   return_pinned_methods = {"gpu", "gpuw"};
 
 
   // Universal
-  vararg_methods = {"view", "sum", "tmax", "argmax"};
+  vararg_methods = {"view", "sum", "prod", "tmax", "argmax"};
   string_methods = {"split", "split_idx"};
 
 
