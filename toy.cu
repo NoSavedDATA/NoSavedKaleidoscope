@@ -612,6 +612,8 @@ static int get_token() {
       return tok_var;
     if (IdentifierStr == "glob")
       IdentifierStr = "_glob_b_";
+    if (IdentifierStr == "tanh")
+      IdentifierStr = "_tanh";
     if (IdentifierStr == "str")
       return tok_var_str;
     if (IdentifierStr == "str_vec")
@@ -4321,8 +4323,8 @@ extern "C" float print_tensor(Tensor tensor){
   return 0;
 }
 
-extern "C" float PrintTensorF(float *cuda_tensor, int d1, int d2){
-  
+
+extern "C" float PrintTensorF(const float *cuda_tensor, int d1, int d2){
 
   std::vector<float> dims;
   dims.push_back(d1);
@@ -4738,6 +4740,28 @@ extern "C" void *view(Tensor tensor, float first_dim, ...)
 // Tensor -- Scalar   Operations
 //===----------------------------------------------------------------------===//
 
+std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1)
+{
+
+  int grid_size, block_size, shared_mem_size;
+
+  if (pre_block_size==-1)
+  {
+    if (dims_prod<64)
+      block_size=32;
+    else if (dims_prod>=64 && dims_prod<128)
+      block_size=64;
+    else
+      block_size=128;  
+  } else
+    block_size = pre_block_size;
+
+  grid_size = ceil_div(dims_prod, block_size);
+  shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  std::vector<int> ret = {grid_size, block_size, shared_mem_size};
+  return ret;
+}
 
 __global__ void vec_mult(const float a, float* x, float* y, int dims_prod) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -7018,11 +7042,12 @@ extern "C" void *onehot(Tensor tensor, float num_classes)
   cudaMalloc(&probs, B*C*sizeof(float));
   cudaMemset(probs, 0, B*C*sizeof(float));
   
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
 
-
-  int grid_size = B;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
   onehot_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, probs, B, C);
   //grid_size = ceil_div(B*C, block_size);
   //onehot_kernel<<<grid_size, block_size>>>(tensor, probs, B, C);
@@ -7890,6 +7915,32 @@ __global__ void gelu_forward_kernel1(const float* inp, float* out, int N) {
         out[i] = 0.5f * xi * (1.0f + tanhf(GELU_SCALING_FACTOR * (xi + cube)));
     }
 }
+__global__ void gelu_backward1(float* dinp, const float* inp, const float* dout, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        float x = (float)inp[i];
+        float cube = 0.044715f * x * x * x;
+        float tanh_arg = GELU_SCALING_FACTOR * (x + cube);
+        float tanh_out = tanhf(tanh_arg);
+        float coshf_out = coshf(tanh_arg);
+        float sech_out = 1.0f / (coshf_out * coshf_out);
+        float local_grad = 0.5f * (1.0f + tanh_out) + x * 0.5f * sech_out * GELU_SCALING_FACTOR * (1.0f + 3.0f * 0.044715f * x * x);
+        dinp[i] = (float)(local_grad * (float)dout[i]);
+    }
+}
+void gelu_backward(const float* inp, float B, float C, float* dinp, const float* dout) {
+
+  float N = B * C;
+  
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(N);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
+
+  gelu_backward1<<<grid_size, block_size>>>(dinp, inp, dout, N);
+  cudaCheck(cudaGetLastError());
+}
 
 extern "C" void *gelu(Tensor tensor)
 {
@@ -7898,7 +7949,12 @@ extern "C" void *gelu(Tensor tensor)
   
 
   float dims_prod = DimsProd(dims);
-  float block_size = 32;
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
@@ -7907,7 +7963,7 @@ extern "C" void *gelu(Tensor tensor)
   cudaMalloc(&y, dims_prod*sizeof(float));
   cudaMemset(y, 0, dims_prod * sizeof(float));
 
-  const int grid_size = ceil_div(dims_prod, block_size);
+
   gelu_forward_kernel1<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
   cudaCheck(cudaGetLastError());
 
@@ -7936,31 +7992,163 @@ extern "C" void *gelu(Tensor tensor)
   return new_tensor;
 }
 
-__global__ void gelu_backward1(float* dinp, const float* inp, const float* dout, int N) {
+
+
+__global__ void sigmoid_forward_kernel(const float* inp, float* out, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N) {
-        float x = (float)inp[i];
-        float cube = 0.044715f * x * x * x;
-        float tanh_arg = GELU_SCALING_FACTOR * (x + cube);
-        float tanh_out = tanhf(tanh_arg);
-        float coshf_out = coshf(tanh_arg);
-        float sech_out = 1.0f / (coshf_out * coshf_out);
-        float local_grad = 0.5f * (1.0f + tanh_out) + x * 0.5f * sech_out * GELU_SCALING_FACTOR * (1.0f + 3.0f * 0.044715f * x * x);
+        float x = inp[i];
+        out[i] = 1/(1+exp(-x));
+    }
+}
+__global__ void sigmoid_backward_kernel(float* dinp, const float* out, const float* dout, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        float x = (float)out[i];
+        float local_grad = x * (1 - x);
         dinp[i] = (float)(local_grad * (float)dout[i]);
     }
 }
 
-void gelu_backward(const float* inp, float B, float C, float* dinp, const float* dout) {
-
+void sigmoid_backward(const float* out, float B, float C, float* dinp, const float* dout) {
   float N = B * C;
-  float block_size = 32;
+  
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(N);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
 
-  const int grid_size = ceil_div(N, block_size);
-  gelu_backward1<<<grid_size, block_size>>>(dinp, inp, dout, N);
+  sigmoid_backward_kernel<<<grid_size, block_size>>>(dinp, out, dout, N);
   cudaCheck(cudaGetLastError());
 }
 
+extern "C" void *sigmoid(Tensor tensor)
+{
+  float *tensor_ptr = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  
 
+  float dims_prod = DimsProd(dims);
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
+
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
+  
+
+  float *y;
+  cudaMalloc(&y, dims_prod*sizeof(float));
+  cudaMemset(y, 0, dims_prod * sizeof(float));
+
+  
+  sigmoid_forward_kernel<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
+  cudaCheck(cudaGetLastError());
+
+  
+  int is_forward_func=1;
+  if (is_forward_func)
+  {
+    float *inp, *out;
+
+    
+    float B  = linear_layer_dims[0];
+    float C  = linear_layer_dims[1];
+    float OC = linear_layer_dims[1];
+
+    cudaCheck(cudaMalloc(&inp, dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, dims_prod * sizeof(float)));
+    cudaMemcpy(inp, tensor_ptr, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, y, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+
+    todo_backwards.push_back(std::make_tuple(B, C, OC, B*C, C*OC, inp, nullptr, out,
+                                           "sigmoid", "none"));
+  }
+
+  Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
+  return new_tensor;
+}
+
+
+
+__global__ void tanh_forward_kernel(const float* inp, float* out, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N)
+        out[i] = tanhf(inp[i]);
+}
+__global__ void tanh_backward_kernel(float* dinp, const float* out, const float* dout, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) {
+        float x = (float)out[i];
+        float local_grad = 1 - x*x;
+        dinp[i] = (float)(local_grad * (float)dout[i]);
+    }
+}
+
+void tanh_backward(const float* out, float B, float C, float* dinp, const float* dout) {
+  float N = B * C;
+  
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(N);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
+
+  tanh_backward_kernel<<<grid_size, block_size>>>(dinp, out, dout, N);
+  cudaCheck(cudaGetLastError());
+}
+
+extern "C" void *_tanh(Tensor tensor)
+{
+  float *tensor_ptr = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  
+
+  float dims_prod = DimsProd(dims);
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
+
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
+  
+
+  float *y;
+  cudaMalloc(&y, dims_prod*sizeof(float));
+  cudaMemset(y, 0, dims_prod * sizeof(float));
+
+  
+  tanh_forward_kernel<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
+  cudaCheck(cudaGetLastError());
+
+  
+  int is_forward_func=1;
+  if (is_forward_func)
+  {
+    float *inp, *out;
+
+    
+    float B  = linear_layer_dims[0];
+    float C  = linear_layer_dims[1];
+    float OC = linear_layer_dims[1];
+
+    cudaCheck(cudaMalloc(&inp, dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, dims_prod * sizeof(float)));
+    cudaMemcpy(inp, tensor_ptr, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, y, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+
+    todo_backwards.push_back(std::make_tuple(B, C, OC, B*C, C*OC, inp, nullptr, out,
+                                           "tanh", "none"));
+  }
+
+  Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
+  return new_tensor;
+}
 
 __global__ void relu_forward(float* Z, float* A,
                                       float N) {
@@ -8047,7 +8235,7 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
     extern __shared__ float shared[];
     int idx = blockIdx.x;
     int tid = threadIdx.x;
-    int warpId = threadIdx.x / 32; // warp index within a block
+    int warpId = threadIdx.x / 32; // warp index within a block //starred
     int laneId = threadIdx.x % 32; // thread index within a warp
 
     // the number of warps per block. recall that blockDim.x is block_size
@@ -8700,17 +8888,31 @@ void CrossEntropyBackward(float *y_hat,
                           int B, int C, int OC,
                           float *dloss)
 {
-
+  
   int grid_size = B;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  
 
   float *probs;
   cudaMalloc(&probs, B*C*sizeof(float));
 
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size>>>(y_hat, probs, B, C);
+  //int grid_size, block_size;
+  //size_t shared_mem_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B, 32);
+  /*
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
+  */
 
-  grid_size = ceil_div(B*C, block_size);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size>>>(y_hat, probs, B, C);
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C, 32);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
+
+  
   crossentropy_softmax_backward_kernel1<<<grid_size, block_size>>>(dloss, probs, y, B, C);
   cudaFree(probs);
 
@@ -8821,18 +9023,23 @@ extern "C" float backprop()
     if (op=="matmul")
       matmul_backward(inp, w, B, C, OC, device_dx, device_dw, device_dy);
     else if (op=="conv2d")
-    {
-      //std::cout << "\n\n\n\nSKIPPING CONVOLUTION BACKWARD\n\n\n\n";
       conv2d_backward(inp, w, device_dx, device_dw, device_dy, param_name);
-    }
     else if (op=="relu")
       relu_backward(inp, B, C, device_dx, device_dy);
     else if (op=="gelu")
       gelu_backward(inp, B, C, device_dx, device_dy);
+    else if (op=="sigmoid")
+      sigmoid_backward(out, B, C, device_dx, device_dy);
+    else if (op=="tanh")
+      tanh_backward(out, B, C, device_dx, device_dy);
     else if (op=="cross_entropy")
       CrossEntropyBackward(inp, out, B, C, OC, device_dx);
     else
-      LogErrorS("A operação não possui implementação do backward.");
+    {
+      std::string _error = "The operation "+op+" does not yet have the backward implementation";
+      LogErrorS(_error);
+    }
+      
 
     /*
     std::cout << "\nd inp:\n";
@@ -9058,7 +9265,6 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
       LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
-
 
       if(LHSE->Idx[0]->GetType()!="tensor")
       {
@@ -11737,6 +11943,24 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("gelu", geluTy);
+  
+
+  //
+  FunctionType *sigmoidTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("sigmoid", sigmoidTy);
+  
+
+  //
+  FunctionType *tanhTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("_tanh", tanhTy);
 
 
   //
@@ -12795,7 +13019,7 @@ int main() {
 
 
 
-  return_tensor_functions = {"gelu", "relu", "softmax", "log", "rand_like", "print_tensor"};
+  return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "permute","cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
