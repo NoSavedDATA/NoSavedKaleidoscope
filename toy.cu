@@ -230,10 +230,6 @@ return_pinned_methods, vararg_methods, string_methods, native_methods, native_fu
 
 
 
-
-
-
-
 PointerType *floatPtrTy, *int8PtrTy;
 bool ShallCodegen = true;
 
@@ -2228,6 +2224,8 @@ struct BackwardNode {
   int B, C, OC;
   int x_size, w_size;
   float *inp, *w, *out;
+  float *b=nullptr;
+  int b_size=0;
 
   std::string op, tensor_name, param_name;
 
@@ -2244,6 +2242,12 @@ struct BackwardNode {
     this->op = op;
     this->tensor_name = tensor_name;
     this->param_name = param_name;
+  }
+
+  void SetBias(float *b, int b_size)
+  {
+    this->b=b;
+    this->b_size=b_size;
   }
 };
 
@@ -7397,6 +7401,16 @@ extern "C" void *onehot(Tensor tensor, float num_classes)
 }
 
 
+extern "C" float shape(Tensor tensor)
+{
+  std::cout << "\nTensor \033[95m" << tensor.scopeless_name << "\033[0m:\n   ";
+  PrintDims(tensor.dims);
+
+  return 0;
+}
+
+
+
 
 extern "C" void *repeat_interleave(Tensor tensor, float repeats, float dim)
 {
@@ -8798,25 +8812,7 @@ extern "C" void *softmax(Tensor tensor)
 
 class BatchNorm2d
 {
-  // Forward
   cudnnTensorDescriptor_t input_desc, output_desc, scale_bias_mean_var_desc;
-
-
-
-
-  // Weight backward grad
-  cudnnTensorDescriptor_t dy_desc;
-  cudnnConvolutionBwdFilterAlgo_t w_bwd_algo;
-  std::size_t workspace_size_w_back;
-  void* d_workspace_w_back;
-
-
-  // Input backward grad
-  cudnnConvolutionBwdDataAlgo_t y_bwd_algo;
-  std::size_t workspace_size_y_back;
-  void* d_workspace_y_back;
-
-
 
   public:
     float* scale=nullptr;
@@ -8825,6 +8821,7 @@ class BatchNorm2d
     float* running_var=nullptr;
     float* saved_mean=nullptr;
     float* saved_var=nullptr;
+    float* dscale, dbias;
     int B = 0;
     int C;
     int H = 0;
@@ -8834,12 +8831,10 @@ class BatchNorm2d
         : C(C) {}
 
   
-
-
   void SetDescriptors(int, int, int);
   void InitMovingAverages();
   float *Forward(float *, int, int, int, int);
-  void Backward(float *, float *, float *, float *);
+  void Backward(float *, float *, float *, float *, float *, float *);
 
 };
 
@@ -8849,8 +8844,6 @@ static std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
 
 void BatchNorm2d::SetDescriptors(int H, int W, int B)
 {
-
-  
   checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
   checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
 
@@ -8859,6 +8852,7 @@ void BatchNorm2d::SetDescriptors(int H, int W, int B)
   
   checkCUDNN(cudnnCreateTensorDescriptor(&scale_bias_mean_var_desc));
   checkCUDNN(cudnnSetTensor4dDescriptor(scale_bias_mean_var_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, C, 1, 1));
+  //checkCUDNN(cudnnDeriveBNTensorDescriptor(output_desc, input_desc, CUDNN_BATCHNORM_SPATIAL));
   
 }
 
@@ -8938,8 +8932,6 @@ float *BatchNorm2d::Forward(float *tensor, int H, int W, int B, int C)
     saved_var
   ));
 
-
-
   return output;
 }
 
@@ -8963,9 +8955,9 @@ extern "C" void *BatchNormForward2d(char *self, Tensor tensor, char *conv_namec,
   float input_dims_prod = DimsProd(dims);
 
   float B = dims[0];
-  float H = dims[dims.size()-3];
-  float W = dims[dims.size()-2];
-  float C = dims[dims.size()-1];
+  float C = dims[dims.size()-3];
+  float H = dims[dims.size()-2];
+  float W = dims[dims.size()-1];
 
 
 
@@ -9000,25 +8992,85 @@ extern "C" void *BatchNormForward2d(char *self, Tensor tensor, char *conv_namec,
 
 
     BackwardNode back_node;
-    back_node.NewNode(B, C, C, input_dims_prod, resultingDimsProd,
-                                             inp, nullptr, out,
-                                             "conv2d", tensor.scopeless_name, conv_name);
+    back_node.NewNode(B, C, C, input_dims_prod, C,
+                        inp, conv->scale, out,
+                        "batchnorm2d", tensor.scopeless_name, conv_name);
+    back_node.SetBias(conv->bias, C);
 
     todo_backwards.push_back(back_node);
     
   }
-
-
-  std::vector<float> new_dims = {(float)B, (float)H, (float)W, (float)C};
   
+  
+  std::vector<float> bn_dims = {(float)C};
+  std::string bias_name = conv_name+"_bias";
 
+  Tensor scale_tensor, bias_tensor;
+  scale_tensor.NewTensor(conv->scale, bn_dims, C, true, conv_name);
+  NamedTensorsT[conv_name] = scale_tensor;
+  bias_tensor.NewTensor(conv->bias, bn_dims, C, true, conv_name);
+  NamedTensorsT[bias_name] = bias_tensor;
 
 
   NamedBatchNorm2d[conv_name] = std::move(conv);
 
+  std::vector<float> new_dims = {(float)B, (float)C, (float)H, (float)W};
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
 }
+
+
+
+void BatchNorm2d::Backward(float *tensor, float *out, float *dx, float *dw, float *db, float *dy)
+{
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+  constexpr float gamma = 0.1f;
+  constexpr float eps = 0.00001f;
+  std::cout << "BACKWARD TO BATCHNORM"  << "\n";
+
+  
+  checkCUDNN(cudnnBatchNormalizationBackward(
+    cudnn,
+    CUDNN_BATCHNORM_SPATIAL,
+    &one,
+    &zero,
+    &one,
+    &one,
+    input_desc,
+    tensor,
+    output_desc,
+    dy,
+    input_desc,
+    dx,
+    scale_bias_mean_var_desc,
+    scale,
+    dw,
+    db,
+    eps,
+    saved_mean,
+    saved_var
+    ));
+  
+}
+
+void batchnormd2d_backward(float *inp, float *out,
+                     float *dinp, float *dw, float *db,
+                     float *dout, std::string conv_name)
+{
+
+  //std::cout << "conv2d_backward for " << conv_name << "\n";
+  std::unique_ptr<BatchNorm2d> conv = std::move(NamedBatchNorm2d[conv_name]);
+
+  conv->Backward(inp, out, dw, db, dinp, dout);
+
+  NamedBatchNorm2d[conv_name] = std::move(conv);
+
+  cudaCheck(cudaGetLastError());
+}
+
+
+
 
 class Conv2d
 {
@@ -9420,22 +9472,24 @@ extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int 
   float input_dims_prod = DimsProd(dims);
 
   float B = dims[0];
-  float C = dims[dims.size()-1];
+  float C = dims[dims.size()-3];
+  float H = dims[dims.size()-2];
+  float W = dims[dims.size()-1];
 
 
 
   std::unique_ptr<Conv2d> conv = std::move(NamedConv2d[conv_name]);
 
-  if (dims[dims.size()-1]!=conv->C)
+  if ((int)C!=(int)conv->C)
   {
-    std::string error = "Input tensor channels are: " + std::to_string((int)dims[dims.size()-1]) + ", while the expected input channels of the convolution are: " + std::to_string(conv->C);
+    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the convolution are: " + std::to_string(conv->C);
     LogError(error);
     
     NamedConv2d[conv_name] = std::move(conv);
     return nullptr;
   }
 
-  output = conv->Forward(tensor_ptr, dims[dims.size()-3], dims[dims.size()-2], dims[0]);
+  output = conv->Forward(tensor_ptr, H, W, B);
 
   int ks_H = conv->ks;
   int ks_W = conv->ks;
@@ -9468,11 +9522,11 @@ extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int 
   }
 
 
-  std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)conv->OC};
+  std::vector<float> new_dims = {(float)conv->B, (float)conv->OC, (float)conv->out_H, (float)conv->out_W};
   
 
   //for backprop:
-  std::vector<float> kernel_dims = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks}; 
+  std::vector<float> kernel_dims = {(float)conv->OC, (float)C, (float)conv->ks, (float)conv->ks}; 
 
 
 
@@ -9656,14 +9710,16 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor tensor, char *conv_namec, i
   float input_dims_prod = DimsProd(dims);
 
   float B = dims[0];
-  float C = dims[dims.size()-1];
+  float C = dims[dims.size()-3];
+  float H = dims[dims.size()-2];
+  float W = dims[dims.size()-1];
   float OC = C;
 
 
   std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
 
 
-  output = conv->Forward(tensor_ptr, dims[dims.size()-3], dims[dims.size()-2], B, C);
+  output = conv->Forward(tensor_ptr, H, W, B, C);
 
   int ks_H = conv->ks;
   int ks_W = conv->ks;
@@ -9695,7 +9751,7 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor tensor, char *conv_namec, i
   }
 
 
-  std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)OC};
+  std::vector<float> new_dims = {(float)B, (float)OC, (float)conv->out_H, (float)conv->out_W};
   
 
   NamedMaxPool2d[conv_name] = std::move(conv);
@@ -9738,7 +9794,6 @@ void maxpool2d_backward(float *inp,  float *out,
                      float *dout, std::string conv_name)
 {
 
-  //std::cout << "conv2d_backward for " << conv_name << "\n";
   std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
 
   conv->Backward(inp, out, dinp, dout);
@@ -9872,12 +9927,12 @@ extern "C" float backprop()
   //float * loss_gradient = ;
   
   int B, C, OC;
-  float x_size, w_size;
-  float *inp, *w, *out, *last_inp;
-  float *dinp, *device_dx, *dw, *device_dw, *device_dy;
+  float x_size, w_size, b_size;
+  float *inp, *w, *b, *out, *last_inp;
+  float *dinp, *device_dx, *dw, *device_dw, *db, *device_db, *device_dy;
   std::map<std::string, float *> var_to_grad, var_to_next_grad;
 
-  std::string op, tensor_name, param_name;
+  std::string op, tensor_name, param_name, bias_name;
   
   bool first=true;
 
@@ -9893,8 +9948,10 @@ extern "C" float backprop()
     OC = back_node.OC;
     x_size = back_node.x_size;
     w_size = back_node.w_size;
+    b_size = back_node.b_size;
     inp = back_node.inp;
     w = back_node.w;
+    b = back_node.b;
     out = back_node.out;
     op = back_node.op;
     tensor_name = back_node.tensor_name;
@@ -9939,9 +9996,30 @@ extern "C" float backprop()
       delete[] dw;
     }
 
-    // input gradient
-    
-    
+    if (b!=nullptr&&op!="hadamard"&&op!="add")
+    {
+      
+      db = make_zeros_float(b_size);
+      bias_name = param_name+"_bias";
+      std::cout << "GETTING THE BIAS OF " << bias_name << "\n";
+
+      if (NamedParamGrads[bias_name]==nullptr)
+      {
+        NamedParamGrads[bias_name] = new_grad_ptr;
+        cudaCheck(cudaMalloc(&new_grad_ptr, b_size*sizeof(float)));
+        NamedParamGrads[bias_name] = new_grad_ptr;
+      }
+      
+      device_db = NamedParamGrads[bias_name];
+      cudaCheck(cudaMemcpy(device_db, db, b_size*sizeof(float), cudaMemcpyHostToDevice));
+      delete[] db;
+    }
+
+    // bias gradient
+
+
+
+    // input gradient    
     dinp = make_zeros_float(x_size);
     cudaMalloc(&device_dx, x_size*sizeof(float));
     cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice);
@@ -9956,6 +10034,8 @@ extern "C" float backprop()
       conv2d_backward(inp, w, device_dx, device_dw, device_dy, param_name);
     else if (op=="maxpool2d")
       maxpool2d_backward(inp, out, device_dx, device_dy, param_name);
+    else if (op=="batchnorm2d")
+      batchnormd2d_backward(inp, out, device_dx, device_dw, device_db, device_dy, param_name);
     else if (op=="relu")
       relu_backward(inp, B, C, device_dx, device_dy);
     else if (op=="gelu")
@@ -10045,6 +10125,8 @@ extern "C" float backprop()
     
     if (w!=nullptr)
       NamedParamGrads[param_name] = device_dw;
+    if (b!=nullptr)
+      NamedParamGrads[param_name] = device_dw;
 
 
     // Garbage Collector on all lines below
@@ -10112,6 +10194,7 @@ __global__ void adamw_kernel(float* params_memory, const float* grads_memory, fl
 
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    if (i >= num_parameters) return;  // guard
+   
    float grad = grads_memory[i];
    float m = m_memory[i];
    float v = v_memory[i];
@@ -10159,6 +10242,8 @@ void AdamW_optim::init_states(std::string param_name, float params_count)
 void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name)
 {
   //std::cout  << "Optimizer step called\n";
+  std::cout << "AdamW stepping: " << param_name << "\n";
+  PrintDims(dims);
   
 
   float *v = NamedV[param_name];
@@ -10208,6 +10293,8 @@ extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
 
     if (param_name!="none")
     {
+      //if (ends_with(param_name, "_bias"))
+      //  PrintTensorF(pair.second, 2, 2);
       Tensor tensor = NamedTensorsT[param_name];
       optimizer->init_states(param_name, tensor.dims_prod);
       optimizer->step(tensor.tensor_ptr, pair.second, tensor.dims, param_name);
@@ -11897,7 +11984,6 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
 
-
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
   // Register all variables and emit their initializer.
@@ -13092,6 +13178,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("onehot", onehotTy);
+  
+
+  //
+  FunctionType *shapeTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("shape", shapeTy);
 
   
   //
@@ -14149,7 +14244,7 @@ int main() {
 
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor"};
-  return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "permute","cpu",
+  return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute","cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
 
