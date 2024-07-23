@@ -300,6 +300,8 @@ enum Token {
   tok_attr_var = -18,
   tok_attr_tensor = -19,
   tok_conv2d = -21,
+  tok_maxpool2d = -41,
+  tok_avgpool2d = -42,
   tok_vec = -37,
   tok_post_class_attr_attr = -38,
   tok_post_class_attr_identifier = -39,
@@ -375,6 +377,8 @@ std::map<int, std::string> token_to_string = {
   { tok_attr_var, "tok attr var" },
   { tok_attr_tensor, "tok attr tensor" },
   { tok_conv2d, "Conv2d" },
+  { tok_maxpool2d, "MaxPool2d"},
+  { tok_avgpool2d, "AvgPool2d"},
 
   { 10, "tok space"},
 
@@ -570,6 +574,16 @@ static int get_token() {
       {
         LastChar = getchar();
         return tok_conv2d;
+      }
+      if (IdentifierStr == "MaxPool2d")
+      {
+        LastChar = getchar();
+        return tok_maxpool2d;
+      }
+      if (IdentifierStr == "AvgPool2d")
+      {
+        LastChar = getchar();
+        return tok_avgpool2d;
       }
       if (LastChar=='.')
       {
@@ -1057,6 +1071,26 @@ class Conv2dExprAST : public VarExprAST {
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
+
+
+
+class MaxPool2dExprAST : public VarExprAST {
+  public:
+    std::unique_ptr<ExprAST> Ks, Stride, Padding;
+    std::string TensorInit;
+
+    MaxPool2dExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::unique_ptr<ExprAST> Ks,
+      std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding)
+      : VarExprAST(std::move(VarNames), std::move(Type)),
+                   Ks(std::move(Ks)),
+                   Stride(std::move(Stride)), Padding(std::move(Padding)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
+
 
 
 /// UnaryExprAST - Expression class for a unary operator.
@@ -3113,11 +3147,11 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
   
 
   if (CurTok != ']')
-    return LogError("Faltou fechar ].");
+    return LogError("Expected ].");
     getNextToken();
 
   if (dims.size()<5)
-    return LogError("Convolução requer argumentos canais, canais de saída, kernel size, stride e padding.");
+    return LogError("Convolution declaration requires input and output channels, kernel size, stride and padding.");
 
 
   std::string pre_dot="";
@@ -3166,6 +3200,122 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
                                              std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
                                              std::move(dims[3]), std::move(dims[4]),
                                              init);
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
+
+
+
+
+
+//
+static std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
+  std::string type;
+  if (CurTok==tok_maxpool2d)
+    type = "max";
+  if (CurTok==tok_avgpool2d)
+    type = "avg";
+
+  getNextToken(); // eat the MaxPool2d.
+  
+  if (CurTok != '[')
+    return LogError("MaxPool2d declaration expected [");
+    getNextToken();
+
+  std::vector<std::unique_ptr<ExprAST>> dims;
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::string init = "xavu_relu";
+  //std::make_unique<NumberExprAST>(NumVal)
+  
+  while (true) {
+    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      return LogError("Expected tensor dimension number.");
+    
+    if (CurTok==tok_number)
+    {
+      if (std::fmod(NumVal, 1.0) != 0)
+        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
+    
+      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      getNextToken();
+    } else if (CurTok==tok_identifier)
+      if (in_str(IdentifierStr, tensor_inits))
+      {
+        init = IdentifierStr;
+        getNextToken();
+      } else
+        dims.push_back(std::move(ParseIdentifierExpr()));
+    else {
+      dims.push_back(std::move(ParseSelfExpr()));
+    }
+
+    
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+  }
+
+  
+
+  if (CurTok != ']')
+    return LogError("Expected ].");
+    getNextToken();
+
+  if (dims.size()<3)
+    return LogError("MaxPool2d requires kernel size, stride and padding.");
+
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true;
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected conv identifier name.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    functionVars[Name] = "MaxPool2d";
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Esperado um ou mais identificadores após var.");
+  }
+
+
+
+  auto aux = std::make_unique<MaxPool2dExprAST>(std::move(VarNames), type,
+                                             std::move(dims[0]), std::move(dims[1]), std::move(dims[2]));
   aux->SetSelf(is_self);
   aux->SetIsAttribute(is_attr);
   aux->SetPreDot(pre_dot);
@@ -3341,6 +3491,10 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParsePinnedTensorExpr();
   case tok_conv2d:
     return ParseConv2dExpr();
+  case tok_maxpool2d:
+    return ParseMaxPool2dExpr();
+  case tok_avgpool2d:
+    return ParseMaxPool2dExpr();
   case tok_space:
     getNextToken();
     return ParsePrimary(class_name);
@@ -8430,9 +8584,6 @@ class Conv2d
   void* d_workspace_y_back;
 
 
-  // Weights
-
-  
 
   public:
     float* d_filter=nullptr;
@@ -8615,11 +8766,6 @@ void Conv2d::SetDescriptors(int H, int W, int B)
   cudaCheck(cudaMalloc(&d_workspace_w_back, workspace_size_w_back));
   this->workspace_size_w_back = workspace_size_w_back;
   this->d_workspace_w_back = d_workspace_w_back;
-
-
-
-
-
 }
 
 
@@ -8887,32 +9033,258 @@ extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int 
 
 
 
-extern "C" float CreateConv2dOnDemand(char *first_arg, char *tensor_name, int is_obj_attr_or_self, char *init,
-                                      float C, float OC, float ks, float stride, float padding, float H, float W)
+extern "C" float CreateConv2dOnDemand(char *tensor_name, char *init,
+                                      float C, float OC, float ks, float stride, float padding)
 {
-  
-  std::string _first_arg = first_arg;
-  std::string objectTensorName = tensor_name;
-  if (is_obj_attr_or_self)
-    objectTensorName = _first_arg + tensor_name;
-
-
-  char * cObjectTensorName = new char[objectTensorName.length() + 1];
-  std::strcpy(cObjectTensorName, objectTensorName.c_str());
-  
-
-
   std::cout << "\nCreate conv on demand:\n   C: " << C << " OC " << OC << " ks " << ks << " stride " << stride << " padding " << padding << "\n";
-
 
   auto conv = std::make_unique<Conv2d>((int)C, (int)OC, (int)ks, (int)stride, (int)padding, init);
 
+  std::cout << "Adding " << tensor_name << " to NamedConv2d dict\n";
+  NamedConv2d[tensor_name] = std::move(conv);
+  return 0;
+}
 
-  std::cout << "Adding " << objectTensorName << " to NamedConv2d dict\n";
-  NamedConv2d[cObjectTensorName] = std::move(conv);
+
+class MaxPool2d
+{
+  // Forward
+  cudnnTensorDescriptor_t input_desc;
+  cudnnPoolingDescriptor_t pooling_desc;
+  cudnnTensorDescriptor_t output_desc;
+
+
+  // Weight backward grad
+  cudnnTensorDescriptor_t dy_desc;
+
+
+
+  public:
+    std::string Type;
+    int ks, stride, padding, out_H, out_W;
+    int B = 0;
+    int C = 0;
+    int H = 0;
+    int W = 0;
+
+    MaxPool2d(int ks, int stride, int padding, std::string Type)
+        : ks(ks), stride(stride), padding(padding), Type(Type) {}
+
   
 
 
+  void SetDescriptors(int, int, int, int);
+  float *Forward(float *, int, int, int, int);
+  void Backward(float *, float *, float *, float *);
+
+};
+static std::map<std::string, std::unique_ptr<MaxPool2d>> NamedMaxPool2d;
+
+
+
+void MaxPool2d::SetDescriptors(int H, int W, int B, int C)
+{
+  this->H = H;
+  this->W = W;
+  this->B = B;
+
+
+
+
+  out_H = std::floor((H - ks + 2 * padding) / stride) + 1;
+  out_W = std::floor((W - ks + 2 * padding) / stride) + 1;
+  //std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
+
+
+
+  // Initialize input tensor descriptor
+  cudnnTensorDescriptor_t input_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+  this->input_desc = input_desc;
+
+  // Initialize pooling descriptor
+  checkCUDNN(cudnnCreatePoolingDescriptor(&pooling_desc));
+  checkCUDNN(cudnnSetPooling2dDescriptor(pooling_desc,            //descriptor handle
+                                         (Type=="max") ? CUDNN_POOLING_MAX : CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING,       //mode - max pooling
+                                         CUDNN_NOT_PROPAGATE_NAN, //NaN propagation mode
+                                         ks,                       //window height
+                                         ks,                       //window width
+                                         padding,                       //vertical padding
+                                         padding,                       //horizontal padding
+                                         stride,                       //vertical stride
+                                         stride));                     //horizontal stride
+  
+  // Initialize output tensor descriptor
+  cudnnTensorDescriptor_t output_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, out_H, out_W));
+  this->output_desc = output_desc;
+
+  // Initialize output tensor descriptor
+  cudnnTensorDescriptor_t dy_desc;
+  checkCUDNN(cudnnCreateTensorDescriptor(&dy_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(dy_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, out_H, out_W));
+  this->dy_desc = dy_desc;
+}
+
+
+
+float *MaxPool2d::Forward(float *tensor, int H, int W, int B, int C)
+{
+  // Initialize descriptors.
+  std::cout << "\nPool2d Forward with H: " << H << " W: " << W << "\n";
+  std::cout << "Type: " << Type << "\n";
+
+
+  if (H != this->H || W != this->W || B != this->B || C != this->C)
+    this->SetDescriptors(H, W, B, C);
+
+
+  
+  // Forward
+  float *d_output;
+  cudaCheck(cudaMalloc(&d_output, B * out_H * out_W * C * sizeof(float)));
+
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+
+  checkCUDNN(cudnnPoolingForward(
+        cudnn,
+        pooling_desc,
+        &one,
+        input_desc,
+        tensor,
+        &zero,
+        output_desc,
+        d_output
+    ));
+  
+
+  return d_output;
+}
+
+
+extern "C" void *MaxPoolForward2d(char *self, Tensor tensor, char *conv_namec, int is_obj_attr_or_self)
+{
+  //std::cout << "MaxPoolForward2d of " << conv_namec << " and tensor " << tensor.name << "\n";
+  
+  std::string _self = self;
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = _self + conv_name;
+
+  //std::cout << "Conv forward for  conv: " << conv_name <<"\n";
+  
+
+  float *tensor_ptr, *output, *d_filter;
+  tensor_ptr = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  float input_dims_prod = DimsProd(dims);
+
+  float B = dims[0];
+  float C = dims[dims.size()-1];
+  float OC = C;
+
+
+  std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
+
+
+  output = conv->Forward(tensor_ptr, dims[dims.size()-3], dims[dims.size()-2], B, C);
+
+  int ks_H = conv->ks;
+  int ks_W = conv->ks;
+  
+
+  
+  
+  float resultingDimsProd = B * (float)OC * (float)conv->out_W * (float)conv->out_W;
+
+  int is_forward_func = 1;
+  if (is_forward_func)
+  {
+    float *inp, *out;
+    
+    
+    //oom
+    cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
+    cudaMemcpy(inp, tensor_ptr, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, output, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
+
+
+    BackwardNode back_node;
+    back_node.NewNode(B, C, OC, input_dims_prod, resultingDimsProd,
+                                             inp, nullptr, out,
+                                             "maxpool2d", tensor.scopeless_name, conv_name);
+
+    todo_backwards.push_back(back_node);
+  }
+
+
+  std::vector<float> new_dims = {(float)conv->B, (float)conv->out_H, (float)conv->out_W, (float)OC};
+  
+
+  NamedMaxPool2d[conv_name] = std::move(conv);
+
+  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  return new_tensor;
+}
+
+
+void MaxPool2d::Backward(float *tensor, float *out, float *dx, float *dy)
+{
+  //std::cout << "\nMaxPool2d Backward with H: " << H << " W: " << W << "\n";
+
+
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+
+
+  // Backward to input
+  checkCUDNN(cudnnPoolingBackward(
+    cudnn,
+    pooling_desc,
+    &one,
+    output_desc,
+    out,
+    output_desc, // output grad tensor descriptor
+    dy,
+    input_desc,
+    tensor,
+    &zero,
+    input_desc, // input descriptor
+    dx
+  ));
+  
+}
+
+
+void maxpool2d_backward(float *inp,  float *out,
+                     float *dinp,
+                     float *dout, std::string conv_name)
+{
+
+  //std::cout << "conv2d_backward for " << conv_name << "\n";
+  std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
+
+  conv->Backward(inp, out, dinp, dout);
+
+  NamedMaxPool2d[conv_name] = std::move(conv);
+
+  cudaCheck(cudaGetLastError());
+}
+
+
+
+
+extern "C" float CreateMaxPool2dOnDemand(char *tensor_name, char *type, float ks, float stride, float padding)
+{
+  std::cout << "\nCreate maxpool2d on demand:\n" << "   ks " << ks << " stride " << stride << " padding " << padding << "\n";
+
+  auto maxpool = std::make_unique<MaxPool2d>((int)ks, (int)stride, (int)padding, type);
+
+  NamedMaxPool2d[tensor_name] = std::move(maxpool);
   return 0;
 }
 
@@ -9109,6 +9481,8 @@ extern "C" float backprop()
       matmul_backward(inp, w, B, C, OC, device_dx, device_dw, device_dy);
     else if (op=="conv2d")
       conv2d_backward(inp, w, device_dx, device_dw, device_dy, param_name);
+    else if (op=="maxpool2d")
+      maxpool2d_backward(inp, out, device_dx, device_dy, param_name);
     else if (op=="relu")
       relu_backward(inp, B, C, device_dx, device_dy);
     else if (op=="gelu")
@@ -10864,7 +11238,6 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     Value *var_name, *scopeless_name;
     var_name = Builder->CreateGlobalString(VarName);
 
-    std::string pre_dot = GetPreDot();
     bool is_self = GetSelf();
     bool is_attr = GetIsAttribute();
 
@@ -10972,41 +11345,75 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     const std::string &VarName = VarNames[i].first;
     ExprAST *Init = VarNames[i].second.get();
 
-    // Emit the initializer before adding the variable to scope, this prevents
-    // the initializer from referencing the variable itself, and permits stuff
-    // like this:
-    //  var a = 1 in
-    Value *InitVal;
-    if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
-      if (!InitVal)
-        return nullptr;
-    } else { // If not specified, use 0.0.
-      InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
-    }
+
+    Value *var_name, *scopeless_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+    
+    
 
 
-    
-    int is_obj_attr_or_self = 0;
-    if (GetSelf() || GetIsAttribute())
-      is_obj_attr_or_self=1;
-    
     std::cout << "Parsing Conv2d var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
-                                              {Builder->CreateLoad(int8PtrTy, first_arg),
-                                               Builder->CreateGlobalString(VarName),
-                                               ConstantInt::get(Type::getInt32Ty(*GlobalContext), is_obj_attr_or_self),
-                                               Builder->CreateGlobalString(TensorInit),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
                                                C->codegen(first_arg, scope_str, previous_scope), OC->codegen(first_arg, scope_str, previous_scope), Ks->codegen(first_arg, scope_str, previous_scope), Stride->codegen(first_arg, scope_str, previous_scope),
                                                Padding->codegen(first_arg, scope_str, previous_scope)});
-
-
   }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
 
-  // Codegen the body that is contained by the in expression
 
 
+Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *scopeless_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+    
+
+    
+    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateMaxPool2dOnDemand"),
+                                              {var_name, type,
+                                               Ks->codegen(first_arg, scope_str, previous_scope),
+                                               Stride->codegen(first_arg, scope_str, previous_scope),
+                                               Padding->codegen(first_arg, scope_str, previous_scope)});
+  }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
@@ -11256,6 +11663,17 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     if (CalleeOverride=="Conv2d")
     {
       CalleeF = getFunction("ConvForward2d");
+      Value *conv_name = Builder->CreateGlobalString(tgt_function);
+      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
+      ArgsV.push_back(conv_name);
+      ArgsV.push_back(is_attr);
+      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+
+
+    }
+    if (CalleeOverride=="MaxPool2d")
+    {
+      CalleeF = getFunction("MaxPoolForward2d");
       Value *conv_name = Builder->CreateGlobalString(tgt_function);
       Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
       ArgsV.push_back(conv_name);
@@ -12125,6 +12543,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("ConvForward2d", conv2dForwardTy);
+
+
+  //
+  FunctionType *MaxPoolForward2dTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("MaxPoolForward2d", MaxPoolForward2dTy);
   
 
   //
@@ -12807,10 +13234,6 @@ FunctionType *unbugTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
        int8PtrTy,
-       Type::getInt32Ty(*TheContext),
-       int8PtrTy,
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
@@ -12819,6 +13242,19 @@ FunctionType *unbugTy = FunctionType::get(
       false
   );
   TheModule->getOrInsertFunction("CreateConv2dOnDemand", CreateConv2dOnDemandTy);
+
+
+  //
+  FunctionType *CreateMaxPool2dOnDemandTy = FunctionType::get(
+      //PointerType::get(Type::getVoidTy(*TheContext), 0),
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy,
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("CreateMaxPool2dOnDemand", CreateMaxPool2dOnDemandTy);
 
 
   //
