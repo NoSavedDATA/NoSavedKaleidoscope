@@ -302,6 +302,7 @@ enum Token {
   tok_conv2d = -21,
   tok_maxpool2d = -41,
   tok_avgpool2d = -42,
+  tok_batchnorm2d = -43,
   tok_vec = -37,
   tok_post_class_attr_attr = -38,
   tok_post_class_attr_identifier = -39,
@@ -379,6 +380,8 @@ std::map<int, std::string> token_to_string = {
   { tok_conv2d, "Conv2d" },
   { tok_maxpool2d, "MaxPool2d"},
   { tok_avgpool2d, "AvgPool2d"},
+  { tok_batchnorm2d, "BatchNorm2d"},
+  
 
   { 10, "tok space"},
 
@@ -585,6 +588,12 @@ static int get_token() {
         LastChar = getchar();
         return tok_avgpool2d;
       }
+      if (IdentifierStr == "BatchNorm2d")
+      {
+        LastChar = getchar();
+        return tok_batchnorm2d;
+      }
+      
       if (LastChar=='.')
       {
         LastChar = getchar();
@@ -1077,7 +1086,6 @@ class Conv2dExprAST : public VarExprAST {
 class MaxPool2dExprAST : public VarExprAST {
   public:
     std::unique_ptr<ExprAST> Ks, Stride, Padding;
-    std::string TensorInit;
 
     MaxPool2dExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
@@ -1091,6 +1099,20 @@ class MaxPool2dExprAST : public VarExprAST {
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
 
+
+class BatchNorm2dExprAST : public VarExprAST {
+  public:
+    std::unique_ptr<ExprAST> C;
+
+    BatchNorm2dExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::unique_ptr<ExprAST> C)
+      : VarExprAST(std::move(VarNames), std::move(Type)),
+                   C(std::move(C)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
 
 
 /// UnaryExprAST - Expression class for a unary operator.
@@ -2280,7 +2302,6 @@ Tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kD
 static std::map<std::string, Tensor> NamedTensorsT;
 static std::map<std::string, float *> NamedPinnedTensors;
 static std::map<std::string, std::vector<float>> NamedDims;
-static std::map<std::string, std::vector<float>> NamedDimsConv;
 
 unsigned char* current_data_attr;
 std::vector<float> current_data_attr_dims;
@@ -3330,6 +3351,118 @@ static std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
 
 
 
+
+//
+static std::unique_ptr<ExprAST> ParseBatchNorm2dExpr() {
+  std::string type;
+
+  getNextToken(); // eat the BatchNorm2d.
+  
+  if (CurTok != '[')
+    return LogError("BatchNorm2d declaration expected [");
+    getNextToken();
+
+  std::vector<std::unique_ptr<ExprAST>> dims;
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::string init = "xavu_relu";
+  //std::make_unique<NumberExprAST>(NumVal)
+  
+  while (true) {
+    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      return LogError("Expected tensor dimension number.");
+    
+    if (CurTok==tok_number)
+    {
+      if (std::fmod(NumVal, 1.0) != 0)
+        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
+    
+      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      getNextToken();
+    } else if (CurTok==tok_identifier)
+      if (in_str(IdentifierStr, tensor_inits))
+      {
+        init = IdentifierStr;
+        getNextToken();
+      } else
+        dims.push_back(std::move(ParseIdentifierExpr()));
+    else {
+      dims.push_back(std::move(ParseSelfExpr()));
+    }
+
+    
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+  }
+
+  
+
+  if (CurTok != ']')
+    return LogError("Expected ].");
+    getNextToken();
+
+  if (dims.size()<1)
+    return LogError("BatchNorm2d requires input channels, kernel size, stride and padding.");
+
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true;
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected BatchNorm2d identifier name.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    functionVars[Name] = "BatchNorm2d";
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Expected one or more identifiers at BatchNorm2d.");
+  }
+
+
+
+  auto aux = std::make_unique<BatchNorm2dExprAST>(std::move(VarNames), type,
+                                             std::move(dims[0]));
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
+
+
+
+
 static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
   int cur_level_tabs = SeenTabs;
   getNextToken(); // eat the lock.
@@ -3495,6 +3628,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseMaxPool2dExpr();
   case tok_avgpool2d:
     return ParseMaxPool2dExpr();
+  case tok_batchnorm2d:
+    return ParseBatchNorm2dExpr();
   case tok_space:
     getNextToken();
     return ParsePrimary(class_name);
@@ -7299,30 +7434,123 @@ extern "C" void *repeat_interleave(Tensor tensor, float repeats, float dim)
 }
 
 //TODO: mean over axis
-extern "C" float mean(char *self)
+extern "C" void *mean(Tensor tensor, float first_dim, ...)
 {
-  std::string tensor_name = self;
+  //std::cout << "SUM OF " << tensor.name << "\n";
 
-  Tensor tensor = NamedTensorsT[tensor_name];
+
   float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims = NamedDims[tensor_name];
+  std::vector<float> dims = tensor.dims;
+  float *summed;
+
+
+  va_list args;
+  va_start(args, first_dim);
+
+  if (first_dim==TERMINATE_VARARG)
+  {
+    va_end(args);
+    float *ret;
+    int dims_prod = DimsProd(dims);
+
+    summed = new float[dims_prod];
+    cudaCheck(cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost));
+
+    cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
   
-  int B = DimsProd(dims);
-
-
-  float *meaned = new float[B];
-
-  cudaMemcpy(meaned, tensor_ptr, B*sizeof(float), cudaMemcpyDeviceToHost);
+    float tensor_sum=0;
+    for(int i=0; i<dims_prod; i++)
+      tensor_sum += summed[i];
+    tensor_sum = tensor_sum/tensor.dims_prod;
+    
+    delete[] summed;
   
-  float tensor_mean=0;
-  for(int i=0; i<B; i++)
-    tensor_mean += meaned[i];
-  tensor_mean = tensor_mean/B;
+    float *aux = new float[1];
+    aux[0] = tensor_sum;
+    cudaCheck(cudaMemcpy(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice));
+    delete[] aux;
+  
+    std::vector<float> new_dims;
+    new_dims.push_back(1.0f);
+  
+    Tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
+    return new_tensor;
+  }
 
-  std::cout << "Mean: " << tensor_mean << "\n";
 
-  return 0;
+  std::vector<float> sum_dims, new_dims;
+  if (first_dim<0)
+    first_dim = dims.size()+first_dim;
+  sum_dims.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions???");
+      return nullptr;
+    }
+
+    float dim = va_arg(args, float);
+    
+    if (dim==TERMINATE_VARARG)
+      break;
+    if (in_float_vec(dim, sum_dims))  
+    {
+      std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
+      LogErrorS(_error);
+      return nullptr;
+    }
+    if (dim<0)
+      dim = dims.size()+dim;
+    sum_dims.push_back(dim);
+  }
+  va_end(args);
+  
+  
+  float summed_dim;
+  for (int i=0; i<dims.size(); i++)
+    if (!in_float_vec(i, sum_dims))
+      new_dims.push_back(dims[i]);
+    else
+      summed_dim=dims[i];
+
+
+  int dims_prod = DimsProd(dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+  
+  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  cudaMemset(summed, 0, new_dims_prod * sizeof(float));
+
+  //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
+
+  
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  
+  /*
+  if (dims.size()==1)
+  {
+    sum_single_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod);
+    new_dims = {1.0f};
+  }
+  else if (sum_dims[0]==(dims.size()-1))
+    sum_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, summed_dim);
+  if (sum_dims[0]==(dims.size()-2))
+    sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+
+
+  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  return new_tensor;
+  */
+  LogErrorS("Mean of specific dim is not implemented yet.");
+  return nullptr;
 }
+
+
 
 __global__ void sum_single_dim_kernel(const float *tensor,
                            float *summed,
@@ -7407,19 +7635,30 @@ extern "C" void *sum(Tensor tensor, float first_dim, ...)
   if (first_dim==TERMINATE_VARARG)
   {
     va_end(args);
+    float *ret;
     int dims_prod = DimsProd(dims);
 
-    cudaMalloc(&summed, dims_prod*sizeof(float));
-    cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
-    
+    summed = new float[dims_prod];
+    cudaCheck(cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost));
+
+    cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
+  
     float tensor_sum=0;
     for(int i=0; i<dims_prod; i++)
       tensor_sum += summed[i];
-    tensor_sum = tensor_sum;
-
-    std::cout << "Sum: " << tensor_sum << "\n";
-
-    return summed;
+    
+    delete[] summed;
+  
+    float *aux = new float[1];
+    aux[0] = tensor_sum;
+    cudaCheck(cudaMemcpy(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice));  
+    delete[] aux;
+  
+    std::vector<float> new_dims;
+    new_dims.push_back(1.0f);
+  
+    Tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
+    return new_tensor;
   }
 
 
@@ -8557,6 +8796,230 @@ extern "C" void *softmax(Tensor tensor)
 
 
 
+class BatchNorm2d
+{
+  // Forward
+  cudnnTensorDescriptor_t input_desc, output_desc, scale_bias_mean_var_desc;
+
+
+
+
+  // Weight backward grad
+  cudnnTensorDescriptor_t dy_desc;
+  cudnnConvolutionBwdFilterAlgo_t w_bwd_algo;
+  std::size_t workspace_size_w_back;
+  void* d_workspace_w_back;
+
+
+  // Input backward grad
+  cudnnConvolutionBwdDataAlgo_t y_bwd_algo;
+  std::size_t workspace_size_y_back;
+  void* d_workspace_y_back;
+
+
+
+  public:
+    float* scale=nullptr;
+    float* bias=nullptr;
+    float* running_mean=nullptr;
+    float* running_var=nullptr;
+    float* saved_mean=nullptr;
+    float* saved_var=nullptr;
+    int B = 0;
+    int C;
+    int H = 0;
+    int W = 0;
+
+    BatchNorm2d(int C)
+        : C(C) {}
+
+  
+
+
+  void SetDescriptors(int, int, int);
+  void InitMovingAverages();
+  float *Forward(float *, int, int, int, int);
+  void Backward(float *, float *, float *, float *);
+
+};
+
+//global
+static std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
+
+
+void BatchNorm2d::SetDescriptors(int H, int W, int B)
+{
+
+  
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+
+  checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+  
+  checkCUDNN(cudnnCreateTensorDescriptor(&scale_bias_mean_var_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(scale_bias_mean_var_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, C, 1, 1));
+  
+}
+
+void BatchNorm2d::InitMovingAverages()
+{
+  float *aux;
+
+  aux = make_ones_float(C);
+  cudaCheck(cudaMalloc(&scale, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(scale, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_zeros_float(C);
+  cudaCheck(cudaMalloc(&bias, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(bias, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_zeros_float(C);
+  cudaCheck(cudaMalloc(&running_mean, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(running_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_ones_float(C);
+  cudaCheck(cudaMalloc(&running_var, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(running_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_zeros_float(C);
+  cudaCheck(cudaMalloc(&saved_mean, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(saved_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_ones_float(C);
+  cudaCheck(cudaMalloc(&saved_var, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(saved_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+}
+
+float *BatchNorm2d::Forward(float *tensor, int H, int W, int B, int C)
+{
+
+  if (H != this->H || W != this->W || B != this->B)
+    this->SetDescriptors(H, W, B);
+
+  // Initialize weights.
+  if (scale==nullptr)
+    this->InitMovingAverages();
+
+
+  // Forward
+  float *output;
+  cudaCheck(cudaMalloc(&output, B * H * W * C * sizeof(float)));
+  
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+  constexpr float gamma = 0.1f;
+  constexpr float eps = 0.00001f;
+
+
+  checkCUDNN(cudnnBatchNormalizationForwardTraining(
+    cudnn,
+    CUDNN_BATCHNORM_SPATIAL,
+    &one,
+    &zero,
+    input_desc,
+    tensor,
+    output_desc,
+    output,
+    scale_bias_mean_var_desc,
+    scale,
+    bias,
+    gamma,
+    running_mean,
+    running_var,
+    eps,
+    saved_mean,
+    saved_var
+  ));
+
+
+
+  return output;
+}
+
+
+extern "C" void *BatchNormForward2d(char *self, Tensor tensor, char *conv_namec, int is_obj_attr_or_self)
+{
+  //TODO: remove self arg and concatenate it instead during the function call
+  std::cout << "\nBatchNormForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
+  
+  std::string _self = self;
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = _self + conv_name;
+
+  //std::cout << "Conv forward for  conv: " << conv_name <<"\n";
+  
+
+  float *tensor_ptr, *output, *d_filter;
+  tensor_ptr = tensor.tensor_ptr;
+  std::vector<float> dims = tensor.dims;
+  float input_dims_prod = DimsProd(dims);
+
+  float B = dims[0];
+  float H = dims[dims.size()-3];
+  float W = dims[dims.size()-2];
+  float C = dims[dims.size()-1];
+
+
+
+  std::unique_ptr<BatchNorm2d> conv = std::move(NamedBatchNorm2d[conv_name]);
+
+  if ((int)C!=(int)conv->C)
+  {
+    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the BatchNorm2d are: " + std::to_string(conv->C);
+    LogError(error);
+    
+    NamedBatchNorm2d[conv_name] = std::move(conv);
+    return nullptr;
+  }
+
+  output = conv->Forward(tensor_ptr, H, W, B, C);
+
+  
+  
+  float resultingDimsProd = B * (float)C * (float)H * (float)W;
+
+  int is_forward_func = 1;
+  if (is_forward_func)
+  {
+    float *inp, *out;
+    
+    
+    //oom
+    cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
+    cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
+    cudaMemcpy(inp, tensor_ptr, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaMemcpy(out, output, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
+
+
+    BackwardNode back_node;
+    back_node.NewNode(B, C, C, input_dims_prod, resultingDimsProd,
+                                             inp, nullptr, out,
+                                             "conv2d", tensor.scopeless_name, conv_name);
+
+    todo_backwards.push_back(back_node);
+    
+  }
+
+
+  std::vector<float> new_dims = {(float)B, (float)H, (float)W, (float)C};
+  
+
+
+
+  NamedBatchNorm2d[conv_name] = std::move(conv);
+
+  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  return new_tensor;
+}
+
 class Conv2d
 {
   // Forward
@@ -8980,7 +9443,7 @@ extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int 
 
   
   
-  float resultingDimsProd = B * (float)conv->OC * (float)conv->out_W * (float)conv->out_W;
+  float resultingDimsProd = B * (float)conv->OC * (float)conv->out_H * (float)conv->out_W;
 
   int is_forward_func = 1;
   if (is_forward_func)
@@ -9010,13 +9473,9 @@ extern "C" void *ConvForward2d(char *self, Tensor tensor, char *conv_namec, int 
 
   //for backprop:
   std::vector<float> kernel_dims = {(float)conv->OC, (float)conv->C, (float)conv->ks, (float)conv->ks}; 
-  //NamedDims[conv_name] = kernel_dims;
 
-  //for forward resulting dims:
-  NamedDimsConv[conv_name] = new_dims;
-  
-  //if (conv_name=="modelconv1")
-  //  PrintTensorF(conv->d_filter, 1, conv->ks*conv->ks);
+
+
 
   Tensor conv_tensor;
   conv_tensor.NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
@@ -9044,6 +9503,20 @@ extern "C" float CreateConv2dOnDemand(char *tensor_name, char *init,
   NamedConv2d[tensor_name] = std::move(conv);
   return 0;
 }
+
+
+
+
+extern "C" float CreateBatchNorm2dOnDemand(char *tensor_name, float C)
+{
+  std::cout << "\nCreate BatchNorm2d on demand:\n   C: " << C  << "\n";
+
+  auto conv = std::make_unique<BatchNorm2d>((int)C);
+
+  NamedBatchNorm2d[tensor_name] = std::move(conv);
+  return 0;
+}
+
 
 
 class MaxPool2d
@@ -11419,6 +11892,48 @@ Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
 
 
+Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *scopeless_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+    
+
+    
+    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
+                                              {var_name, type,
+                                               C->codegen(first_arg, scope_str, previous_scope)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
 Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -11679,8 +12194,15 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       ArgsV.push_back(conv_name);
       ArgsV.push_back(is_attr);
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-
-
+    }
+    if (CalleeOverride=="BatchNorm2d")
+    {
+      CalleeF = getFunction("BatchNormForward2d");
+      Value *conv_name = Builder->CreateGlobalString(tgt_function);
+      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
+      ArgsV.push_back(conv_name);
+      ArgsV.push_back(is_attr);
+      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
     }
     if (floatFunctions.count(tgt_function)>0)
       ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
@@ -12552,6 +13074,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("MaxPoolForward2d", MaxPoolForward2dTy);
+
+
+  //
+  FunctionType *BatchNormForward2dTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("BatchNormForward2d", BatchNormForward2dTy);
   
 
   //
@@ -13230,7 +13761,6 @@ FunctionType *unbugTy = FunctionType::get(
 
   //
   FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
        int8PtrTy,
@@ -13245,8 +13775,17 @@ FunctionType *unbugTy = FunctionType::get(
 
 
   //
+  FunctionType *CreateBatchNorm2dOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("CreateBatchNorm2dOnDemand", CreateBatchNorm2dOnDemandTy);
+
+
+  //
   FunctionType *CreateMaxPool2dOnDemandTy = FunctionType::get(
-      //PointerType::get(Type::getVoidTy(*TheContext), 0),
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy,
        Type::getFloatTy(*TheContext),
@@ -13618,7 +14157,7 @@ int main() {
 
 
   // Universal
-  vararg_methods = {"view", "sum", "prod", "tmax", "argmax"};
+  vararg_methods = {"view", "sum", "mean", "prod", "tmax", "argmax"};
   string_methods = {"split", "split_idx"};
 
 
