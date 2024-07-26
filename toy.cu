@@ -5745,7 +5745,14 @@ extern "C" char *GetEmptyChar()
   return str_to_char(x);
 }
 
+extern "C" void FreeCharFromFunc(char *_char, char *func) {
+  std::cout << "FREEING " << _char << " at function: " << func << "\n";
+  delete[] _char;
+}
+
+
 extern "C" void FreeChar(char *_char) {
+  //std::cout << "FREEING " << _char << "\n";
   delete[] _char;
 }
 
@@ -12380,9 +12387,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     }
     else
-    {
+    { // Pass first_arg's reference for the derived AST nodes.
       std::cout << "Adding first arg and scope  for " << tgt_function << "\n";
-      ArgsV.push_back(first_arg); // Pass first_arg's reference for the derived AST nodes.
+      ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
     }
     target_args_size+=1;
   }
@@ -12544,7 +12551,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
   }
 
-  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+  
+  Builder->CreateCall(TheModule->getFunction("FreeChar"), {Builder->CreateLoad(int8PtrTy, previous_scope)});
   
   return ret;
 }
@@ -12851,15 +12859,20 @@ Function *FunctionAST::codegen() {
 
   if (function_name=="__anon_expr")
   {
-    Builder->CreateStore(Builder->CreateGlobalString(""), first_arg);
-    Builder->CreateStore(Builder->CreateGlobalString(""), scope_str);
-    Builder->CreateStore(Builder->CreateGlobalString(""), previous_scope);
+    Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {}), first_arg);
+    Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {}), scope_str);
+    Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {}), previous_scope);
   }
 
 
   std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
 
   NamedValues.clear();
+
+  bool has_self, has_scope, has_previous_scope;
+  has_self = false;
+  has_scope = false;
+  has_previous_scope = false;
 
   float val;
   int i = 0;
@@ -12874,24 +12887,21 @@ Function *FunctionAST::codegen() {
 
     if (arg_name == "self")
     {
-      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                        {Builder->CreateLoad(int8PtrTy, &Arg)});
+      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
       Builder->CreateStore(self, first_arg);
-
+      has_self = true;
     }
     else if (arg_name == "scope_str")
     {
-      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                        {&Arg});
+      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
       Builder->CreateStore(self, scope_str);
-
+      has_scope = true;
     }
     else if (arg_name == "previous_scope")
     {
-      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                        {&Arg});
+      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
       Builder->CreateStore(self, previous_scope);
-
+      has_previous_scope = true;
     } else if (in_str(arg_name, floatVars))
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
@@ -12934,10 +12944,28 @@ Function *FunctionAST::codegen() {
   for (auto &body : Body)
     RetVal = body->codegen(first_arg, scope_str, previous_scope);
 
+
+
+  Value *aux = Builder->CreateGlobalString(function_name);
+
+  
+  //if(has_self)
+  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {Builder->CreateLoad(int8PtrTy, first_arg), aux});
+  
+  if(has_scope)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {Builder->CreateLoad(int8PtrTy, scope_str)});
+  
+  //if(has_previous_scope)
+  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {Builder->CreateLoad(int8PtrTy, previous_scope), aux});
+  
+  
+
   if (RetVal) {
     // Finish off the function.
     
+    
     Builder->CreateRet(RetVal);
+    
 
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
@@ -14036,6 +14064,15 @@ FunctionType *unbugTy = FunctionType::get(
       false
   );
   TheModule->getOrInsertFunction("FreeChar", FreeCharTy);
+  
+
+  //
+  FunctionType *FreeCharFromFuncTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("FreeCharFromFunc", FreeCharFromFuncTy);
   
 
   //
