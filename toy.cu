@@ -2646,21 +2646,23 @@ extern "C" float * gload_img(Tensor tensor, char *img_name, float batch_idx)
 
 
 
-extern "C" float * wload_img(Tensor tensor, char *img_name, float worker_idx, float batch_idx)
+extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, float batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
 
 
   int width, height, channels;
+
+  //std::cout << "GLOAD IMG, dims of " << img_name << "\n";
   
   unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
 
   if (image_data) {
     
-    std::vector<float> dims = tensor.dims;
+    std::vector<float> dims = tensor->dims;
 
-    //std::cout << "GLOAD IMG, dims of " << tensor_name << "\n";
+    
     
 
     std::vector<float> workerless_dims = BatchLessDims(dims);
@@ -2677,7 +2679,7 @@ extern "C" float * wload_img(Tensor tensor, char *img_name, float worker_idx, fl
 
     if (batchless_dims_prod < width*height*channels)
     {
-      std::string t_n = tensor.name;
+      std::string t_n = tensor->name;
       std::string _error = "The image dimensions are incompatible with the tensor \033[95m" + t_n + "\033[0m dimensions.";
       LogErrorS(_error);
 
@@ -2686,7 +2688,7 @@ extern "C" float * wload_img(Tensor tensor, char *img_name, float worker_idx, fl
       PrintDims(batchless_dims);
 
       std::cout << "\nImage required dims: [" << width << ", " << height << ", " << channels << "]\n\n";
-
+      
       return nullptr;
     }
     if (batch_idx > dims[1])
@@ -2697,7 +2699,7 @@ extern "C" float * wload_img(Tensor tensor, char *img_name, float worker_idx, fl
 
 
 
-    float *image_data_float = tensor.cpu_tensor_ptr;
+    float *image_data_float = tensor->cpu_tensor_ptr;
     int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
 
     //std::cout << "worker idx: " << worker_idx << ", batch idx: " << batch_idx << ", batch offset: " << idx_offset << "\n";
@@ -4613,6 +4615,7 @@ extern "C" float first_nonzero(char *self)
       break;
     }
 
+  delete[] self;
   return idx;
 }
 
@@ -4638,7 +4641,7 @@ extern "C" void * ShuffleStrVec(std::vector<char*> vec)
 }
 
 
-
+//deprecated
 extern "C" char * shuffle_str(char *string_list)
 {
 
@@ -4667,7 +4670,9 @@ extern "C" char * shuffle_str(char *string_list)
 
 extern "C" void *LoadTensor(char *tensor_name){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
-  return NamedTensorsT[tensor_name];
+  Tensor *ret = NamedTensorsT[tensor_name];
+  delete[] tensor_name;
+  return ret;
 }
 
 
@@ -4679,6 +4684,7 @@ extern "C" void *LoadDims(char *tensor_name) // TODO: invert this back
   std::string random_str = RandomString(15);
   NamedDims[random_str] = NamedDims[tensor_name];
   AuxRandomStrs[random_str] = "dim";
+  delete[] tensor_name;
 
   return &NamedDims[random_str];
 }
@@ -4931,7 +4937,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   
   bool include_scope = GetSolverIncludeScope();
-  Value *var_name = Builder->CreateGlobalString("");
+  Value *var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
 
 
   if(Names.size()>1)
@@ -4946,19 +4952,19 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       if (i==0)
       {
         if (type==type_self)
-          var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+          var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                           {var_name, Builder->CreateLoad(int8PtrTy, first_arg)});
         else
         {
           if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name)&&include_scope)
-            var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+            var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                           {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
         }
       }
 
       if (type==type_object_name)
       {
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, name});
         var_name = Builder->CreateCall(TheModule->getFunction("LoadObject"),
                                                         {var_name});
@@ -4966,15 +4972,15 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       }
 
       if (type==type_attr||type==type_var)
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, name});
 
       if (type==type_vec)
       {
         Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, name});
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStr"),
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
                                                         {var_name, _idx});
         var_name = Builder->CreateCall(TheModule->getFunction("LoadObjectScopeName"),
                                                         {var_name});
@@ -4983,7 +4989,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   if(Names.size()==1)// Concat scope only
     if((Type=="object"||Type=="tensor"||Type=="float")&&include_scope)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
 
 
@@ -4993,12 +4999,12 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   //std::cout << "\n\n\nNAMESOLVER TYPE OF LAST: " << type << "\n";
   //std::cout << "For: " << std::get<0>(Names[Names.size()-1]) << "\n";
   //std::cout << "Type: " << Type << "\n";
-  var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+  var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                     {var_name, name});
   if (Type=="object_vec")
   {
     Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
-    var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStr"),
+    var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
                                                       {var_name, _idx});
   }
 
@@ -5691,6 +5697,7 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
   {
     std::string ret = NamedObjects[pre_dot];
     return str_to_char(ret);
+    //return const_cast<char*>(ret.c_str());
   }
   
   if (pre_dot!="self")
@@ -5710,7 +5717,7 @@ extern "C" void InstantiateObject(char *scope, char *obj_name)
   //std::cout << "\n\nInstantiateObject of: " << scope << obj_name << "\n";
   std::string _obj_name = obj_name;
 
-  NamedObjects[scope+_obj_name] = _obj_name + RandomString(5);
+  NamedObjects[scope+_obj_name] = _obj_name + RandomString(13);
   //std::cout << "Saving " << NamedObjects[scope+_obj_name]  << "\n\n";
 }
 
@@ -5727,8 +5734,19 @@ extern "C" char *LoadObject(char *obj_name)
 {
   //std::cout << "LOADING OBJECT FROM " << obj_name << "\n";
   std::string ret = NamedObjects[obj_name];
+  delete[] obj_name;
   //std::cout << "Load object of: " << ret << "\n";
   return str_to_char(ret);
+}
+
+extern "C" char *GetEmptyChar()
+{
+  std::string x = "";
+  return str_to_char(x);
+}
+
+extern "C" void FreeChar(char *_char) {
+  delete[] _char;
 }
 
 
@@ -5803,10 +5821,26 @@ extern "C" char * ConcatNumToStr(char *lc, float r)
   return result_cstr;
 }
 
+extern "C" char * ConcatNumToStrFree(char *lc, float r)
+{
+  //std::cout << "\nCONCAT NUM TO STR " << lc << " & " << std::to_string(r) << "\n";
+
+  std::string l = lc;
+  int _r = r;
+
+  std::string result_str = l + std::to_string(_r);
+  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
+  std::strcpy(result_cstr, result_str.c_str());
+
+  delete[] lc;
+  
+  return result_cstr;
+}
+
 extern "C" char * RandomStrOnDemand()
 {
 
-  std::string random_str = RandomString(4);
+  std::string random_str = RandomString(14);
 
   char* result_cstr = new char[random_str.length() + 1]; // +1 for null terminator
   std::strcpy(result_cstr, random_str.c_str());
@@ -5819,7 +5853,13 @@ extern "C" char * RandomStrOnDemand()
 extern "C" void StoreOnDemand(char *name, float value){
   
   NamedClassValues[name] = value;
+  delete[] name;
 }
+extern "C" void StoreOnDemandNoFree(char *name, float value){
+  
+  NamedClassValues[name] = value;
+}
+
 
 extern "C" void StoreArgOnDemand(char *name, float value){
   //std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
@@ -5843,6 +5883,7 @@ extern "C" float StoreStrOnDemand(char *name, char * value){
 extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as StrVec type.\n";
   ClassStrVecs[name] = value;
+  delete[] name;
   return 0;
 }
 
@@ -5850,7 +5891,7 @@ extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
-  
+  delete[] name;
   return 0;
 }
 
@@ -5858,7 +5899,7 @@ extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name][(int)idx] = value;
-  
+  delete[] name;
   return 0;
 }
 
@@ -5869,8 +5910,21 @@ extern "C" float LoadOnDemand(char *object_var_name) {
   //std::cout << "Load on demand for: " << object_var_name << "\n";
   //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n";
 
-  return NamedClassValues[object_var_name];
+  float ret = NamedClassValues[object_var_name];
+  delete[] object_var_name;
+  return ret;
 }
+
+extern "C" float LoadOnDemandNoFree(char *object_var_name) {
+  //std::cout << "Load on demand for: " << object_var_name << "\n";
+  //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n";
+
+  float ret = NamedClassValues[object_var_name];
+  
+  return ret;
+}
+
+
 
 
 extern "C" void LockMutex(char *mutex_name)
@@ -5887,15 +5941,19 @@ extern "C" void UnlockMutex(char *mutex_name)
 
 extern "C" void *LoadStrVecOnDemand(char *object_var_name) {
   //std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
-    
-  return &ClassStrVecs[object_var_name];
+  
+  void *ret = &ClassStrVecs[object_var_name];
+  delete[] object_var_name;
+  return ret;
 }
 
 
 extern "C" void *LoadFloatVecOnDemand(char *object_var_name) {
   std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
-    
-  return &ClassFloatVecs[object_var_name];
+  
+  void *ret = &ClassFloatVecs[object_var_name];
+  delete[] object_var_name;
+  return ret;
 }
 
 
@@ -5990,6 +6048,8 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
       return V;
     }
   }
+
+
 
   if (type=="float")
   {
@@ -9121,11 +9181,8 @@ extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec
     return nullptr;
   }
 
-  float *inp, *out;
-  cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
-  cudaMemcpy(inp, tensor_ptr, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
 
-  output = conv->Forward(inp, H, W, B, C);
+  output = conv->Forward(tensor_ptr, H, W, B, C);
 
   float resultingDimsProd = B * (float)C * (float)H * (float)W;
 
@@ -9143,7 +9200,6 @@ extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec
 
 
   // for the optimizer only
-
   scale_tensor = NamedTensorsT[conv_name];
   scale_tensor->NewTensor(conv->scale, bn_dims, C, true, conv_name);
   scale_tensor->weight=true;
@@ -9199,7 +9255,7 @@ void batchnormd2d_backward(float *inp,
                      float *dout, std::string conv_name)
 {
 
-  //std::cout << "conv2d_backward for " << conv_name << "\n";
+  std::cout << "batchnorm2d_backward for " << conv_name << "\n";
   std::unique_ptr<BatchNorm2d> conv = std::move(NamedBatchNorm2d[conv_name]);
 
   conv->Backward(inp, dinp, dw, db, dout);
@@ -9976,7 +10032,7 @@ extern "C" float cross_entropy(Tensor *y_hat, Tensor *y)
   
   Tensor *loss_tensor = new Tensor();
 
-  std::cout << "cross_entropy y_hat leaf " << y_hat->leaf << " y leaf " << y->leaf << "\n";
+  //std::cout << "cross_entropy y_hat leaf " << y_hat->leaf << " y leaf " << y->leaf << "\n";
 
   loss_tensor->AttrNodes(y_hat, y, cross_entropy_op);
 
@@ -10045,14 +10101,12 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     if(device_dy==nullptr&&!in_int(op, loss_ops))
       LogErrorS("dy derivate is null at the backward mode.");
 
-    std::cout << "\nTraversing: " << back_node->name << ", op: " << back_node->op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
+    //std::cout << "\nTraversing: " << back_node->name << ", op: " << back_node->op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
 
 
     if (back_node->weight) // dw is updated by pointer
-    {
-      //delete back_node;
       return;
-    }
+    
 
 
     tensor_name = back_node->scopeless_name;
@@ -10061,7 +10115,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
       float dims_prod = back_node->dims_prod;
       
-      std::cout << "Accumulating grad of: " << tensor_name << "\n";
+      //std::cout << "Accumulating grad of: " << tensor_name << "\n";
 
       if(var_to_grad.count(tensor_name)>0)
       {
@@ -10081,8 +10135,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
       to_free(back_node->tensor_ptr);
       
-      //if (back_node->op==create_tensor_op)
-      //  cudaCheck(cudaFree(back_node->tensor_ptr));
+      
 
       delete back_node;
       return;
@@ -10109,7 +10162,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
     out = back_node->tensor_ptr;
 
-    std::cout << "Check null" << "\n";
+    //std::cout << "Check null" << "\n";
     if(back_node->R_Node!=nullptr)
     {
       param_name  = back_node->R_Node->name;
@@ -10128,7 +10181,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
       if (w!=nullptr&&op!=hadamard_op&&op!=add_op)
       {
         dw = make_zeros_float(w_size);
-        std::cout << "weight of size " << w_size << "\n";
+        //std::cout << "weight of size " << w_size << "\n";
         if (NamedParamGrads[param_name]==nullptr)
         {
           cudaCheck(cudaMalloc(&new_grad_ptr, w_size*sizeof(float)));
@@ -10158,13 +10211,15 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     }
     
 
+    //std::cout << "malloc device_dx " << "\n";
 
     // input gradient    
     dinp = make_zeros_float(x_size);
-    cudaMalloc(&device_dx, x_size*sizeof(float));
-    cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice);
+    cudaCheck(cudaMalloc(&device_dx, x_size*sizeof(float)));
+    cudaCheck(cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice));
     delete[] dinp;
 
+    //std::cout << "malloc done"  << "\n";
 
 
     B=0;
@@ -10181,7 +10236,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     
 
 
-    std::cout << "EXECUTING OP  " << op << "\n";
+    //std::cout << "EXECUTING OP  " << op << "\n";
     switch (op)
     {
       case mult_op:
@@ -10222,7 +10277,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     cudaCheck(cudaGetLastError());
   } else
   {
-    std::cout << "\n\nFROM A GRADLESS OP" << "\n\n\n";
+    //std::cout << "\n\nFROM A GRADLESS OP" << "\n\n\n";
     from_gradless = true;
   }
 
@@ -10243,8 +10298,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
   if(!in_int(op, loss_ops))
     to_free(back_node->tensor_ptr);
 
+  if(!from_gradless)
+    to_free(device_dy);
+
   delete back_node;
-  to_free(device_dy);
 }
 
 
@@ -10392,8 +10449,8 @@ void AdamW_optim::init_states(std::string param_name, float params_count)
 void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name)
 {
   //std::cout  << "Optimizer step called\n";
-  std::cout << "AdamW stepping: " << param_name << "\n";
-  PrintDims(dims);
+  //std::cout << "AdamW stepping: " << param_name << "\n";
+  //PrintDims(dims);
   
 
   float *v = NamedV[param_name];
@@ -11108,7 +11165,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
   var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                     {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
 
-  Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+  Builder->CreateCall(TheModule->getFunction("StoreOnDemandNoFree"),
                                                   {var_name, StartVal});
 
   // Store the value into the alloca.
@@ -11178,12 +11235,12 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
-  Value *CurVar = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),{var_name});
+  Value *CurVar = Builder->CreateCall(TheModule->getFunction("LoadOnDemandNoFree"), {var_name});
   Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar"); // Increment
-  Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+  Builder->CreateCall(TheModule->getFunction("StoreOnDemandNoFree"),
                                                   {var_name, NextVar});
 
-                                                  std::string __print = "\n\nLOAD OF " + std::string(Name) + " ";
+  
   
   Builder->CreateBr(CondBB);
 
@@ -11194,7 +11251,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
   TheFunction->insert(TheFunction->end(), AfterBB);
   Builder->SetInsertPoint(AfterBB);
 
-
+  Builder->CreateCall(TheModule->getFunction("FreeChar"), {var_name});
   // Restore the unshadowed variable.
   //if (OldVal)
   //  NamedValues[VarName] = OldVal;
@@ -12217,6 +12274,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     Builder->CreateStore(Builder->CreateGlobalString(""), scope_str);
   }
 
+
+  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   previous_scope = Builder->CreateAlloca(int8PtrTy);
   Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
                                        {Builder->CreateLoad(int8PtrTy, scope_str)}), previous_scope);
@@ -12225,14 +12284,14 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   Value *_pre_dot_str = Builder->CreateGlobalString(_pre_dot);
   Value *first_arg_copy = Builder->CreateAlloca(int8PtrTy);
 
+
+
   if (isAttribute && !isSelf && !in_str(tgt_function, native_methods))
   { // e.g: model.forward()
     if (nested_function)
       Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
                                                     {Builder->CreateLoad(int8PtrTy, first_arg)}),
                                                first_arg_copy);
-
-    
 
     first_arg = Builder->CreateAlloca(int8PtrTy);
     Builder->CreateStore(_pre_dot_str, first_arg);
@@ -12241,7 +12300,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     //                                    {Builder->CreateLoad(int8PtrTy, scope_str), _pre_dot_str}), first_arg);
 
 
-    
     Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                 {Builder->CreateLoad(int8PtrTy, previous_scope), Builder->CreateLoad(int8PtrTy, first_arg)});
     
@@ -12330,6 +12388,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
 
+  
   if (!(CalleeOverride!="none" || in_str(Callee, native_fn)))
   {
     scope_str = Builder->CreateAlloca(int8PtrTy);
@@ -12337,18 +12396,18 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     //if (starts_with(functionName.c_str(), "__async_"))
     //  scope_name = Builder->CreateGlobalString("threaded_");
     //else 
-      scope_name = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
+    scope_name = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
     Builder->CreateStore(scope_name, scope_str);
     
-    ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
-    ArgsV.push_back(previous_scope);
+    ArgsV.push_back(Builder->CreateLoad(int8PtrTy, scope_str)); // Pass scope's reference for the derived AST nodes.
+    ArgsV.push_back(Builder->CreateLoad(int8PtrTy, previous_scope));
     target_args_size+=2;
   }
+  
 
 
-
-
-
+  
+  
 
   // Detect function errors
   Function *CalleeF;
@@ -12485,6 +12544,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
   }
 
+  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   
   return ret;
 }
@@ -12588,19 +12648,19 @@ extern "C" char *SplitStringIndexate(char *self, char *pattern, float idx)
 
 
 
-extern "C" char * IndexStrVec(std::vector<char*> vec, float _idx)
+extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)
 {
 
   int idx = (int) _idx;
 
   //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
   
-
+  
   return vec[idx];
 }
 
 
-extern "C" char * IndexClassStrVec(char * vec_name, float _idx)
+extern "C" char * IndexClassStrVec(char *vec_name, float _idx)
 {
   int idx = (int) _idx;
 
@@ -12608,18 +12668,19 @@ extern "C" char * IndexClassStrVec(char * vec_name, float _idx)
   std::vector<char*> vec = ClassStrVecs[vec_name];
 
   //std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
-  
+  delete[] vec_name;
 
   return vec[idx];
 }
 
 
-extern "C" float IndexClassFloatVec(char * vec_name, float _idx)
+extern "C" float IndexClassFloatVec(char *vec_name, float _idx)
 {
   int idx = (int) _idx;
 
-  
-  return ClassFloatVecs[vec_name][idx];
+  float ret = ClassFloatVecs[vec_name][idx];
+  delete[] vec_name;
+  return ret;
 }
 
 
@@ -12631,7 +12692,10 @@ extern "C" float StrToFloat(char *in_str)
   char *copied = (char*)malloc(strlen(in_str) + 1);
   strcpy(copied, in_str);
   char *end;
-  return std::strtof(copied, &end);
+
+  float ret = std::strtof(copied, &end);
+  delete[] copied;
+  return ret;
 }
 
 
@@ -12654,7 +12718,7 @@ extern "C" void objAttr_var_from_var(char *LName, char *RName)
   //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
 
   NamedObjects[LName] = NamedObjects[RName];
-
+  
   
 }
 
@@ -12735,6 +12799,7 @@ extern "C" char *LoadObjectScopeName(char *self)
     return "";
   }
   std::string ret = objectVecs[self];
+  delete[] self;
   //std::cout << "LoadObjectScopeName is: " << ret << ", from self: " << self << "\n";
 
   return str_to_char(ret);
@@ -12817,14 +12882,14 @@ Function *FunctionAST::codegen() {
     else if (arg_name == "scope_str")
     {
       Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                        {Builder->CreateLoad(int8PtrTy, &Arg)});
+                        {&Arg});
       Builder->CreateStore(self, scope_str);
 
     }
     else if (arg_name == "previous_scope")
     {
       Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                        {Builder->CreateLoad(int8PtrTy, &Arg)});
+                        {&Arg});
       Builder->CreateStore(self, previous_scope);
 
     } else if (in_str(arg_name, floatVars))
@@ -12871,6 +12936,7 @@ Function *FunctionAST::codegen() {
 
   if (RetVal) {
     // Finish off the function.
+    
     Builder->CreateRet(RetVal);
 
     // Validate the generated code, checking for consistency.
@@ -13955,6 +14021,24 @@ FunctionType *unbugTy = FunctionType::get(
   
 
   //
+  FunctionType * GetEmptyCharTy = FunctionType::get(
+      int8PtrTy,
+      {},
+      false 
+  );
+  TheModule->getOrInsertFunction("GetEmptyChar", GetEmptyCharTy);
+  
+
+  //
+  FunctionType *FreeCharTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("FreeChar", FreeCharTy);
+  
+
+  //
   FunctionType * ConcatStrTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy},
@@ -13997,6 +14081,15 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("ConcatNumToStr", ConcatNumToStrTy);
+
+  
+  //
+  FunctionType * ConcatNumToStrFreeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("ConcatNumToStrFree", ConcatNumToStrFreeTy);
   
 
   //
@@ -14018,6 +14111,15 @@ FunctionType *unbugTy = FunctionType::get(
 
   
   // 
+  FunctionType *StoreOnDemandNoFreeTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      false //
+  );
+  TheModule->getOrInsertFunction("StoreOnDemandNoFree", StoreOnDemandNoFreeTy);
+
+  
+  // 
   FunctionType *StoreArgOnDemandTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -14033,6 +14135,15 @@ FunctionType *unbugTy = FunctionType::get(
       false
   );
   TheModule->getOrInsertFunction("LoadOnDemand", LoadOnDemandTy);
+  
+
+  //
+  FunctionType *LoadOnDemandNoFreeTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      false
+  );
+  TheModule->getOrInsertFunction("LoadOnDemandNoFree", LoadOnDemandNoFreeTy);
   
 
   //
