@@ -5744,6 +5744,7 @@ extern "C" char *GetEmptyChar()
 extern "C" void FreeCharFromFunc(char *_char, char *func) {
   std::cout << "FREEING " << _char << " at function: " << func << "\n";
   delete[] _char;
+  std::cout << "freed" << "\n";
 }
 
 
@@ -12536,7 +12537,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
   
-  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+  Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
   
   return ret;
 }
@@ -12935,15 +12937,16 @@ Function *FunctionAST::codegen() {
 
   Value *aux = Builder->CreateGlobalString(function_name);
 
+
   
   //if(has_self)
-  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {Builder->CreateLoad(int8PtrTy, first_arg), aux});
+  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {first_arg, aux});
   
-  //if(has_scope)
-  //  Builder->CreateCall(TheModule->getFunction("FreeChar"), {Builder->CreateLoad(int8PtrTy, scope_str)});
+  if(has_scope)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
   
   //if(has_previous_scope)
-  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {Builder->CreateLoad(int8PtrTy, previous_scope), aux});
+  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {previous_scope, aux});
   
   
 
