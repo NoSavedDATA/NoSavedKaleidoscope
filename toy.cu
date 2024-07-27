@@ -826,7 +826,7 @@ public:
   bool isVarLoad = false;
   bool SolverIncludeScope = true;
 
-  Value *TensorPtr, *DimsPtr;
+  Value *TensorPtr;
 
 
   virtual Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) = 0;
@@ -902,9 +902,7 @@ public:
   virtual Value *GetTensorPtr() {
     return TensorPtr;
   }
-  virtual Value *GetDimsPtr() {
-    return DimsPtr;
-  }
+  
 };
 
 
@@ -2648,7 +2646,7 @@ extern "C" float * gload_img(Tensor tensor, char *img_name, float batch_idx)
 
 extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, float batch_idx)
 {
-  //std::cout << "LOADING IMAGE FOR: " << tensor_name <<  "\n";
+  //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
 
 
@@ -2715,6 +2713,7 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
     }
     stbi_image_free(image_data);
 
+    //std::cout << "returning float image" << "\n";
     return image_data_float;
     
   } else {
@@ -4953,12 +4952,12 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       {
         if (type==type_self)
           var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
-                                                          {var_name, Builder->CreateLoad(int8PtrTy, first_arg)});
+                                                          {var_name, first_arg});
         else
         {
           if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name)&&include_scope)
             var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
-                                                          {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
+                                                          {var_name, scope_str});
         }
       }
 
@@ -4990,7 +4989,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   if(Names.size()==1)// Concat scope only
     if((Type=="object"||Type=="tensor"||Type=="float")&&include_scope)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
-                                                        {var_name, Builder->CreateLoad(int8PtrTy, scope_str)});
+                                                        {var_name, scope_str});
 
 
   name = Builder->CreateGlobalString(std::get<0>(Names[Names.size()-1]));
@@ -5647,16 +5646,13 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
 
 
-
-
-
   return idx_at;
 }
 
 
 extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
   Tensor *tensor = NamedTensorsT[tensor_name];
-  //std::cout << "AttrPinnedOnIdx for " << tensor_name << " at index " << idx_at << "\n";
+  //std::cout << "AttrPinnedOnIdx for " << tensor->name << " at index " << idx_at << "\n";
   //std::cout << "Value: " << val <<"\n";
 
   std::vector<float> dims = tensor->dims;
@@ -5965,6 +5961,7 @@ extern "C" void *LoadFloatVecOnDemand(char *object_var_name) {
 
 
 Value *ObjAttrExprAST::codegen(Value *ignored_first_arg, Value *scope_str, Value *previous_scope) {
+  /*
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -5975,8 +5972,8 @@ Value *ObjAttrExprAST::codegen(Value *ignored_first_arg, Value *scope_str, Value
 
 
   ret = Body->codegen(first_arg, scope_str, previous_scope);
-
-  return ret;
+  */
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
 
 
@@ -6829,10 +6826,10 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   }
   if (is_self)
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
+                                                      {first_arg, tensor_name});
   if (!(is_self||is_attr))
     tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), tensor_name});
+                                            {scope_str, tensor_name});
     
 
 
@@ -6952,7 +6949,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
   Value *tensor_name;
 
-  DimsPtr = Builder->CreateAlloca(int8PtrTy);
+
 
   
 
@@ -7036,12 +7033,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   
-  Value *LdimsPtr = Builder->CreateLoad(int8PtrTy, LHS->GetDimsPtr());
-  Builder->CreateStore(LdimsPtr, DimsPtr);
-
-  //Builder->CreateCall(TheModule->getFunction("PrintDims"),
-  //                    {LdimsPtr});
-
+  
   if (!LtensorPtr || !R)
     return nullptr;
 
@@ -10693,7 +10685,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
     seen_var_attr=true;
 
     Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
-    Value *rDimsPtr;
+    
 
     if (!LHS->GetIsVec())
     {
@@ -11031,10 +11023,10 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
       }
       if (is_self)
         tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {Builder->CreateLoad(int8PtrTy, first_arg), tensor_name});
+                                                          {first_arg, tensor_name});
       if (!(is_self||is_attr))
         tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                {Builder->CreateLoad(int8PtrTy, scope_str), tensor_name});
+                                                {scope_str, tensor_name});
         
 
       Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("LoadTensor"),
@@ -11170,7 +11162,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
   Value *var_name = Builder->CreateGlobalString(VarName);
   var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                    {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                    {scope_str, var_name});
 
   Builder->CreateCall(TheModule->getFunction("StoreOnDemandNoFree"),
                                                   {var_name, StartVal});
@@ -11440,6 +11432,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
+
   Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str, previous_scope);
 
 
@@ -11589,8 +11582,8 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
 
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                            {_name, Builder->CreateLoad(int8PtrTy, scope_str),
-                                             _name, Builder->CreateLoad(int8PtrTy, previous_scope)});
+                                            {_name, scope_str,
+                                             _name, previous_scope});
       }
     } else {
       l_name   = Vars[i]->GetName();
@@ -11613,8 +11606,8 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         if (l_type=="tensor"||type=="tensor")
         {
           Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                              {_l_name, Builder->CreateLoad(int8PtrTy, scope_str),
-                                               _name,   Builder->CreateLoad(int8PtrTy, previous_scope)});
+                                              {_l_name, scope_str,
+                                               _name,   previous_scope});
         }
       } else {
 
@@ -11627,7 +11620,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, previous_scope), _name}));
+                                                      {previous_scope, _name}));
         for (int i=0; i<destiny->Idx.size(); i++)
           idx_calc_args.push_back(destiny->Idx[i]->codegen(first_arg, scope_str, previous_scope));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
@@ -11636,8 +11629,8 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         
         Value *_l_name = Builder->CreateGlobalString(l_name);
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
-                                              {_l_name, Builder->CreateLoad(int8PtrTy, scope_str),
-                                               _name, Builder->CreateLoad(int8PtrTy, previous_scope),
+                                              {_l_name, scope_str,
+                                               _name, previous_scope,
                                                idx_at});
       }
     }
@@ -11680,7 +11673,7 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
     Value *var_name = Builder->CreateGlobalString(VarName);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                        {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                        {scope_str, var_name});
 
     Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
                                                   {var_name, InitVal});
@@ -11850,7 +11843,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     if (!GetIsVec())
     {
       Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
-                                              {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                              {scope_str, var_name});
     }
     else if (Init) // init of vec[size]
     {
@@ -11860,10 +11853,10 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (is_self||is_attr)
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                              {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+                                              {first_arg, var_name});
       if (!(is_self||is_attr))
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                              {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                              {scope_str, var_name});
 
       //Value *object_hash = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
       //var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -12033,12 +12026,12 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+                                            {first_arg, var_name});
     scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                             {var_name});
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                            {scope_str, var_name});
 
     Value *aux;
     for (int j=0; j<V_Dims.size(); j++)
@@ -12096,10 +12089,10 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+                                            {first_arg, var_name});
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                            {scope_str, var_name});
 
     Value *aux;
     for (int j=0; j<V_Dims.size(); j++)
@@ -12145,12 +12138,12 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+                                            {first_arg, var_name});
     scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                             {var_name});
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                            {scope_str, var_name});
     
     
 
@@ -12188,12 +12181,12 @@ Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+                                            {first_arg, var_name});
     scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                             {var_name});
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                            {scope_str, var_name});
     
 
     
@@ -12230,12 +12223,12 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, first_arg), var_name});
+                                            {first_arg, var_name});
     scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                             {var_name});
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                            {scope_str, var_name});
     
 
     
@@ -12277,40 +12270,37 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   if (starts_with(functionName.c_str(), "__async_"))
   {
     //TODO: Solve scope_str discontinuity on async functions
-    scope_str = Builder->CreateAlloca(int8PtrTy);
-    Builder->CreateStore(Builder->CreateGlobalString(""), scope_str);
+    scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    
   }
 
 
   //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
-  previous_scope = Builder->CreateAlloca(int8PtrTy);
-  Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                       {Builder->CreateLoad(int8PtrTy, scope_str)}), previous_scope);
+  
+  previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                        {scope_str});
 
 
   Value *_pre_dot_str = Builder->CreateGlobalString(_pre_dot);
-  Value *first_arg_copy = Builder->CreateAlloca(int8PtrTy);
+  Value *first_arg_copy;
 
 
 
   if (isAttribute && !isSelf && !in_str(tgt_function, native_methods))
   { // e.g: model.forward()
     if (nested_function)
-      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                                    {Builder->CreateLoad(int8PtrTy, first_arg)}),
-                                               first_arg_copy);
+      first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                                    {first_arg});
 
-    first_arg = Builder->CreateAlloca(int8PtrTy);
-    Builder->CreateStore(_pre_dot_str, first_arg);
-
-    //Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("objHash"),
-    //                                    {Builder->CreateLoad(int8PtrTy, scope_str), _pre_dot_str}), first_arg);
+    first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                                    {_pre_dot_str});
+                                                    
 
 
-    Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                {Builder->CreateLoad(int8PtrTy, previous_scope), Builder->CreateLoad(int8PtrTy, first_arg)});
+    first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                {previous_scope, first_arg});
     
-    Builder->CreateStore(arg, first_arg);
+    
   }
   
   
@@ -12334,48 +12324,44 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     {
       if (nested_function)
         _pre_dot_str = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                {Builder->CreateLoad(int8PtrTy, scope_str), _pre_dot_str});
-      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
-                                                    {Builder->CreateLoad(int8PtrTy, first_arg),
+                {scope_str, _pre_dot_str});
+      first_arg = Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
+                                                    {first_arg,
                                                      _pre_dot_str,
                                                      Builder->CreateGlobalString(Class),
                                                      Builder->CreateGlobalString(Callee),
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function),
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), isSelf),
-                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), isAttribute)}),
-                                                    first_arg);
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), isAttribute)});
     }
     if (is_self_of_nested_function && not_coding_language_method)
     {
-      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                                    {Builder->CreateLoad(int8PtrTy, first_arg)}),
-                                               first_arg_copy);
-      first_arg = Builder->CreateAlloca(int8PtrTy);
-      Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                    {Builder->CreateLoad(int8PtrTy, first_arg_copy),
-                                                     _pre_dot_str}),
-                                                    first_arg);
+      first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
+      //first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
+      first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                    {first_arg_copy,
+                                                     _pre_dot_str});
     }
     
     
     if (CalleeOverride!="none"||in_str(Callee, native_methods))
     { // e.g: x.view()
-      //ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
+    
       
       
       if (isSelf&&!isAttribute)
-        ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
+        ArgsV.push_back(first_arg);
       if (!isSelf&&isAttribute)
       {
         Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                        {Builder->CreateLoad(int8PtrTy, previous_scope), _pre_dot_str});
+                        {previous_scope, _pre_dot_str});
         ArgsV.push_back(arg);
       }
       
       if (isSelf && isAttribute)
       { // e.g: self.can_load_.first_nonzero()
         // Extend first arg
-        ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
+        ArgsV.push_back(first_arg);
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                         {ArgsV[0], _pre_dot_str});
         //ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
@@ -12389,7 +12375,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     else
     { // Pass first_arg's reference for the derived AST nodes.
       std::cout << "Adding first arg and scope  for " << tgt_function << "\n";
-      ArgsV.push_back(Builder->CreateLoad(int8PtrTy, first_arg));
+      ArgsV.push_back(first_arg);
     }
     target_args_size+=1;
   }
@@ -12398,16 +12384,14 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   
   if (!(CalleeOverride!="none" || in_str(Callee, native_fn)))
   {
-    scope_str = Builder->CreateAlloca(int8PtrTy);
-    Value *scope_name;
     //if (starts_with(functionName.c_str(), "__async_"))
     //  scope_name = Builder->CreateGlobalString("threaded_");
     //else 
-    scope_name = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
-    Builder->CreateStore(scope_name, scope_str);
+    scope_str = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
     
-    ArgsV.push_back(Builder->CreateLoad(int8PtrTy, scope_str)); // Pass scope's reference for the derived AST nodes.
-    ArgsV.push_back(Builder->CreateLoad(int8PtrTy, previous_scope));
+    
+    ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
+    ArgsV.push_back(previous_scope);
     target_args_size+=2;
   }
   
@@ -12552,7 +12536,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
   
-  Builder->CreateCall(TheModule->getFunction("FreeChar"), {Builder->CreateLoad(int8PtrTy, previous_scope)});
+  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   
   return ret;
 }
@@ -12853,16 +12837,19 @@ Function *FunctionAST::codegen() {
   // Record the function arguments in the NamedValues map.
 
   Value *first_arg, *scope_str, *previous_scope;
+  /*
   first_arg = Builder->CreateAlloca(int8PtrTy);
   scope_str = Builder->CreateAlloca(int8PtrTy);
   previous_scope = Builder->CreateAlloca(int8PtrTy);
+  */
 
   if (function_name=="__anon_expr")
   {
-    Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {}), first_arg);
-    Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {}), scope_str);
-    Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {}), previous_scope);
+    first_arg = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    previous_scope = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
   }
+  
 
 
   std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
@@ -12887,26 +12874,26 @@ Function *FunctionAST::codegen() {
 
     if (arg_name == "self")
     {
-      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
-      Builder->CreateStore(self, first_arg);
+      first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
+      
       has_self = true;
     }
     else if (arg_name == "scope_str")
     {
-      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
-      Builder->CreateStore(self, scope_str);
+      scope_str = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
+      
       has_scope = true;
     }
     else if (arg_name == "previous_scope")
     {
-      Value *self = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
-      Builder->CreateStore(self, previous_scope);
+      previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
+      
       has_previous_scope = true;
     } else if (in_str(arg_name, floatVars))
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                    {Builder->CreateLoad(int8PtrTy, scope_str), var_name});
+                                    {scope_str, var_name});
 
       Builder->CreateCall(TheModule->getFunction("StoreArgOnDemand"),
                                                   {var_name, &Arg});
@@ -12932,8 +12919,8 @@ Function *FunctionAST::codegen() {
         Builder->CreateCall(TheModule->getFunction("CopyArgTensor"),
                           {&Arg,
                            Builder->CreateGlobalString(arg_name),
-                           Builder->CreateLoad(int8PtrTy, previous_scope),
-                           Builder->CreateLoad(int8PtrTy, scope_str)});
+                           previous_scope,
+                           scope_str});
       }
     }
   }
@@ -12952,8 +12939,8 @@ Function *FunctionAST::codegen() {
   //if(has_self)
   //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {Builder->CreateLoad(int8PtrTy, first_arg), aux});
   
-  if(has_scope)
-    Builder->CreateCall(TheModule->getFunction("FreeChar"), {Builder->CreateLoad(int8PtrTy, scope_str)});
+  //if(has_scope)
+  //  Builder->CreateCall(TheModule->getFunction("FreeChar"), {Builder->CreateLoad(int8PtrTy, scope_str)});
   
   //if(has_previous_scope)
   //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {Builder->CreateLoad(int8PtrTy, previous_scope), aux});
