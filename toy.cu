@@ -2167,6 +2167,8 @@ static std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name="") {
 }
 
 
+
+
 static std::unique_ptr<ExprAST> ParseStrExpr() {
   getNextToken(); // eat str
   
@@ -2176,6 +2178,22 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
   // At least one variable name is required.
   if (CurTok != tok_identifier)
     return LogError("Esperado identificador após var.");
+
+  
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true; //TODO: set self per VarName instead.
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    getNextToken();
+  }
 
   while (true) {
     std::string Name = IdentifierStr;
@@ -2203,10 +2221,18 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
       return LogError("Esperado um ou mais identificadores após var.");
   }
 
+  auto aux = std::make_unique<StrExprAST>(std::move(VarNames));
+
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+  
+
   if (CurTok==tok_space)
     getNextToken();
 
-  return std::make_unique<StrExprAST>(std::move(VarNames));
+
+  return aux;
 }
 
 
@@ -3357,7 +3383,7 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
     
     std::unique_ptr<ExprAST> Init = nullptr;
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "Conv2d";
+    functionVars[Name] = "ConvForward2d";
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -3475,7 +3501,7 @@ static std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
     
     std::unique_ptr<ExprAST> Init = nullptr;
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "MaxPool2d";
+    functionVars[Name] = "MaxPoolForward2d";
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -3587,7 +3613,7 @@ static std::unique_ptr<ExprAST> ParseBatchNorm2dExpr() {
     
     std::unique_ptr<ExprAST> Init = nullptr;
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "BatchNorm2d";
+    functionVars[Name] = "BatchNormForward2d";
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -4103,7 +4129,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
 
   while (CurTok != ')')
   {
-    type="no";
+    type="str";
     if (IdentifierStr=="t")
       type="tensor";
     if (IdentifierStr=="c")
@@ -4121,10 +4147,12 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
 
       if (type=="float")
         floatVars.push_back(IdentifierStr);
-      if (type=="tensor")
+      else if (type=="tensor")
         tensorVars.push_back(IdentifierStr);
-      if (type=="function")
-        functionVars[IdentifierStr] = "Conv2d";
+      else if (type=="function")
+        functionVars[IdentifierStr] = "ConvForward2d";
+      else
+        strVars.push_back(IdentifierStr);
       
       getNextToken(); // eat arg name
     }
@@ -4265,7 +4293,7 @@ static ExitOnError ExitOnErr;
 
 // Vars
 static std::map<std::string, Value *> NamedValues;
-static std::map<std::string, AllocaInst *> NamedStrs;
+static std::map<std::string, char *> NamedStrs;
 static std::map<std::string, AllocaInst *> NamedStrVecs;
 static std::map<std::string, AllocaInst *> NamedFloatVecs;
 static std::map<std::string, std::vector<char *>> ClassStrVecs;
@@ -4273,7 +4301,7 @@ static std::map<std::string, std::vector<float>> ClassFloatVecs;
 static std::map<std::string, float> NamedClassValues;
 static std::map<std::string, std::string> NamedObjects;
 
-
+static std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
 
 
 // Aux to not lose pointers
@@ -4938,6 +4966,8 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   bool include_scope = GetSolverIncludeScope();
   Value *var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
 
+  
+
 
   if(Names.size()>1)
     for (int i=0; i<Names.size()-1;i++)
@@ -4955,7 +4985,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                                           {var_name, first_arg});
         else
         {
-          if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name)&&include_scope)
+          if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name||Type=="str")&&include_scope)
             var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                           {var_name, scope_str});
         }
@@ -4987,9 +5017,10 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     }
 
   if(Names.size()==1)// Concat scope only
-    if((Type=="object"||Type=="tensor"||Type=="float")&&include_scope)
+    if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str")&&include_scope)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, scope_str});
+
 
 
   name = Builder->CreateGlobalString(std::get<0>(Names[Names.size()-1]));
@@ -5007,6 +5038,8 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                                       {var_name, _idx});
   }
 
+
+  
   
   return var_name;
 }
@@ -5754,8 +5787,17 @@ extern "C" void FreeChar(char *_char) {
 }
 
 
+extern "C" char *CopyString(char *in_str)
+{
+  char* copied = (char*)malloc(strlen(in_str) + 1);
+  strcpy(copied, in_str);
+
+  return copied;
+}
+
 extern "C" char * ConcatStr(char *lc, char *rc)
 {
+  //std::cout << "Concat strings " << lc << " & " << rc << "\n";
   std::string l = lc;
   std::string r = rc;
 
@@ -5841,6 +5883,47 @@ extern "C" char * ConcatNumToStrFree(char *lc, float r)
   return result_cstr;
 }
 
+extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
+{
+  
+  std::vector<std::pair<std::string, std::string>> scope_vars = ScopeVarsToClean[scope];
+  
+  for(auto &pair : scope_vars)
+    if (pair.first==name)
+    {
+      delete[] name;
+      return;
+    }
+      
+
+  ScopeVarsToClean[scope].push_back(std::make_pair(name, type));
+  
+  delete[] name;
+}
+extern "C" void CleanScopeVars(char *scope)
+{
+  
+  
+  std::vector<std::pair<std::string, std::string>> scope_vars = ScopeVarsToClean[scope];
+
+  for(auto &pair : scope_vars)
+  {
+    if (pair.second=="str")
+    {
+      auto it = NamedStrs.find(pair.first);
+      if (it != NamedStrs.end()) {
+        delete[] it->second;
+        NamedStrs.erase(it);
+      }
+    }
+  }
+  
+
+
+  delete[] scope;
+}
+
+
 extern "C" char * RandomStrOnDemand()
 {
 
@@ -5872,17 +5955,19 @@ extern "C" void StoreArgOnDemand(char *name, float value){
 
 extern "C" float StoreStrOnDemand(char *name, char * value){
   
+  NamedStrs[name] = CopyString(value);
+  delete[] name;
 
-  //std::cout << "STORING " << object_var_name << " on demand.\n";
-  
-
-  //TODO: Correct obj attr String Storing
-
-  //NamedClassValues[_self + object_var_name] = Builder->CreateGlobalString(value);
-
-  std::cout << "StoreStrOnDemand not implemented yet.\n";
   return 0;
 }
+extern "C" void *LoadStrOnDemand(char *name){
+  
+  char *ret = CopyString(NamedStrs[name]);
+  delete[] name;
+
+  return ret;
+}
+
 
 extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as StrVec type.\n";
@@ -6004,8 +6089,6 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   std::cout << "\nVARIABLE EXPR CODEGEN: " << Name << "\n";
   for (const auto &entry : NamedStrVecs)
     std::cout << "NamedStrVec: " << entry.first << "\n";
-  for (const auto &entry : NamedStrs)
-    std::cout << "NamedStr: " << entry.first << "\n";
   for (const auto &entry : NamedValues)
     std::cout << "NamedValues: " << entry.first << "\n";
   for (const auto &entry : NamedClassValues)
@@ -6073,7 +6156,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
   } else if (type=="str") {
 
-    //std::cout << "\nVariable Str " << Name << " Codegen. \nNamedStrs.count(Name): " << NamedStrs.count(Name) <<"\n";
+    
     //std::cout << "Type: " << Type << "\n\n";
 
     for (const auto &entry : NamedTensorsT)
@@ -6084,9 +6167,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     }
     
 
-    V = NamedStrs[Name];
-    
-    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
+    V = Builder->CreateCall(TheModule->getFunction("LoadStrOnDemand"), {var_name});
 
     //if (!seen_var_attr)
     //  Builder->CreateCall(TheModule->getFunction("PrintStr"), {V});
@@ -10862,18 +10943,11 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     } else if (LType=="str") {
 
-      //std::cout << "ATTRIBUTING TO STRING: " << Lname << "\n";
-      
-      if(LHS->GetSelf())
-        Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
+
+      Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
                                                   {Lvar_name,
                                                    Val});
-      else
-      {
-        Value *Variable = NamedStrs[Lname];
-        Builder->CreateStore(Builder->CreateCall(TheModule->getFunction("CopyString"), {Val}),
-                             Variable);
-      }
+                                                   
 
     } else if (LType=="str_vec") {
 
@@ -11713,29 +11787,45 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
-      InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
+      InitVal = Builder->CreateGlobalString("");
     }
 
 
-    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
-    Builder->CreateStore(InitVal, Alloca);
+
       
     // Remember the old variable binding so that we can restore the binding when
     // we unrecurse.
-    //std::cout << "STRING CODEGEN FOR " << VarName << "\n";
-    //OldBindings.push_back(NamedStrs[VarName]);
+    
+    Value *var_name, *scopeless_name;
+    var_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {Builder->CreateGlobalString(VarName)});
+    
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
+                                            {first_arg, var_name});
+    //scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+    //                                        {var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
+                                            {scope_str, var_name});
+    
 
     
-    // Remember this binding.
-    NamedStrs[VarName] = Alloca;
-    
+    Builder->CreateCall(TheModule->getFunction("AddToScopeCleanList"),
+                        {scope_str,
+                         Builder->CreateCall(TheModule->getFunction("CopyString"), {var_name}),
+                         Builder->CreateGlobalString("str") //stack?
+                        });
+
+                        
+    Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
+                                                  {var_name,
+                                                   InitVal});
   }
-
-
-
-
-  //for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
-  //  NamedStrs[VarNames[i].first] = OldBindings[i];
 
   
   return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -12268,12 +12358,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
 
   
+
+  //TODO: Solve scope_str discontinuity on async functions
   if (starts_with(functionName.c_str(), "__async_"))
-  {
-    //TODO: Solve scope_str discontinuity on async functions
     scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-    
-  }
 
 
   //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
@@ -12296,16 +12384,14 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                                     {_pre_dot_str});
                                                     
-
-
     first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                 {previous_scope, first_arg});
-    
-    
   }
   
   
   
+
+
 
   int target_args_size = Args.size();
   std::vector<Value *> ArgsV;
@@ -12319,6 +12405,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     if (not_coding_language_method)
       tgt_function = Class+tgt_function;
+
 
 
     if (!is_self_of_nested_function && not_coding_language_method)
@@ -12382,9 +12469,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
 
-  
+  bool has_scope = false;
   if (!(CalleeOverride!="none" || in_str(Callee, native_fn)))
   {
+    has_scope = true;
     //if (starts_with(functionName.c_str(), "__async_"))
     //  scope_name = Builder->CreateGlobalString("threaded_");
     //else 
@@ -12479,66 +12567,39 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   else
   {
     //std::cout << "Override: " << CalleeOverride << "\n";
-    if (CalleeOverride=="Conv2d")
+    if (CalleeOverride=="ConvForward2d"||CalleeOverride=="MaxPoolForward2d"||CalleeOverride=="BatchNormForward2d")
     {
-      CalleeF = getFunction("ConvForward2d");
-      Value *conv_name = Builder->CreateGlobalString(tgt_function);
-      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
-      ArgsV.push_back(conv_name);
-      ArgsV.push_back(is_attr);
-      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-
-
-    }
-    if (CalleeOverride=="MaxPool2d")
-    {
-      CalleeF = getFunction("MaxPoolForward2d");
+      CalleeF = getFunction(CalleeOverride);
       Value *conv_name = Builder->CreateGlobalString(tgt_function);
       Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
       ArgsV.push_back(conv_name);
       ArgsV.push_back(is_attr);
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
     }
-    if (CalleeOverride=="BatchNorm2d")
+    else if (CalleeOverride=="SplitString")
     {
-      CalleeF = getFunction("BatchNormForward2d");
-      Value *conv_name = Builder->CreateGlobalString(tgt_function);
-      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
-      ArgsV.push_back(conv_name);
-      ArgsV.push_back(is_attr);
-      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-    }
-    if (floatFunctions.count(tgt_function)>0)
-      ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
-    if (CalleeOverride=="SplitString")
-    {
-      Value *V = NamedStrs[PreDot];
+      Value *V = Builder->CreateCall(TheModule->getFunction("LoadStrOnDemand"), 
+                                     {Builder->CreateGlobalString(PreDot)});
       
       ret = Builder->CreateCall(getFunction("SplitString"), 
-                          {Builder->CreateLoad(int8PtrTy, V), ArgsV[1]});
+                          {V, ArgsV[1]});
 
     }
-    if (CalleeOverride=="SplitStringIndexate")
-    {
-      Value *V = NamedStrs[PreDot];
-      
-      ret = Builder->CreateCall(getFunction("SplitStringIndexate"), 
-                          {Builder->CreateLoad(int8PtrTy, V), ArgsV[1], ArgsV[2]});
-
-    }
-    if (CalleeOverride=="ToFloat")
+    else if (CalleeOverride=="ToFloat")
     {
       std::cout << "\n\nTO FLOAT HAS TYPE " << Args[0]->GetType() << "\n";
       if (Args[0]->GetType()=="str")
         ret = Builder->CreateCall(getFunction("StrToFloat"), 
                           {ArgsV[0]});
 
-    }
+    } else
+      ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
   }
 
   
   Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
-  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
+  //if (has_scope)
+  //  Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
   
   return ret;
 }
@@ -12611,9 +12672,9 @@ extern "C" void *SplitString(char *self, char *pattern)
 
 // INDEX METHODS
 
-extern "C" char *SplitStringIndexate(char *self, char *pattern, float idx)
+extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
 {
-
+  char *self = NamedStrs[name];
   //std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
 
   
@@ -12635,8 +12696,8 @@ extern "C" char *SplitStringIndexate(char *self, char *pattern, float idx)
 
   //std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
  
+  delete[] name;
   return splits[idx];
-    
 }
 
 
@@ -12694,15 +12755,6 @@ extern "C" float StrToFloat(char *in_str)
 
 
 
-// Change the pointer for a new memory location, because it was changing
-// alognswith the global variable FirstArg
-extern "C" char *CopyString(char *in_str)
-{
-  char* copied = (char*)malloc(strlen(in_str) + 1);
-  strcpy(copied, in_str);
-
-  return copied;
-}
 
 extern "C" void objAttr_var_from_var(char *LName, char *RName)
 {
@@ -12899,6 +12951,15 @@ Function *FunctionAST::codegen() {
 
       Builder->CreateCall(TheModule->getFunction("StoreArgOnDemand"),
                                                   {var_name, &Arg});
+    } else if (in_str(arg_name, strVars))
+    {
+      Value *var_name = Builder->CreateGlobalString(arg_name);
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                    {scope_str, var_name});
+
+
+      Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
+                                                  {var_name, &Arg});
     }
     else if (!in_str(arg_name, tensorVars))
     {
@@ -12939,11 +13000,13 @@ Function *FunctionAST::codegen() {
 
 
   
+  
+
   //if(has_self)
   //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {first_arg, aux});
   
   if(has_scope)
-    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
+    Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
   
   //if(has_previous_scope)
   //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {previous_scope, aux});
@@ -13891,6 +13954,15 @@ FunctionType *unbugTy = FunctionType::get(
   );
   TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
 
+  
+  //
+  FunctionType *LoadStrOnDemandTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("LoadStrOnDemand", LoadStrOnDemandTy);
+
 
   //
   FunctionType *StoreStrVecOnDemandTy = FunctionType::get(
@@ -14117,6 +14189,24 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("ConcatNumToStrFree", ConcatNumToStrFreeTy);
+
+  
+  //
+  FunctionType * AddToScopeCleanListTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("AddToScopeCleanList", AddToScopeCleanListTy);
+
+  
+  //
+  FunctionType *CleanScopeVarsTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("CleanScopeVars", CleanScopeVarsTy);
   
 
   //
