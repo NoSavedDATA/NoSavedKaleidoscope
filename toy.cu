@@ -367,6 +367,7 @@ enum BackwardTypes {
   clip_op = 22,
   gpu_op = 23,
   cpu_op = 24,
+  equal_op = 27,
 };
 
 int nn_mode=training_mode;
@@ -7324,6 +7325,15 @@ __global__ void sub_forward(float *y, const float *x,
         y[i] = x[i] - w[i];
 }
 
+
+__global__ void equal_forward(float *y, const float *x,
+                            const float *w, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = (x[i]==w[i]) ? 1.0f : 0.0f;
+}
+
 extern "C" Tensor *CudaAdd(int is_forward_func,
                           Tensor *tensor_x, Tensor *tensor_w) {
 
@@ -7400,13 +7410,45 @@ extern "C" Tensor *CudaSub(int is_forward_func,
   sub_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
   
   
-
-
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
   new_tensor->AttrNodes(tensor_x, tensor_w, sub_op);
   return new_tensor;
 }
 
+
+extern "C" Tensor *CudaEqual(int is_forward_func,
+                          Tensor *tensor_x, Tensor *tensor_w) {
+
+  //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
+    
+  std::vector<float> Ldims, Rdims;
+  Ldims = tensor_x->dims;
+  Rdims = tensor_w->dims;
+  float *device_x = tensor_x->tensor_ptr;
+  float *device_w = tensor_w->tensor_ptr;
+
+
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
+  float dims_prod = tensor_x->dims_prod;
+
+
+
+
+  float* device_y;
+  cudaCheck(cudaMalloc(&device_y, dims_prod * sizeof(float)));
+
+
+
+  int grid_size = dims_prod;
+  int block_size = 32;
+  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  equal_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
+  
+  
+  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  new_tensor->AttrNodes(tensor_x, tensor_w, equal_op);
+  return new_tensor;
+}
 
 
 __global__ void hadamard_kernel(float *y, const float *x,
@@ -9851,8 +9893,8 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C)
 float *MaxPool2d::Forward(float *tensor, int H, int W, int B, int C)
 {
   // Initialize descriptors.
-  std::cout << "\nPool2d Forward with H: " << H << " W: " << W << "\n";
-  std::cout << "Type: " << Type << "\n";
+  //std::cout << "\nPool2d Forward with H: " << H << " W: " << W << "\n";
+  //std::cout << "Type: " << Type << "\n";
 
 
   if (H != this->H || W != this->W || B != this->B || C != this->C)
@@ -9965,7 +10007,7 @@ void maxpool2d_backward(float *inp,  float *out,
                      float *dinp,
                      float *dout, std::string conv_name)
 {
-  std::cout << "maxpool2d_backward of " << conv_name << "\n";
+  //std::cout << "maxpool2d_backward of " << conv_name << "\n";
   std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
 
   conv->Backward(inp, out, dinp, dout);
@@ -10715,6 +10757,9 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
     return Builder->CreateCall(TheModule->getFunction("CudaSub"),
                                     {is_forward_func,
                                      LtensorPtr, RtensorPtr});
+  case tok_equal:
+    return Builder->CreateCall(TheModule->getFunction("CudaEqual"),
+                               {is_forward_func, LtensorPtr, RtensorPtr}, "cudaequal");
   case ':':
     return LtensorPtr;
   default:
@@ -13244,6 +13289,17 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *CudaEqualTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getInt32Ty(*TheContext),
+       int8PtrTy,
+       int8PtrTy}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CudaEqual", CudaEqualTy);
+
+
+  //
   FunctionType *CudaHadamardTy = FunctionType::get(
       int8PtrTy,
       {Type::getInt32Ty(*TheContext),
@@ -14636,7 +14692,7 @@ int main() {
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
   loss_ops = {cross_entropy_op};
-  gradless_ops = {onehot_op, max_op, argmax_op};
+  gradless_ops = {onehot_op, max_op, argmax_op, equal_op};
 
   // Install standard binary operators.
   // 1 is lowest precedence.
