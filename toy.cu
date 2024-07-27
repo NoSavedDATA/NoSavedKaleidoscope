@@ -220,7 +220,6 @@ bool in_float_vec(float value, const std::vector<float>& list) {
 bool in_float_ptr_vec(float *value, const std::vector<float *>& list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }
-
 std::vector<std::string> concat_str_vec(std::vector<std::string> l, std::vector<std::string>r)
 {
   std::vector<std::string> concatenated_vectors = l;
@@ -354,7 +353,9 @@ enum BackwardTypes {
   tanh_op = 10,
   cross_entropy_op = 11,
   add_op = 12,
+  sub_op = 25,
   hadamard_op = 13,
+  div_op=26,
   softmax_op = 14,
   onehot_op = 15,
   view_op = 16,
@@ -2446,6 +2447,12 @@ Tensor *createBackward(std::string name, Tensor *tensor) {
     new_tensor->AttributionBackwardNode(name, tensor);
     return new_tensor;
 }
+
+
+bool in_tensor_ptr_vec(Tensor *value, const std::vector<Tensor *>& list) {
+    return std::find(list.begin(), list.end(), value) != list.end();
+}
+
 
 
 //global
@@ -5902,8 +5909,8 @@ extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
 }
 extern "C" void CleanScopeVars(char *scope)
 {
-  
-  
+  //TODO: this leads to segmentation fault with 3+ workers. 
+  /*
   std::vector<std::pair<std::string, std::string>> scope_vars = ScopeVarsToClean[scope];
 
   for(auto &pair : scope_vars)
@@ -5917,10 +5924,9 @@ extern "C" void CleanScopeVars(char *scope)
       }
     }
   }
-  
+  */
 
-
-  delete[] scope;
+  //delete[] scope;
 }
 
 
@@ -7319,19 +7325,29 @@ __global__ void sub_forward(float *y, const float *x,
 }
 
 extern "C" Tensor *CudaAdd(int is_forward_func,
-                          Tensor tensor_x, Tensor tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
   std::vector<float> Ldims, Rdims;
-  Ldims = tensor_x.dims;
-  Rdims = tensor_w.dims;
-  float *device_x = tensor_x.tensor_ptr;
-  float *device_w = tensor_w.tensor_ptr;
+  Ldims = tensor_x->dims;
+  Rdims = tensor_w->dims;
+  float *device_x = tensor_x->tensor_ptr;
+  float *device_w = tensor_w->tensor_ptr;
 
+
+  if (Ldims!=Rdims)
+  {
+    LogErrorS("Tried to add tensors of different dimenstions.");
+    std::cout << "   Left tensor dims " << "\n   ";
+    PrintDims(Ldims);
+    std::cout << "\n   Right tensor dims " << "\n   ";
+    PrintDims(Rdims);
+    std::cout << "\n\n";
+  }
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
-  float dims_prod = tensor_x.dims_prod;
+  float dims_prod = tensor_x->dims_prod;
 
 
 
@@ -7348,49 +7364,27 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
   
 
 
-  
-  if (is_forward_func)
-  {
-    float *inp, *out;
-    float B  = linear_layer_dims[0];
-    float C  = linear_layer_dims[1];
-    float OC = Rdims[0];
-        
 
-    //oom
-    cudaCheck(cudaMalloc(&inp, dims_prod * sizeof(float)));
-    cudaCheck(cudaMalloc(&out, dims_prod * sizeof(float)));
-    cudaMemcpy(inp, device_x, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
-    cudaMemcpy(out, device_y, dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
-
-    BackwardNode back_node;
-    back_node.NewNode(B, C, OC, B*C, B*C, inp, device_w, out,
-                                            "add", tensor_x.scopeless_name, tensor_w.scopeless_name);
-
-    todo_backwards.push_back(back_node);
-  }
-  
-
-
-  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
+  new_tensor->AttrNodes(tensor_x, tensor_w, add_op);
   return new_tensor;
 }
 
 
 extern "C" Tensor *CudaSub(int is_forward_func,
-                          Tensor tensor_x, Tensor tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
   std::vector<float> Ldims, Rdims;
-  Ldims = tensor_x.dims;
-  Rdims = tensor_w.dims;
-  float *device_x = tensor_x.tensor_ptr;
-  float *device_w = tensor_w.tensor_ptr;
+  Ldims = tensor_x->dims;
+  Rdims = tensor_w->dims;
+  float *device_x = tensor_x->tensor_ptr;
+  float *device_w = tensor_w->tensor_ptr;
 
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
-  float dims_prod = tensor_x.dims_prod;
+  float dims_prod = tensor_x->dims_prod;
 
 
 
@@ -7405,33 +7399,11 @@ extern "C" Tensor *CudaSub(int is_forward_func,
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
   sub_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
   
-
-
-  /*
-  if (is_forward_func)
-  {
-    float *inp, *out;
-    float B  = linear_layer_dims[0];
-    float C  = linear_layer_dims[1];
-    float OC = Rdims[0];
-        
-
-    //oom
-    cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
-    cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
-    cudaMemcpy(inp, device_x, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
-    cudaMemcpy(out, device_y, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
-
-    todo_backwards.push_back(std::make_tuple(B, C, OC,
-                                             B*C, C*OC, inp, device_w, out,
-                                            "matmul", tensor_w.name));
-  }
-  */
-
   
 
 
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  new_tensor->AttrNodes(tensor_x, tensor_w, sub_op);
   return new_tensor;
 }
 
@@ -7445,17 +7417,17 @@ __global__ void hadamard_kernel(float *y, const float *x,
         y[i] = x[i] * w[i];
 }
 extern "C" Tensor *CudaHadamard(int is_forward_func,
-                          Tensor tensor_x, Tensor tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w) {
 
   //std::cout << "      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
   std::vector<float> Ldims, Rdims;
-  Ldims = tensor_x.dims;
-  Rdims = tensor_w.dims;
-  float *device_x = tensor_x.tensor_ptr;
-  float *device_w = tensor_w.tensor_ptr;
+  Ldims = tensor_x->dims;
+  Rdims = tensor_w->dims;
+  float *device_x = tensor_x->tensor_ptr;
+  float *device_w = tensor_w->tensor_ptr;
 
-  float dims_prod = tensor_x.dims_prod;
+  float dims_prod = tensor_x->dims_prod;
 
 
   if (Ldims!=Rdims) //Then broadcast
@@ -7523,49 +7495,27 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
   //PrintTensorF(device_y, 2, 2);
 
 
-  /*
-  if (is_forward_func)
-  {
-    float *inp, *out;
-    float B  = linear_layer_dims[0];
-    float C  = linear_layer_dims[1];
-    float OC = Rdims[0];
-        
 
-    //oom
-    cudaCheck(cudaMalloc(&inp, input_dims_prod * sizeof(float)));
-    cudaCheck(cudaMalloc(&out, resultingDimsProd * sizeof(float)));
-    cudaMemcpy(inp, device_x, input_dims_prod * sizeof(float), cudaMemcpyDeviceToDevice);
-    cudaMemcpy(out, device_y, resultingDimsProd * sizeof(float), cudaMemcpyDeviceToDevice);
-
-    todo_backwards.push_back(std::make_tuple(B, C, OC,
-                                             B*C, C*OC, inp, device_w, out,
-                                            "matmul", tensor_w.name));
-  }
-  */
-
-  
-
-
-  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
+  new_tensor->AttrNodes(tensor_x, tensor_w, hadamard_op);
   return new_tensor;
 }
 
 
 
 extern "C" void *CudaDiv(int is_forward_func,
-                          Tensor tensor_x, Tensor tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w) {
   
   //std::cout << "TENSOR TENSOR DIV" << "\n";
   
   std::vector<float> Ldims, Rdims;
-  Ldims = tensor_x.dims;
-  Rdims = tensor_w.dims;
-  float *device_x = tensor_x.tensor_ptr;
-  float *device_w = tensor_w.tensor_ptr;
+  Ldims = tensor_x->dims;
+  Rdims = tensor_w->dims;
+  float *device_x = tensor_x->tensor_ptr;
+  float *device_w = tensor_w->tensor_ptr;
   float dims_prod, R_dims_prod;
-  dims_prod = tensor_x.dims_prod;
-  R_dims_prod = tensor_w.dims_prod;
+  dims_prod = tensor_x->dims_prod;
+  R_dims_prod = tensor_w->dims_prod;
 
 
   if (Ldims!=Rdims) //Then broadcast
@@ -7637,6 +7587,7 @@ extern "C" void *CudaDiv(int is_forward_func,
   tensor_div<<<grid_size, block_size, shared_mem_size>>>(device_w, device_x, device_y, dims_prod);
 
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  new_tensor->AttrNodes(tensor_x, tensor_w, div_op);
   return new_tensor;
 }
 
@@ -9336,7 +9287,7 @@ void batchnormd2d_backward(float *inp,
                      float *dout, std::string conv_name)
 {
 
-  std::cout << "batchnorm2d_backward for " << conv_name << "\n";
+  //std::cout << "batchnorm2d_backward for " << conv_name << "\n";
   std::unique_ptr<BatchNorm2d> conv = std::move(NamedBatchNorm2d[conv_name]);
 
   conv->Backward(inp, dinp, dw, db, dout);
@@ -10155,11 +10106,17 @@ void safeCudaFree(void** ptr)
 
 std::map<std::string, float *> var_to_grad;
 std::vector<float *> backprop_tensors_to_free;
+std::vector<Tensor *> backprop_Tensors_to_free;
 
 void to_free(float *tensor_ptr)
 {
   if(!in_float_ptr_vec(tensor_ptr, backprop_tensors_to_free))
     backprop_tensors_to_free.push_back(tensor_ptr);
+}
+void to_free_tensor(Tensor *tensor_ptr)
+{
+  if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_free))
+    backprop_Tensors_to_free.push_back(tensor_ptr);
 }
 
 void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
@@ -10200,6 +10157,9 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
       if(var_to_grad.count(tensor_name)>0)
       {
+        
+        
+        
         float *acc_y = var_to_grad[tensor_name];
         
         int grid_size, block_size, shared_mem_size;
@@ -10207,6 +10167,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
         grid_size = grid_block_mem_sizes[0];
         block_size = grid_block_mem_sizes[1];
 
+        
         add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
         to_free(device_dy);
 
@@ -10218,7 +10179,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
       
       
 
-      delete back_node;
+      to_free_tensor(back_node);
       return;
     }
 
@@ -10234,7 +10195,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     
 
     
-
+    //std::cout << "Acquire info"  << "\n";
 
     tensor_name = back_node->L_Node->scopeless_name;
 
@@ -10246,6 +10207,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     //std::cout << "Check null" << "\n";
     if(back_node->R_Node!=nullptr)
     {
+      //std::cout << "not null " << "\n";
       param_name  = back_node->R_Node->name;
       w = back_node->R_Node->tensor_ptr;
       w_size = back_node->R_Node->dims_prod;
@@ -10255,50 +10217,67 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     }
 
 
+    //std::cout << "malloc device w" << "\n";
+
     // weight gradient
     if(!in_int(op, loss_ops)&&back_node->R_Node!=nullptr)
     {
-      float *new_grad_ptr;
-      if (w!=nullptr&&op!=hadamard_op&&op!=add_op)
+      //std::cout << "Is weight: " << back_node->R_Node->weight << "\n";
+      if(back_node->R_Node->weight)
       {
-        dw = make_zeros_float(w_size);
-        //std::cout << "weight of size " << w_size << "\n";
-        if (NamedParamGrads[param_name]==nullptr)
+        float *new_grad_ptr;
+        if (w!=nullptr&&op!=hadamard_op&&op!=add_op)
         {
-          cudaCheck(cudaMalloc(&new_grad_ptr, w_size*sizeof(float)));
-          NamedParamGrads[param_name] = new_grad_ptr;
-        } 
-      
-        device_dw = NamedParamGrads[param_name];
-        cudaCheck(cudaMemcpy(device_dw, dw, w_size*sizeof(float), cudaMemcpyHostToDevice));
-        delete[] dw;
-      }
-
-      if (b!=nullptr&&op!=hadamard_op&&op!=add_op)
-      {
-        db = make_zeros_float(b_size);
-        bias_name = param_name+"_bias";
-
-        if (NamedParamGrads[bias_name]==nullptr)
-        {
-          cudaCheck(cudaMalloc(&new_grad_ptr, b_size*sizeof(float)));
-          NamedParamGrads[bias_name] = new_grad_ptr;
-        }
+          dw = make_zeros_float(w_size);
+          //std::cout << "weight of size " << w_size << "\n";
+          if (NamedParamGrads[param_name]==nullptr)
+          {
+            cudaCheck(cudaMalloc(&new_grad_ptr, w_size*sizeof(float)));
+            NamedParamGrads[param_name] = new_grad_ptr;
+          } 
         
-        device_db = NamedParamGrads[bias_name];
-        cudaCheck(cudaMemcpy(device_db, db, b_size*sizeof(float), cudaMemcpyHostToDevice));
-        delete[] db;
+          device_dw = NamedParamGrads[param_name];
+          cudaCheck(cudaMemcpy(device_dw, dw, w_size*sizeof(float), cudaMemcpyHostToDevice));
+          delete[] dw;
+        }
+
+        if (b!=nullptr&&op!=hadamard_op&&op!=add_op)
+        {
+          db = make_zeros_float(b_size);
+          bias_name = param_name+"_bias";
+
+          if (NamedParamGrads[bias_name]==nullptr)
+          {
+            cudaCheck(cudaMalloc(&new_grad_ptr, b_size*sizeof(float)));
+            NamedParamGrads[bias_name] = new_grad_ptr;
+          }
+          
+          device_db = NamedParamGrads[bias_name];
+          cudaCheck(cudaMemcpy(device_db, db, b_size*sizeof(float), cudaMemcpyHostToDevice));
+          delete[] db;
+        }
+      } else {
+        if(op!=add_op)
+        {
+          dw = make_zeros_float(w_size);
+          cudaCheck(cudaMalloc(&device_dw, w_size*sizeof(float)));
+          cudaCheck(cudaMemcpy(device_dw, dw, w_size*sizeof(float), cudaMemcpyHostToDevice));
+          delete[] dw;
+        }
       }
     }
     
 
     //std::cout << "malloc device_dx " << "\n";
 
-    // input gradient    
-    dinp = make_zeros_float(x_size);
-    cudaCheck(cudaMalloc(&device_dx, x_size*sizeof(float)));
-    cudaCheck(cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice));
-    delete[] dinp;
+    // input gradient
+    if(op!=add_op)
+    {   
+      dinp = make_zeros_float(x_size);
+      cudaCheck(cudaMalloc(&device_dx, x_size*sizeof(float)));
+      cudaCheck(cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice));
+      delete[] dinp;
+    }
 
     //std::cout << "malloc done"  << "\n";
 
@@ -10348,6 +10327,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
         CrossEntropyBackward(inp, w, B, C, device_dx);
         break;
       case add_op:
+        device_dx = device_dy;
+        device_dw = device_dy;
+        //cudaCheck(cudaMemcpy(device_dx, device_dy, x_size*sizeof(float), cudaMemcpyDeviceToDevice));
+        //cudaCheck(cudaMemcpy(device_dw, device_dy, w_size*sizeof(float), cudaMemcpyDeviceToDevice));
         break;
       default:
         std::string _error = "The operation "+std::to_string(op)+" does not yet have the backward implementation";
@@ -10364,7 +10347,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
   if (in_int(op, loss_ops))
   {
-    to_free(back_node->R_Node->tensor_ptr);
+    //to_free(back_node->R_Node->tensor_ptr);
     delete back_node->R_Node;
     back_node->R_Node = nullptr;
   }
@@ -10382,7 +10365,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
   if(!from_gradless)
     to_free(device_dy);
 
-  delete back_node;
+  to_free_tensor(back_node);
 }
 
 
@@ -10408,7 +10391,7 @@ extern "C" float backprop()
 
     op = back_node->op;
     
-
+    
     if (op==attribution)
     {
       tensor_name = back_node->name;
@@ -10421,7 +10404,7 @@ extern "C" float backprop()
       back_node = back_node->R_Node;
     }
 
-
+    
     TraversePreOrder(back_node, device_dy, false);
   }
 
@@ -10433,7 +10416,11 @@ extern "C" float backprop()
   for(float *tensor_ptr : backprop_tensors_to_free)
     cudaCheck(cudaFree(tensor_ptr));
 
+  for(Tensor *tensor : backprop_Tensors_to_free)
+    delete tensor;
+
   backprop_tensors_to_free.clear();
+  backprop_Tensors_to_free.clear();
   var_to_grad.clear();
   return 0;
 }
