@@ -4720,14 +4720,14 @@ void move_to_pool(float dims_prod, float *tensor_ptr)
   std::vector<float *> tensors_in_pool = TensorPool[dims_prod];
   if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
   {
-    if(tensors_in_pool.size()<3)
+    if(tensors_in_pool.size()<60)
       TensorPool[dims_prod].push_back(tensor_ptr);
     else
     {
       std::cout << "FREEING TENSOR WITH dims prod:" << dims_prod << "\n";
       cudaCheck(cudaFree(tensor_ptr)); 
     }
-  }
+  }  
 }
 
 float *get_from_pool(float dims_prod)
@@ -4741,7 +4741,7 @@ float *get_from_pool(float dims_prod)
     {
       std::cout << "GETTING FROM POOL: " << dims_prod << "\n";
       tensor_ptr = tensors_in_pool.back();
-      tensors_in_pool.pop_back();
+      TensorPool[dims_prod].pop_back();
       return tensor_ptr;
     }
   }
@@ -6740,14 +6740,9 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
     //std::cout << "attributing op" << "\n";
     if(nn_mode==eval_mode)
     {
-      /*
       move_to_pool(tgt_tensor->dims_prod, tgt_tensor->tensor_ptr);
       tgt_tensor->AttrTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod);
       delete tensor;
-      */
-      std::string scopeless_name = tgt_tensor->scopeless_name;
-      tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
-      tgt_tensor->scopeless_name = scopeless_name;
     } else {
       Tensor *attr_tensor;
       attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
@@ -6758,6 +6753,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
       tgt_tensor->scopeless_name = scopeless_name;
     } 
   } else { // Copy incoming tensor to preserve it
+    
     if(tensor->op==tensor_leaf||nn_mode==eval_mode)
     {
       if(tgt_tensor->dims != tensor->dims)
@@ -6792,9 +6788,8 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
       tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
       tgt_tensor->scopeless_name = scopeless_name;
     }
-    //OP: copy dy
+    //OP: copy dy 
   }
-  
 
   NamedTensorsT[tensor_name] = tgt_tensor;
   return 0;
@@ -6806,19 +6801,23 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor)
 {
   //std::cout << "\nAttrTensorNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
   
-
   std::vector<float> new_dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
   cudaCheck(cudaGetLastError());
 
 
-  float *new_tensor;
-  cudaMalloc(&new_tensor, dims_prod*sizeof(float));
+  
+
+
+  float *new_tensor = get_from_pool(dims_prod);
+  //cudaMalloc(&new_tensor, dims_prod*sizeof(float));
   cudaCheck(cudaMemcpy(new_tensor, tensor->tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
 
+
   Tensor *tgt_tensor = NamedTensorsT[tensor_name];
-  cudaCheck(cudaFree(tgt_tensor->tensor_ptr));
+  move_to_pool(tgt_tensor->dims_prod, tgt_tensor->tensor_ptr);
+  //cudaCheck(cudaFree(tgt_tensor->tensor_ptr));
   tgt_tensor->AttrTensor(new_tensor, new_dims, dims_prod);
   
 
@@ -7377,6 +7376,12 @@ __global__ void set_to_zero_kernel(float *y, int dims_prod) {
     if (i < dims_prod)
         y[i] = 0;
 }
+__global__ void set_to_one_kernel(float *y, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = 0;
+}
 __global__ void add_forward(float *y, const float *x,
                             const float *w, int dims_prod) {
 
@@ -7766,16 +7771,18 @@ extern "C" void *onehot(Tensor tensor, float num_classes)
   int B = DimsProd(dims);
   int C = (int)num_classes;
 
-  float *probs;
-
-  cudaMalloc(&probs, B*C*sizeof(float));
-  cudaMemset(probs, 0, B*C*sizeof(float));
   
   int grid_size, block_size, shared_mem_size; 
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = grid_block_mem_sizes[2];
+
+
+
+  float *probs = get_from_pool(B*C);
+  set_to_zero_kernel<<<grid_size, block_size>>>(probs, B*C);
+
 
   onehot_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, probs, B, C);
   //grid_size = ceil_div(B*C, block_size);
@@ -8970,20 +8977,20 @@ extern "C" void *relu(Tensor *tensor)
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
+  float dims_prod = tensor->dims_prod;
 
-  float N = DimsProd(dims);
-  float block_size = 32;
-  const int grid_size = ceil_div(N, block_size);
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
 
 
-  float *y = get_from_pool(N);
-  set_to_zero_kernel<<<grid_size, block_size>>>(y, N);
+  float *y = get_from_pool(dims_prod);
+  set_to_zero_kernel<<<grid_size, block_size>>>(y, dims_prod);
 
-  //float *y;
-  //cudaMalloc(&y, N*sizeof(float));
-  //cudaMemset(y, 0, N * sizeof(float));
 
-  relu_forward<<<grid_size, block_size>>>(tensor_ptr, y, N);
+  relu_forward<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
 
 
 
@@ -9239,11 +9246,14 @@ float *BatchNorm2d::Forward(float *tensor, int H, int W, int B, int C)
 
 
   // Forward
-  float *output;
-  float *aux = make_ones_float(B * H * W * C);
-  cudaCheck(cudaMalloc(&output, B * H * W * C * sizeof(float)));
-  cudaCheck(cudaMemcpy(output, aux, B * H * W * C * sizeof(float), cudaMemcpyHostToDevice));
-  delete[] aux;
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  float *output = get_from_pool(B * H * W * C);
+  //set_to_one_kernel<<<grid_size, block_size>>>(output, B * H * W * C);
+  
   
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
@@ -9415,7 +9425,6 @@ void batchnormd2d_backward(float *inp,
 
   NamedBatchNorm2d[conv_name] = std::move(conv);
 
-  cudaCheck(cudaGetLastError());
 }
 
 
@@ -9677,8 +9686,7 @@ float *Conv2d::Forward(float *tensor, int H, int W, int B)
 
   
   // Forward
-  float *d_output;
-  cudaCheck(cudaMalloc(&d_output, B * out_H * out_W * OC * sizeof(float)));
+  float *d_output = get_from_pool(B * out_H * out_W * OC);
 
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
@@ -9982,8 +9990,8 @@ float *MaxPool2d::Forward(float *tensor, int H, int W, int B, int C)
 
   
   // Forward
-  float *d_output;
-  cudaCheck(cudaMalloc(&d_output, B * out_H * out_W * C * sizeof(float)));
+  float *d_output = get_from_pool(B * out_H * out_W * C);
+  //cudaCheck(cudaMalloc(&d_output, B * out_H * out_W * C * sizeof(float)));
 
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
@@ -10185,7 +10193,6 @@ extern "C" float cross_entropy(Tensor *y_hat, Tensor *y)
   
   Tensor *loss_tensor = new Tensor();
 
-  //std::cout << "cross_entropy y_hat leaf " << y_hat->leaf << " y leaf " << y->leaf << "\n";
 
   loss_tensor->AttrNodes(y_hat, y, cross_entropy_op);
 
@@ -10290,8 +10297,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
         
         add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
-        //to_pool(dims_prod, device_dy);
-        to_free(device_dy);
+        to_pool(dims_prod, device_dy);
+        //to_free(device_dy);
 
       } else 
         var_to_grad[tensor_name] = device_dy;
@@ -10394,10 +10401,19 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
     // input gradient
     if(op!=add_op) {
+      int grid_size, block_size; 
+      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(x_size);
+      grid_size = grid_block_mem_sizes[0];
+      block_size = grid_block_mem_sizes[1];
+
+      device_dx = get_from_pool(x_size);
+      set_to_zero_kernel<<<grid_size, block_size>>>(device_dx, x_size);
+      /*
       dinp = make_zeros_float(x_size);
       cudaCheck(cudaMalloc(&device_dx, x_size*sizeof(float)));
       cudaCheck(cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice));
       delete[] dinp;
+      */
     }
 
     //std::cout << "malloc done"  << "\n";
@@ -10484,7 +10500,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     to_pool(dims_prod, back_node->tensor_ptr);
 
   if(!from_gradless)
-    to_free(device_dy);
+    to_pool(dims_prod, device_dy);
 
   to_free_tensor(back_node);
 }
