@@ -2696,7 +2696,6 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
 
     
     
-
     std::vector<float> workerless_dims = BatchLessDims(dims);
     int workerless_dims_prod = DimsProd(workerless_dims);
 
@@ -2741,7 +2740,7 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
       for (int x = 0; x < width; ++x) {
         for (int c = 0; c < channels; ++c) {
           // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
-          image_data_float[idx_offset + (y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          image_data_float[idx_offset + c * (height * width) + y * width + x] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
         }
       }
     }
@@ -3004,7 +3003,10 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
 
 
 
-  // ParseCall.
+
+
+
+  // PARSE CALL.
 
   getNextToken(); // eat (
   std::vector<std::unique_ptr<ExprAST>> Args;
@@ -4701,6 +4703,56 @@ extern "C" char * shuffle_str(char *string_list)
     
   return cstr;
 }
+
+
+std::map<float, std::vector<float *>> TensorPool;
+
+void move_to_pool(float dims_prod, float *tensor_ptr)
+{
+  if (dims_prod==0)
+    return;
+  if (dims_prod<=1)
+  {
+    cudaCheck(cudaFree(tensor_ptr));
+    return;
+  }
+
+  std::vector<float *> tensors_in_pool = TensorPool[dims_prod];
+  if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
+  {
+    if(tensors_in_pool.size()<3)
+      TensorPool[dims_prod].push_back(tensor_ptr);
+    else
+    {
+      std::cout << "FREEING TENSOR WITH dims prod:" << dims_prod << "\n";
+      cudaCheck(cudaFree(tensor_ptr)); 
+    }
+  }
+}
+
+float *get_from_pool(float dims_prod)
+{
+  float *tensor_ptr;
+
+  if(TensorPool.count(dims_prod)>0)
+  {
+    std::vector<float *> tensors_in_pool = TensorPool[dims_prod];
+    if (tensors_in_pool.size()>0)
+    {
+      std::cout << "GETTING FROM POOL: " << dims_prod << "\n";
+      tensor_ptr = tensors_in_pool.back();
+      tensors_in_pool.pop_back();
+      return tensor_ptr;
+    }
+  }
+
+  std::cout << "malloc new" << "\n";
+
+  cudaCheck(cudaMalloc(&tensor_ptr, dims_prod*sizeof(float)));
+  return tensor_ptr;
+}
+
+
 
 
 extern "C" void *LoadTensor(char *tensor_name){
@@ -6688,9 +6740,14 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
     //std::cout << "attributing op" << "\n";
     if(nn_mode==eval_mode)
     {
-      cudaCheck(cudaFree(tgt_tensor->tensor_ptr));
+      /*
+      move_to_pool(tgt_tensor->dims_prod, tgt_tensor->tensor_ptr);
       tgt_tensor->AttrTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod);
       delete tensor;
+      */
+      std::string scopeless_name = tgt_tensor->scopeless_name;
+      tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
+      tgt_tensor->scopeless_name = scopeless_name;
     } else {
       Tensor *attr_tensor;
       attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
@@ -6705,13 +6762,25 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
     {
       if(tgt_tensor->dims != tensor->dims)
       {
-        cudaCheck(cudaFree(tgt_tensor->tensor_ptr));
-        cudaMalloc(&tgt_tensor->tensor_ptr, tensor->dims_prod*sizeof(float));
+        move_to_pool(tgt_tensor->dims_prod, tgt_tensor->tensor_ptr);
+        tgt_tensor->tensor_ptr = get_from_pool(tensor->dims_prod);
 
         tgt_tensor->dims = tensor->dims;
         tgt_tensor->dims_prod = tensor->dims_prod;
       }
       cudaCheck(cudaMemcpy(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tgt_tensor->dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+
+      if(nn_mode==training_mode)
+      {
+        Tensor *attr_tensor;
+        attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
+        todo_backward_tensors.push_back(attr_tensor);
+
+        std::string scopeless_name = tgt_tensor->scopeless_name;
+        tgt_tensor = createTensor(tgt_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
+        tgt_tensor->scopeless_name = scopeless_name;
+      }
+
       if(!tensor->leaf)
         delete tensor;
     } else {
@@ -7268,8 +7337,9 @@ extern "C" Tensor *CudaMult(int is_forward_func,
 
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, resultingDimsProd * sizeof(float)));
+  float* device_y = get_from_pool(resultingDimsProd);
+  
+  
 
   if (Ldims.size()<2)
     LogErrorS("Tensors multiplication requires at least 2 dimensions.");
@@ -7301,7 +7371,12 @@ extern "C" Tensor *CudaMult(int is_forward_func,
 
 
 
+__global__ void set_to_zero_kernel(float *y, int dims_prod) {
 
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = 0;
+}
 __global__ void add_forward(float *y, const float *x,
                             const float *w, int dims_prod) {
 
@@ -8898,12 +8973,16 @@ extern "C" void *relu(Tensor *tensor)
 
   float N = DimsProd(dims);
   float block_size = 32;
-
-  float *y;
-  cudaMalloc(&y, N*sizeof(float));
-  cudaMemset(y, 0, N * sizeof(float));
-
   const int grid_size = ceil_div(N, block_size);
+
+
+  float *y = get_from_pool(N);
+  set_to_zero_kernel<<<grid_size, block_size>>>(y, N);
+
+  //float *y;
+  //cudaMalloc(&y, N*sizeof(float));
+  //cudaMemset(y, 0, N * sizeof(float));
+
   relu_forward<<<grid_size, block_size>>>(tensor_ptr, y, N);
 
 
@@ -10135,19 +10214,10 @@ extern "C" float cross_entropy(Tensor *y_hat, Tensor *y)
 
 
 
-void safeCudaFree(void** ptr)
-{
-    if (ptr != nullptr && *ptr != nullptr)
-    {
-        cudaCheck(cudaFree(*ptr));
-        *ptr = nullptr;
-    }
-}
-
-
-
 std::map<std::string, float *> var_to_grad;
 std::vector<float *> backprop_tensors_to_free;
+std::vector<std::pair<float, float *>> backprop_tensors_to_pool;
+std::vector<float *> tensors_sent_to_pool;
 std::vector<Tensor *> backprop_Tensors_to_free;
 
 void to_free(float *tensor_ptr)
@@ -10159,6 +10229,14 @@ void to_free_tensor(Tensor *tensor_ptr)
 {
   if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_free))
     backprop_Tensors_to_free.push_back(tensor_ptr);
+}
+void to_pool(float dims_prod, float *tensor_ptr)
+{
+  if (!in_float_ptr_vec(tensor_ptr, tensors_sent_to_pool))
+  {
+    backprop_tensors_to_pool.push_back(std::make_pair(dims_prod, tensor_ptr));
+    tensors_sent_to_pool.push_back(tensor_ptr);
+  }
 }
 
 void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
@@ -10172,6 +10250,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
   float *device_dx, *device_dw;
   device_dx=nullptr;
   device_dw=nullptr;
+  float dims_prod = back_node->dims_prod;
 
   
 
@@ -10193,7 +10272,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     if (back_node->leaf)
     {
 
-      float dims_prod = back_node->dims_prod;
+      
       
       //std::cout << "Accumulating grad of: " << tensor_name << "\n";
 
@@ -10211,13 +10290,14 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
         
         add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
+        //to_pool(dims_prod, device_dy);
         to_free(device_dy);
 
       } else 
         var_to_grad[tensor_name] = device_dy;
       
 
-      to_free(back_node->tensor_ptr);
+      to_pool(dims_prod, back_node->tensor_ptr);
       
       
 
@@ -10313,8 +10393,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
     //std::cout << "malloc device_dx " << "\n";
 
     // input gradient
-    if(op!=add_op)
-    {   
+    if(op!=add_op) {
       dinp = make_zeros_float(x_size);
       cudaCheck(cudaMalloc(&device_dx, x_size*sizeof(float)));
       cudaCheck(cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice));
@@ -10402,7 +10481,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless)
 
   
   if(!in_int(op, loss_ops))
-    to_free(back_node->tensor_ptr);
+    to_pool(dims_prod, back_node->tensor_ptr);
 
   if(!from_gradless)
     to_free(device_dy);
@@ -10461,8 +10540,13 @@ extern "C" float backprop()
   for(Tensor *tensor : backprop_Tensors_to_free)
     delete tensor;
 
+  for(std::pair<float, float *> pair : backprop_tensors_to_pool)
+    move_to_pool(pair.first, pair.second);
+
   backprop_tensors_to_free.clear();
   backprop_Tensors_to_free.clear();
+  backprop_tensors_to_pool.clear();
+  tensors_sent_to_pool.clear();
   var_to_grad.clear();
   return 0;
 }
@@ -10489,11 +10573,11 @@ public:
 
 class AdamW_optim : public Optimizer {
   std::map<std::string, float *> NamedV, NamedM;
-  float lr, beta1, beta2, weight_decay;
+  float lr, beta1, beta2, weight_decay, grad_clip;
 
   public:
-    AdamW_optim(float lr, float beta1, float beta2, float weight_decay)
-      : lr(lr), beta1(beta1), beta2(beta2), weight_decay(weight_decay) {}
+    AdamW_optim(float lr, float beta1, float beta2, float weight_decay, float grad_clip)
+      : lr(lr), beta1(beta1), beta2(beta2), weight_decay(weight_decay), grad_clip(grad_clip) {}
     
   void init_states(std::string param_name, float params_count) override;
   void step(float *param, float *grad, std::vector<float> dims, std::string param_name) override;
@@ -10507,12 +10591,12 @@ __device__ inline float lerp(float start, float end, float weight) {
 
 __global__ void adamw_kernel(float* params_memory, const float* grads_memory, float* m_memory, float* v_memory, long num_parameters,
                               float learning_rate, float beta1, float beta2, float beta1_correction, float beta2_correction,
-                              float eps, float weight_decay) {
+                              const float eps, const float weight_decay, const float grad_clip) {
 
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    if (i >= num_parameters) return;  // guard
    
-   float grad = grads_memory[i];
+   float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
    float m = m_memory[i];
    float v = v_memory[i];
    // update the first moment (momentum)
@@ -10586,7 +10670,7 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
 
   adamw_kernel<<<num_blocks, block_size>>>(param, grad, m, v, params_count,
                                            lr, beta1, beta2, beta1_correction, beta2_correction,
-                                           eps, weight_decay);
+                                           eps, weight_decay, grad_clip);
 
 
 }
@@ -10597,11 +10681,11 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
 std::unique_ptr<Optimizer> optimizer = nullptr;
 
 
-extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay)
+extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay, float grad_clip)
 {
 
   if (optimizer==nullptr)
-    optimizer = std::make_unique<AdamW_optim>(lr, beta1, beta2, weight_decay);
+    optimizer = std::make_unique<AdamW_optim>(lr, beta1, beta2, weight_decay, grad_clip);
 
   
   for (auto& pair : NamedParamGrads)
@@ -12092,7 +12176,7 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
     tensor_cpu = make_random_int(product, 10);
   else if (std::strcmp(init, "binary") == 0)
     tensor_cpu = make_random_int(product, 1);
-    
+  
 
   cudaCheck(cudaMalloc(&tensor_ptr, product*sizeof(float)));
   cudaCheck(cudaMemcpy(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
@@ -12629,8 +12713,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
   
-  Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
-  //if (has_scope)
+  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+
+
+  //if (has_scope) ///////
   //  Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
   
   return ret;
@@ -13034,13 +13120,13 @@ Function *FunctionAST::codegen() {
   
   
 
-  //if(has_self)
+  //if(has_self)//////
   //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {first_arg, aux});
   
-  if(has_scope)
-    Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
+  //if(has_scope)
+  //  Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
   
-  //if(has_previous_scope)
+  //if(has_previous_scope)//////
   //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {previous_scope, aux});
   
   
@@ -13422,6 +13508,7 @@ static void InitializeModule() {
   FunctionType *AdamWTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext)}, 
