@@ -4790,7 +4790,7 @@ void move_to_pool(float dims_prod, float *tensor_ptr, std::string from)
   if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
   {
     //if(!(tensors_in_pool.size()<30&&dims_prod==1))
-    if(tensors_in_pool.size()<30)
+    if(tensors_in_pool.size()<100)
       TensorPool[dims_prod].push_back(tensor_ptr);
     else
     {
@@ -10311,7 +10311,7 @@ __global__ void random_padding_cropping_kernel(
 
     // Setup random number generator
     curandState state;
-    curand_init(seed, b * channels + c, 0, &state); // one random state per batch and channel
+    curand_init(seed, b * channels, 0, &state); // one random state per batch
 
     // Generate random padding values
     int pad_top = curand(&state) % (padding + 1); // Range belongs to [0, padding]
@@ -13296,7 +13296,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
   
-  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+  Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
 
 
   //if (has_scope) ///////
@@ -13709,6 +13709,8 @@ Function *FunctionAST::codegen() {
   
   //if(has_scope)
   //  Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
+  if(has_scope)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
   
   //if(has_previous_scope)//////
   //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {previous_scope, aux});
@@ -15402,6 +15404,8 @@ int main() {
   cudaCheck(cudaSetDevice(deviceIdx));
   cudaDeviceProp deviceProp;
   cudaGetDeviceProperties(&deviceProp, deviceIdx);
+
+  std::cout << "CuDNN Version: " << CUDNN_MAJOR << "." << CUDNN_MINOR << "." << CUDNN_PATCHLEVEL << std::endl;
   printf("Device %d: %s\n", deviceIdx, deviceProp.name);
 
 
@@ -15410,7 +15414,8 @@ int main() {
 
 
   int enable_tf32 = deviceProp.major >= 8 ? 1 : 0;
-  //printf("enable_tf32: %d\n", enable_tf32);
+  printf("enable_tf32: %d\n", enable_tf32);
+  
   cublas_compute_type = enable_tf32 ? CUBLAS_COMPUTE_32F_FAST_TF32 : CUBLAS_COMPUTE_32F;
   cublasMath_t cublas_math_mode = enable_tf32 ? CUBLAS_TF32_TENSOR_OP_MATH : CUBLAS_DEFAULT_MATH;
   cublasCheck(cublasSetMathMode(cublas_handle, cublas_math_mode));
