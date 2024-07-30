@@ -344,6 +344,7 @@ enum NN_Mode {
 };
 
 enum BackwardTypes {
+  create_tensor_from_brackets_op=-4,
   create_tensor_op=-3,
   leaf=-2,
   tensor_leaf = -1,
@@ -377,6 +378,7 @@ enum BackwardTypes {
   equal_op = 27,
   crop_op = 28,
   random_horizontal_flip_op = 29,
+  normalize_img_op = 30,
 };
 
 int nn_mode=training_mode;
@@ -1064,6 +1066,24 @@ class StrVecExprAST : public ExprAST {
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
+
+
+class NewVecExprAST : public ExprAST {
+
+  public:
+    std::vector<std::unique_ptr<ExprAST>> Values;
+    std::string Type;
+    
+    NewVecExprAST(
+        std::vector<std::unique_ptr<ExprAST>> Values,
+        std::string Type)
+        : Values(std::move(Values)), Type(Type) 
+        {
+          this->SetType(Type);
+        }
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -2244,6 +2264,22 @@ static std::unique_ptr<ExprAST> ParseStrExpr() {
 
 
   return aux;
+}
+
+static std::unique_ptr<ExprAST> ParseNewVector(std::string class_name="") {
+  std::cout << "Parsing new vector" << ReverseToken(CurTok)  << "\n";
+  getNextToken(); // [
+  std::vector<std::unique_ptr<ExprAST>> values = ParseIdx(class_name);
+  getNextToken(); // ]
+
+
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  values.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+
+  //TODO: vector for other types
+  return std::make_unique<NewVecExprAST>(std::move(values), "tensor");
 }
 
 
@@ -3855,6 +3891,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseMaxPool2dExpr();
   case tok_batchnorm2d:
     return ParseBatchNorm2dExpr();
+  case '[':
+    return ParseNewVector(class_name);
   case tok_space:
     getNextToken();
     return ParsePrimary(class_name);
@@ -3870,8 +3908,8 @@ static std::unique_ptr<ExprAST> ParseUnary(std::string class_name="") {
     getNextToken();
   // If the current token is not an operator, it must be a primary expr.
   
-  //std::cout << "Unary current token " << CurTok << "\n";
-  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+  //std::cout << "Unary current token " << ReverseToken(CurTok) << "\n";
+  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[')
   {
     //std::cout << "Returning, non-ascii found.\n";
     return ParsePrimary(class_name);
@@ -5342,6 +5380,54 @@ extern "C" void *view(Tensor *tensor, float first_dim, ...)
   Tensor *new_tensor = createTensor(tensor->tensor_ptr, new_dims, DimsProd(new_dims), false, "");
   new_tensor->view_of = tensor->name;
   new_tensor->op=view_op;
+  return new_tensor;
+}
+
+
+
+
+
+
+extern "C" void *NewVecToTensor(float first_dim, ...)
+{
+  std::vector<float> values;
+
+  
+  va_list args;
+  va_start(args, first_dim);
+
+
+  values.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("Tried to create a tensor from brackets with more than 10 positions. This is not yet supported");
+      return nullptr;
+    }
+
+    float dim = va_arg(args, float);
+    if (dim==TERMINATE_VARARG)
+      break;
+    values.push_back(dim);
+
+
+  }
+  va_end(args);
+
+
+  float dims_prod = values.size();
+
+  float *tensor_ptr, *tensor_cpu;
+  tensor_cpu = values.data();
+
+  tensor_ptr = get_from_pool(dims_prod, "tensor from brackets");
+  cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
+  
+
+  Tensor *new_tensor = createTensor(tensor_ptr, {dims_prod}, dims_prod, true, "");
+  new_tensor->op=create_tensor_from_brackets_op;
   return new_tensor;
 }
 
@@ -10300,7 +10386,7 @@ extern "C" void *RandomCrop(Tensor *tensor, float padding)
 
 
 
-__global__ void random_horizontal_flip_kernel(float *input_tensor, float *output_tensor, 
+__global__ void random_horizontal_flip_kernel(const float *input_tensor, float *output_tensor, 
                                               int batch_size, int channels, int height, int width, 
                                               unsigned long long seed) {
     // Thread ID
@@ -10363,6 +10449,68 @@ extern "C" void *RandomHorizontalFlip(Tensor *tensor)
   
   Tensor *new_tensor = createTensor(flipped, dims, dims_prod, false, "");
   new_tensor->AttrLNode(tensor, random_horizontal_flip_op);
+  return new_tensor;
+}
+
+
+
+__global__ void normalize_img_kernel(float *output_tensor, const float *input_tensor, 
+                                     const float *mean, const float *std,
+                                     int batch_size, int channels, int height, int width) {
+    // Thread ID
+    int batch_idx = blockIdx.x;
+    int c = blockIdx.y;
+    int row_idx = threadIdx.x;
+    int col_idx = threadIdx.y;
+
+    
+    int idx = ((batch_idx * channels + c) * height + row_idx) * width + col_idx;
+    
+    output_tensor[idx] = (input_tensor[idx]-mean[c])/std[c];
+    
+}
+
+extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
+{
+  float *tensor_ptr, *normalized;
+  tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  float dims_prod = tensor->dims_prod;
+
+  unsigned long long seed = time_seed();
+
+
+  float B, C, H, W;
+  B = dims[0];
+  C = dims[1];
+  H = dims[dims.size()-2];
+  W = dims[dims.size()-1];
+
+  if(mean->dims_prod!=C||std->dims_prod!=C)
+  { 
+    LogErrorS("NormalizeImg mean and std tensors must have the same dimensionality as the image channels.");
+    return nullptr;
+  }
+
+  normalized = get_from_pool(dims_prod, "horizontal_flipping");
+
+
+  dim3 numBlocks(B, C);
+  dim3 threadsPerBlock(H, W);
+
+  normalize_img_kernel<<<numBlocks, threadsPerBlock>>>(
+    normalized,
+    tensor_ptr,
+    mean->tensor_ptr,
+    std->tensor_ptr,
+    B,
+    C,
+    H,
+    W
+  );
+  
+  Tensor *new_tensor = createTensor(normalized, dims, dims_prod, false, "");
+  new_tensor->AttrLNode(tensor, normalize_img_op);
   return new_tensor;
 }
 
@@ -11579,6 +11727,8 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       return Builder->CreateFMul(L, R, "multmp");
     case '/':
       return Builder->CreateFDiv(L, R, "divtmp");
+    case '%':
+      return Builder->CreateFRem(L, R, "remtmp");
     case 77:
       return LogErrorV("GOTCHA");
     case '<':
@@ -12437,6 +12587,20 @@ extern "C" float is_null(char *name)
   if (objectVecs[name]=="nullptr")
     return 1;
   return 0;
+}
+
+Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  std::vector<Value *> values;
+
+  for (int i=0; i<Values.size(); i++)
+    values.push_back(Values[i]->codegen(first_arg, scope_str, previous_scope));
+
+
+
+  return Builder->CreateCall(TheModule->getFunction("NewVecToTensor"), {values});
 }
 
 
@@ -14092,6 +14256,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("RandomHorizontalFlip", RandomHorizontalFlipTy);
+
+
+  //
+  FunctionType *NormalizeImgTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("NormalizeImg", NormalizeImgTy);
   
 
   //
@@ -14170,7 +14343,7 @@ static void InitializeModule() {
   FunctionType *maxTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-      true
+      true // vararg
   );
   TheModule->getOrInsertFunction("tmax", maxTy);
 
@@ -14179,7 +14352,7 @@ static void InitializeModule() {
   FunctionType *argmaxTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-      true
+      true // vararg
   );
   TheModule->getOrInsertFunction("argmax", argmaxTy);
   
@@ -14188,7 +14361,7 @@ static void InitializeModule() {
   FunctionType *topkTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, Type::getFloatTy(*TheContext)},
-      true
+      true // vararg
   );
   TheModule->getOrInsertFunction("topk", topkTy);
 
@@ -14197,7 +14370,7 @@ static void InitializeModule() {
   FunctionType *viewTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy,int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
-      true // Vararg
+      true // vararg
   );
   TheModule->getOrInsertFunction("view", viewTy);
 
@@ -14206,9 +14379,18 @@ static void InitializeModule() {
   FunctionType *CalculateIdxOffsetTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
-      true // Vararg
+      true // vararg
   );
   TheModule->getOrInsertFunction("CalculateIdxOffset", CalculateIdxOffsetTy);
+
+
+  //
+  FunctionType *NewVecToTensorTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("NewVecToTensor", NewVecToTensorTy);
   
 
   //===----------------------------------------------------------------------===//
@@ -15258,8 +15440,8 @@ int main() {
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op};
   loss_ops = {cross_entropy_op};
 
-  preprocessing_ops = {crop_op, random_horizontal_flip_op};
-  gradless_ops = {onehot_op, max_op, argmax_op, equal_op};
+  preprocessing_ops = {crop_op, random_horizontal_flip_op, normalize_img_op};
+  gradless_ops = {onehot_op, max_op, argmax_op, equal_op, create_tensor_from_brackets_op};
   gradless_ops = concat_int_vec(gradless_ops, preprocessing_ops);
 
 
@@ -15276,6 +15458,7 @@ int main() {
   BinopPrecedence[tok_higher_eq] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
+  BinopPrecedence['%'] = 35;  // highest.
   BinopPrecedence['/'] = 39;
   BinopPrecedence['*'] = 40;  // highest.
   BinopPrecedence['^'] = 50;
@@ -15296,7 +15479,7 @@ int main() {
 
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor",
-                             "RandomCrop", "RandomHorizontalFlip"};
+                             "RandomCrop", "RandomHorizontalFlip", "NormalizeImg"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
