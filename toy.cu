@@ -52,6 +52,7 @@
 #include <cuda_runtime.h>
 #include <cublasLt.h>
 #include <omp.h>
+#include <curand_kernel.h>
 
 #include "include/cu_commons.h"
 
@@ -226,6 +227,12 @@ std::vector<std::string> concat_str_vec(std::vector<std::string> l, std::vector<
   concatenated_vectors.insert(concatenated_vectors.end(), r.begin(), r.end());
   return concatenated_vectors;
 }
+std::vector<int> concat_int_vec(std::vector<int> l, std::vector<int>r)
+{
+  std::vector<int> concatenated_vectors = l;
+  concatenated_vectors.insert(concatenated_vectors.end(), r.begin(), r.end());
+  return concatenated_vectors;
+}
 
 
 // Tensor related
@@ -368,10 +375,12 @@ enum BackwardTypes {
   gpu_op = 23,
   cpu_op = 24,
   equal_op = 27,
+  crop_op = 28,
+  random_horizontal_flip_op = 29,
 };
 
 int nn_mode=training_mode;
-std::vector<int> leaf_ops, loss_ops, gradless_ops;
+std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops;
 
 
 std::map<int, std::string> token_to_string = {
@@ -2300,39 +2309,6 @@ static std::unique_ptr<ExprAST> ParseStrVecExpr() {
 
 
 
-struct BackwardNode {
-  int B, C, OC;
-  int x_size, w_size;
-  float *inp, *w, *out;
-  float *b=nullptr;
-  int b_size=0;
-
-  std::string op, tensor_name, param_name;
-
-  void NewNode(int B, int C, int OC, int x_size, int w_size, float *inp, float *w,
-                  float *out, std::string op, std::string tensor_name, std::string param_name) {
-    this->B = B;
-    this->C = C;
-    this->OC = OC;
-    this->x_size = x_size;
-    this->w_size = w_size;
-    this->inp = inp;
-    this->w = w;
-    this->out = out;
-    this->op = op;
-    this->tensor_name = tensor_name;
-    this->param_name = param_name;
-  }
-
-  void SetBias(float *b, int b_size)
-  {
-    this->b=b;
-    this->b_size=b_size;
-  }
-};
-
-
-
 
 struct Tensor {
   float *tensor_ptr;
@@ -2343,7 +2319,7 @@ struct Tensor {
   float *dy=nullptr;
   int b_size=0;
 
-  bool leaf, weight;
+  bool leaf, weight, from_grad_or_load;
   std::string view_of = "";
   std::string name;
   std::string scopeless_name;
@@ -2367,6 +2343,7 @@ struct Tensor {
     visited=false;
     weight=false;
     op=tensor_leaf;
+    from_grad_or_load=false;
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -2379,6 +2356,7 @@ struct Tensor {
     leaf = new_is_leaf;
     name = new_name;
     weight=false;
+    from_grad_or_load=true;
   }
 
   void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod){
@@ -2397,6 +2375,7 @@ struct Tensor {
     visited=false;
     dy=nullptr;
     weight=false;
+    from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load||new_R_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
   }
 
   void AttrLNode(Tensor *new_L_Tensor, int op_type)
@@ -2408,6 +2387,7 @@ struct Tensor {
     visited=false;
     dy=nullptr;
     weight=false;
+    from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
   }
 
   void AttributionBackwardNode(std::string _name, Tensor *new_R_Tensor)
@@ -2422,7 +2402,11 @@ struct Tensor {
     dy=nullptr;
     weight=false;
   }
-  
+  void SetIsWeight()
+  {
+    weight=true;
+    from_grad_or_load=true;
+  }
   void SetBias(float *b, int b_size)
   {
     this->b=b;
@@ -2456,9 +2440,60 @@ bool in_tensor_ptr_vec(Tensor *value, const std::vector<Tensor *>& list) {
 
 
 
+
+// Cleaners
+std::map<std::string, float *> var_to_grad;
+std::vector<float *> backprop_tensors_to_free;
+std::vector<std::tuple<float, float *, std::string>> backprop_tensors_to_pool;
+std::vector<float *> tensors_sent_to_pool;
+std::vector<Tensor *> backprop_Tensors_to_free;
+
+void to_free(float *tensor_ptr)
+{
+  if(!in_float_ptr_vec(tensor_ptr, backprop_tensors_to_free))
+    backprop_tensors_to_free.push_back(tensor_ptr);
+}
+void to_free_tensor(Tensor *tensor_ptr)
+{
+  if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_free))
+    backprop_Tensors_to_free.push_back(tensor_ptr);
+}
+void to_pool(float dims_prod, float *tensor_ptr, std::string from)
+{
+  if (!in_float_ptr_vec(tensor_ptr, tensors_sent_to_pool))
+  {
+    backprop_tensors_to_pool.push_back(std::make_tuple(dims_prod, tensor_ptr, from));
+    tensors_sent_to_pool.push_back(tensor_ptr);
+  }
+}
+
+std::map<std::string, std::vector<std::tuple<float, float*,std::string>>> forward_tensors_to_pool;
+std::map<std::string, std::vector<float*>> forward_tensors_sent_to_pool;
+std::map<std::string, std::vector<Tensor*>> forward_Tensors_to_free;
+std::map<std::string, std::map<std::string, float*>> scope_tensors; // records last version of a tensor
+
+void to_free_tensor_forward(Tensor *tensor_ptr, std::string scope)
+{
+  if(!in_tensor_ptr_vec(tensor_ptr, forward_Tensors_to_free[scope]))
+    forward_Tensors_to_free[scope].push_back(tensor_ptr);
+}
+void to_pool_forward(float dims_prod, float *tensor_ptr, std::string scope, std::string from)
+{
+  if (!in_float_ptr_vec(tensor_ptr, forward_tensors_sent_to_pool[scope]))
+  {
+    forward_tensors_to_pool[scope].push_back(std::make_tuple(dims_prod, tensor_ptr, from));
+    forward_tensors_sent_to_pool[scope].push_back(tensor_ptr);
+  }
+}
+
+
+
+
+
+
+
 //global
 using backward_tuple = std::tuple<int, int, int, int, int, float *, float *, float *, std::string, std::string, std::string>;
-std::vector<BackwardNode> todo_backwards;
 std::vector<Tensor *> todo_backward_tensors;
 
 // Tensors
@@ -4710,12 +4745,14 @@ void move_to_pool(float dims_prod, float *tensor_ptr, std::string from)
 {
   if (dims_prod==0)
     return;
+  //std::cout << "move_to_pool from: " << from << "\n";
   
 
   std::vector<float *> tensors_in_pool = TensorPool[dims_prod];
   if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
   {
-    if(!(tensors_in_pool.size()<30&&dims_prod==1))
+    //if(!(tensors_in_pool.size()<30&&dims_prod==1))
+    if(tensors_in_pool.size()<30)
       TensorPool[dims_prod].push_back(tensor_ptr);
     else
     {
@@ -5334,6 +5371,27 @@ std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1
 
   std::vector<int> ret = {grid_size, block_size, shared_mem_size};
   return ret;
+}
+
+
+
+__global__ void set_to_zero_kernel(float *y, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = 0;
+}
+__global__ void set_to_one_kernel(float *y, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = 0;
+}
+__global__ void copy_tensor_kernel(float *y, const float *x, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = x[i];
 }
 
 __global__ void vec_mult(const float a, float* x, float* y, int dims_prod) {
@@ -6606,7 +6664,7 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name)
 
 std::vector<std::string> seen_functions_for_pool_allocation;
 
-extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope, char *function_name)
+extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope)
 {
   std::string tensor_name = tensor->name;
   //std::cout << "\n\n\nCOPY ARG TENSOR OF " << previous_scope << tensor_name << " into " << scope<<new_tensor_name <<"\n";
@@ -6621,10 +6679,6 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
   float *arg_tensor, *tensor_ptr;
 
   tensor_ptr = tensor->tensor_ptr;
-
-  std::string all_name = tensor_name+previous_scope;
-  all_name = all_name+function_name;
-
 
 
   arg_tensor = get_from_pool(dims_prod, "arg tensor");
@@ -6661,11 +6715,14 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   move_to_pool(tensor->dims_prod, tensor->tensor_ptr, "remove tensor scope");
   tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod);
+  tensor->from_grad_or_load = scope_tensor->from_grad_or_load;
   
   NamedTensorsT[tgt_tensor] = tensor;
 
   delete scope_tensor;
   NamedTensorsT.erase(scope_tensor_name);
+
+  scope_tensors[scope].clear();
   return 0;
 }
 
@@ -6730,8 +6787,11 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 }
 
 
+void ForwardCleanupToPool(Tensor *back_node, std::string scope);
+int DoesTreeContainWeight(Tensor *back_node);
+void CleanScopeTensors(std::string scope);
 
-extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
+extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
 {
   //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
 
@@ -6743,25 +6803,29 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
     tgt_tensor->dims = tensor->dims;
     delete tensor;
   }
-  else if (tensor->name=="") // Free current and point to operation result
+  else if (tensor->name==""||!tensor->leaf) // Free current and point to operation result
   {
-    //std::cout << "attributing op" << "\n";
     if(nn_mode==eval_mode)
     {
-      move_to_pool(tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "");
-      tgt_tensor->AttrTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod);
-      delete tensor;
-    } else {
+      if(tensor->from_grad_or_load) //if(DoesTreeContainWeight(tensor)>0)
+        ForwardCleanupToPool(tensor, scope);
+      ForwardCleanupToPool(tgt_tensor, scope);
+      //scope_tensors[scope][tensor_name] = tensor->tensor_ptr;
+      //else
+      //  std::cout << "won't move to pool: " << tgt_tensor->name << ", " << tensor->op << ", " << tensor->name << "\n";
+    }
+    else {
       Tensor *attr_tensor;
       attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
       todo_backward_tensors.push_back(attr_tensor);
-
-      std::string scopeless_name = tgt_tensor->scopeless_name;
-      tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
-      tgt_tensor->scopeless_name = scopeless_name;
     } 
-  } else { // Copy incoming tensor to preserve it
+    std::string scopeless_name = tgt_tensor->scopeless_name;
+    tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
+    tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
+    tgt_tensor->scopeless_name = scopeless_name;
     
+  } else { // Copy incoming tensor to preserve it
+  
     if(tensor->op==tensor_leaf||nn_mode==eval_mode)
     {
       if(tgt_tensor->dims != tensor->dims)
@@ -6772,7 +6836,13 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
         tgt_tensor->dims = tensor->dims;
         tgt_tensor->dims_prod = tensor->dims_prod;
       }
-      cudaCheck(cudaMemcpy(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tgt_tensor->dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+      //cudaCheck(cudaMemcpy(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tgt_tensor->dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+      int grid_size, block_size, shared_mem_size; 
+      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
+      grid_size = grid_block_mem_sizes[0];
+      block_size = grid_block_mem_sizes[1];
+
+      copy_tensor_kernel<<<grid_size, block_size>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
 
       if(nn_mode==training_mode)
       {
@@ -6782,23 +6852,31 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor)
 
         std::string scopeless_name = tgt_tensor->scopeless_name;
         tgt_tensor = createTensor(tgt_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
+        tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
         tgt_tensor->scopeless_name = scopeless_name;
-      }
+      } //else
+        //scope_tensors[scope].push_back(tgt_tensor->tensor_ptr);
 
-      if(!tensor->leaf)
-        delete tensor;
-    } else {
+
       
+      
+    } /*else {
+      std::cout << "ULAULAULAULAULAULUALUALUALUA" << "\n";
       Tensor *attr_tensor;
       attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
       todo_backward_tensors.push_back(attr_tensor);
 
       std::string scopeless_name = tgt_tensor->scopeless_name;
       tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
+      tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
       tgt_tensor->scopeless_name = scopeless_name;
-    }
+    }*/
     //OP: copy dy 
   }
+
+
+  //if(nn_mode==eval_mode)
+  //  CleanScopeTensors(scope);
 
   NamedTensorsT[tensor_name] = tgt_tensor;
   return 0;
@@ -6822,10 +6900,18 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor)
   //float *new_tensor;
   //cudaMalloc(&new_tensor, dims_prod*sizeof(float));
   float *new_tensor = get_from_pool(dims_prod, "pinned");
-  cudaCheck(cudaMemcpy(new_tensor, tensor->tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  copy_tensor_kernel<<<grid_size, block_size>>>(new_tensor, tensor->tensor_ptr, dims_prod);
+  //cudaCheck(cudaMemcpy(new_tensor, tensor->tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
 
 
   tgt_tensor->AttrTensor(new_tensor, new_dims, dims_prod);
+  tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
   
   
 
@@ -7378,18 +7464,6 @@ extern "C" Tensor *CudaMult(int is_forward_func,
 
 
 
-__global__ void set_to_zero_kernel(float *y, int dims_prod) {
-
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < dims_prod)
-        y[i] = 0;
-}
-__global__ void set_to_one_kernel(float *y, int dims_prod) {
-
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < dims_prod)
-        y[i] = 0;
-}
 __global__ void add_forward(float *y, const float *x,
                             const float *w, int dims_prod) {
 
@@ -7458,8 +7532,6 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
   add_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
   
 
-
-
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
   new_tensor->AttrNodes(tensor_x, tensor_w, add_op);
   return new_tensor;
@@ -7489,9 +7561,9 @@ extern "C" Tensor *CudaSub(int is_forward_func,
 
 
   int grid_size = dims_prod;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  sub_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
+  int block_size = 512;
+  
+  sub_forward<<<grid_size, block_size>>>(device_y, device_x, device_w, dims_prod);
   
   
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
@@ -7516,16 +7588,13 @@ extern "C" Tensor *CudaEqual(int is_forward_func,
   float dims_prod = tensor_x->dims_prod;
 
 
-
-
-  float* device_y = get_from_pool(dims_prod,"eq");
-
+  float* device_y = get_from_pool(dims_prod, "eq");
 
 
   int grid_size = dims_prod;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  equal_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
+  int block_size = 512;
+  
+  equal_forward<<<grid_size, block_size>>>(device_y, device_x, device_w, dims_prod);
   
   
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
@@ -7844,13 +7913,13 @@ extern "C" void *repeat_interleave(Tensor tensor, float repeats, float dim)
 }
 
 //TODO: mean over axis
-extern "C" void *mean(Tensor tensor, float first_dim, ...)
+extern "C" void *mean(Tensor *tensor, float first_dim, ...)
 {
   //std::cout << "SUM OF " << tensor.name << "\n";
 
 
-  float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  float *tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
   float *summed;
 
 
@@ -7858,7 +7927,7 @@ extern "C" void *mean(Tensor tensor, float first_dim, ...)
   va_start(args, first_dim);
 
   if (first_dim==TERMINATE_VARARG)
-  {
+  { 
     va_end(args);
     float *ret;
     int dims_prod = DimsProd(dims);
@@ -7871,7 +7940,7 @@ extern "C" void *mean(Tensor tensor, float first_dim, ...)
     float tensor_sum=0;
     for(int i=0; i<dims_prod; i++)
       tensor_sum += summed[i];
-    tensor_sum = tensor_sum/tensor.dims_prod;
+    tensor_sum = tensor_sum/tensor->dims_prod;
     
     delete[] summed;
   
@@ -7885,6 +7954,7 @@ extern "C" void *mean(Tensor tensor, float first_dim, ...)
   
     Tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
     new_tensor->op=mean_op;
+    new_tensor->AttrLNode(tensor, mean_op);
     return new_tensor;
   }
 
@@ -8587,19 +8657,26 @@ extern "C" void *argmax(Tensor *tensor, float first_dim, ...)
   int dims_prod = DimsProd(dims);
   int new_dims_prod = DimsProd(new_dims);
 
+    
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(new_dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
   
+
   maxed = get_from_pool(new_dims_prod, "argmax maxed");
   argmaxed = get_from_pool(new_dims_prod, "argmax");
-  cudaMemset(maxed, 0, new_dims_prod * sizeof(float));
-  cudaMemset(argmaxed, 0, new_dims_prod * sizeof(float));
+  set_to_zero_kernel<<<grid_size, block_size>>>(maxed, new_dims_prod);
+  set_to_zero_kernel<<<grid_size, block_size>>>(argmaxed, new_dims_prod);
 
 
   //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nMaxed dim size: " << summed_dim << "\n\n";
 
   
-  int grid_size = dims_prod;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = grid_block_mem_sizes[2];
 
   
   vec_add<<<grid_size, block_size, shared_mem_size>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
@@ -8613,7 +8690,6 @@ extern "C" void *argmax(Tensor *tensor, float first_dim, ...)
   move_to_pool(new_dims_prod, maxed, "argmax maxed");
 
   Tensor *new_tensor = createTensor(argmaxed, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->op=argmax_op;
   new_tensor->AttrLNode(tensor, argmax_op);
   return new_tensor;
 }
@@ -9358,17 +9434,17 @@ extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec
   // for the backprop
   scale_bias_tensor = createTensor(conv->scale, bn_dims, C, true, conv_name);
   scale_bias_tensor->SetBias(conv->bias, C);
-  scale_bias_tensor->weight=true;
+  scale_bias_tensor->SetIsWeight();
 
 
   // for the optimizer only
   scale_tensor = NamedTensorsT[conv_name];
   scale_tensor->NewTensor(conv->scale, bn_dims, C, true, conv_name);
-  scale_tensor->weight=true;
+  scale_tensor->SetIsWeight();
   
   bias_tensor = NamedTensorsT[bias_name];
   bias_tensor->NewTensor(conv->bias, bn_dims, C, true, conv_name);
-  bias_tensor->weight=true;
+  bias_tensor->SetIsWeight();
 
 
 
@@ -9857,7 +9933,7 @@ extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int
 
   Tensor *conv_tensor = NamedTensorsT[conv_name];
   conv_tensor->NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
-  conv_tensor->weight=true;
+  conv_tensor->SetIsWeight();
   
 
   //PrintTensorF(device_y, 2, 2);
@@ -10104,8 +10180,6 @@ void maxpool2d_backward(float *inp,  float *out,
 }
 
 
-
-
 extern "C" float CreateMaxPool2dOnDemand(char *tensor_name, char *type, float ks, float stride, float padding)
 {
   std::cout << "\nCreate maxpool2d on demand:\n" << "   ks " << ks << " stride " << stride << " padding " << padding << "\n";
@@ -10116,6 +10190,181 @@ extern "C" float CreateMaxPool2dOnDemand(char *tensor_name, char *type, float ks
   return 0;
 }
 
+
+
+
+
+unsigned long long time_seed() {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto duration = now.time_since_epoch();
+    auto seed = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    return seed;
+}
+
+
+
+__global__ void random_padding_cropping_kernel(
+    const float* input,
+    float* output,
+    int batch_size,
+    int channels,
+    int input_height,
+    int input_width,
+    int crop_height,
+    int crop_width,
+    int padding,
+    unsigned long long seed) 
+{
+    int b = blockIdx.x;
+    int c = blockIdx.y;
+    int y = threadIdx.y;
+    int x = threadIdx.x;
+
+    if (b >= batch_size || c >= channels || y >= crop_height || x >= crop_width)
+        return;
+
+    // Setup random number generator
+    curandState state;
+    curand_init(seed, b * channels + c, 0, &state); // one random state per batch and channel
+
+    // Generate random padding values
+    int pad_top = curand(&state) % (padding + 1); // Range belongs to [0, padding]
+    int pad_bottom = curand(&state) % (padding + 1);
+    int pad_left = curand(&state) % (padding + 1);
+    int pad_right = curand(&state) % (padding + 1);
+
+    // Compute the padded height and width
+    int padded_height = input_height + pad_top + pad_bottom;
+    int padded_width = input_width + pad_left + pad_right;
+
+    // Ensure crop dimensions fit within padded dimensions
+    int max_crop_top = padded_height - crop_height;
+    int max_crop_left = padded_width - crop_width;
+
+    int crop_top = curand(&state) % (max_crop_top + 1);
+    int crop_left = curand(&state) % (max_crop_left + 1);
+
+    // Compute input coordinates
+    int input_y = crop_top + pad_top + y;
+    int input_x = crop_left + pad_left + x;
+
+    // Read from input and write to output
+    if (input_y < input_height && input_x < input_width) {
+        output[b * channels * crop_height  * crop_width  + c * crop_height  * crop_width  + y * crop_width + x] =
+         input[b * channels * input_height * input_width + c * input_height * input_width + input_y * input_width + input_x];
+    } else {
+        output[b * channels * crop_height * crop_width + c * crop_height * crop_width + y * crop_width + x] = 0.0f;
+    }
+}
+
+extern "C" void *RandomCrop(Tensor *tensor, float padding)
+{
+  float *tensor_ptr, *cropped;
+  tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  float dims_prod = tensor->dims_prod;
+
+  unsigned long long seed = time_seed();
+
+  float B, C, H, W;
+  B = dims[0];
+  C = dims[1];
+  H = dims[dims.size()-2];
+  W = dims[dims.size()-1];
+
+  cropped = get_from_pool(dims_prod, "cropping");
+
+
+  dim3 numBlocks(B, C);
+  dim3 threadsPerBlock(H, W);
+
+
+  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock>>>(
+    tensor_ptr,
+    cropped,
+    B,
+    C,
+    H,
+    W,
+    H,
+    W,
+    padding,
+    seed
+  );
+  
+  Tensor *new_tensor = createTensor(cropped, dims, dims_prod, false, "");
+  new_tensor->AttrLNode(tensor, crop_op);
+  return new_tensor;
+}
+
+
+
+
+__global__ void random_horizontal_flip_kernel(float *input_tensor, float *output_tensor, 
+                                              int batch_size, int channels, int height, int width, 
+                                              unsigned long long seed) {
+    // Thread ID
+    int batch_idx = blockIdx.x;
+    int channel_idx = blockIdx.y;
+    int row_idx = threadIdx.x;
+    int col_idx = threadIdx.y;
+
+    // Random number generator initialization
+    curandState state;
+    curand_init(seed, batch_idx * channels, 0, &state);
+    //curand_init(seed, batch_idx * channels * height * width + channel_idx * height * width + row_idx * width + col_idx, 0, &state);
+
+    // Determine if the current image should be flipped
+    bool flip = curand_uniform(&state) > 0.5f;
+
+    int idx = ((batch_idx * channels + channel_idx) * height + row_idx) * width + col_idx;
+    if (flip) {
+        // Compute the flipped column index
+        int flipped_col_idx = width - col_idx - 1;
+        int flipped_idx = ((batch_idx * channels + channel_idx) * height + row_idx) * width + flipped_col_idx;
+        output_tensor[idx] = input_tensor[flipped_idx];
+    } else {
+        output_tensor[idx] = input_tensor[idx];
+    }
+}
+
+
+
+extern "C" void *RandomHorizontalFlip(Tensor *tensor)
+{
+  float *tensor_ptr, *flipped;
+  tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  float dims_prod = tensor->dims_prod;
+
+  unsigned long long seed = time_seed();
+
+  float B, C, H, W;
+  B = dims[0];
+  C = dims[1];
+  H = dims[dims.size()-2];
+  W = dims[dims.size()-1];
+
+  flipped = get_from_pool(dims_prod, "horizontal_flipping");
+
+
+  dim3 numBlocks(B, C);
+  dim3 threadsPerBlock(H, W);
+
+  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock>>>(
+    tensor_ptr,
+    flipped,
+    B,
+    C,
+    H,
+    W,
+    seed
+  );
+  
+  Tensor *new_tensor = createTensor(flipped, dims, dims_prod, false, "");
+  new_tensor->AttrLNode(tensor, random_horizontal_flip_op);
+  return new_tensor;
+}
 
 
 
@@ -10219,30 +10468,82 @@ extern "C" float cross_entropy(Tensor *y_hat, Tensor *y)
 
 
 
-std::map<std::string, float *> var_to_grad;
-std::vector<float *> backprop_tensors_to_free;
-std::vector<std::tuple<float, float *, std::string>> backprop_tensors_to_pool;
-std::vector<float *> tensors_sent_to_pool;
-std::vector<Tensor *> backprop_Tensors_to_free;
 
-void to_free(float *tensor_ptr)
+
+
+
+std::vector<std::string> scopes;
+
+
+int DoesTreeContainWeight(Tensor *back_node)
 {
-  if(!in_float_ptr_vec(tensor_ptr, backprop_tensors_to_free))
-    backprop_tensors_to_free.push_back(tensor_ptr);
+  if(back_node==nullptr)
+    return 0;
+  
+  if(back_node->weight)
+    return 1;
+
+  if(in_int(back_node->op, activation_ops))
+    return 1;
+  
+  return DoesTreeContainWeight(back_node->L_Node) + DoesTreeContainWeight(back_node->R_Node);
 }
-void to_free_tensor(Tensor *tensor_ptr)
+
+void ForwardCleanupToPool(Tensor *back_node, std::string scope)
 {
-  if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_free))
-    backprop_Tensors_to_free.push_back(tensor_ptr);
+  if(back_node==nullptr)
+    return;
+  
+  if(back_node->weight)
+    return;
+
+  
+  if (!in_str(scope, scopes));
+    scopes.push_back(scope);
+
+  ForwardCleanupToPool(back_node->L_Node, scope);
+  ForwardCleanupToPool(back_node->R_Node, scope);
+
+  
+  to_pool_forward(back_node->dims_prod, back_node->tensor_ptr, scope, "");
+  to_free_tensor_forward(back_node, scope);
 }
-void to_pool(float dims_prod, float *tensor_ptr, std::string from)
+void CleanScopeTensors(std::string scope)
 {
-  if (!in_float_ptr_vec(tensor_ptr, tensors_sent_to_pool))
+  for(Tensor *tensor : forward_Tensors_to_free[scope])
+    delete tensor;
+
+  std::vector<float*> scope_tensors_ptrs;
+
+  //for(auto &pair : scope_tensors[scope])
+  //  scope_tensors_ptrs.push_back(pair.second);
+
+  for(std::tuple<float, float *, std::string> pair : forward_tensors_to_pool[scope])
   {
-    backprop_tensors_to_pool.push_back(std::make_tuple(dims_prod, tensor_ptr, from));
-    tensors_sent_to_pool.push_back(tensor_ptr);
+    //if(!in_float_ptr_vec(std::get<1>(pair), scope_tensors_ptrs))
+      move_to_pool(std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
+
+    //move_to_pool(pair.first, pair.second);
+    //cudaCheck(cudaFree(std::get<1>(pair)));
   }
+
+  forward_Tensors_to_free[scope].clear();
+  forward_tensors_to_pool[scope].clear();
+  forward_tensors_sent_to_pool[scope].clear();
+
+  forward_Tensors_to_free.erase(scope);
+  forward_tensors_to_pool.erase(scope);
+  forward_tensors_sent_to_pool.erase(scope);
 }
+
+extern "C" float clean_forward(char *scope, char *previous_scope)
+{
+  for(std::string _scope : scopes)
+    CleanScopeTensors(_scope);
+  scopes.clear();
+  return 0;
+}
+
 
 void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, int parent_op)
 {
@@ -10587,11 +10888,23 @@ public:
   //float eps = 1.5e-4;
   float eps = 1e-8;
     
-  virtual void init_states(std::string param_name, float params_count) {}
-  virtual void step(float *param, float *grad, std::vector<float> dims, std::string param_name) {}
+  virtual void init_states(std::string, float) {}
+  virtual void step(float *, float *, std::vector<float>, std::string, cudaStream_t) {}
   virtual void count_step() {
     timestep+=1;
   }
+};
+
+class SGD_optim : public Optimizer {
+  std::map<std::string, float *> NamedV, NamedM;
+  float lr, momentum, weight_decay, grad_clip;
+
+  public:
+    SGD_optim(float lr, float momentum, float weight_decay, float grad_clip)
+      : lr(lr), momentum(momentum), weight_decay(weight_decay), grad_clip(grad_clip) {}
+    
+  void init_states(std::string param_name, float params_count) override;
+  void step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
 };
 
 class AdamW_optim : public Optimizer {
@@ -10603,13 +10916,30 @@ class AdamW_optim : public Optimizer {
       : lr(lr), beta1(beta1), beta2(beta2), weight_decay(weight_decay), grad_clip(grad_clip) {}
     
   void init_states(std::string param_name, float params_count) override;
-  void step(float *param, float *grad, std::vector<float> dims, std::string param_name) override;
+  void step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
 };
 
 
 
 __device__ inline float lerp(float start, float end, float weight) {
     return fma(weight, end, fma(-weight, start, start));
+}
+
+__global__ void sgd_kernel(float* params_memory, const float* grads_memory, float* m_memory, long num_parameters,
+                              float learning_rate, float momentum,
+                              const float weight_decay, const float grad_clip) {
+
+   int i = blockIdx.x * blockDim.x + threadIdx.x;
+   if (i >= num_parameters) return;  // guard
+   
+   float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
+   float m = m_memory[i];
+   
+   // update the first moment (momentum)
+   m = m*momentum + grad;
+   m_memory[i] = m;
+  
+   params_memory[i] -= learning_rate * m + weight_decay * params_memory[i];
 }
 
 __global__ void adamw_kernel(float* params_memory, const float* grads_memory, float* m_memory, float* v_memory, long num_parameters,
@@ -10634,10 +10964,43 @@ __global__ void adamw_kernel(float* params_memory, const float* grads_memory, fl
 }
 
 
-void AdamW_optim::init_states(std::string param_name, float params_count)
+void SGD_optim::init_states(std::string param_name, float params_count)
 {
   
 
+  if (NamedM[param_name]==nullptr)
+  {
+    std::cout << "init_states for param " << param_name << " with params count: " << params_count << "\n";
+
+    float *m, *device_m;
+
+    m = new float[params_count];
+    m = make_zeros_float(params_count);
+
+    cudaMalloc(&device_m, params_count*sizeof(float));
+    cudaMemcpy(device_m, m, params_count*sizeof(float), cudaMemcpyHostToDevice);
+
+    delete[] m;
+
+    NamedM[param_name] = device_m;
+  }
+}
+
+void SGD_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream)
+{
+  float *m = NamedM[param_name];
+
+ 
+  int params_count = DimsProd(dims);
+  int block_size = 512;
+  int num_blocks = ceil_div(params_count, block_size);
+
+  sgd_kernel<<<num_blocks, block_size, 0, stream>>>(param, grad, m, params_count,
+                                           lr, momentum, weight_decay, grad_clip);
+}
+
+void AdamW_optim::init_states(std::string param_name, float params_count)
+{
   if (NamedV[param_name]==nullptr)
   {
     std::cout << "init_states for param " << param_name << " with params count: " << params_count << "\n";
@@ -10663,13 +11026,8 @@ void AdamW_optim::init_states(std::string param_name, float params_count)
   }
 }
 
-void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name)
+void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream)
 {
-  //std::cout  << "Optimizer step called\n";
-  //std::cout << "AdamW stepping: " << param_name << "\n";
-  //PrintDims(dims);
-  
-
   float *v = NamedV[param_name];
   float *m = NamedM[param_name];
 
@@ -10678,58 +11036,75 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
 
   
 
-  /*
-  std::cout << "param pre: \n";
-  PrintTensorF(param, dims[0], dims[1]);
-
-  std::cout << "\n\ngrad: \n";
-  PrintTensorF(grad, dims[0], dims[1]);
-  */
-
-
   int params_count = DimsProd(dims);
   int block_size = 512;
   int num_blocks = ceil_div(params_count, block_size);
 
-  adamw_kernel<<<num_blocks, block_size>>>(param, grad, m, v, params_count,
+  adamw_kernel<<<num_blocks, block_size, 0, stream>>>(param, grad, m, v, params_count,
                                            lr, beta1, beta2, beta1_correction, beta2_correction,
                                            eps, weight_decay, grad_clip);
-
-
 }
 
 
-
-
-std::unique_ptr<Optimizer> optimizer = nullptr;
-
-
-extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay, float grad_clip)
+std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 {
+  int num_streams = NamedParamGrads.size();
 
-  if (optimizer==nullptr)
-    optimizer = std::make_unique<AdamW_optim>(lr, beta1, beta2, weight_decay, grad_clip);
+  std::vector<cudaStream_t> streams(num_streams);
 
-  
+  for (int i = 0; i < num_streams; ++i)
+    cudaStreamCreate(&streams[i]);
+
+  int i=0;
   for (auto& pair : NamedParamGrads)
   {
     std::string param_name = pair.first;
 
     if (param_name!="none")
     {
-      //if (!ends_with(param_name, "_bias"))
-      //  PrintTensorF(pair.second, 2, 2);
       Tensor *tensor = NamedTensorsT[param_name];
       optimizer->init_states(param_name, tensor->dims_prod);
-      optimizer->step(tensor->tensor_ptr, pair.second, tensor->dims, param_name);
-      //std::cout << "DELETING " << param_name << "\n";
-      //delete tensor;
+      optimizer->step(tensor->tensor_ptr, pair.second, tensor->dims, param_name, streams[i]);
     }
+    i+=1;
   }
   optimizer->count_step();
 
+  
+  for (int i = 0; i < num_streams; ++i)
+    cudaStreamSynchronize(streams[i]);
+  for (int i = 0; i < num_streams; ++i)
+    cudaStreamDestroy(streams[i]);
+
+  return std::move(optimizer);
+}
+
+
+
+std::unique_ptr<Optimizer> optimizer = nullptr;
+extern "C" float SGD(float lr, float momentum, float weight_decay, float grad_clip)
+{
+
+  if (optimizer==nullptr)
+    optimizer = std::make_unique<SGD_optim>(lr, momentum, weight_decay, grad_clip);
+
+  optimizer = optimize(std::move(optimizer));
+
   return 0;
 }
+extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay, float grad_clip)
+{
+
+  if (optimizer==nullptr)
+    optimizer = std::make_unique<AdamW_optim>(lr, beta1, beta2, weight_decay, grad_clip);
+
+  optimizer = optimize(std::move(optimizer));
+
+  return 0;
+}
+
+
+
 
 
 extern "C" float OneCycleLR(float base_lr, float step, float max_steps)
@@ -10751,6 +11126,15 @@ extern "C" float OneCycleLR(float base_lr, float step, float max_steps)
     return base_lr * step/cycle_length;
   if(step<max_steps)
     return base_lr * (1 + std::cos(M_PI * (step - cycle_length) / (max_steps - cycle_length))) / 2;
+  return min_lr;
+}
+
+extern "C" float CosineLR(float base_lr, float step, float max_steps)
+{
+  float min_lr = base_lr*0.05;
+
+  if(step<max_steps)
+    return min_lr + (base_lr-min_lr) * (1 + std::cos(M_PI * (step/max_steps))) / 2;
   return min_lr;
 }
 
@@ -10786,7 +11170,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
       Builder->CreateCall(TheModule->getFunction("AttrTensor"),
-                          {LtensorName, RtensorPtr});
+                          {LtensorName, RtensorPtr, scope_str});
       std::cout << "Post attr call\n\n";
     } else
     {
@@ -12212,8 +12596,9 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
     else if (std::strcmp(init, "binary") == 0)
       tensor_cpu = make_random_int(product, 1);
 
-    
+    cudaCheck(cudaGetLastError());
     tensor_ptr = get_from_pool(product,"create tensor");
+    std::cout << "cpy of: " << tensor_name << "\n";
     cudaCheck(cudaMemcpy(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
     delete[] tensor_cpu;
   }
@@ -12239,7 +12624,8 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
 
   tensor = createTensor(tensor_ptr, dims, product, true, tensor_name);
   tensor->scopeless_name = scopeless_name;
-  tensor->weight = (bool)is_weight;
+  if((bool)is_weight)
+    tensor->SetIsWeight();
   tensor->op = create_tensor_op;
 
   
@@ -13525,6 +13911,7 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("clip", clipTy);
 
+
   //===----------------------------------------------------------------------===//
   // Backward and Optimizers CUDA Ops
   //===----------------------------------------------------------------------===//
@@ -13536,6 +13923,27 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("backprop", BackpropagationTy);
+
+
+  //
+  FunctionType *clean_forwardTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy}, 
+      false
+  );
+  TheModule->getOrInsertFunction("clean_forward", clean_forwardTy);
+    
+  
+  //
+  FunctionType *SGDTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("SGD", SGDTy);
   
   
   //
@@ -13560,6 +13968,18 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("OneCycleLR", OneCycleLRTy);
+  
+  
+  //
+  FunctionType *CosineLRTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("CosineLR", CosineLRTy);
+
 
 
   //===----------------------------------------------------------------------===//
@@ -13654,6 +14074,24 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("BatchNormForward2d", BatchNormForward2dTy);
+
+
+  //
+  FunctionType *cropTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("RandomCrop", cropTy);
+
+
+  //
+  FunctionType *RandomHorizontalFlipTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("RandomHorizontalFlip", RandomHorizontalFlipTy);
   
 
   //
@@ -14514,10 +14952,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *RemoveTensorScopeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy,
-       int8PtrTy,
-       int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("RemoveTensorScope", RemoveTensorScopeTy);
@@ -14539,17 +14974,14 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *AttrTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("AttrTensor", AttrTensorTy);
 
   FunctionType *AttrTensorNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       floatPtrTy,
-       int8PtrTy}, 
+      {int8PtrTy, floatPtrTy, int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
@@ -14823,8 +15255,13 @@ int main() {
   InitializeNativeTargetAsmParser();
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
+  activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op};
   loss_ops = {cross_entropy_op};
+
+  preprocessing_ops = {crop_op, random_horizontal_flip_op};
   gradless_ops = {onehot_op, max_op, argmax_op, equal_op};
+  gradless_ops = concat_int_vec(gradless_ops, preprocessing_ops);
+
 
   // Install standard binary operators.
   // 1 is lowest precedence.
@@ -14858,7 +15295,8 @@ int main() {
 
 
 
-  return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor"};
+  return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor",
+                             "RandomCrop", "RandomHorizontalFlip"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
@@ -14879,9 +15317,9 @@ int main() {
 
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
                       "LenStrVec", "gpu", "gpuw", "zeros_vec", "ones_vec",
-                      "_glob_b_", "print", "cross_entropy", "backprop", "AdamW",
+                      "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
-                      "cpu_idx", "eval", "train", "OneCycleLR"};
+                      "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
