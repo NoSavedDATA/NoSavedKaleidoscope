@@ -57,8 +57,7 @@
 #include "include/cu_commons.h"
 
 
-pthread_mutex_t mtx_self_float;
-pthread_mutex_t mutex;
+pthread_mutex_t mutex, clean_scope_mutex;
 
 float TERMINATE_VARARG = -40370000000.0f;
 
@@ -68,6 +67,8 @@ float TERMINATE_VARARG = -40370000000.0f;
 // Files
 #define STB_IMAGE_IMPLEMENTATION
 #include "include/stb/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "include/stb/stb_image_write.h"
 
 
 static cublasHandle_t cublas_handle;
@@ -838,6 +839,7 @@ public:
   bool isVec = false;
   bool isVarLoad = false;
   bool SolverIncludeScope = true;
+  bool NameSolveToLast = true;
 
   Value *TensorPtr;
 
@@ -859,6 +861,13 @@ public:
   }
   virtual bool GetIsVarLoad() {
     return isVarLoad;
+  }
+
+  virtual bool GetNameSolveToLast() {
+    return NameSolveToLast;
+  }
+  virtual void SetNameSolveToLast(bool NameSolveToLast) {
+    this->NameSolveToLast=NameSolveToLast;
   }
 
   virtual void SetSelf(bool Self) {
@@ -1293,15 +1302,18 @@ class CallExprAST : public ExprAST {
   std::string PreDot;
   bool IsVarForward;
   std::string CalleeOverride;
+  std::unique_ptr<ExprAST> NameSolver;
 
   public:
-    CallExprAST(const std::string &Callee,
+    CallExprAST(std::unique_ptr<ExprAST> NameSolver,
+                const std::string &Callee,
                 std::vector<std::unique_ptr<ExprAST>> Args,
                 const std::string &Class,
                 const std::string &PreDot,
                 bool IsVarForward,
                 const std::string &CalleeOverride)
-        : Callee(Callee), Args(std::move(Args)), Class(Class), PreDot(PreDot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {}
+        : NameSolver(std::move(NameSolver)), Callee(Callee), Args(std::move(Args)), Class(Class),
+          PreDot(PreDot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {}
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -1834,7 +1846,10 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     is_var_forward = true;
   }
   
-  auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), "None", "None", is_var_forward, callee_override);
+  auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+  name_solver_expr->SetNameSolveToLast(false);
+  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, std::move(Args),
+                                                "None", "None", is_var_forward, callee_override);
 
   
   
@@ -2830,6 +2845,389 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
 }
 
 
+/*
+void bilinear_resize(unsigned char *dest, int dwidth, int dheight, int width, int sheight)
+{
+  unsigned char *src = new unsigned char[];
+  float a, b;
+  float red, green, blue, alpha;
+  float dx, dy;
+  float rx, ry;
+  int x, y;
+  int index0, index1, index2, index3;
+
+  dx = ((float) swidth)/dwidth;
+  dy = ((float) sheight)/dheight;
+  for(y=0, ry = 0;y<dheight-1;y++, ry += dy)
+  {
+    b = ry - (int) ry;
+    for(x=0, rx = 0;x<dwidth-1;x++, rx += dx)
+    {
+      a = rx - (int) rx;
+      index0 = (int)ry * swidth + (int) rx;
+      index1 = index0 + 1;
+      index2 = index0 + swidth;     
+      index3 = index0 + swidth + 1;
+
+      red = src[index0*4] * (1.0f-a)*(1.0f-b);
+      green = src[index0*4+1] * (1.0f-a)*(1.0f-b);
+      blue = src[index0*4+2] * (1.0f-a)*(1.0f-b);
+      alpha = src[index0*4+3] * (1.0f-a)*(1.0f-b);
+      red += src[index1*4] * (a)*(1.0f-b);
+      green += src[index1*4+1] * (a)*(1.0f-b);
+      blue += src[index1*4+2] * (a)*(1.0f-b);
+      alpha += src[index1*4+3] * (a)*(1.0f-b);
+      red += src[index2*4] * (1.0f-a)*(b);
+      green += src[index2*4+1] * (1.0f-a)*(b);
+      blue += src[index2*4+2] * (1.0f-a)*(b);
+      alpha += src[index2*4+3] * (1.0f-a)*(b);
+      red += src[index3*4] * (a)*(b);
+      green += src[index3*4+1] * (a)*(b);
+      blue += src[index3*4+2] * (a)*(b);
+      alpha += src[index3*4+3] * (a)*(b);
+
+      red = red < 0 ? 0 : red > 255 ? 255 : red;
+      green = green < 0 ? 0 : green > 255 ? 255 : green;
+      blue = blue < 0 ? 0 : blue > 255 ? 255 : blue;
+      alpha = alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
+
+      dest[(y*dwidth+x)*4] = (unsigned char) red;
+      dest[(y*dwidth+x)*4+1] = (unsigned char) green;
+      dest[(y*dwidth+x)*4+2] = (unsigned char) blue;
+      dest[(y*dwidth+x)*4+3] = (unsigned char) alpha;
+    }
+    index0 = (int)ry * swidth + (int) rx;
+    index1 = index0;
+    index2 = index0 + swidth;     
+    index3 = index0 + swidth;   
+
+    red = src[index0*4] * (1.0f-a)*(1.0f-b);
+    green = src[index0*4+1] * (1.0f-a)*(1.0f-b);
+    blue = src[index0*4+2] * (1.0f-a)*(1.0f-b);
+    alpha = src[index0*4+3] * (1.0f-a)*(1.0f-b);
+    red += src[index1*4] * (a)*(1.0f-b);
+    green += src[index1*4+1] * (a)*(1.0f-b);
+    blue += src[index1*4+2] * (a)*(1.0f-b);
+    alpha += src[index1*4+3] * (a)*(1.0f-b);
+    red += src[index2*4] * (1.0f-a)*(b);
+    green += src[index2*4+1] * (1.0f-a)*(b);
+    blue += src[index2*4+2] * (1.0f-a)*(b);
+    alpha += src[index2*4+3] * (1.0f-a)*(b);
+    red += src[index3*4] * (a)*(b);
+    green += src[index3*4+1] * (a)*(b);
+    blue += src[index3*4+2] * (a)*(b);
+    alpha += src[index3*4+3] * (a)*(b);
+
+    red = red < 0 ? 0 : red > 255 ? 255 : red;
+    green = green < 0 ? 0 : green > 255 ? 255 : green;
+    blue = blue < 0 ? 0 : blue > 255 ? 255 : blue;
+    alpha = alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
+
+    dest[(y*dwidth+x)*4] = (unsigned char) red;
+    dest[(y*dwidth+x)*4+1] = (unsigned char) green;
+    dest[(y*dwidth+x)*4+2] = (unsigned char) blue;
+    dest[(y*dwidth+x)*4+3] = (unsigned char) alpha;
+  }
+  index0 = (int)ry * swidth + (int) rx;
+  index1 = index0;
+  index2 = index0 + swidth;     
+  index3 = index0 + swidth;   
+
+  for(x=0, rx = 0;x<dwidth-1;x++, rx += dx)
+  {
+    a = rx - (int) rx;
+    index0 = (int)ry * swidth + (int) rx;
+    index1 = index0 + 1;
+    index2 = index0;     
+    index3 = index0;
+
+    red = src[index0*4] * (1.0f-a)*(1.0f-b);
+    green = src[index0*4+1] * (1.0f-a)*(1.0f-b);
+    blue = src[index0*4+2] * (1.0f-a)*(1.0f-b);
+    alpha = src[index0*4+3] * (1.0f-a)*(1.0f-b);
+    red += src[index1*4] * (a)*(1.0f-b);
+    green += src[index1*4+1] * (a)*(1.0f-b);
+    blue += src[index1*4+2] * (a)*(1.0f-b);
+    alpha += src[index1*4+3] * (a)*(1.0f-b);
+    red += src[index2*4] * (1.0f-a)*(b);
+    green += src[index2*4+1] * (1.0f-a)*(b);
+    blue += src[index2*4+2] * (1.0f-a)*(b);
+    alpha += src[index2*4+3] * (1.0f-a)*(b);
+    red += src[index3*4] * (a)*(b);
+    green += src[index3*4+1] * (a)*(b);
+    blue += src[index3*4+2] * (a)*(b);
+    alpha += src[index3*4+3] * (a)*(b);
+
+    red = red < 0 ? 0 : red > 255 ? 255 : red;
+    green = green < 0 ? 0 : green > 255 ? 255 : green;
+    blue = blue < 0 ? 0 : blue > 255 ? 255 : blue;
+    alpha = alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
+
+    dest[(y*dwidth+x)*4] = (unsigned char) red;
+    dest[(y*dwidth+x)*4+1] = (unsigned char) green;
+    dest[(y*dwidth+x)*4+2] = (unsigned char) blue;
+    dest[(y*dwidth+x)*4+3] = (unsigned char) alpha;
+  }
+
+   dest[(y*dwidth+x)*4] = src[((sheight-1)*swidth+swidth-1)*4];
+   dest[(y*dwidth+x)*4+1] = src[((sheight-1)*swidth+swidth-1)*4+1];
+   dest[(y*dwidth+x)*4+2] = src[((sheight-1)*swidth+swidth-1)*4+2];
+   dest[(y*dwidth+x)*4+3] = src[((sheight-1)*swidth+swidth-1)*4+3];
+}
+*/
+
+
+unsigned char *interpolate_img(unsigned char *src, int height, int width, int dst_height, int dst_width)
+{
+    unsigned char *new_img = new unsigned char[dst_height*dst_width*3];
+
+
+    // Calculate scale factors for width and height
+    float xScale = static_cast<float>(width) / dst_width;
+    float yScale = static_cast<float>(height) / dst_height;
+
+
+
+    for (int y = 0; y < dst_height; ++y) {
+        for (int x = 0; x < dst_width; ++x) {
+            // Find the corresponding position in the input image
+            float srcX = x * xScale;
+            float srcY = y * yScale;
+            int x1 = static_cast<int>(srcX);
+            int y1 = static_cast<int>(srcY);
+            int x2 = std::min(x1 + 1, width - 1);
+            int y2 = std::min(y1 + 1, height - 1);
+
+            float alphaX = srcX - x1;
+            float alphaY = srcY - y1;
+
+            // Get the pixel values from the input image
+            auto getPixel = [&](int x, int y, int c) {
+                int index = (y * width + x) * 3 + c;
+                return static_cast<float>(src[index]);
+            };
+
+            // Perform bilinear interpolation
+            for (int c = 0; c < 3; ++c) {
+                float value1 = (1 - alphaX) * getPixel(x1, y1, c) + alphaX * getPixel(x2, y1, c);
+                float value2 = (1 - alphaX) * getPixel(x1, y2, c) + alphaX * getPixel(x2, y2, c);
+                float interpolatedValue = (1 - alphaY) * value1 + alphaY * value2;
+                new_img[(y * dst_width + x) * 3 + c] = static_cast<unsigned char>(std::clamp(interpolatedValue, 0.0f, 255.0f));
+            }
+        }
+    }
+
+  delete[] src;
+  return new_img;
+}
+
+
+uint uint_min(uint x, int y){
+  uint _y = (uint) y;
+  if (x>_y)
+    return _y;
+  return x;
+}
+
+double lerp_bli(double c1, double c2, double v1, double v2, double x)
+{
+  if( (v1==v2) ) return c1;
+  double inc = ((c2-c1)/(v2 - v1)) * (x - v1);
+  double val = c1 + inc;
+  return val;
+};
+
+unsigned char *bilinear_resize(unsigned char *src, int height, int width, int dst_height, int dst_width)
+{
+    unsigned char *new_img = new unsigned char[dst_height*dst_width*3];
+    std::memset(new_img, 0, dst_height * dst_width * 3 * sizeof(unsigned char));
+
+    // x and y ratios
+    double rx = (double)width / (double)dst_width;
+    double ry = (double)height / (double)dst_height;
+
+
+    
+    // loop through destination image
+    for(int y=0; y<dst_height; ++y)
+    {
+        for(int x=0; x<dst_width; ++x)
+        {
+            //double sx = x * rx;
+            //double sy = y * ry;
+            double sx = (width>dst_width) ? (x + 0.5) * rx - 0.5 : x * rx;
+            double sy = (height>dst_height) ? (y + 0.5) * ry - 0.5 : y * ry;
+            
+            
+            uint xl = std::floor(sx);
+            uint yt = std::floor(sy);
+            uint xr = (width>dst_width) ? xl+1 : xl;
+            uint yb = (height>dst_height) ? yt+1 : yt;
+            //uint xr = uint_min(xl + 1, width - 1);
+            //uint yb = uint_min(yt + 1, height - 1);
+
+
+            if (height<dst_height)
+              std::cout << yt << ", " << yb << ", " << y << ", " << sy << ". " << height << ", " << dst_height << "\n";
+
+            
+            for (uint d = 0; d < 3; ++d)
+            {
+                unsigned char tl    = src[(xl*width+yt)*3+d];//GetData(xl, yt, d);
+                unsigned char tr    = src[(xr*width+yt)*3+d];//GetData(xr, yt, d);
+                unsigned char bl    = src[(xl*width+yb)*3+d];//GetData(xl, yb, d);
+                unsigned char br    = src[(xr*width+yb)*3+d];//GetData(xr, yb, d);
+                double t    = lerp_bli(tl, tr, xl, xr, sx);
+                double b    = lerp_bli(bl, br, xl, xr, sx);
+                double m    = lerp_bli(t, b, yt, yb, sy);
+                unsigned char val   = std::floor(m + 0.5);
+                
+                new_img[(x * dst_width + y) * 3 + d] = val;
+            }
+        }
+    }
+
+  delete[] src;
+  return new_img;
+}
+
+extern "C" float * wload_img_resize(Tensor *tensor, char *img_name, float worker_idx, float batch_idx, float c, float h, float w)
+{
+  //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
+  //std::cout << "Image: " << img_name <<  "\n";
+
+
+  int width, height, channels;
+
+  //std::cout << "GLOAD IMG, dims of " << img_name << "\n";
+  
+  unsigned char* image_data = stbi_load(img_name, &width, &height, &channels, 0);
+
+
+
+  if(width!=w||height!=h)
+  { 
+    image_data = interpolate_img(image_data, height, width, h, w);
+    width = w;
+    height = h;
+  }
+
+
+
+  if (image_data) {
+    
+    std::vector<float> dims = tensor->dims;
+
+    
+    
+    std::vector<float> workerless_dims = BatchLessDims(dims);
+    int workerless_dims_prod = DimsProd(workerless_dims);
+
+    std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+    int batchless_dims_prod = DimsProd(batchless_dims);
+    
+    current_data_attr_dims.clear();
+    current_data_attr_dims.push_back((float)width);
+    current_data_attr_dims.push_back((float)height);
+    current_data_attr_dims.push_back((float)channels);
+
+
+    if (batchless_dims_prod < width*height*channels)
+    {
+      std::string t_n = tensor->name;
+      std::string _error = "The image dimensions are incompatible with the tensor \033[95m" + t_n + "\033[0m dimensions.";
+      LogErrorS(_error);
+
+
+      std::cout << "\nTENSOR BATCHLESS DIMS:" << "\n";
+      PrintDims(batchless_dims);
+
+      std::cout << "\nImage required dims: [" << width << ", " << height << ", " << channels << "]\n\n";
+      
+      return nullptr;
+    }
+    if (batch_idx > dims[1])
+    {
+      std::string _error = "Tried to load a pinned tensor on batch index " + std::to_string(batch_idx) + ", whereas this tensor batch size is " + std::to_string(dims[1]) + ".";
+      LogErrorS(_error);
+    }
+
+
+
+    float *image_data_float = tensor->cpu_tensor_ptr;
+    int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+
+    //std::cout << "worker idx: " << worker_idx << ", batch idx: " << batch_idx << ", batch offset: " << idx_offset << "\n";
+  
+    // Loop through each pixel and convert to float between 0.0 and 1.0
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        for (int c = 0; c < channels; ++c) {
+          // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
+          image_data_float[idx_offset + c * (height * width) + y * width + x] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+        }
+      }
+    }
+    stbi_image_free(image_data);
+
+    //std::cout << "returning float image" << "\n";
+    return image_data_float;
+    
+  } else {
+    std::string img_n = img_name;
+    std::string _error = "Failed to open image: " + img_n + ".\n\n";
+    LogErrorS(_error);
+  }
+
+  return nullptr;
+}
+
+
+extern "C" float save_img(Tensor *tensor, char *img_name)
+{
+  
+  int c, h, w;
+
+  c = tensor->dims[tensor->dims.size()-3];
+  h = tensor->dims[tensor->dims.size()-2];
+  w = tensor->dims[tensor->dims.size()-1];
+
+
+  // Check if the tensor has 3 channels
+  if (c != 3) {
+    std::cerr << "Only 3-channel images are supported." << std::endl;
+    return -1;
+  }
+
+  float *tensor_cpu = new float[c*h*w];
+  cudaCheck(cudaMemcpy(tensor_cpu, tensor->tensor_ptr, c*h*w*sizeof(float), cudaMemcpyDeviceToHost));
+
+  // Convert tensor to 8-bit format
+  std::vector<uint8_t> imageData(h * w * c);
+  for (int ch = 0; ch < c; ++ch) {
+    for (int y = 0; y < h; ++y) {
+      for (int x = 0; x < w; ++x) {
+        int tensorIndex = (ch * h + y) * w + x;
+        int imageIndex = (y * w + x) * c + ch;
+        imageData[imageIndex] = static_cast<uint8_t>(std::min(255.0f, std::max(0.0f, tensor_cpu[tensorIndex] * 255.0f)));
+      }
+    }
+  }
+
+  std::string img = "/home/nosaveddata/imgs/";
+  img = img + RandomString(4);
+  img = img + ".png";
+
+  // Write the image using stb_image_write
+  if (!stbi_write_png(img.c_str(), w, h, c, imageData.data(), w * c)) {
+    std::cerr << "Failed to write image to " << img_name << std::endl;
+  }
+
+  delete[] tensor_cpu;
+
+  return 0;
+}
+
 extern "C" float cpu(Tensor *tensor)
 {
 
@@ -3144,8 +3542,10 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
   //if (IdName == "len")
 
 
-
-  auto aux = std::make_unique<CallExprAST>(IdName, std::move(Args), object_class, pre_dot, is_var_forward, callee_override);
+  auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+  name_solver_expr->SetNameSolveToLast(false);
+  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, std::move(Args),
+                                        object_class, pre_dot, is_var_forward, callee_override);
 
   if (in_str(IdName, return_tensor_fn) || return_tensor)
   {
@@ -5152,33 +5552,35 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       }
     }
 
-  if(Names.size()==1)// Concat scope only
-    if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str")&&include_scope)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
-                                                        {var_name, scope_str});
 
-
-
-  name = Builder->CreateGlobalString(std::get<0>(Names[Names.size()-1]));
-  idx = std::move(std::get<2>(Names[Names.size()-1]));
-
-  //std::cout << "\n\n\nNAMESOLVER TYPE OF LAST: " << type << "\n";
-  //std::cout << "For: " << std::get<0>(Names[Names.size()-1]) << "\n";
-  //std::cout << "Type: " << Type << "\n";
-  var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
-                                                    {var_name, name});
-  if (Type=="object_vec")
+  if(NameSolveToLast)
   {
-    Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
-    var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
-                                                      {var_name, _idx});
+    if(Names.size()==1)// Concat scope only
+      if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str")&&include_scope)
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
+                                                          {var_name, scope_str});
+
+
+
+    name = Builder->CreateGlobalString(std::get<0>(Names[Names.size()-1]));
+    idx = std::move(std::get<2>(Names[Names.size()-1]));
+
+    //std::cout << "\n\n\nNAMESOLVER TYPE OF LAST: " << type << "\n";
+    //std::cout << "For: " << std::get<0>(Names[Names.size()-1]) << "\n";
+    //std::cout << "Type: " << Type << "\n";
+    var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
+                                                      {var_name, name});
+    if (Type=="object_vec")
+    {
+      Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
+                                                        {var_name, _idx});
+    }
   }
 
-
-  
-  
   return var_name;
 }
+
 
 Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
@@ -5921,6 +6323,9 @@ extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
 extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class, char *method, int nested_function, int isSelf, int isAttribute)
 {
 
+  if (nested_function)
+    delete[] pre_dotc;
+
   std::string _first_arg = first_arg;
   std::string pre_dot = pre_dotc;
 
@@ -6099,7 +6504,7 @@ extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
       delete[] name;
       return;
     }
-      
+    
 
   ScopeVarsToClean[scope].push_back(std::make_pair(name, type));
   
@@ -6108,7 +6513,9 @@ extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
 extern "C" void CleanScopeVars(char *scope)
 {
   //TODO: this leads to segmentation fault with 3+ workers. 
-  /*
+  
+  pthread_mutex_lock(&clean_scope_mutex);
+
   std::vector<std::pair<std::string, std::string>> scope_vars = ScopeVarsToClean[scope];
 
   for(auto &pair : scope_vars)
@@ -6122,8 +6529,8 @@ extern "C" void CleanScopeVars(char *scope)
       }
     }
   }
-  */
-
+  
+  pthread_mutex_unlock(&clean_scope_mutex);
   //delete[] scope;
 }
 
@@ -6155,18 +6562,21 @@ extern "C" void StoreOnDemandNoFree(char *name, float value){
 extern "C" void StoreArgOnDemand(char *name, float value){
   //std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
   NamedClassValues[name] = value;
+  delete[] name;
 }
 
 extern "C" float StoreStrOnDemand(char *name, char * value){
   
-  NamedStrs[name] = CopyString(value);
+  //NamedStrs[name] = CopyString(value); //TODO: Break?
+  NamedStrs[name] = value;
   delete[] name;
 
   return 0;
 }
 extern "C" void *LoadStrOnDemand(char *name){
   
-  char *ret = CopyString(NamedStrs[name]);
+  //char *ret = CopyString(NamedStrs[name]);
+  char *ret = NamedStrs[name];
   delete[] name;
 
   return ret;
@@ -6181,7 +6591,7 @@ extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
 }
 
 extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value){
-  //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
+  std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
   delete[] name;
@@ -6321,7 +6731,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     if (type=="float")
     {
         V = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"), {var_name});
-        V = Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
+        //V = Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
         return V;
       
     }
@@ -10290,58 +10700,63 @@ unsigned long long time_seed() {
 
 
 __global__ void random_padding_cropping_kernel(
-    const float* input,
-    float* output,
-    int batch_size,
-    int channels,
-    int input_height,
-    int input_width,
-    int crop_height,
-    int crop_width,
-    int padding,
-    unsigned long long seed) 
+  const float* input,
+  float* output,
+  int batch_size,
+  int channels,
+  int input_height,
+  int input_width,
+  int crop_height,
+  int crop_width,
+  int padding,
+  unsigned long long seed)
 {
-    int b = blockIdx.x;
-    int c = blockIdx.y;
-    int y = threadIdx.y;
-    int x = threadIdx.x;
+  int b = blockIdx.x;
+  int c = blockIdx.y;
+  int y = threadIdx.y;
+  int x = threadIdx.x;
 
-    if (b >= batch_size || c >= channels || y >= crop_height || x >= crop_width)
-        return;
+  if (b >= batch_size || c >= channels || y >= crop_height || x >= crop_width)
+    return;
 
-    // Setup random number generator
-    curandState state;
-    curand_init(seed, b * channels, 0, &state); // one random state per batch
+  // Setup random number generator
+  curandState state;
+  curand_init(seed, b * channels, 0, &state); // one random state per batch
 
-    // Generate random padding values
-    int pad_top = curand(&state) % (padding + 1); // Range belongs to [0, padding]
-    int pad_bottom = curand(&state) % (padding + 1);
-    int pad_left = curand(&state) % (padding + 1);
-    int pad_right = curand(&state) % (padding + 1);
+  // Generate random padding values
+  int pad_top = curand(&state) % (padding + 1); // Range belongs to [0, padding]
+  int pad_bottom = curand(&state) % (padding + 1);
+  int pad_left = curand(&state) % (padding + 1);
+  int pad_right = curand(&state) % (padding + 1);
 
-    // Compute the padded height and width
-    int padded_height = input_height + pad_top + pad_bottom;
-    int padded_width = input_width + pad_left + pad_right;
+  // Compute the padded height and width
+  int padded_height = input_height + pad_top + pad_bottom;
+  int padded_width = input_width + pad_left + pad_right;
 
-    // Ensure crop dimensions fit within padded dimensions
-    int max_crop_top = padded_height - crop_height;
-    int max_crop_left = padded_width - crop_width;
+  // Ensure crop dimensions fit within padded dimensions
+  int max_crop_top = padded_height - crop_height;
+  int max_crop_left = padded_width - crop_width;
 
-    int crop_top = curand(&state) % (max_crop_top + 1);
-    int crop_left = curand(&state) % (max_crop_left + 1);
+  // Generate random crop starting points
+  int crop_top = curand(&state) % (max_crop_top + 1);
+  int crop_left = curand(&state) % (max_crop_left + 1);
 
-    // Compute input coordinates
-    int input_y = crop_top + pad_top + y;
-    int input_x = crop_left + pad_left + x;
+  // Compute input coordinates for any location within the crop
+  int input_y = crop_top + y;
+  int input_x = crop_left + x;
 
-    // Read from input and write to output
-    if (input_y < input_height && input_x < input_width) {
-        output[b * channels * crop_height  * crop_width  + c * crop_height  * crop_width  + y * crop_width + x] =
-         input[b * channels * input_height * input_width + c * input_height * input_width + input_y * input_width + input_x];
-    } else {
-        output[b * channels * crop_height * crop_width + c * crop_height * crop_width + y * crop_width + x] = 0.0f;
-    }
+  // Handle padding and out-of-bounds conditions
+  if (input_y >= pad_top && input_y < padded_height - pad_bottom &&
+      input_x >= pad_left && input_x < padded_width - pad_right) {
+    // Within padded region, read from input
+    output[b * channels * crop_height * crop_width + c * crop_height * crop_width + y * crop_width + x] =
+      input[b * channels * input_height * input_width + c * input_height * input_width + (input_y - pad_top) * input_width + (input_x - pad_left)];
+  } else {
+    // Outside padded region, set to zero
+    output[b * channels * crop_height * crop_width + c * crop_height * crop_width + y * crop_width + x] = 0.0f;
+  }
 }
+
 
 extern "C" void *RandomCrop(Tensor *tensor, float padding)
 {
@@ -10685,7 +11100,7 @@ void CleanScopeTensors(std::string scope)
 }
 
 extern "C" float clean_forward(char *scope, char *previous_scope)
-{
+{//TODO: break? clears threaded tensors
   for(std::string _scope : scopes)
     CleanScopeTensors(_scope);
   scopes.clear();
@@ -12557,8 +12972,6 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   }
 
 
-
-
   //for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
   //  NamedStrVecs[VarNames[i].first] = OldBindings[i];
 
@@ -12567,7 +12980,7 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-extern "C" float InitObjectVecWithNull(char *name, float vec_size)
+extern "C" float InitObjectVecWithNull(char *name, float vec_size) 
 {
   //std::cout << "InitObjectVecWithNull of " << name << " with vec_size " << vec_size << "\n\n\n\n";
 
@@ -12576,7 +12989,8 @@ extern "C" float InitObjectVecWithNull(char *name, float vec_size)
     std::string indexed_name = name + std::to_string(i);
     objectVecs[indexed_name] = "nullptr";
   }
-    
+  
+  delete[] name; //TODO: Break?
   return 0;
 }
 
@@ -12620,7 +13034,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
 
-    Value *var_name = Builder->CreateGlobalString(VarName);
+    Value *var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     
     if (!GetIsVec())
     {
@@ -12633,11 +13047,11 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       bool is_self = GetSelf();
       bool is_attr = GetIsAttribute();
 
-      if (is_self||is_attr)
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      if (is_self||is_attr) 
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"), //TODO: Break?
                                               {first_arg, var_name});
       if (!(is_self||is_attr))
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"), //TODO: Break?
                                               {scope_str, var_name});
 
       //Value *object_hash = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
@@ -12794,6 +13208,8 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
 
   
   NamedTensorsT[tensor_name] = tensor;
+  delete[] tensor_name, scopeless_name;
+
 
   return 0;
 }
@@ -12812,18 +13228,21 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     
     
     Value *var_name, *scopeless_name;
-    var_name = Builder->CreateGlobalString(VarName);
+    //var_name = Builder->CreateGlobalString(VarName);
+
+    var_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {Builder->CreateGlobalString(VarName)});
 
     bool is_self = GetSelf();
     bool is_attr = GetIsAttribute();
 
     if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
                                             {first_arg, var_name});
     scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                             {var_name});
     if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
                                             {scope_str, var_name});
 
     Value *aux;
@@ -13058,6 +13477,12 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     nested_function=1;
 
 
+  bool has_scope = false;
+  bool changed_first_arg = false;
+  bool has_first_arg_copy = false;
+  bool must_free_arg0 = false;
+
+  Value *name;
   
 
   //TODO: Solve scope_str discontinuity on async functions
@@ -13066,7 +13491,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
 
   //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
-  
   previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                         {scope_str});
 
@@ -13079,14 +13503,19 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   if (isAttribute && !isSelf && !in_str(tgt_function, native_methods))
   { // e.g: model.forward()
     if (nested_function)
+    {
       first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                                     {first_arg});
+      has_first_arg_copy = true;
+    }
 
     first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                                     {_pre_dot_str});
                                                     
     first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                 {previous_scope, first_arg});
+
+    changed_first_arg = true;
   }
   
   
@@ -13104,10 +13533,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   {
     bool not_coding_language_method = (!in_str(tgt_function, native_methods));    
 
+    
+
     if (not_coding_language_method)
       tgt_function = Class+tgt_function;
-
-
 
     if (!is_self_of_nested_function && not_coding_language_method)
     {
@@ -13122,22 +13551,26 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function),
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), isSelf),
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), isAttribute)});
+      changed_first_arg = true;
     }
     if (is_self_of_nested_function && not_coding_language_method)
-    {
+    { // object method inside object method
+
+      //TODO: can this be changed into first_arg_copy=first_arg?
       first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
+
       //first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
       first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                     {first_arg_copy,
                                                      _pre_dot_str});
+      has_first_arg_copy = true;
+      changed_first_arg = true;
     }
-    
+    //name = NameSolver->codegen(first_arg, scope_str, previous_scope);
     
     if (CalleeOverride!="none"||in_str(Callee, native_methods))
     { // e.g: x.view()
     
-      
-      
       if (isSelf&&!isAttribute)
         ArgsV.push_back(first_arg);
       if (!isSelf&&isAttribute)
@@ -13145,6 +13578,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
         Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                         {previous_scope, _pre_dot_str});
         ArgsV.push_back(arg);
+        //must_free_arg0 = true; //TODO: break?
       }
       
       if (isSelf && isAttribute)
@@ -13153,12 +13587,15 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
         ArgsV.push_back(first_arg);
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                         {ArgsV[0], _pre_dot_str});
-        //ArgsV.push_back(ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf)));
-        //target_args_size+=1;
+        //must_free_arg0 = true; //TODO: break?
+        
       }
 
       if (in_str(Callee, return_tensor_methods))
+      {
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {ArgsV[0]});
+        must_free_arg0 = false;
+      }
 
     }
     else // Pass first_arg's reference for the derived AST nodes.
@@ -13168,7 +13605,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
 
-  bool has_scope = false;
   if (!(CalleeOverride!="none" || in_str(Callee, native_fn)))
   {
     has_scope = true;
@@ -13209,7 +13645,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       return LogErrorV(_error);
     }
   }
-  //std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
+  std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
 
 
 
@@ -13298,9 +13734,17 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   
   Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
 
+  if (changed_first_arg)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
 
-  //if (has_scope) ///////
-  //  Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
+  if (has_first_arg_copy)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg_copy});
+
+  if (has_scope)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
+
+  if (must_free_arg0)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {ArgsV[0]});
   
   return ret;
 }
@@ -13611,10 +14055,10 @@ Function *FunctionAST::codegen() {
 
   NamedValues.clear();
 
-  bool has_self, has_scope, has_previous_scope;
-  has_self = false;
-  has_scope = false;
-  has_previous_scope = false;
+  bool has_self = false; 
+  bool has_scope = false;
+  bool has_previous_scope = false;
+  
 
   float val;
   int i = 0;
@@ -13704,16 +14148,20 @@ Function *FunctionAST::codegen() {
   
   
 
-  //if(has_self)//////
-  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {first_arg, aux});
+
   
+  if(has_self)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
+
   //if(has_scope)
   //  Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
+
   if(has_scope)
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
   
-  //if(has_previous_scope)//////
-  //  Builder->CreateCall(TheModule->getFunction("FreeCharFromFunc"), {previous_scope, aux});
+  if(has_previous_scope)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+
   
   
 
@@ -14450,6 +14898,24 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("wload_img", wload_imgTy);
+
+
+  //
+  FunctionType *wload_img_resizeTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("wload_img_resize", wload_img_resizeTy);
+
+
+  //
+  FunctionType *save_imgTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("save_img", save_imgTy);
   
 
   //
@@ -15427,6 +15893,10 @@ int main() {
     printf("Mutex initialization failed\n");
     return 1;
   }
+  if (pthread_mutex_init(&clean_scope_mutex, NULL) != 0) {
+    printf("Mutex initialization failed\n");
+    return 1;
+  }
 
 
   lockVars["mutex"] = &mutex;
@@ -15486,7 +15956,8 @@ int main() {
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
-                            "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave"};
+                            "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
+                            "save_img"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
 
   return_pinned_methods = {"gpu", "gpuw"};
@@ -15507,7 +15978,7 @@ int main() {
                       "LenStrVec", "gpu", "gpuw", "zeros_vec", "ones_vec",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
-                      "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR"};
+                      "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
