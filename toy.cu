@@ -2388,7 +2388,7 @@ struct CudaStreams {
   cudaStream_t stream;
   int idx;
 };
-constexpr int num_parallel_streams = 16;
+constexpr int num_parallel_streams = 32;
 CudaStreams *parallel_streams[num_parallel_streams];
 cudaEvent_t parallel_events[num_parallel_streams];
 int open_streams[num_parallel_streams];
@@ -2408,6 +2408,60 @@ void SynchronizeStream(CudaStreams *cuda_stream)
   cudaStreamSynchronize(cuda_stream->stream);
   open_streams[cuda_stream->idx] = 1;
 }
+CudaStreams *main_stream;
+
+
+int ASYNC_LOADER_THREADS = 6;
+
+void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaStream_t stream) {
+    cudaMemcpyAsync(d_data + offset, h_data + offset, size*sizeof(float), cudaMemcpyHostToDevice, stream);
+}
+
+struct Loader {
+    std::vector<std::thread> threads;
+    std::vector<CudaStreams *> streams;
+
+    void Load(float *tensor_ptr, const float *tensor_cpu, int all_dims_prod) {
+
+      float quotient = std::floor(all_dims_prod / ASYNC_LOADER_THREADS);
+      float remainder = all_dims_prod % ASYNC_LOADER_THREADS;
+
+
+      std::vector<float> dims_prods;
+
+      for(int i=0; i<ASYNC_LOADER_THREADS-1; i++)
+        dims_prods.push_back(quotient);
+      dims_prods.push_back(quotient+remainder);
+
+
+      float offset, size;
+      offset = 0;
+      for(int i=0; i<ASYNC_LOADER_THREADS; i++)
+      {
+        size = dims_prods[i];
+        CudaStreams *cuda_stream = AllocateStream();
+
+        //copyChunk(tensor_ptr, tensor_cpu, offset, size, cuda_stream->stream);
+        //threads.push_back(std::thread(copyChunk, tensor_ptr, tensor_cpu, offset, size, cuda_stream->stream));
+
+        cudaMemcpyAsync(tensor_ptr + (int)offset, tensor_cpu + (int)offset, size*sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+
+        streams.push_back(cuda_stream);
+        offset += size;
+      }
+    }
+    
+    void Sync()
+    {
+      for(int i=0; i<ASYNC_LOADER_THREADS; i++)
+      {
+        SynchronizeStream(streams[i]);
+        //threads[i].join();
+      }
+      streams.clear();
+      //threads.clear();
+    }
+};
 
 
 
@@ -2419,7 +2473,9 @@ struct Tensor {
   float *b=nullptr;
   float *dy=nullptr;
   int b_size=0;
+
   CudaStreams *cuda_stream = nullptr;
+  Loader *loader = nullptr;
 
   bool leaf, weight, from_grad_or_load;
   std::string view_of = "";
@@ -2431,7 +2487,7 @@ struct Tensor {
   bool visited;
 
   void NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
-                 bool new_is_leaf, std::string new_name, CudaStreams *_cuda_stream=nullptr){
+                 bool new_is_leaf, std::string new_name, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr){
     tensor_ptr = new_tensor_ptr;
     dims = new_dims;
     dims_prod = new_dims_prod;
@@ -2447,6 +2503,7 @@ struct Tensor {
     op=tensor_leaf;
     from_grad_or_load=false;
     cuda_stream = _cuda_stream;
+    loader = _loader;
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -2462,11 +2519,12 @@ struct Tensor {
     from_grad_or_load=true;
   }
 
-  void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream=nullptr){
+  void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr){
     tensor_ptr = new_tensor_ptr;
     dims = new_dims;
     dims_prod = new_dims_prod;
     cuda_stream = _cuda_stream;
+    loader = _loader;
   }
 
   
@@ -2519,6 +2577,13 @@ struct Tensor {
   }
   void Sync()
   {
+    
+    if(loader!=nullptr)
+    {
+      loader->Sync();
+      delete loader;
+      loader=nullptr;
+    }
     if(cuda_stream!=nullptr)
     {
       SynchronizeStream(cuda_stream);
@@ -2528,9 +2593,9 @@ struct Tensor {
 };
 
 Tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
-                     bool is_leaf, std::string name, CudaStreams *_cuda_stream=nullptr) {
+                     bool is_leaf, std::string name, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr) {
     Tensor *new_tensor = new Tensor();
-    new_tensor->NewTensor(tensor_ptr, dims, kDataLen, is_leaf, name, _cuda_stream);
+    new_tensor->NewTensor(tensor_ptr, dims, kDataLen, is_leaf, name, _cuda_stream, _loader);
     return new_tensor;
 }
 Tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
@@ -5038,7 +5103,7 @@ float *get_from_pool(float dims_prod, std::string from);
 
 
 
-extern "C" void *gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
+extern "C" float gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
 {
   //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
   
@@ -5056,40 +5121,55 @@ extern "C" void *gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
 
   tensor_cpu = pinned_tensor->cpu_tensor_ptr + static_cast<int>(idx*batchless_dims_prod);
 
+  
   if (tensor->dims_prod==batchless_dims_prod)
     tensor_ptr = tensor->tensor_ptr;
   else
     tensor_ptr = get_from_pool(batchless_dims_prod, "gpuw");
+  
+  //tensor_ptr = get_from_pool(batchless_dims_prod, "gpuw");
 
 
-
-  CudaStreams *cuda_stream;
-  if (batchless_dims_prod<1000)
-  {
-    cuda_stream = nullptr;
+  
+  Loader *loader=nullptr;
+  CudaStreams *cuda_stream=nullptr;
+  
+  
+  if (batchless_dims_prod<32){
     cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
   }
+  else //if (batchless_dims_prod<1000)
   {
     cuda_stream = AllocateStream();
     cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+    //cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+  }/*
+  else
+  {
+    //cuda_stream = AllocateStream();
+    //cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+    loader = new Loader();
+    loader->Load(tensor_ptr, tensor_cpu, batchless_dims_prod);
   }
+  */
 
 
   if (nn_mode==eval_mode)
   {
 
   } else {
+    
     Tensor *attr_tensor;
     attr_tensor = createTensor(tensor_ptr, batchless_dims, batchless_dims_prod, true, "");
     attr_tensor->op = gpu_op;
     todo_backward_tensors.push_back(attr_tensor);
+    
   }
 
-  tensor->AttrTensor(tensor_ptr, batchless_dims, batchless_dims_prod, cuda_stream);
+  tensor->AttrTensor(tensor_ptr, batchless_dims, batchless_dims_prod, cuda_stream, loader);
   tensor->from_grad_or_load = true;
-  NamedTensorsT[tensor->name] = tensor;
 
-  return nullptr;
+  return 0;
 }
 
 
@@ -5192,13 +5272,14 @@ extern "C" float first_nonzero(char *self)
 
   std::vector<float> vec;
   vec = ClassFloatVecs[self];
-
+  
   /*
   std::cout << "[";
   for (int i=0; i<vec.size(); i++)
     std::cout << vec[i] << ", ";
   std::cout << "]" << "\n";
   */
+
 
   float idx = -1;
   for (int i=0; i<vec.size(); i++)
@@ -7152,7 +7233,7 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
 
 
   cudaMalloc(&new_tensor, new_dims_prod*sizeof(float));
-  cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyHostToHost));
+  cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
 
   /*
   PrintTensorF(new_tensor, 1, 1);
@@ -7269,10 +7350,10 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
   arg_tensor = get_from_pool(dims_prod, "arg tensor");
   //cudaMalloc(&arg_tensor, dims_prod*sizeof(float));
   if (dims_prod!=0)
-    cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyHostToHost);
+    cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);
   
 
-  Tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream);
+  Tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
   new_tensor->scopeless_name = tensor->scopeless_name;
   NamedTensorsT[arg_tensor_name] = new_tensor;
   return 0;
@@ -7299,7 +7380,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
 
   move_to_pool(tensor->dims_prod, tensor->tensor_ptr, "remove tensor scope");
-  tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod, scope_tensor->cuda_stream);
+  tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod, scope_tensor->cuda_stream, scope_tensor->loader);
   tensor->from_grad_or_load = scope_tensor->from_grad_or_load;
   
   NamedTensorsT[tgt_tensor] = tensor;
@@ -7366,7 +7447,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
   float *base_address = tensor->tensor_ptr;
   float *device_x = base_address + static_cast<int>(idx_at);
 
-  cudaCheck(cudaMemcpy(device_x, scope_tensor->tensor_ptr, scope_dims_prod*sizeof(float), cudaMemcpyHostToHost));
+  cudaCheck(cudaMemcpy(device_x, scope_tensor->tensor_ptr, scope_dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
   
   return 0;
 }
@@ -7405,7 +7486,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
       todo_backward_tensors.push_back(attr_tensor);
     } 
     std::string scopeless_name = tgt_tensor->scopeless_name;
-    tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, tensor->cuda_stream);
+    tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, tensor->cuda_stream, tensor->loader);
     tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
     tgt_tensor->scopeless_name = scopeless_name;
     
@@ -7439,7 +7520,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
         todo_backward_tensors.push_back(attr_tensor);
 
         std::string scopeless_name = tgt_tensor->scopeless_name;
-        tgt_tensor = createTensor(tgt_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
+        tgt_tensor = createTensor(tgt_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, tgt_tensor->cuda_stream, tgt_tensor->loader);
         //tgt_tensor = createTensor(tgt_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, cuda_stream);
         tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
         tgt_tensor->scopeless_name = scopeless_name;
@@ -7554,7 +7635,7 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at
   float *base_address = tgt_tensor->tensor_ptr;
   float *device_x = base_address + static_cast<int>(idx_at);
 
-  cudaCheck(cudaMemcpy(device_x, tensor->tensor_ptr, R_dims_prod*sizeof(float), cudaMemcpyHostToHost));
+  cudaCheck(cudaMemcpy(device_x, tensor->tensor_ptr, R_dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
     
   return 0;
 }
@@ -10366,6 +10447,9 @@ float *Conv2d::Forward(float *tensor, int H, int W, int B)
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
 
+  
+ 
+
   checkCUDNN(cudnnConvolutionForward(
         cudnn,
         &one,
@@ -10888,7 +10972,7 @@ extern "C" void *RandomCrop(Tensor *tensor, float padding)
   dim3 threadsPerBlock(H, W);
 
 
-  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock>>>(
+  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
     tensor_ptr,
     cropped,
     B,
@@ -10901,7 +10985,7 @@ extern "C" void *RandomCrop(Tensor *tensor, float padding)
     seed
   );
   
-  Tensor *new_tensor = createTensor(cropped, dims, dims_prod, false, "");
+  Tensor *new_tensor = createTensor(cropped, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, crop_op);
   return new_tensor;
 }
@@ -10960,7 +11044,7 @@ extern "C" void *RandomHorizontalFlip(Tensor *tensor)
   dim3 numBlocks(B, C);
   dim3 threadsPerBlock(H, W);
 
-  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock>>>(
+  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
     tensor_ptr,
     flipped,
     B,
@@ -10970,7 +11054,7 @@ extern "C" void *RandomHorizontalFlip(Tensor *tensor)
     seed
   );
   
-  Tensor *new_tensor = createTensor(flipped, dims, dims_prod, false, "");
+  Tensor *new_tensor = createTensor(flipped, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, random_horizontal_flip_op);
   return new_tensor;
 }
@@ -11021,7 +11105,7 @@ extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
   dim3 numBlocks(B, C);
   dim3 threadsPerBlock(H, W);
 
-  normalize_img_kernel<<<numBlocks, threadsPerBlock>>>(
+  normalize_img_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
     normalized,
     tensor_ptr,
     mean->tensor_ptr,
@@ -11032,7 +11116,7 @@ extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
     W
   );
   
-  Tensor *new_tensor = createTensor(normalized, dims, dims_prod, false, "");
+  Tensor *new_tensor = createTensor(normalized, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, normalize_img_op);
   return new_tensor;
 }
@@ -15062,7 +15146,7 @@ static void InitializeModule() {
 
   //  
   FunctionType *gpuwTy = FunctionType::get(
-      int8PtrTy,
+      Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false 
   );
@@ -16011,8 +16095,11 @@ int main() {
   cublasCheck(cublasSetMathMode(cublas_handle, cublas_math_mode));
   // setup the (global) cuBLASLt workspace
   cudaCheck(cudaMalloc(&cublaslt_workspace, cublaslt_workspace_size));
+  
+  cudnnCreate(&cudnn);
 
 
+  // Create Global CUDA Streams
   for(int i=0; i<num_parallel_streams; i++)
   {
     CudaStreams *cuda_stream = new CudaStreams();
@@ -16023,6 +16110,13 @@ int main() {
 
     open_streams[i]=1;
   }
+
+  
+  // Set the Main Stream
+  //main_stream = AllocateStream();
+  //cublasSetStream(cublas_handle, main_stream->stream);
+  //cudnnSetStream(cudnn, main_stream->stream);
+
 
 
   if (pthread_mutex_init(&mutex, NULL) != 0) {
@@ -16037,9 +16131,6 @@ int main() {
 
   lockVars["mutex"] = &mutex;
   
-
-  
-  cudnnCreate(&cudnn);
 
 
 
