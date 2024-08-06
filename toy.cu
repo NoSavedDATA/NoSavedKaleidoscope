@@ -57,7 +57,7 @@
 #include "include/cu_commons.h"
 
 
-pthread_mutex_t mutex, clean_scope_mutex;
+pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex;
 
 float TERMINATE_VARARG = -40370000000.0f;
 
@@ -70,6 +70,8 @@ float TERMINATE_VARARG = -40370000000.0f;
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "include/stb/stb_image_write.h"
 
+
+cudaDeviceProp deviceProp;
 
 static cublasHandle_t cublas_handle;
 static cublasLtHandle_t cublaslt_handle;
@@ -115,16 +117,16 @@ using namespace llvm::orc;
 // \033[95m purple
 
 
-std::string RandomString(size_t length) {
-  const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+char *RandomString(size_t length) {
   std::random_device rd;
   std::mt19937 generator(rd());
   std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
 
-  std::string random_string;
+  char *random_string = new char[length+1];
   for (size_t i = 0; i < length; ++i) {
     int random_index = distribution(generator);
-    random_string += charset[random_index];
+    random_string[i] = charset[random_index];
   }
 
   return random_string;
@@ -219,9 +221,13 @@ bool in_float_vec(float value, const std::vector<float>& list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }
 
-bool in_float_ptr_vec(float *value, const std::vector<float *>& list) {
+bool in_char_ptr_vec(const char *value, const std::vector<char *>& list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }
+bool in_float_ptr_vec(const float *value, const std::vector<float *>& list) {
+    return std::find(list.begin(), list.end(), value) != list.end();
+}
+
 std::vector<std::string> concat_str_vec(std::vector<std::string> l, std::vector<std::string>r)
 {
   std::vector<std::string> concatenated_vectors = l;
@@ -235,6 +241,8 @@ std::vector<int> concat_int_vec(std::vector<int> l, std::vector<int>r)
   return concatenated_vectors;
 }
 
+void move_to_char_pool(size_t, char *, std::string);
+char *get_from_char_pool(size_t, std::string);
 
 // Tensor related
 std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn,
@@ -315,6 +323,8 @@ enum Token {
   tok_maxpool2d = -41,
   tok_avgpool2d = -42,
   tok_batchnorm2d = -43,
+  tok_bn2drelu = -45,
+  tok_relu = -46,
   tok_vec = -37,
   tok_post_class_attr_attr = -38,
   tok_post_class_attr_identifier = -39,
@@ -356,7 +366,9 @@ enum BackwardTypes {
   conv2d = 4,
   maxpool2d = 5,
   batchnorm2d = 6,
+  bn2drelu = 32,
   relu_op = 7,
+  cudnn_relu_op = 33,
   gelu_op = 8,
   sigmoid_op = 9,
   tanh_op = 10,
@@ -440,6 +452,9 @@ std::map<int, std::string> token_to_string = {
   { tok_maxpool2d, "MaxPool2d"},
   { tok_avgpool2d, "AvgPool2d"},
   { tok_batchnorm2d, "BatchNorm2d"},
+  { tok_bn2drelu, "BN2dRelu"},
+  { tok_relu, "Relu"},
+
   
 
   { 10, "tok space"},
@@ -657,7 +672,16 @@ static int get_token() {
         LastChar = getchar();
         return tok_batchnorm2d;
       }
-      
+      if (IdentifierStr == "BN2dRelu")
+      {
+        LastChar = getchar();
+        return tok_bn2drelu;
+      }
+      if (IdentifierStr == "Relu")
+      {
+        LastChar = getchar();
+        return tok_relu;
+      }
       if (LastChar=='.')
       {
         LastChar = getchar();
@@ -1199,6 +1223,33 @@ class BatchNorm2dExprAST : public VarExprAST {
       std::unique_ptr<ExprAST> C)
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
+
+
+class BN2dReluExprAST : public VarExprAST {
+  public:
+    std::unique_ptr<ExprAST> C;
+
+    BN2dReluExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::unique_ptr<ExprAST> C)
+      : VarExprAST(std::move(VarNames), std::move(Type)),
+                   C(std::move(C)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
+
+
+class ReluExprAST : public VarExprAST {
+  public:
+
+    ReluExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type)
+      : VarExprAST(std::move(VarNames), std::move(Type)) {}
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -2408,7 +2459,8 @@ void SynchronizeStream(CudaStreams *cuda_stream)
   cudaStreamSynchronize(cuda_stream->stream);
   open_streams[cuda_stream->idx] = 1;
 }
-CudaStreams *main_stream;
+
+CudaStreams *main_stream, *backward_stream;
 
 
 int ASYNC_LOADER_THREADS = 6;
@@ -2481,6 +2533,7 @@ struct Tensor {
   std::string view_of = "";
   std::string name;
   std::string scopeless_name;
+  std::string from_cudnn;
   int op;
 
   Tensor *R_Node, *L_Node;
@@ -2504,6 +2557,7 @@ struct Tensor {
     from_grad_or_load=false;
     cuda_stream = _cuda_stream;
     loader = _loader;
+    from_cudnn = "";
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -2689,19 +2743,6 @@ static std::map<std::string, int> objectVecsLastId;
 
 
 
-extern "C" float eval()
-{
-  std::cout << "SETTING NN MODE TO EVAL" << "\n";
-  nn_mode = eval_mode;
-  return 0;
-}
-
-extern "C" float train()
-{
-  std::cout << "SETTING NN MODE TO TRAIN" << "\n";
-  nn_mode = training_mode;
-  return 0;
-}
 
 extern "C" void PrintDims(std::vector<float> dims)
 {
@@ -2971,136 +3012,6 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
 }
 
 
-/*
-void bilinear_resize(unsigned char *dest, int dwidth, int dheight, int width, int sheight)
-{
-  unsigned char *src = new unsigned char[];
-  float a, b;
-  float red, green, blue, alpha;
-  float dx, dy;
-  float rx, ry;
-  int x, y;
-  int index0, index1, index2, index3;
-
-  dx = ((float) swidth)/dwidth;
-  dy = ((float) sheight)/dheight;
-  for(y=0, ry = 0;y<dheight-1;y++, ry += dy)
-  {
-    b = ry - (int) ry;
-    for(x=0, rx = 0;x<dwidth-1;x++, rx += dx)
-    {
-      a = rx - (int) rx;
-      index0 = (int)ry * swidth + (int) rx;
-      index1 = index0 + 1;
-      index2 = index0 + swidth;     
-      index3 = index0 + swidth + 1;
-
-      red = src[index0*4] * (1.0f-a)*(1.0f-b);
-      green = src[index0*4+1] * (1.0f-a)*(1.0f-b);
-      blue = src[index0*4+2] * (1.0f-a)*(1.0f-b);
-      alpha = src[index0*4+3] * (1.0f-a)*(1.0f-b);
-      red += src[index1*4] * (a)*(1.0f-b);
-      green += src[index1*4+1] * (a)*(1.0f-b);
-      blue += src[index1*4+2] * (a)*(1.0f-b);
-      alpha += src[index1*4+3] * (a)*(1.0f-b);
-      red += src[index2*4] * (1.0f-a)*(b);
-      green += src[index2*4+1] * (1.0f-a)*(b);
-      blue += src[index2*4+2] * (1.0f-a)*(b);
-      alpha += src[index2*4+3] * (1.0f-a)*(b);
-      red += src[index3*4] * (a)*(b);
-      green += src[index3*4+1] * (a)*(b);
-      blue += src[index3*4+2] * (a)*(b);
-      alpha += src[index3*4+3] * (a)*(b);
-
-      red = red < 0 ? 0 : red > 255 ? 255 : red;
-      green = green < 0 ? 0 : green > 255 ? 255 : green;
-      blue = blue < 0 ? 0 : blue > 255 ? 255 : blue;
-      alpha = alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
-
-      dest[(y*dwidth+x)*4] = (unsigned char) red;
-      dest[(y*dwidth+x)*4+1] = (unsigned char) green;
-      dest[(y*dwidth+x)*4+2] = (unsigned char) blue;
-      dest[(y*dwidth+x)*4+3] = (unsigned char) alpha;
-    }
-    index0 = (int)ry * swidth + (int) rx;
-    index1 = index0;
-    index2 = index0 + swidth;     
-    index3 = index0 + swidth;   
-
-    red = src[index0*4] * (1.0f-a)*(1.0f-b);
-    green = src[index0*4+1] * (1.0f-a)*(1.0f-b);
-    blue = src[index0*4+2] * (1.0f-a)*(1.0f-b);
-    alpha = src[index0*4+3] * (1.0f-a)*(1.0f-b);
-    red += src[index1*4] * (a)*(1.0f-b);
-    green += src[index1*4+1] * (a)*(1.0f-b);
-    blue += src[index1*4+2] * (a)*(1.0f-b);
-    alpha += src[index1*4+3] * (a)*(1.0f-b);
-    red += src[index2*4] * (1.0f-a)*(b);
-    green += src[index2*4+1] * (1.0f-a)*(b);
-    blue += src[index2*4+2] * (1.0f-a)*(b);
-    alpha += src[index2*4+3] * (1.0f-a)*(b);
-    red += src[index3*4] * (a)*(b);
-    green += src[index3*4+1] * (a)*(b);
-    blue += src[index3*4+2] * (a)*(b);
-    alpha += src[index3*4+3] * (a)*(b);
-
-    red = red < 0 ? 0 : red > 255 ? 255 : red;
-    green = green < 0 ? 0 : green > 255 ? 255 : green;
-    blue = blue < 0 ? 0 : blue > 255 ? 255 : blue;
-    alpha = alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
-
-    dest[(y*dwidth+x)*4] = (unsigned char) red;
-    dest[(y*dwidth+x)*4+1] = (unsigned char) green;
-    dest[(y*dwidth+x)*4+2] = (unsigned char) blue;
-    dest[(y*dwidth+x)*4+3] = (unsigned char) alpha;
-  }
-  index0 = (int)ry * swidth + (int) rx;
-  index1 = index0;
-  index2 = index0 + swidth;     
-  index3 = index0 + swidth;   
-
-  for(x=0, rx = 0;x<dwidth-1;x++, rx += dx)
-  {
-    a = rx - (int) rx;
-    index0 = (int)ry * swidth + (int) rx;
-    index1 = index0 + 1;
-    index2 = index0;     
-    index3 = index0;
-
-    red = src[index0*4] * (1.0f-a)*(1.0f-b);
-    green = src[index0*4+1] * (1.0f-a)*(1.0f-b);
-    blue = src[index0*4+2] * (1.0f-a)*(1.0f-b);
-    alpha = src[index0*4+3] * (1.0f-a)*(1.0f-b);
-    red += src[index1*4] * (a)*(1.0f-b);
-    green += src[index1*4+1] * (a)*(1.0f-b);
-    blue += src[index1*4+2] * (a)*(1.0f-b);
-    alpha += src[index1*4+3] * (a)*(1.0f-b);
-    red += src[index2*4] * (1.0f-a)*(b);
-    green += src[index2*4+1] * (1.0f-a)*(b);
-    blue += src[index2*4+2] * (1.0f-a)*(b);
-    alpha += src[index2*4+3] * (1.0f-a)*(b);
-    red += src[index3*4] * (a)*(b);
-    green += src[index3*4+1] * (a)*(b);
-    blue += src[index3*4+2] * (a)*(b);
-    alpha += src[index3*4+3] * (a)*(b);
-
-    red = red < 0 ? 0 : red > 255 ? 255 : red;
-    green = green < 0 ? 0 : green > 255 ? 255 : green;
-    blue = blue < 0 ? 0 : blue > 255 ? 255 : blue;
-    alpha = alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
-
-    dest[(y*dwidth+x)*4] = (unsigned char) red;
-    dest[(y*dwidth+x)*4+1] = (unsigned char) green;
-    dest[(y*dwidth+x)*4+2] = (unsigned char) blue;
-    dest[(y*dwidth+x)*4+3] = (unsigned char) alpha;
-  }
-
-   dest[(y*dwidth+x)*4] = src[((sheight-1)*swidth+swidth-1)*4];
-   dest[(y*dwidth+x)*4+1] = src[((sheight-1)*swidth+swidth-1)*4+1];
-   dest[(y*dwidth+x)*4+2] = src[((sheight-1)*swidth+swidth-1)*4+2];
-   dest[(y*dwidth+x)*4+3] = src[((sheight-1)*swidth+swidth-1)*4+3];
-}
-*/
 
 
 unsigned char *interpolate_img(unsigned char *src, int height, int width, int dst_height, int dst_width)
@@ -4248,6 +4159,183 @@ static std::unique_ptr<ExprAST> ParseBatchNorm2dExpr() {
 
 
 
+//
+static std::unique_ptr<ExprAST> ParseBN2dReluExpr() {
+  std::string type;
+
+  getNextToken(); // eat the BatchNorm2d.
+  
+  if (CurTok != '[')
+    return LogError("BN2dRelu declaration expected [");
+    getNextToken();
+
+  std::vector<std::unique_ptr<ExprAST>> dims;
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::string init = "xavu_relu";
+  //std::make_unique<NumberExprAST>(NumVal)
+  
+  while (true) {
+    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      return LogError("Expected tensor dimension number.");
+    
+    if (CurTok==tok_number)
+    {
+      if (std::fmod(NumVal, 1.0) != 0)
+        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
+    
+      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      getNextToken();
+    } else if (CurTok==tok_identifier)
+      if (in_str(IdentifierStr, tensor_inits))
+      {
+        init = IdentifierStr;
+        getNextToken();
+      } else
+        dims.push_back(std::move(ParseIdentifierExpr()));
+    else {
+      dims.push_back(std::move(ParseSelfExpr()));
+    }
+
+    
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+  }
+
+  
+
+  if (CurTok != ']')
+    return LogError("Expected ].");
+    getNextToken();
+
+  if (dims.size()<1)
+    return LogError("BN2dRelu requires input channels, kernel size, stride and padding.");
+
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true;
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected BatchNorm2d identifier name.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    functionVars[Name] = "BN2dReluForward";
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Expected one or more identifiers at BN2dRelu.");
+  }
+
+
+
+  auto aux = std::make_unique<BN2dReluExprAST>(std::move(VarNames), type,
+                                             std::move(dims[0]));
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
+
+
+
+//
+static std::unique_ptr<ExprAST> ParseReluExpr() {
+  std::string type;
+
+  getNextToken(); // eat the Relu.
+  
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true;
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected Relu identifier name.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    functionVars[Name] = "ReluForward";
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Expected one or more identifiers at Relu.");
+  }
+
+
+
+  auto aux = std::make_unique<ReluExprAST>(std::move(VarNames), type);
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
+
+
+
+
+
 static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
   int cur_level_tabs = SeenTabs;
   getNextToken(); // eat the lock.
@@ -4417,6 +4505,10 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseMaxPool2dExpr();
   case tok_batchnorm2d:
     return ParseBatchNorm2dExpr();
+  case tok_bn2drelu:
+    return ParseBN2dReluExpr();
+  case tok_relu:
+    return ParseReluExpr();
   case '[':
     return ParseNewVector(class_name);
   case tok_space:
@@ -5135,15 +5227,16 @@ extern "C" float gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
   CudaStreams *cuda_stream=nullptr;
   
   
-  if (batchless_dims_prod<32){
+  if (batchless_dims_prod<2000){
     cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
   }
-  else //if (batchless_dims_prod<1000)
+  else// if (batchless_dims_prod<1000)
   {
     cuda_stream = AllocateStream();
     cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
     //cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
-  }/*
+  }
+  /*
   else
   {
     //cuda_stream = AllocateStream();
@@ -5152,6 +5245,7 @@ extern "C" float gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
     loader->Load(tensor_ptr, tensor_cpu, batchless_dims_prod);
   }
   */
+
 
 
   if (nn_mode==eval_mode)
@@ -5395,11 +5489,41 @@ float *get_from_pool(float dims_prod, std::string from)
 
 
 
+extern "C" float eval()
+{
+  std::cout << "SETTING NN MODE TO EVAL" << "\n";
+  
+
+  for(int i=0; i<TensorPool.size(); i++)
+  {
+    for(int j=0; j<TensorPool[i].size();j++)
+    {
+      cudaCheck(cudaFree(TensorPool[i][j]));
+    }
+    TensorPool[i].clear();
+  }
+
+  TensorPool.clear();
+  
+
+  nn_mode = eval_mode;
+  return 0;
+}
+
+extern "C" float train()
+{
+  std::cout << "SETTING NN MODE TO TRAIN" << "\n";
+  nn_mode = training_mode;
+  return 0;
+}
+
+
 
 extern "C" void *LoadTensor(char *tensor_name){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
   Tensor *ret = NamedTensorsT[tensor_name];
-  delete[] tensor_name;
+  move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
+  //delete[] tensor_name;
   return ret;
 }
 
@@ -6012,10 +6136,14 @@ std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1
   {
     if (dims_prod<64)
       block_size=32;
-    else if (dims_prod>=64 && dims_prod<128)
+    else if (dims_prod<128)
       block_size=64;
+    else if (dims_prod<256)
+      block_size=128;
+    else if (dims_prod<512)
+      block_size=256;
     else
-      block_size=128;  
+      deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
   } else
     block_size = pre_block_size;
 
@@ -6482,6 +6610,7 @@ extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
   float *device_x = base_address + static_cast<int>(idx_at);
 
   *device_x = val;
+  move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
 }
 
 
@@ -6493,8 +6622,7 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
   std::string pre_dot = pre_dotc;
 
   
-  if (nested_function)
-    delete[] pre_dotc;
+  delete[] pre_dotc;
 
   //delete[] first_arg; //TODO: break?
 
@@ -6548,10 +6676,75 @@ extern "C" char *LoadObject(char *obj_name)
   return str_to_char(ret);
 }
 
+
+
+
+
+std::map<size_t, std::vector<char *>> CharPool;
+
+void move_to_char_pool(size_t length, char *char_ptr, std::string from)
+{
+  if (length==0)
+    return;
+  delete[] char_ptr;
+  return;
+  //std::cout << "\nmove_to_pool from: " << from << "\n";
+  
+
+  pthread_mutex_lock(&char_pool_mutex);
+  std::vector<char *> chars_in_pool = CharPool[length];
+  if (!in_char_ptr_vec(char_ptr, chars_in_pool))
+  {
+    //if(!(chars_in_pool.size()<30&&length==1))
+    if(chars_in_pool.size()<270)
+      CharPool[length].push_back(char_ptr);
+    else
+    {
+      std::cout << "FREEING CHAR WITH length: " << length << " from: " << from <<  "\n";
+      delete[] char_ptr;
+    }
+  } 
+  pthread_mutex_unlock(&char_pool_mutex);
+}
+
+char *get_from_char_pool(size_t length, std::string from)
+{
+  if (length==0)
+    return nullptr;
+
+
+  char *char_ptr;
+  char_ptr = (char*)malloc(length);
+  return char_ptr;
+
+  
+  pthread_mutex_lock(&char_pool_mutex);
+  if(CharPool.count(length)>0)
+  {
+    std::vector<char *> chars_in_pool = CharPool[length];
+    if (chars_in_pool.size()>0)
+    {
+      //std::cout << "GETTING FROM CHAR POOL: " << length << "\n";
+      char_ptr = chars_in_pool.back();
+      CharPool[length].pop_back();
+      pthread_mutex_unlock(&char_pool_mutex);
+      return char_ptr;
+    }
+  }
+  pthread_mutex_unlock(&char_pool_mutex);
+
+  //std::cout << "\nMalloc new CHAR from " << from << " of size: " << length << "\n";
+
+  char_ptr = (char*)malloc(length);
+  return char_ptr;
+}
+
+
 extern "C" char *GetEmptyChar()
 {
-  std::string x = "";
-  return str_to_char(x);
+  char *empty_char = get_from_char_pool(1,"get empty char");
+  empty_char[0] = '\0';
+  return empty_char;
 }
 
 extern "C" void FreeCharFromFunc(char *_char, char *func) {
@@ -6563,86 +6756,115 @@ extern "C" void FreeCharFromFunc(char *_char, char *func) {
 
 extern "C" void FreeChar(char *_char) {
   //std::cout << "FREEING " << _char << "\n";
-  delete[] _char;
+
+  move_to_char_pool(strlen(_char)+1, _char, "free");
+  //delete[] _char;
 }
+
+
+
+
 
 
 extern "C" char *CopyString(char *in_str)
 {
-  char* copied = (char*)malloc(strlen(in_str) + 1);
-  strcpy(copied, in_str);
+  size_t length = strlen(in_str) + 1;
+  char *copied = get_from_char_pool(length, "copy");
+  memcpy(copied, in_str, length);
 
   return copied;
 }
 
 extern "C" char * ConcatStr(char *lc, char *rc)
 {
-  //std::cout << "Concat strings " << lc << " & " << rc << "\n";
-  std::string l = lc;
-  std::string r = rc;
-
-  std::string result_str = l + r;
-  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
-  std::strcpy(result_cstr, result_str.c_str());
-
+  size_t length_lc = strlen(lc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat");
+  //char* result_cstr = new char[length_lc+length_rc]; 
   
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
+
   return result_cstr;
 }
 
 extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 {
-  std::string l = lc;
-  std::string r = rc;
+  size_t length_lc = strlen(lc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  //char* result_cstr = new char[length_lc+length_rc];
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat free left");
+  
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
 
-  std::string result_str = l + r;
-  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
-  std::strcpy(result_cstr, result_str.c_str());
 
-  delete[] lc;
+  move_to_char_pool(length_lc+1, lc, "concat free left");
+  //delete[] lc;
   
   return result_cstr;
 }
 
 extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 {
-  std::string l = lc;
-  std::string r = rc;
+  size_t length_lc = strlen(lc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  //char* result_cstr = new char[length_lc+length_rc];
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat free right");
+  
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
 
-  std::string result_str = l + r;
-  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
-  std::strcpy(result_cstr, result_str.c_str());
-
-  delete[] rc;
+  move_to_char_pool(length_rc, rc, "concat free right");
+  //delete[] rc;
   
   return result_cstr;
 }
 
 extern "C" char * ConcatStrFree(char *lc, char *rc)
 {
-  std::string l = lc;
-  std::string r = rc;
+  size_t length_lc = strlen(lc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  char* result_cstr = new char[length_lc+length_rc]; 
+  
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
 
-  std::string result_str = l + r;
-  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
-  std::strcpy(result_cstr, result_str.c_str());
+  move_to_char_pool(length_lc+1, lc, "concat free");
+  move_to_char_pool(length_rc, rc, "concat free");
+  //delete[] lc, rc;
 
-  delete[] lc, rc;
   return result_cstr;
 }
 
 
-extern "C" char * ConcatNumToStr(char *lc, float r)
+extern "C" char * ConcatFloatToStr(char *lc, float r)
 {
-  //std::cout << "\nCONCAT NUM TO STR " << lc << " & " << std::to_string(r) << "\n";
+
+  //TODO: Change and test the function below
+  /*
+    char buffer[32]; // 32 bytes should be enough to hold float as a string
+    int len = snprintf(buffer, sizeof(buffer), "%.6f", r); // Format float as string with 6 decimal places
+
+    // Calculate the total length for the result
+    size_t lc_len = std::strlen(lc);
+    size_t total_len = lc_len + len + 1; // +1 for null terminator
+
+    // Allocate the result buffer
+    char* result_cstr = new char[total_len];
+
+    // Copy the input string and the formatted float to the result buffer
+    std::memcpy(result_cstr, lc, lc_len);
+    std::memcpy(result_cstr + lc_len, buffer, len + 1);
+  */
 
   std::string l = lc;
   int _r = r;
 
   std::string result_str = l + std::to_string(_r);
-  char* result_cstr = new char[result_str.length() + 1]; // +1 for null terminator
+  char* result_cstr = new char[result_str.length() + 1];
   std::strcpy(result_cstr, result_str.c_str());
 
-  //std::cout << "Concatenated into " << result_cstr << "\n\n";
   
   return result_cstr;
 }
@@ -6650,6 +6872,24 @@ extern "C" char * ConcatNumToStr(char *lc, float r)
 extern "C" char * ConcatNumToStrFree(char *lc, float r)
 {
   //std::cout << "\nCONCAT NUM TO STR " << lc << " & " << std::to_string(r) << "\n";
+
+  //TODO: Change and test the function below
+  /*
+    char buffer[32]; // 32 bytes should be enough to hold float as a string
+    int len = snprintf(buffer, sizeof(buffer), "%.6f", r); // Format float as string with 6 decimal places
+
+    // Calculate the total length for the result
+    size_t lc_len = std::strlen(lc);
+    size_t total_len = lc_len + len + 1; // +1 for null terminator
+
+    // Allocate the result buffer
+    char* result_cstr = new char[total_len];
+
+    // Copy the input string and the formatted float to the result buffer
+    std::memcpy(result_cstr, lc, lc_len);
+    std::memcpy(result_cstr + lc_len, buffer, len + 1);
+  */
+
 
   std::string l = lc;
   int _r = r;
@@ -6706,23 +6946,11 @@ extern "C" void CleanScopeVars(char *scope)
 
 
 extern "C" char * RandomStrOnDemand()
-{
-
-  std::string random_str = RandomString(14);
-
-  char* result_cstr = new char[random_str.length() + 1]; // +1 for null terminator
-  std::strcpy(result_cstr, random_str.c_str());
-
-  
-  return result_cstr;
+{ 
+  return RandomString(14);
 }
 
 
-extern "C" void StoreOnDemand(char *name, float value){
-  
-  NamedClassValues[name] = value;
-  delete[] name;
-}
 extern "C" void StoreOnDemandNoFree(char *name, float value){
   
   NamedClassValues[name] = value;
@@ -6732,14 +6960,16 @@ extern "C" void StoreOnDemandNoFree(char *name, float value){
 extern "C" void StoreArgOnDemand(char *name, float value){
   //std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
   NamedClassValues[name] = value;
-  delete[] name;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
 }
 
 extern "C" float StoreStrOnDemand(char *name, char * value){
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   NamedStrs[name] = value;
-  delete[] name;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
 
   return 0;
 }
@@ -6747,7 +6977,8 @@ extern "C" void *LoadStrOnDemand(char *name){
   
   //char *ret = CopyString(NamedStrs[name]);
   char *ret = NamedStrs[name];
-  delete[] name;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
 
   return ret;
 }
@@ -6756,7 +6987,8 @@ extern "C" void *LoadStrOnDemand(char *name){
 extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as StrVec type.\n";
   ClassStrVecs[name] = value;
-  delete[] name;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
   return 0;
 }
 
@@ -6764,7 +6996,8 @@ extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value){
   std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
-  delete[] name;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
   return 0;
 }
 
@@ -6772,19 +7005,28 @@ extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name][(int)idx] = value;
-  delete[] name;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
   return 0;
 }
 
 
 
 
+extern "C" void StoreOnDemand(char *name, float value){
+  
+  NamedClassValues[name] = value;
+  move_to_char_pool(strlen(name)+1, name, "StoreOnDemand");
+  //delete[] name;
+}
 extern "C" float LoadOnDemand(char *object_var_name) {
   //std::cout << "Load on demand for: " << object_var_name << "\n";
   //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n";
 
   float ret = NamedClassValues[object_var_name];
-  delete[] object_var_name;
+  
+  move_to_char_pool(strlen(object_var_name)+1, object_var_name, "free");
+  //delete[] object_var_name;
   return ret;
 }
 
@@ -7509,9 +7751,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
       block_size = grid_block_mem_sizes[1];
 
 
-      //CudaStreams *cuda_stream = AllocateStream();
-      //copy_tensor_kernel<<<grid_size,block_size,0,cuda_stream->stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
-      copy_tensor_kernel<<<grid_size,block_size>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
+      copy_tensor_kernel<<<grid_size,block_size, 0, main_stream->stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
 
       if(nn_mode==training_mode)
       {
@@ -8204,7 +8444,7 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
   int grid_size = dims_prod;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  add_forward<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
+  add_forward<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
   
 
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
@@ -8271,7 +8511,7 @@ extern "C" Tensor *CudaEqual(int is_forward_func,
   
   tensor_x->Sync();
   tensor_w->Sync();
-  equal_forward<<<grid_size, block_size>>>(device_y, device_x, device_w, dims_prod);
+  equal_forward<<<grid_size, block_size,0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
   
   
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
@@ -9277,6 +9517,7 @@ __global__ void argmax_over_last_dim_kernel(const float *tensor,
 extern "C" void *argmax(Tensor *tensor, float first_dim, ...) 
 {
   //std::cout << "ARGMAX OF " << tensor.name << "\n";
+  cudaCheck(cudaGetLastError());
 
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
@@ -9358,18 +9599,19 @@ extern "C" void *argmax(Tensor *tensor, float first_dim, ...)
   shared_mem_size = grid_block_mem_sizes[2];
 
   
-  vec_add<<<grid_size, block_size, shared_mem_size>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
+  vec_add<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
   if (sum_dims[0]==(dims.size()-1))
-    argmax_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, maxed, argmaxed, dims_prod, maxed_dim);
+    argmax_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_ptr, maxed, argmaxed, dims_prod, maxed_dim);
   //if (sum_dims[0]==(dims.size()-2))
   //  max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, maxed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
-  vec_sub<<<grid_size, block_size, shared_mem_size>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
+  vec_sub<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
 
   
   move_to_pool(new_dims_prod, maxed, "argmax maxed");
 
   Tensor *new_tensor = createTensor(argmaxed, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor, argmax_op);
+  cudaCheck(cudaGetLastError());
   return new_tensor;
 }
 
@@ -9553,7 +9795,7 @@ void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* 
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = grid_block_mem_sizes[2];
 
-  gelu_backward1<<<grid_size, block_size>>>(dinp, inp, dout, dims_prod);
+  gelu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, inp, dout, dims_prod);
   
 }
 
@@ -9575,10 +9817,10 @@ extern "C" void *gelu(Tensor *tensor)
   
   tensor->Sync();
   float *y = get_from_pool(dims_prod,"gelu");
-  set_to_zero_kernel<<<grid_size, block_size>>>(y, dims_prod);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
 
 
-  gelu_forward_kernel1<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
+  gelu_forward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
   
 
   
@@ -9616,7 +9858,7 @@ void sigmoid_backward(const float* out, float dims_prod, float* dinp, const floa
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = grid_block_mem_sizes[2];
 
-  sigmoid_backward_kernel<<<grid_size, block_size>>>(dinp, out, dout, dims_prod);
+  sigmoid_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
   
 }
 
@@ -9638,10 +9880,10 @@ extern "C" void *sigmoid(Tensor *tensor)
   
   tensor->Sync();
   float *y = get_from_pool(dims_prod, "sigmoid");
-  set_to_zero_kernel<<<grid_size, block_size>>>(y, dims_prod);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
 
   
-  sigmoid_forward_kernel<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
+  sigmoid_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
   
 
   
@@ -9677,7 +9919,7 @@ void tanh_backward(const float* out, float dims_prod, float* dinp, const float* 
   block_size = grid_block_mem_sizes[1];
   
 
-  tanh_backward_kernel<<<grid_size, block_size>>>(dinp, out, dout, dims_prod);
+  tanh_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
   
 }
 
@@ -9699,10 +9941,10 @@ extern "C" void *_tanh(Tensor *tensor)
   
   tensor->Sync();
   float *y = get_from_pool(dims_prod, "tanh");
-  set_to_zero_kernel<<<grid_size, block_size>>>(y, dims_prod);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
 
   
-  tanh_forward_kernel<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
+  tanh_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
   
 
   
@@ -9739,10 +9981,10 @@ extern "C" void *relu(Tensor *tensor)
 
 
   float *y = get_from_pool(dims_prod, "relu");
-  set_to_zero_kernel<<<grid_size, block_size>>>(y, dims_prod);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
 
   tensor->Sync();
-  relu_forward<<<grid_size, block_size>>>(tensor_ptr, y, dims_prod);
+  relu_forward<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
 
 
 
@@ -9775,7 +10017,7 @@ void relu_backward(float* inp, float dims_prod, float* dinp, float* dout) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  relu_backward1<<<grid_size, block_size>>>(inp, dinp, dout, dims_prod);
+  relu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(inp, dinp, dout, dims_prod);
   
 }
 
@@ -9885,10 +10127,10 @@ extern "C" void *softmax(Tensor *tensor)
 
   tensor->Sync();
   float *probs = get_from_pool(B*C, "softmax");
-  set_to_zero_kernel<<<grid_size, block_size>>>(probs, B*C);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
 
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, probs, B, C);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_ptr, probs, B, C);
 
   
   Tensor *new_tensor = createTensor(probs, dims, tensor->dims_prod, false, "");
@@ -9901,9 +10143,9 @@ extern "C" void *softmax(Tensor *tensor)
 
 class BatchNorm2d
 {
-  cudnnTensorDescriptor_t input_desc, output_desc, scale_bias_mean_var_desc;
-
   public:
+    cudnnTensorDescriptor_t input_desc, output_desc, scale_bias_mean_var_desc;
+    
     float* scale=nullptr;
     float* bias=nullptr;
     float* running_mean=nullptr;
@@ -9924,34 +10166,188 @@ class BatchNorm2d
     }
 
   
-  void SetDescriptors(int, int, int);
+  void SetDescriptors(int, int, int, Tensor *);
   void InitMovingAverages();
-  float *Forward(float *, int, int, int, int);
+  float *Forward(Tensor *, int, int, int, int);
   void Backward(float *, float *, float *, float *, float *);
 
 };
 
+
+class Conv2d
+{
+  public:
+    // Forward
+    cudnnTensorDescriptor_t input_desc, output_desc;
+    cudnnFilterDescriptor_t filter_desc;
+    cudnnConvolutionDescriptor_t conv_desc;
+    cudnnConvolutionFwdAlgo_t fwd_algo;  
+
+    // Weight backward grad
+    cudnnConvolutionBwdFilterAlgo_t w_bwd_algo;
+    // Input backward grad
+    cudnnConvolutionBwdDataAlgo_t y_bwd_algo;
+
+    std::size_t workspace_size, workspace_size_w_back, workspace_size_y_back;
+    void *d_workspace, *d_workspace_w_back, *d_workspace_y_back;
+
+
+    float* d_filter=nullptr;
+    float* d_filter_g=nullptr;
+    int C, OC, ks, stride, padding, out_H, out_W;
+    int B = 0;
+    int H = 0;
+    int W = 0;
+    std::string Init, Name;
+
+    Conv2d(int C, int OC, int ks, int stride, int padding, std::string Init, std::string Name) 
+        : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Name(Name) {
+      NamedTensorsT[Name] = new Tensor();
+    }
+
+  
+
+
+  void SetDescriptors(int, int, int, Tensor *tensor);
+  void InitFilters();
+  float *Forward(Tensor *, int, int, int);
+  void Backward(float *, float *, float *, float *);
+
+};
+
+
+
+class BN2dRelu
+{
+  public:
+    cudnnTensorDescriptor_t input_desc, output_desc, intermediate_desc, scale_bias_mean_var_desc;
+    cudnnActivationDescriptor_t activation_desc;
+
+    float* scale=nullptr;
+    float* bias=nullptr;
+    float* running_mean=nullptr;
+    float* running_var=nullptr;
+    float* saved_mean=nullptr;
+    float* saved_var=nullptr;
+    float* dscale, dbias;
+    int B = 0;
+    int C;
+    int H = 0;
+    int W = 0;
+    std::string Name;
+
+    BN2dRelu(int C, std::string Name)
+        : C(C), Name(Name) {
+      NamedTensorsT[Name] = new Tensor();
+      NamedTensorsT[Name+"_bias"] = new Tensor();
+    }
+
+  
+  void SetDescriptors(int, int, int, Tensor *);
+  void InitMovingAverages();
+  float *Forward(Tensor *, int, int, int, int);
+  void Backward(float *, float *, float *, float *, float *, float *, float *, float *);
+
+};
+
+
+class Relu
+{
+  public:
+    cudnnTensorDescriptor_t input_desc, output_desc;
+    cudnnActivationDescriptor_t activation_desc;
+
+
+    int B = 0;
+    int C = 0;
+    int H = 0;
+    int W = 0;
+    std::string Name;
+
+    Relu(std::string Name)
+        : Name(Name) {}
+
+  
+  void SetDescriptors(int, int, int, int, Tensor *);
+  float *Forward(Tensor *, int, int, int, int);
+  void Backward(float *, float *, float *, float *);
+
+};
+
+
+class MaxPool2d
+{
+  public:
+    // Forward
+    cudnnTensorDescriptor_t input_desc, output_desc;
+    cudnnPoolingDescriptor_t pooling_desc;
+    
+    std::string Type;
+    int ks, stride, padding, out_H, out_W;
+    int B = 0;
+    int C = 0;
+    int H = 0;
+    int W = 0;
+
+    MaxPool2d(int ks, int stride, int padding, std::string Type)
+        : ks(ks), stride(stride), padding(padding), Type(Type) {}
+
+  
+
+
+  void SetDescriptors(int, int, int, int, Tensor *);
+  float *Forward(Tensor *, int, int, int, int);
+  void Backward(float *, float *, float *, float *);
+
+};
+
+
+
 //global
+static std::map<std::string, std::unique_ptr<BN2dRelu>> NamedBN2dRelu;
+static std::map<std::string, std::unique_ptr<Relu>> NamedRelu;
+static std::map<std::string, std::unique_ptr<MaxPool2d>> NamedMaxPool2d;
+static std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
 static std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
 
 
-void BatchNorm2d::SetDescriptors(int H, int W, int B)
-{
-  cudnnTensorDescriptor_t input_desc;
-  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
-  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
-  this->input_desc = input_desc;
 
-  cudnnTensorDescriptor_t output_desc;
+void BatchNorm2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
+{
+  this->H = H;
+  this->W = W;
+  this->B = B;
+
+  switch(tensor->op)
+  {
+    case conv2d:
+      input_desc = NamedConv2d[tensor->from_cudnn]->output_desc;
+      break;
+    case bn2drelu:
+      input_desc = NamedBN2dRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case cudnn_relu_op:
+      input_desc = NamedRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case batchnorm2d:
+      input_desc = NamedBatchNorm2d[tensor->from_cudnn]->output_desc;
+      break;
+    case maxpool2d:
+      input_desc = NamedMaxPool2d[tensor->from_cudnn]->output_desc;
+      break;
+    default:
+      checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+      checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+      break;
+  }
+  
+  
   checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
   checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
-  this->output_desc = output_desc;
-
-  cudnnTensorDescriptor_t scale_bias_mean_var_desc;
+  
   checkCUDNN(cudnnCreateTensorDescriptor(&scale_bias_mean_var_desc));
   //checkCUDNN(cudnnSetTensor4dDescriptor(scale_bias_mean_var_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, C, 1, 1));
   checkCUDNN(cudnnDeriveBNTensorDescriptor(scale_bias_mean_var_desc, input_desc, CUDNN_BATCHNORM_SPATIAL_PERSISTENT));
-  this->scale_bias_mean_var_desc = scale_bias_mean_var_desc;
 }
 
 void BatchNorm2d::InitMovingAverages()
@@ -9989,11 +10385,11 @@ void BatchNorm2d::InitMovingAverages()
   delete[] aux;
 }
 
-float *BatchNorm2d::Forward(float *tensor, int H, int W, int B, int C)
+float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C)
 {
 
   if (H != this->H || W != this->W || B != this->B)
-    this->SetDescriptors(H, W, B);
+    this->SetDescriptors(H, W, B, tensor);
 
   // Initialize weights.
   if (scale==nullptr)
@@ -10025,7 +10421,7 @@ float *BatchNorm2d::Forward(float *tensor, int H, int W, int B, int C)
       &one,
       &zero,
       input_desc,
-      tensor,
+      tensor->tensor_ptr,
       output_desc,
       output,
       scale_bias_mean_var_desc,
@@ -10047,7 +10443,7 @@ float *BatchNorm2d::Forward(float *tensor, int H, int W, int B, int C)
       &one,
       &zero,
       input_desc,
-      tensor,
+      tensor->tensor_ptr,
       output_desc,
       output,
       scale_bias_mean_var_desc,
@@ -10101,7 +10497,7 @@ extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec
 
 
   tensor->Sync();
-  output = conv->Forward(tensor_ptr, H, W, B, C);
+  output = conv->Forward(tensor, H, W, B, C);
 
   float resultingDimsProd = B * (float)C * (float)H * (float)W;
 
@@ -10134,6 +10530,7 @@ extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec
   std::vector<float> new_dims = {(float)B, (float)C, (float)H, (float)W};
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
   new_tensor->AttrNodes(tensor, scale_bias_tensor, batchnorm2d);
+  new_tensor->from_cudnn = conv_name;
   return new_tensor;
 }
 
@@ -10186,53 +10583,493 @@ void batchnormd2d_backward(float *inp,
 
 
 
-class Conv2d
+
+void BN2dRelu::SetDescriptors(int H, int W, int B, Tensor *tensor)
 {
+  std::cout << "BN2dRelu::SetDescriptors" << "\n";
+  switch(tensor->op)
+  {
+    case conv2d:
+      input_desc = NamedConv2d[tensor->from_cudnn]->output_desc;
+      break;
+    case bn2drelu:
+      input_desc = NamedBN2dRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case cudnn_relu_op:
+      input_desc = NamedRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case batchnorm2d:
+      input_desc = NamedBatchNorm2d[tensor->from_cudnn]->output_desc;
+      break;
+    case maxpool2d:
+      input_desc = NamedMaxPool2d[tensor->from_cudnn]->output_desc;
+      break;
+    default:
+      checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+      checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+      break;
+  }
+
+  
+  checkCUDNN(cudnnCreateTensorDescriptor(&intermediate_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(intermediate_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+
+  checkCUDNN(cudnnCreateTensorDescriptor(&scale_bias_mean_var_desc));
+  //checkCUDNN(cudnnSetTensor4dDescriptor(scale_bias_mean_var_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, C, 1, 1));
+  checkCUDNN(cudnnDeriveBNTensorDescriptor(scale_bias_mean_var_desc, input_desc, CUDNN_BATCHNORM_SPATIAL_PERSISTENT));  
+  
+  
+  cudnnCreateActivationDescriptor(&activation_desc);
+  cudnnSetActivationDescriptor(activation_desc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 0.0);
+
+  checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+}
+
+void BN2dRelu::InitMovingAverages()
+{
+  std::cout << "BN2dRelu::InitMovingAverages" << "\n";
+  float *aux;
+
+  aux = make_ones_float(C);
+  cudaCheck(cudaMalloc(&scale, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(scale, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_zeros_float(C);
+  cudaCheck(cudaMalloc(&bias, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(bias, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_zeros_float(C);
+  cudaCheck(cudaMalloc(&running_mean, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(running_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_ones_float(C);
+  cudaCheck(cudaMalloc(&running_var, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(running_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_zeros_float(C);
+  cudaCheck(cudaMalloc(&saved_mean, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(saved_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+  
+  aux = make_ones_float(C);
+  cudaCheck(cudaMalloc(&saved_var, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(saved_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+}
+
+float *BN2dRelu::Forward(Tensor *tensor, int H, int W, int B, int C)
+{
+  std::cout << "BN2dRelu::Forward" << "\n";
+
+  if (H != this->H || W != this->W || B != this->B)
+    this->SetDescriptors(H, W, B, tensor);
+
+  // Initialize weights.
+  if (scale==nullptr)
+    this->InitMovingAverages();
+
+
   // Forward
-  cudnnTensorDescriptor_t input_desc, output_desc;
-  cudnnFilterDescriptor_t filter_desc;
-  cudnnConvolutionDescriptor_t conv_desc;
-  cudnnConvolutionFwdAlgo_t fwd_algo;  
-
-  // Weight backward grad
-  cudnnConvolutionBwdFilterAlgo_t w_bwd_algo;
-  // Input backward grad
-  cudnnConvolutionBwdDataAlgo_t y_bwd_algo;
-
-  std::size_t workspace_size, workspace_size_w_back, workspace_size_y_back;
-  void *d_workspace, *d_workspace_w_back, *d_workspace_y_back;
-
-
-
-
-  public:
-    float* d_filter=nullptr;
-    float* d_filter_g=nullptr;
-    int C, OC, ks, stride, padding, out_H, out_W;
-    int B = 0;
-    int H = 0;
-    int W = 0;
-    std::string Init, Name;
-
-    Conv2d(int C, int OC, int ks, int stride, int padding, std::string Init, std::string Name) 
-        : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Name(Name) {
-      NamedTensorsT[Name] = new Tensor();
-    }
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  float *intermediate = get_from_pool(B * H * W * C, "bn2drelu");
+  float *output = get_from_pool(B * H * W * C, "bn2drelu");
+  //set_to_one_kernel<<<grid_size, block_size>>>(output, B * H * W * C);
+  
+  
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+  float gamma = 0.1f;
+  float eps = 0.00001f;
 
   
 
+  if(nn_mode==training_mode)
+  {
+    checkCUDNN(cudnnBatchNormalizationForwardTraining(
+      cudnn,
+      CUDNN_BATCHNORM_SPATIAL_PERSISTENT,
+      &one,
+      &zero,
+      input_desc,
+      tensor->tensor_ptr,
+      intermediate_desc,
+      intermediate,
+      scale_bias_mean_var_desc,
+      scale,
+      bias,
+      gamma,
+      running_mean,
+      running_var,
+      eps,
+      saved_mean,
+      saved_var
+    ));
+  }
+  else
+  {
+    checkCUDNN(cudnnBatchNormalizationForwardInference(
+      cudnn,
+      CUDNN_BATCHNORM_SPATIAL,
+      &one,
+      &zero,
+      input_desc,
+      tensor->tensor_ptr,
+      intermediate_desc,
+      intermediate,
+      scale_bias_mean_var_desc,
+      scale,
+      bias,
+      running_mean,
+      running_var,
+      eps
+    ));
+  }
 
-  void SetDescriptors(int, int, int);
-  void InitFilters();
-  float *Forward(float *, int, int, int);
-  void Backward(float *, float *, float *, float *);
+  checkCUDNN(cudnnActivationForward(
+    cudnn,
+    activation_desc,
+    &one,
+    intermediate_desc,
+    intermediate,
+    &zero,
+    output_desc,
+    output
+  ));
+  
+  return output;
+}
 
-};
-//global
-static std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
+
+extern "C" void *BN2dReluForward(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
+{
+  std::cout << "BN2dReluForward" << "\n";
+  //TODO: remove self arg and concatenate it instead during the function call
+  //std::cout << "\nBatchNormForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
+  
+  std::string _self = self;
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = _self + conv_name;
+
+  std::cout << "Conv forward for conv: " << conv_name <<"\n";
+  
+
+  float *tensor_ptr, *output;
+  tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  float input_dims_prod = DimsProd(dims);
+
+  float B = dims[0];
+  float C = dims[dims.size()-3];
+  float H = dims[dims.size()-2];
+  float W = dims[dims.size()-1];
 
 
-void Conv2d::SetDescriptors(int H, int W, int B)
+
+  std::cout << "BN2dReluForward move" << "\n";
+
+  std::unique_ptr<BN2dRelu> conv = std::move(NamedBN2dRelu[conv_name]);
+
+  if ((int)C!=(int)conv->C)
+  {
+    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the BN2dRelu are: " + std::to_string(conv->C);
+    LogError(error);
+    
+    NamedBN2dRelu[conv_name] = std::move(conv);
+    return nullptr;
+  }
+
+  std::cout << "BN2dReluForward sync" << "\n";
+
+  tensor->Sync();
+  output = conv->Forward(tensor, H, W, B, C);
+
+  float resultingDimsProd = B * (float)C * (float)H * (float)W;
+
+  
+  
+  std::vector<float> bn_dims = {(float)C};
+  std::string bias_name = conv_name+"_bias";
+
+  Tensor *scale_bias_tensor, *scale_tensor, *bias_tensor;
+
+  // for the backprop
+  scale_bias_tensor = createTensor(conv->scale, bn_dims, C, true, conv_name);
+  scale_bias_tensor->SetBias(conv->bias, C);
+  scale_bias_tensor->SetIsWeight();
+
+
+  // for the optimizer only
+  scale_tensor = NamedTensorsT[conv_name];
+  scale_tensor->NewTensor(conv->scale, bn_dims, C, true, conv_name);
+  scale_tensor->SetIsWeight();
+  
+  bias_tensor = NamedTensorsT[bias_name];
+  bias_tensor->NewTensor(conv->bias, bn_dims, C, true, conv_name);
+  bias_tensor->SetIsWeight();
+
+
+
+  NamedBN2dRelu[conv_name] = std::move(conv);
+
+  std::vector<float> new_dims = {(float)B, (float)C, (float)H, (float)W};
+  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
+  new_tensor->AttrNodes(tensor, scale_bias_tensor, bn2drelu);
+  new_tensor->from_cudnn = conv_name;
+  return new_tensor;
+}
+
+
+
+void BN2dRelu::Backward(float *tensor, float *intermediate, float *out, float *dx, float *dw, float *db, float *dintermediate, float *dy)
+{
+  std::cout << "BN2dRelu::Backward" << "\n";
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+  float eps = 0.00001f;
+  
+  
+  checkCUDNN(cudnnBatchNormalizationBackward(
+    cudnn,
+    CUDNN_BATCHNORM_SPATIAL_PERSISTENT,
+    &one,
+    &zero,
+    &one,
+    &one,
+    input_desc,
+    tensor,
+    intermediate_desc,
+    dintermediate,
+    input_desc,
+    dx,
+    scale_bias_mean_var_desc,
+    scale,
+    dw,
+    db,
+    eps,
+    saved_mean,
+    saved_var
+  ));
+
+
+  checkCUDNN(cudnnActivationBackward(
+                        cudnn,
+                        activation_desc,
+                        &one,
+                        output_desc,
+                        out,
+                        output_desc,
+                        dy,
+                        intermediate_desc,
+                        intermediate,
+                        &zero,
+                        intermediate_desc,
+                        dintermediate
+  ));
+}
+
+void bn2drelu_backward(float *inp, float *intermediate, float *out,
+                     float *dinp, float *dw, float *db, float *dintermediate,
+                     float *dout, std::string conv_name)
+{
+
+  //std::cout << "batchnorm2d_backward for " << conv_name << "\n";
+  std::unique_ptr<BN2dRelu> conv = std::move(NamedBN2dRelu[conv_name]);
+
+  conv->Backward(inp, intermediate, out, dinp, dw, db, dintermediate, dout);
+
+  NamedBN2dRelu[conv_name] = std::move(conv);
+
+}
+
+
+
+
+
+
+
+
+void Relu::SetDescriptors(int C, int H, int W, int B, Tensor *tensor)
+{
+  this->C = C;
+  this->H = H;
+  this->W = W;
+  this->B = B;
+
+
+  switch(tensor->op)
+  {
+    case conv2d:
+      input_desc = NamedConv2d[tensor->from_cudnn]->output_desc;
+      break;
+    case bn2drelu:
+      input_desc = NamedBN2dRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case cudnn_relu_op:
+      input_desc = NamedRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case batchnorm2d:
+      input_desc = NamedBatchNorm2d[tensor->from_cudnn]->output_desc;
+      break;
+    case maxpool2d:
+      input_desc = NamedMaxPool2d[tensor->from_cudnn]->output_desc;
+      break;
+    default:
+      checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+      checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+      break;
+  }
+
+  
+  cudnnCreateActivationDescriptor(&activation_desc);
+  cudnnSetActivationDescriptor(activation_desc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 0.0);
+
+  checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+}
+
+
+float *Relu::Forward(Tensor *tensor, int H, int W, int B, int C)
+{
+
+  if (H != this->H || W != this->W || B != this->B)
+    this->SetDescriptors(C, H, W, B, tensor);
+
+
+
+  float *output = get_from_pool(B * H * W * C, "Relu");
+  //set_to_one_kernel<<<grid_size, block_size>>>(output, B * H * W * C);
+  
+  
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+  
+
+
+
+  checkCUDNN(cudnnActivationForward(
+    cudnn,
+    activation_desc,
+    &one,
+    input_desc,
+    tensor->tensor_ptr,
+    &zero,
+    output_desc,
+    output
+  ));
+  
+  return output;
+}
+
+
+extern "C" void *ReluForward(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
+{
+  
+  //TODO: remove self arg and concatenate it instead during the function call
+  //std::cout << "\nBatchNormForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
+  
+  std::string _self = self;
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = _self + conv_name;
+
+
+  float *tensor_ptr, *output;
+  tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  float input_dims_prod = DimsProd(dims);
+
+  float B = dims[0];
+  float C = dims[dims.size()-3];
+  float H = dims[dims.size()-2];
+  float W = dims[dims.size()-1];
+
+
+
+  std::unique_ptr<Relu> conv = std::move(NamedRelu[conv_name]);
+
+
+  tensor->Sync();
+  output = conv->Forward(tensor, H, W, B, C);
+
+  float resultingDimsProd = B * (float)C * (float)H * (float)W;
+
+  
+  
+  std::vector<float> bn_dims = {(float)C};
+  std::string bias_name = conv_name+"_bias";
+
+  Tensor *scale_bias_tensor, *scale_tensor, *bias_tensor;
+
+
+
+
+  NamedRelu[conv_name] = std::move(conv);
+
+  std::vector<float> new_dims = {(float)B, (float)C, (float)H, (float)W};
+  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
+  new_tensor->AttrLNode(tensor, cudnn_relu_op);
+  new_tensor->from_cudnn = conv_name;
+  return new_tensor;
+}
+
+
+
+void Relu::Backward(float *tensor, float *out, float *dx, float *dy)
+{
+  constexpr float one = 1.0f;
+  constexpr float zero = 0.0f;
+  float eps = 0.00001f;
+  
+  
+
+  checkCUDNN(cudnnActivationBackward(
+                        cudnn,
+                        activation_desc,
+                        &one,
+                        output_desc,
+                        out,
+                        output_desc,
+                        dy,
+                        input_desc,
+                        tensor,
+                        &zero,
+                        input_desc,
+                        dx
+  ));
+}
+
+void cudnn_relu_backward(float *inp, float *out,
+                     float *dinp, 
+                     float *dout, std::string conv_name)
+{
+
+  //std::cout << "batchnorm2d_backward for " << conv_name << "\n";
+  std::unique_ptr<Relu> conv = std::move(NamedRelu[conv_name]);
+
+  conv->Backward(inp, out, dinp, dout);
+
+  NamedRelu[conv_name] = std::move(conv);
+
+}
+
+
+
+
+
+
+
+
+void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
 {
   this->H = H;
   this->W = W;
@@ -10248,11 +11085,29 @@ void Conv2d::SetDescriptors(int H, int W, int B)
 
 
 
-  // Initialize input tensor descriptor
-  cudnnTensorDescriptor_t input_desc;
-  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
-  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
-  this->input_desc = input_desc;
+  switch(tensor->op)
+  {
+    case conv2d:
+      input_desc = NamedConv2d[tensor->from_cudnn]->output_desc;
+      break;
+    case bn2drelu:
+      input_desc = NamedBN2dRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case cudnn_relu_op:
+      input_desc = NamedRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case batchnorm2d:
+      input_desc = NamedBatchNorm2d[tensor->from_cudnn]->output_desc;
+      break;
+    case maxpool2d:
+      input_desc = NamedMaxPool2d[tensor->from_cudnn]->output_desc;
+      break;
+    default:
+      // Initialize input tensor descriptor
+      checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+      checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+      break;
+  }
 
   // Initialize filter descriptor
   cudnnFilterDescriptor_t filter_desc;
@@ -10426,14 +11281,13 @@ void Conv2d::InitFilters()
 
 
 
-float *Conv2d::Forward(float *tensor, int H, int W, int B)
+float *Conv2d::Forward(Tensor *tensor, int H, int W, int B)
 {
   // Initialize descriptors.
   //std::cout << "\nConv2d Forward with H: " << H << " W: " << W << "\n";
 
-
   if (H != this->H || W != this->W || B != this->B)
-    this->SetDescriptors(H, W, B);
+    this->SetDescriptors(H, W, B, tensor);
 
   // Initialize weights.
   if (d_filter==nullptr)
@@ -10454,7 +11308,7 @@ float *Conv2d::Forward(float *tensor, int H, int W, int B)
         cudnn,
         &one,
         input_desc,
-        tensor,
+        tensor->tensor_ptr,
         filter_desc,
         d_filter,
         conv_desc,
@@ -10468,16 +11322,6 @@ float *Conv2d::Forward(float *tensor, int H, int W, int B)
   
 
 
-
-  
-  /*
-  std::cout << "Input grad:\n";
-  PrintTensorF(dx, B * C, H * W);
-
-
-  std::cout << "W grad:\n";
-  PrintTensorF(d_filter_g, OC * C, ks * ks);
-  */
 
   return d_output;
 }
@@ -10566,6 +11410,7 @@ extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int
   if (is_obj_attr_or_self)
     conv_name = _self + conv_name;
 
+
   //std::cout << "Conv forward for  conv: " << conv_name <<"\n";
   
 
@@ -10596,7 +11441,7 @@ extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int
 
   tensor->Sync();
 
-  output = conv->Forward(tensor_ptr, H, W, B);
+  output = conv->Forward(tensor, H, W, B);
 
   int ks_H = conv->ks;
   int ks_W = conv->ks;
@@ -10624,11 +11469,12 @@ extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int
   conv_tensor->SetIsWeight();
   
 
-  //PrintTensorF(device_y, 2, 2);
+
   NamedConv2d[conv_name] = std::move(conv);
 
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrNodes(tensor, conv_tensor, conv2d);
+  new_tensor->from_cudnn = conv_name;
   return new_tensor;
 }
 
@@ -10662,48 +11508,35 @@ extern "C" float CreateBatchNorm2dOnDemand(char *tensor_name, float C)
 }
 
 
-
-class MaxPool2d
+extern "C" float CreateBN2dReluOnDemand(char *tensor_name, float C)
 {
-  // Forward
-  cudnnTensorDescriptor_t input_desc;
-  cudnnPoolingDescriptor_t pooling_desc;
-  cudnnTensorDescriptor_t output_desc;
+  std::cout << "\nCreate BatchNorm2d on demand:\n   C: " << C  << "\n";
+
+  auto conv = std::make_unique<BN2dRelu>((int)C, tensor_name);
+
+  NamedBN2dRelu[tensor_name] = std::move(conv);
+  return 0;
+}
+
+
+extern "C" float CreateReluOnDemand(char *tensor_name)
+{
+  auto conv = std::make_unique<Relu>(tensor_name);
+
+  NamedRelu[tensor_name] = std::move(conv);
+  return 0;
+}
 
 
 
 
 
-  public:
-    std::string Type;
-    int ks, stride, padding, out_H, out_W;
-    int B = 0;
-    int C = 0;
-    int H = 0;
-    int W = 0;
 
-    MaxPool2d(int ks, int stride, int padding, std::string Type)
-        : ks(ks), stride(stride), padding(padding), Type(Type) {}
-
-  
-
-
-  void SetDescriptors(int, int, int, int);
-  float *Forward(float *, int, int, int, int);
-  void Backward(float *, float *, float *, float *);
-
-};
-static std::map<std::string, std::unique_ptr<MaxPool2d>> NamedMaxPool2d;
-
-
-
-void MaxPool2d::SetDescriptors(int H, int W, int B, int C)
+void MaxPool2d::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
 {
   this->H = H;
   this->W = W;
   this->B = B;
-
-
 
 
   out_H = std::floor((H - ks + 2 * padding) / stride) + 1;
@@ -10711,12 +11544,30 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C)
   //std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
 
 
+  switch(tensor->op)
+  {
+    case conv2d:
+      input_desc = NamedConv2d[tensor->from_cudnn]->output_desc;
+      break;
+    case bn2drelu:
+      input_desc = NamedBN2dRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case cudnn_relu_op:
+      input_desc = NamedRelu[tensor->from_cudnn]->output_desc;
+      break;
+    case batchnorm2d:
+      input_desc = NamedBatchNorm2d[tensor->from_cudnn]->output_desc;
+      break;
+    case maxpool2d:
+      input_desc = NamedMaxPool2d[tensor->from_cudnn]->output_desc;
+      break;
+    default:
+      checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+      checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+      break;
+  }
+  
 
-  // Initialize input tensor descriptor
-  cudnnTensorDescriptor_t input_desc;
-  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
-  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
-  this->input_desc = input_desc;
 
   // Initialize pooling descriptor
   checkCUDNN(cudnnCreatePoolingDescriptor(&pooling_desc));
@@ -10731,16 +11582,13 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C)
                                          stride));                     //horizontal stride
   
   // Initialize output tensor descriptor
-  cudnnTensorDescriptor_t output_desc;
   checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
   checkCUDNN(cudnnSetTensor4dDescriptor(output_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, out_H, out_W));
-  this->output_desc = output_desc;
-
 }
 
 
 
-float *MaxPool2d::Forward(float *tensor, int H, int W, int B, int C)
+float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C)
 {
   // Initialize descriptors.
   //std::cout << "\nPool2d Forward with H: " << H << " W: " << W << "\n";
@@ -10748,7 +11596,7 @@ float *MaxPool2d::Forward(float *tensor, int H, int W, int B, int C)
 
 
   if (H != this->H || W != this->W || B != this->B || C != this->C)
-    this->SetDescriptors(H, W, B, C);
+    this->SetDescriptors(H, W, B, C, tensor);
 
 
   
@@ -10764,7 +11612,7 @@ float *MaxPool2d::Forward(float *tensor, int H, int W, int B, int C)
         pooling_desc,
         &one,
         input_desc,
-        tensor,
+        tensor->tensor_ptr,
         &zero,
         output_desc,
         d_output
@@ -10802,7 +11650,7 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, char *conv_namec, 
   std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
 
   tensor->Sync();
-  output = conv->Forward(tensor_ptr, H, W, B, C);
+  output = conv->Forward(tensor, H, W, B, C);
 
   int ks_H = conv->ks;
   int ks_W = conv->ks;
@@ -10821,6 +11669,7 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, char *conv_namec, 
 
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
   new_tensor->AttrLNode(tensor, maxpool2d);
+  new_tensor->from_cudnn = conv_name;
   return new_tensor;
 }
 
@@ -10905,15 +11754,21 @@ __global__ void random_padding_cropping_kernel(
 {
   int b = blockIdx.x;
   int c = blockIdx.y;
-  int y = threadIdx.y;
-  int x = threadIdx.x;
+  int hw = blockIdx.z * blockDim.z + threadIdx.x;
+
+
+  int y = hw / input_width;
+  int x = hw % input_width;
+
+  //int y = threadIdx.y;
+  //int x = threadIdx.x;
 
   if (b >= batch_size || c >= channels || y >= crop_height || x >= crop_width)
     return;
 
   // Setup random number generator
   curandState state;
-  curand_init(seed, b * channels, 0, &state); // one random state per batch
+  curand_init(seed, b, 0, &state); // one random state per batch
 
   // Generate random padding values
   int pad_top = curand(&state) % (padding + 1); // Range belongs to [0, padding]
@@ -10961,15 +11816,18 @@ extern "C" void *RandomCrop(Tensor *tensor, float padding)
 
   float B, C, H, W;
   B = dims[0];
-  C = dims[1];
+  C = dims[dims.size()-3];
   H = dims[dims.size()-2];
   W = dims[dims.size()-1];
 
   cropped = get_from_pool(dims_prod, "cropping");
 
 
-  dim3 numBlocks(B, C);
-  dim3 threadsPerBlock(H, W);
+  int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+
+  dim3 numBlocks(B, C, std::ceil(H*W/block_size));
+  dim3 threadsPerBlock(block_size);
+  cudaCheck(cudaGetLastError());
 
 
   random_padding_cropping_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
@@ -10984,6 +11842,7 @@ extern "C" void *RandomCrop(Tensor *tensor, float padding)
     padding,
     seed
   );
+  cudaCheck(cudaGetLastError());
   
   Tensor *new_tensor = createTensor(cropped, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, crop_op);
@@ -10996,29 +11855,35 @@ extern "C" void *RandomCrop(Tensor *tensor, float padding)
 __global__ void random_horizontal_flip_kernel(const float *input_tensor, float *output_tensor, 
                                               int batch_size, int channels, int height, int width, 
                                               unsigned long long seed) {
-    // Thread ID
-    int batch_idx = blockIdx.x;
-    int channel_idx = blockIdx.y;
-    int row_idx = threadIdx.x;
-    int col_idx = threadIdx.y;
+  // Thread ID
+  int batch_idx = blockIdx.x;
+  int channel_idx = blockIdx.y;
+  int hw = blockIdx.z * blockDim.z + threadIdx.x;
 
-    // Random number generator initialization
-    curandState state;
-    curand_init(seed, batch_idx * channels, 0, &state);
-    //curand_init(seed, batch_idx * channels * height * width + channel_idx * height * width + row_idx * width + col_idx, 0, &state);
+  int h = hw / width;
+  int w = hw % width;
 
-    // Determine if the current image should be flipped
-    bool flip = curand_uniform(&state) > 0.5f;
+  int idx = ((batch_idx * channels + channel_idx) * height + h) * width + w;
 
-    int idx = ((batch_idx * channels + channel_idx) * height + row_idx) * width + col_idx;
-    if (flip) {
-        // Compute the flipped column index
-        int flipped_col_idx = width - col_idx - 1;
-        int flipped_idx = ((batch_idx * channels + channel_idx) * height + row_idx) * width + flipped_col_idx;
-        output_tensor[idx] = input_tensor[flipped_idx];
-    } else {
-        output_tensor[idx] = input_tensor[idx];
-    }
+  if (idx>(batch_size*channels*height*width))
+    return;
+
+  // Random number generator initialization
+  curandState state;
+  curand_init(seed, batch_idx, 0, &state);
+    
+
+  // Determine if the current image should be flipped
+  bool flip = curand_uniform(&state) > 0.5f;
+
+  if (flip) {
+    // Compute the flipped column index
+    int flipped_col_idx = width - w - 1;
+    int flipped_idx = ((batch_idx * channels + channel_idx) * height + h) * width + flipped_col_idx;
+    output_tensor[idx] = input_tensor[flipped_idx];
+  } else {
+    output_tensor[idx] = input_tensor[idx];
+  }
 }
 
 
@@ -11034,15 +11899,20 @@ extern "C" void *RandomHorizontalFlip(Tensor *tensor)
 
   float B, C, H, W;
   B = dims[0];
-  C = dims[1];
+  C = dims[dims.size()-3];
   H = dims[dims.size()-2];
   W = dims[dims.size()-1];
 
   flipped = get_from_pool(dims_prod, "horizontal_flipping");
 
 
-  dim3 numBlocks(B, C);
-  dim3 threadsPerBlock(H, W);
+  int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+
+  dim3 numBlocks(B, C, std::ceil(H*W/block_size));
+  dim3 threadsPerBlock(block_size);
+  cudaCheck(cudaGetLastError());
+
+  //std::cout << "B " << B << ", C " << C << ", H " << H << ", W " << W << "\n";
 
   random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
     tensor_ptr,
@@ -11053,6 +11923,7 @@ extern "C" void *RandomHorizontalFlip(Tensor *tensor)
     W,
     seed
   );
+  cudaCheck(cudaGetLastError());
   
   Tensor *new_tensor = createTensor(flipped, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, random_horizontal_flip_op);
@@ -11064,16 +11935,17 @@ extern "C" void *RandomHorizontalFlip(Tensor *tensor)
 __global__ void normalize_img_kernel(float *output_tensor, const float *input_tensor, 
                                      const float *mean, const float *std,
                                      int batch_size, int channels, int height, int width) {
-    // Thread ID
-    int batch_idx = blockIdx.x;
-    int c = blockIdx.y;
-    int row_idx = threadIdx.x;
-    int col_idx = threadIdx.y;
+  // Thread ID
+  int batch_idx = blockIdx.x;
+  int c = blockIdx.y;
+  int hw = blockIdx.z * blockDim.z + threadIdx.x;
+  
+  int h = hw / width;
+  int w = hw % width;
 
+  int idx = ((batch_idx * channels + c) * height + h) * width + w;
     
-    int idx = ((batch_idx * channels + c) * height + row_idx) * width + col_idx;
-    
-    output_tensor[idx] = (input_tensor[idx]-mean[c])/std[c];
+  output_tensor[idx] = (input_tensor[idx]-mean[c])/std[c];
     
 }
 
@@ -11089,7 +11961,7 @@ extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
 
   float B, C, H, W;
   B = dims[0];
-  C = dims[1];
+  C = dims[dims.size()-3];
   H = dims[dims.size()-2];
   W = dims[dims.size()-1];
 
@@ -11099,11 +11971,15 @@ extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
     return nullptr;
   }
 
-  normalized = get_from_pool(dims_prod, "horizontal_flipping");
+  normalized = get_from_pool(dims_prod, "normalize img");
 
 
-  dim3 numBlocks(B, C);
-  dim3 threadsPerBlock(H, W);
+
+  int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+
+  dim3 numBlocks(B, C, std::ceil(H*W/block_size));
+  dim3 threadsPerBlock(block_size);
+  cudaCheck(cudaGetLastError());
 
   normalize_img_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
     normalized,
@@ -11115,7 +11991,9 @@ extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
     H,
     W
   );
-  
+
+  cudaCheck(cudaGetLastError());
+
   Tensor *new_tensor = createTensor(normalized, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, normalize_img_op);
   return new_tensor;
@@ -11175,14 +12053,14 @@ void CrossEntropyBackward(float *y_hat,
   shared_mem_size = grid_block_mem_sizes[2];
   */
 
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size>>>(y_hat, probs, B, C);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(y_hat, probs, B, C);
   std::vector<int> grid_block_mem_sizes;
   grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C, 32);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
   
-  crossentropy_softmax_backward_kernel1<<<grid_size, block_size>>>(dloss, probs, y, B, C);
+  crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C);
   move_to_pool(B*C, probs,"ce probs");
 
   
@@ -11297,6 +12175,8 @@ extern "C" float clean_forward(char *scope, char *previous_scope)
   for(std::string _scope : scopes)
     CleanScopeTensors(_scope);
   scopes.clear();
+  
+  cudaCheck(cudaGetLastError());
   return 0;
 }
 
@@ -11467,13 +12347,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
 
       device_dx = get_from_pool(x_size, from);
       set_to_zero_kernel<<<grid_size, block_size>>>(device_dx, x_size);
-      /*
-      dinp = make_zeros_float(x_size);
-      cudaCheck(cudaMalloc(&device_dx, x_size*sizeof(float)));
-      cudaCheck(cudaMemcpy(device_dx, dinp, x_size*sizeof(float), cudaMemcpyHostToDevice));
-      delete[] dinp;
-      */
     }
+    
 
     //std::cout << "malloc done"  << "\n";
 
@@ -11507,8 +12382,14 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
       case batchnorm2d:
         batchnormd2d_backward(inp, device_dx, device_dw, device_db, device_dy, back_node->name);
         break;
+      //case bn2drelu:
+      //  bn2drelu_backward(inp, intermediate, out, device_dx, device_dw, device_db, device_dintermediate, device_dy, back_node->name);
+      //  break;
       case relu_op:
         relu_backward(inp, x_size, device_dx, device_dy);
+        break;
+      case cudnn_relu_op:
+        cudnn_relu_backward(inp, out, device_dx, device_dy, back_node->name);
         break;
       case gelu_op:
         gelu_backward(inp, x_size, device_dx, device_dy);
@@ -13653,6 +14534,82 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
 
 
+Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *scopeless_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {first_arg, var_name});
+    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {scope_str, var_name});
+    
+
+    
+    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateBN2dReluOnDemand"),
+                                              {var_name, C->codegen(first_arg, scope_str, previous_scope)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *scopeless_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {first_arg, var_name});
+    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {scope_str, var_name});
+    
+
+    
+    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateReluOnDemand"),
+                                              {var_name});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
 Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -13738,9 +14695,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     if (!is_self_of_nested_function && not_coding_language_method)
     {
-      if (nested_function)
-        _pre_dot_str = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      
+      _pre_dot_str = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                 {scope_str, _pre_dot_str});
+
       first_arg = Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
                                                     {first_arg,
                                                      _pre_dot_str,
@@ -13749,12 +14707,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function),
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), isSelf),
                                                      ConstantInt::get(Type::getInt32Ty(*TheContext), isAttribute)});
-      changed_first_arg = true;
+      
     }
     if (is_self_of_nested_function && not_coding_language_method)
     { // object method inside object method
-
-      //TODO: can this be changed into first_arg_copy=first_arg?
       first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
 
       //first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
@@ -13762,8 +14718,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
                                                     {first_arg_copy,
                                                      _pre_dot_str});
       has_first_arg_copy = true;
-      changed_first_arg = true;
     }
+    changed_first_arg = not_coding_language_method;
+    
+
     //name = NameSolver->codegen(first_arg, scope_str, previous_scope);
     
     if (CalleeOverride!="none"||in_str(Callee, native_methods))
@@ -13889,9 +14847,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
 
 
-
-
-
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   //std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
@@ -13900,11 +14855,11 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   else
   {
     //std::cout << "Override: " << CalleeOverride << "\n";
-    if (CalleeOverride=="ConvForward2d"||CalleeOverride=="MaxPoolForward2d"||CalleeOverride=="BatchNormForward2d")
+    if (CalleeOverride=="ConvForward2d"||CalleeOverride=="MaxPoolForward2d"||CalleeOverride=="BatchNormForward2d"||CalleeOverride=="BN2dReluForward"||CalleeOverride=="ReluForward")
     {
       CalleeF = getFunction(CalleeOverride);
       Value *conv_name = Builder->CreateGlobalString(tgt_function);
-      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*GlobalContext), (int)(isSelf));
+      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf));
       ArgsV.push_back(conv_name);
       ArgsV.push_back(is_attr);
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
@@ -14033,7 +14988,8 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
   
   std::vector<char *> splits;
   char *input = (char*)malloc(strlen(self) + 1);
-  strcpy(input, self);
+  memcpy(input, self, strlen(self) + 1);
+  //strcpy(input, self);
 
   char *saveptr;
   char *token = strtok_r(input, pattern, &saveptr); // Get the first token
@@ -14043,14 +14999,23 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
     token = strtok_r(nullptr, pattern, &saveptr); // Get the next token
   }
 
-  if (idx < 0) 
+  if(splits.size()<=1)
+  {
+    std::string _err = "Failed to split.";
+    LogErrorS(_err);
+    return nullptr;
+  }
+
+  if (idx < 0)
     idx = splits.size() + idx;
   
-
   //std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
  
-  delete[] name;
-  return splits[idx];
+  // Convert the retained token to a std::string
+  char *result = splits[idx];
+
+  delete[] name, pattern, input;
+  return result;
 }
 
 
@@ -14899,9 +15864,27 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *BN2dReluForwardTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("BN2dReluForward", BN2dReluForwardTy);
+
+
+  //
+  FunctionType *ReluForwardTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("ReluForward", ReluForwardTy);
+
+
+  //
   FunctionType *cropTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("RandomCrop", cropTy);
@@ -15070,8 +16053,8 @@ static void InitializeModule() {
   
   //
   FunctionType *load_imgTy = FunctionType::get(
-      PointerType::get(Type::getFloatTy(*GlobalContext), 0),
-      {PointerType::get(Type::getInt8Ty(*GlobalContext), 0)},
+      PointerType::get(Type::getFloatTy(*TheContext), 0),
+      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
       false 
   );
   TheModule->getOrInsertFunction("load_img", load_imgTy);
@@ -15787,6 +16770,25 @@ FunctionType *unbugTy = FunctionType::get(
 
 
   //
+  FunctionType *CreateBN2dReluOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("CreateBN2dReluOnDemand", CreateBN2dReluOnDemandTy);
+
+
+  //
+  FunctionType *CreateReluOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("CreateReluOnDemand", CreateReluOnDemandTy);
+
+
+  //
   FunctionType *CreateMaxPool2dOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy,
@@ -16076,7 +17078,6 @@ int main() {
 
   int deviceIdx = 0;
   cudaCheck(cudaSetDevice(deviceIdx));
-  cudaDeviceProp deviceProp;
   cudaGetDeviceProperties(&deviceProp, deviceIdx);
 
   std::cout << "CuDNN Version: " << CUDNN_MAJOR << "." << CUDNN_MINOR << "." << CUDNN_PATCHLEVEL << std::endl;
@@ -16113,9 +17114,9 @@ int main() {
 
   
   // Set the Main Stream
-  //main_stream = AllocateStream();
-  //cublasSetStream(cublas_handle, main_stream->stream);
-  //cudnnSetStream(cudnn, main_stream->stream);
+  main_stream = AllocateStream();
+  cublasSetStream(cublas_handle, main_stream->stream);
+  cudnnSetStream(cudnn, main_stream->stream);
 
 
 
@@ -16124,6 +17125,10 @@ int main() {
     return 1;
   }
   if (pthread_mutex_init(&clean_scope_mutex, NULL) != 0) {
+    printf("Mutex initialization failed\n");
+    return 1;
+  }
+  if (pthread_mutex_init(&char_pool_mutex, NULL) != 0) {
     printf("Mutex initialization failed\n");
     return 1;
   }
@@ -16139,7 +17144,7 @@ int main() {
   InitializeNativeTargetAsmParser();
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
-  activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op};
+  activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
   loss_ops = {cross_entropy_op};
 
   preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op};
