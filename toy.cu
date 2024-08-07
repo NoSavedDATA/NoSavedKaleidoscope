@@ -43,6 +43,8 @@
 #include <thread>
 #include <random>
 #include <float.h>
+#include <fstream>
+#include <sstream>
 
 
 // Cuda
@@ -57,9 +59,11 @@
 #include "include/cu_commons.h"
 
 
-pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex;
+pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex;
 
 float TERMINATE_VARARG = -40370000000.0f;
+float UNK_TOK = -10.0f;
+float PAD_TOK = -10.0f;
 
 #define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
 
@@ -3310,6 +3314,163 @@ extern "C" float cpu_idx(Tensor *tensor, float idx)
 
 
 
+std::map<std::string, int> Vocab;
+float max_tokens;
+float last_tok_id = 0;
+
+
+void ProcessString(std::string& str) {
+  // to lower and remove ponctuation
+
+
+  // Convert to lowercase
+  std::transform(str.begin(), str.end(), str.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+  // Remove punctuation
+  str.erase(std::remove_if(str.begin(), str.end(),
+                   [](unsigned char c) { return std::ispunct(c); }),
+            str.end());
+}
+
+
+extern "C" float build_vocab(char *filename, float _max_tokens)
+{
+  pthread_mutex_lock(&vocab_mutex); // Files are not thread safe
+  std::ifstream file(filename);
+  max_tokens = _max_tokens;
+
+  if (!file) {
+    std::cerr << "Error opening file!" << std::endl;
+    return 1;
+  }
+
+  std::string line;
+  while (std::getline(file, line)) 
+  {       
+    std::istringstream lineStream(line); // Create a string stream from the line
+    std::string word;
+
+    while (lineStream >> word) {
+      ProcessString(word);
+      
+      if (Vocab.count(word)==0 && last_tok_id<max_tokens)
+      {
+        Vocab[word] = last_tok_id;
+        last_tok_id+=1;
+      }
+    }
+  }
+
+  file.close();
+  pthread_mutex_unlock(&vocab_mutex);
+
+  return 0;
+}
+
+
+extern "C" float tokenize(Tensor *tensor, char *filename)
+{
+  pthread_mutex_lock(&vocab_mutex); // Files are not thread safe
+  std::ifstream file(filename);
+
+  if (!file) {
+    std::cerr << "Error opening file!" << std::endl;
+    return 1;
+  }
+
+  std::string line;
+  while (std::getline(file, line)) 
+  {       
+    std::istringstream lineStream(line); // Create a string stream from the line
+    std::string word;
+
+    while (lineStream >> word) {
+
+      ProcessString(word);
+
+      int idx;
+
+      std::cout << word << "\n";
+      idx = (Vocab.count(word)>0) ? Vocab[word] : -100;
+      //idx = (idx>max_tokens) ? max_tokens : idx;
+
+      std::cout << idx << std::endl;
+    }
+  }
+
+  file.close();
+  pthread_mutex_unlock(&vocab_mutex);
+
+  return 0;
+}
+
+
+extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+{
+  pthread_mutex_lock(&vocab_mutex); // Files are not trhead safe
+  std::ifstream file(filename);
+
+  if (!file) {
+    std::cerr << "Error opening file!" << std::endl;
+    return 1;
+  }
+
+
+  std::vector<float> dims = tensor->dims;
+
+  std::vector<float> workerless_dims = BatchLessDims(dims);
+  int workerless_dims_prod = DimsProd(workerless_dims);
+
+  std::vector<float> seqless_dims = BatchLessDims(workerless_dims);
+  int seqless_dims_prod = DimsProd(seqless_dims);
+
+  std::vector<float> batchless_dims = BatchLessDims(seqless_dims);
+  int batchless_dims_prod = DimsProd(batchless_dims);
+
+
+  float *image_data_float = tensor->cpu_tensor_ptr;
+  int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+
+
+  //TODO: add pad and left pad
+
+  std::string line;
+  int words_count = 0;
+  while (std::getline(file, line)) 
+  {       
+    std::istringstream lineStream(line); // Create a string stream from the line
+    std::string word;
+
+    while (lineStream >> word)
+    {
+      ProcessString(word);
+
+      int idx;
+
+      idx = (Vocab.count(word)>0) ? Vocab[word] : UNK_TOK;
+      
+
+      idx = idx + idx_offset;
+      tensor->cpu_tensor_ptr[idx] = 1;
+
+      words_count++;
+      idx_offset += seqless_dims_prod;
+
+      if (words_count>trunc_to)
+        break;
+    }
+    if (words_count>trunc_to)
+      break;
+  }
+
+  file.close();
+  pthread_mutex_unlock(&vocab_mutex);
+
+  return 0;
+}
+
+
 
 
 
@@ -5937,7 +6098,7 @@ extern "C" void * _glob_b_(char *pattern) {
 
 
   if (ret.size()<1)
-    LogErrorS("Glob falhou ao encontrar arquivos.");
+    LogErrorS("Glob failed to find files.");
     
   // Aux to not lose pointers
   std::string random_str = RandomString(15);
@@ -7625,7 +7786,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod, scope_tensor->cuda_stream, scope_tensor->loader);
   tensor->from_grad_or_load = scope_tensor->from_grad_or_load;
   
-  NamedTensorsT[tgt_tensor] = tensor;
+  
 
   delete scope_tensor;
   NamedTensorsT.erase(scope_tensor_name);
@@ -8555,7 +8716,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
       int grid_size = dims_prod;
       int block_size = 32;
       size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size>>>(device_w, aux_tensor, aux_size, tgt_dim_size);
+      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(device_w, aux_tensor, aux_size, tgt_dim_size);
 
       if (!first_iter)
       {
@@ -8578,7 +8739,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
       int grid_size = dims_prod;
       int block_size = 32;
       size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size>>>(device_x, aux_tensor, aux_size, tgt_dim_size);
+      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(device_x, aux_tensor, aux_size, tgt_dim_size);
 
       if (!first_iter)
       {
@@ -8602,7 +8763,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
   int grid_size = dims_prod;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  hadamard_kernel<<<grid_size, block_size, shared_mem_size>>>(device_y, device_x, device_w, dims_prod);
+  hadamard_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
   //PrintTensorF(device_y, 2, 2);
 
 
@@ -8786,7 +8947,7 @@ extern "C" void *onehot(Tensor *tensor, float num_classes)
 
 extern "C" float shape(Tensor tensor)
 {
-  std::cout << "\nTensor \033[95m" << tensor.scopeless_name << "\033[0m:\n   ";
+  std::cout << "\nTensor \033[95m" << tensor.name << "\033[0m:\n   ";
   PrintDims(tensor.dims);
 
   return 0;
@@ -11756,7 +11917,6 @@ __global__ void random_padding_cropping_kernel(
   int c = blockIdx.y;
   int hw = blockIdx.z * blockDim.z + threadIdx.x;
 
-
   int y = hw / input_width;
   int x = hw % input_width;
 
@@ -11851,7 +12011,6 @@ extern "C" void *RandomCrop(Tensor *tensor, float padding)
 
 
 
-
 __global__ void random_horizontal_flip_kernel(const float *input_tensor, float *output_tensor, 
                                               int batch_size, int channels, int height, int width, 
                                               unsigned long long seed) {
@@ -11865,7 +12024,7 @@ __global__ void random_horizontal_flip_kernel(const float *input_tensor, float *
 
   int idx = ((batch_idx * channels + channel_idx) * height + h) * width + w;
 
-  if (idx>(batch_size*channels*height*width))
+  if (idx > (batch_size*channels*height*width))
     return;
 
   // Random number generator initialization
@@ -11945,9 +12104,9 @@ __global__ void normalize_img_kernel(float *output_tensor, const float *input_te
 
   int idx = ((batch_idx * channels + c) * height + h) * width + w;
     
-  output_tensor[idx] = (input_tensor[idx]-mean[c])/std[c];
-    
+  output_tensor[idx] = (input_tensor[idx]-mean[c])/std[c];    
 }
+
 
 extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
 {
@@ -16504,6 +16663,33 @@ FunctionType *unbugTy = FunctionType::get(
   );
   TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
 
+  
+  //
+  FunctionType *TokenizeTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("build_vocab", TokenizeTy);
+
+  
+  //
+  FunctionType *tokenizeTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("tokenize", tokenizeTy);
+
+  
+  //
+  FunctionType *wtokenizeTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("wtokenize", wtokenizeTy);
+
 
   //
   FunctionType *InitObjectVecWithNullTy = FunctionType::get(
@@ -17132,6 +17318,11 @@ int main() {
     printf("Mutex initialization failed\n");
     return 1;
   }
+  if (pthread_mutex_init(&vocab_mutex, NULL) != 0) {
+    printf("Mutex initialization failed\n");
+    return 1;
+  }
+  
 
 
   lockVars["mutex"] = &mutex;
@@ -17211,7 +17402,8 @@ int main() {
                       "LenStrVec", "gpu", "zeros_vec", "ones_vec",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
-                      "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize"};
+                      "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
+                      "build_vocab", "tokenize", "wtokenize"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
