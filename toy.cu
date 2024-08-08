@@ -397,10 +397,14 @@ enum BackwardTypes {
   random_horizontal_flip_op = 29,
   normalize_img_op = 30,
   rand_like_op = 31,
+  scalar_add_op = 34,
+  scalar_sub_op = 35,
+  scalar_mult_op = 36,
+  scalar_div_op = 37,
 };
 
 int nn_mode=training_mode;
-std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops;
+std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops;
 
 
 std::map<int, std::string> token_to_string = {
@@ -2528,6 +2532,7 @@ struct Tensor {
   float dims_prod;
   float *b=nullptr;
   float *dy=nullptr;
+  float scalar;
   int b_size=0;
 
   CudaStreams *cuda_stream = nullptr;
@@ -2723,6 +2728,9 @@ void to_pool_forward(float dims_prod, float *tensor_ptr, std::string scope, std:
 
 
 
+void ForwardCleanupToPool(Tensor *back_node, std::string scope);
+int DoesTreeContainWeight(Tensor *back_node);
+void CleanScopeTensors(std::string scope);
 
 
 
@@ -4898,20 +4906,20 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       //std::cout << "Bin op: " << BinOp << "\n";
 
 
-      if (BinOp==47)
+      if (BinOp=='/')
         BinOp = 77; // scalar / tensor
 
-      if (BinOp==45) // inversion of 1 - tensor
+      if (BinOp=='-') // inversion of 1 - tensor
       {
-        RHS = std::make_unique<BinaryTensorScalarExprAST>(42,
+        RHS = std::make_unique<BinaryTensorScalarExprAST>('*',
                                                     std::move(RHS),
                                                     std::move(std::make_unique<NumberExprAST>(-1.0f)));
                                                     //std::move(LHS)
                                                     
-        LHS = std::make_unique<BinaryTensorScalarExprAST>(43,
+        LHS = std::make_unique<BinaryTensorScalarExprAST>('+',
                                                     std::move(RHS), std::move(LHS));
       } else {
-        if (BinOp!=':') // Avoid codegen reversing
+        if (BinOp!=':') // Avoid codegen reversing //todo: is this necessary anymore?
           LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(RHS), std::move(LHS));
         else
@@ -6475,22 +6483,25 @@ __global__ void tensor_clip(float* x, float *y, float _min, float _max, int dims
 
 
 
-extern "C" void *CudaScalarMult(Tensor tensor, float R) {
+extern "C" void *CudaScalarMult(Tensor *tensor, float R) {
   //std::cout << "CudaScalarMult by " << R << "\n";
   
-  int kDataLen = tensor.dims_prod;
+  int kDataLen = tensor->dims_prod;
 
-  float *device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  
+  float* device_y = get_from_pool(kDataLen, "scalar mult");
   
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_mult<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
-
-  Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
   
+  vec_mult<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
+
+  Tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
+  new_tensor->AttrLNode(tensor, scalar_mult_op);
+  new_tensor->scalar = R;
   return new_tensor;
 }
 
@@ -6500,14 +6511,16 @@ extern "C" void *CudaScalarDiv(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  
+  float* device_y = get_from_pool(kDataLen, "scalar div");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_div<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  vec_div<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
@@ -6519,52 +6532,58 @@ extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  
+  float* device_y = get_from_pool(kDataLen, "reverse scalar div");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_reverse_div<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  vec_reverse_div<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
 
-extern "C" void *CudaScalarAdd(Tensor tensor, float R) {
+extern "C" void *CudaScalarAdd(Tensor *tensor, float R) {
   
-  int dims_prod = tensor.dims_prod;
+  int dims_prod = tensor->dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, dims_prod * sizeof(float)));
+  float* device_y = get_from_pool(dims_prod, "scalar add");
   
   
-  int grid_size = dims_prod;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_add<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, dims_prod);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
   
-  Tensor *new_tensor = createTensor(device_y, tensor.dims, dims_prod, false, "");
+  vec_add<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor->tensor_ptr, device_y, dims_prod);
+  
+  Tensor *new_tensor = createTensor(device_y, tensor->dims, dims_prod, false, "");
+  new_tensor->AttrLNode(tensor, scalar_add_op);
   return new_tensor;
 }
 
-extern "C" void *CudaScalarSub(Tensor tensor, float R) {
+extern "C" void *CudaScalarSub(Tensor *tensor, float R) {
 
-  int kDataLen = tensor.dims_prod;
-
-
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  int kDataLen = tensor->dims_prod;
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_sub<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
 
-  Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  vec_sub<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
+
+  Tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
+  new_tensor->AttrLNode(tensor, scalar_sub_op);
   return new_tensor;
 }
 
@@ -6573,14 +6592,15 @@ extern "C" void *CudaScalarEqual(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_equal<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  vec_equal<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
@@ -6590,14 +6610,15 @@ extern "C" void *CudaScalarDiff(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_diff<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  vec_diff<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
@@ -6607,14 +6628,14 @@ extern "C" void *CudaScalarMinor(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_minor<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  vec_minor<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
@@ -6624,14 +6645,14 @@ extern "C" void *CudaScalarMinorEq(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_minor_eq<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  vec_minor_eq<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
@@ -6641,14 +6662,14 @@ extern "C" void *CudaScalarHigher(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_higher<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  vec_higher<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
@@ -6658,14 +6679,14 @@ extern "C" void *CudaScalarHigherEq(Tensor tensor, float R) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
 
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_higher_eq<<<grid_size, block_size, shared_mem_size>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  vec_higher_eq<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
@@ -6680,13 +6701,15 @@ extern "C" void *logE(Tensor tensor) {
   std::vector<float> dims = tensor.dims;
   int kDataLen = tensor.dims_prod;
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_log<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y, kDataLen);
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
+
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  vec_log<<<grid_size, block_size, 0, main_stream->stream>>>(device_x, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
   return new_tensor;
@@ -6699,13 +6722,15 @@ extern "C" void *logE2(Tensor tensor) {
   std::vector<float> dims = tensor.dims;
   int kDataLen = tensor.dims_prod;
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, kDataLen * sizeof(float)));
 
-  int grid_size = kDataLen;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  vec_log2<<<grid_size, block_size, shared_mem_size>>>(device_x, device_y, kDataLen);
+  float* device_y = get_from_pool(kDataLen, "scalar sub");
+
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  vec_log2<<<grid_size, block_size, 0, main_stream->stream>>>(device_x, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
   return new_tensor;
@@ -7542,7 +7567,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                           idx_calc_args);
 
-      return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at});
+      return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at, scope_str});
     } else {
       VariableExprAST *idx = static_cast<VariableExprAST *>(Idx[0].get());
       Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope);
@@ -7632,7 +7657,7 @@ __global__ void repeat_interleave_kernel_last_dim(const float *tensor,
 
 
 
-extern "C" void *IdxTensor(char *tensor_name, float idx_at)
+extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope)
 {
   
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
@@ -7674,8 +7699,15 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
   float *device_x = base_address + static_cast<int>(idx_at);
 
 
-  cudaMalloc(&new_tensor, new_dims_prod*sizeof(float));
-  cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+
+  new_tensor = get_from_pool(new_dims_prod, "idx tensor");
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(new_dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  tensor->Sync();
+  copy_tensor_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_tensor, device_x, new_dims_prod);
 
   /*
   PrintTensorF(new_tensor, 1, 1);
@@ -7683,7 +7715,11 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
   std::cout << "dims prod:" << new_dims_prod  << "\n";
   */
 
+  if(nn_mode==eval_mode)
+    ForwardCleanupToPool(tensor, scope);
+
   Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, true, "");
+  indexed->from_grad_or_load = tensor->from_grad_or_load;
   return indexed;
 }
 
@@ -7791,12 +7827,22 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
 
   arg_tensor = get_from_pool(dims_prod, "arg tensor");
   //cudaMalloc(&arg_tensor, dims_prod*sizeof(float));
+
   if (dims_prod!=0)
-    cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);
+  {
+    int grid_size, block_size, shared_mem_size; 
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+
+    copy_tensor_kernel<<<grid_size,block_size,0,main_stream->stream>>>(arg_tensor, tensor_ptr, dims_prod);
+    //cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);
+  }
   
 
   Tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
   new_tensor->scopeless_name = tensor->scopeless_name;
+  new_tensor->from_grad_or_load = tensor->from_grad_or_load;
   NamedTensorsT[arg_tensor_name] = new_tensor;
   return 0;
 }
@@ -7895,9 +7941,6 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 }
 
 
-void ForwardCleanupToPool(Tensor *back_node, std::string scope);
-int DoesTreeContainWeight(Tensor *back_node);
-void CleanScopeTensors(std::string scope);
 
 extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
 {
@@ -7951,7 +7994,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
       block_size = grid_block_mem_sizes[1];
 
 
-      copy_tensor_kernel<<<grid_size,block_size, 0, main_stream->stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
+      copy_tensor_kernel<<<grid_size,block_size,0,main_stream->stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
 
       if(nn_mode==training_mode)
       {
@@ -8969,7 +9012,6 @@ extern "C" void *onehot(Tensor *tensor, float num_classes)
 
 
   Tensor *new_tensor = createTensor(probs, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->op=onehot_op;
   new_tensor->AttrLNode(tensor, onehot_op);
   return new_tensor;
 }
@@ -12182,9 +12224,31 @@ extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
 
 
 
+__global__ void scalarmult_backward_kernel(float *dx, const float *dy,
+                                           const float scalar,
+                                           int dims_prod) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i < dims_prod)
+    {
+      dx[i] = scalar * dy[i];
+    }
+}
+void scalarmult_backward(float *dx, float *dy, float scalar, float dims_prod)
+{
+  //std::cout << "scalar mult backward with scalar " << scalar <<  "\n";
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, scalar, dims_prod);
+}
+
+
 __global__ void hadamard_backward_kernel(const float *x, const float *w,
-                            float *dx, float *dw, const float *dy,
-                            int dims_prod) {
+                                         float *dx, float *dw, const float *dy,
+                                         int dims_prod) {
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -12194,7 +12258,6 @@ __global__ void hadamard_backward_kernel(const float *x, const float *w,
       dw[i] = w[i] * dy[i];
     }
 }
-
 
 void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod)
 {
@@ -12534,7 +12597,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
       } else {
       
         //device_dw = get_from_pool(w_size, "dw"); //lock pool even if dx is not used.
-        if(op!=add_op)
+        if(op!=add_op && !in_int(op, tensor_scalar_ops))
         {
           //std::cout << "ulululu of op " << std::to_string(op) << "\n";
           device_dw = get_from_pool(w_size, "dw");
@@ -12549,7 +12612,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
     std::string from = "dx of "+ std::to_string(op);
     
 
-    if(op!=add_op) {
+    if(op!=add_op && op!=scalar_add_op) {
       int grid_size, block_size; 
       std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(x_size);
       grid_size = grid_block_mem_sizes[0];
@@ -12580,6 +12643,12 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
     //std::cout << "EXECUTING OP  " << op << "\n";
     switch (op)
     {
+      case scalar_add_op:
+        device_dx = device_dy;
+        break;
+      case scalar_mult_op:
+        scalarmult_backward(device_dx, device_dy, back_node->scalar, x_size); //todo: This one may be wrong
+        break;
       case mult_op:
         matmul_backward(inp, w, B, C, OC, device_dx, device_dw, device_dy);
         break;
@@ -15840,7 +15909,7 @@ static void InitializeModule() {
   //
   FunctionType *IdxTensorTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
   TheModule->getOrInsertFunction("IdxTensor", IdxTensorTy);
@@ -17402,6 +17471,7 @@ int main() {
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
   loss_ops = {cross_entropy_op};
 
+  tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
   preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op};
   gradless_ops = {rand_like_op, onehot_op, max_op, argmax_op, equal_op,
                   create_tensor_from_brackets_op};
