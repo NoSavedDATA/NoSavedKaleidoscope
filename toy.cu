@@ -128,7 +128,7 @@ char *RandomString(size_t length) {
   std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
 
   char *random_string = new char[length+1];
-  for (size_t i = 0; i < length; ++i) {
+  for (size_t i = 0; i < length+2; i++) { //TODO: does length+2 break?
     int random_index = distribution(generator);
     random_string[i] = charset[random_index];
   }
@@ -3256,8 +3256,11 @@ extern "C" float save_img(Tensor *tensor, char *img_name)
   }
 
   std::string img = "/home/nosaveddata/imgs/";
+  img = img + img_name;
   img = img + RandomString(4);
   img = img + ".png";
+
+  std::cout << "writing image: " << img << "\n";
 
   // Write the image using stb_image_write
   if (!stbi_write_png(img.c_str(), w, h, c, imageData.data(), w * c)) {
@@ -10130,7 +10133,7 @@ extern "C" void *_tanh(Tensor *tensor)
     
   int is_forward_func=1;
 
-  std::cout << "tanh tensor attribution from " << tensor->name<<"/"<<tensor->scopeless_name << "\n";
+  //std::cout << "tanh tensor attribution from " << tensor->name<<"/"<<tensor->scopeless_name << "\n";
 
   Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
   new_tensor->AttrLNode(tensor, tanh_op);
@@ -11932,10 +11935,11 @@ __global__ void random_padding_cropping_kernel(
 {
   int b = blockIdx.x;
   int c = blockIdx.y;
-  int hw = blockIdx.z * blockDim.z + threadIdx.x;
+  int hw = blockIdx.z * blockDim.x + threadIdx.x;
 
   int y = hw / input_width;
   int x = hw % input_width;
+
 
   //int y = threadIdx.y;
   //int x = threadIdx.x;
@@ -12034,7 +12038,7 @@ __global__ void random_horizontal_flip_kernel(const float *input_tensor, float *
   // Thread ID
   int batch_idx = blockIdx.x;
   int channel_idx = blockIdx.y;
-  int hw = blockIdx.z * blockDim.z + threadIdx.x;
+  int hw = blockIdx.z * blockDim.x + threadIdx.x;
 
   int h = hw / width;
   int w = hw % width;
@@ -12114,7 +12118,7 @@ __global__ void normalize_img_kernel(float *output_tensor, const float *input_te
   // Thread ID
   int batch_idx = blockIdx.x;
   int c = blockIdx.y;
-  int hw = blockIdx.z * blockDim.z + threadIdx.x;
+  int hw = blockIdx.z * blockDim.x + threadIdx.x;
   
   int h = hw / width;
   int w = hw % width;
@@ -12194,7 +12198,7 @@ __global__ void hadamard_backward_kernel(const float *x, const float *w,
 
 void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod)
 {
-  std::cout << "hadamard_backward" <<  "\n";
+  //std::cout << "hadamard_backward" <<  "\n";
   int grid_size, block_size;
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
   grid_size = grid_block_mem_sizes[0];
@@ -12489,39 +12493,43 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
     // weight gradient
     if(!in_int(op, loss_ops)&&back_node->R_Node!=nullptr)
     {
+      
+      int grid_size, block_size; 
+      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(w_size);
+      grid_size = grid_block_mem_sizes[0];
+      block_size = grid_block_mem_sizes[1];
+      
       //std::cout << "Is weight: " << back_node->R_Node->weight << "\n";
       if(back_node->R_Node->weight)
       {
         float *new_grad_ptr;
         if (w!=nullptr&&op!=hadamard_op&&op!=add_op)
         {
-          dw = make_zeros_float(w_size);
           //std::cout << "weight of size " << w_size << "\n";
           if (NamedParamGrads[param_name]==nullptr)
           {
             cudaCheck(cudaMalloc(&new_grad_ptr, w_size*sizeof(float)));
+            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, w_size);
             NamedParamGrads[param_name] = new_grad_ptr;
-          } 
-        
+          }
           device_dw = NamedParamGrads[param_name];
-          cudaCheck(cudaMemcpy(device_dw, dw, w_size*sizeof(float), cudaMemcpyHostToDevice));
-          delete[] dw;
         }
 
         if (b!=nullptr&&op!=hadamard_op&&op!=add_op)
         {
-          db = make_zeros_float(b_size);
           bias_name = param_name+"_bias";
 
           if (NamedParamGrads[bias_name]==nullptr)
           {
+            int grid_size_b, block_size_b; 
+            std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(w_size);
+            grid_size_b = grid_block_mem_sizes[0];
+            block_size_b = grid_block_mem_sizes[1];
             cudaCheck(cudaMalloc(&new_grad_ptr, b_size*sizeof(float)));
+            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, b_size);
             NamedParamGrads[bias_name] = new_grad_ptr;
           }
-          
           device_db = NamedParamGrads[bias_name];
-          cudaCheck(cudaMemcpy(device_db, db, b_size*sizeof(float), cudaMemcpyHostToDevice));
-          delete[] db;
         }
       } else {
       
@@ -12529,12 +12537,6 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
         if(op!=add_op)
         {
           //std::cout << "ulululu of op " << std::to_string(op) << "\n";
-
-          int grid_size, block_size; 
-          std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(w_size);
-          grid_size = grid_block_mem_sizes[0];
-          block_size = grid_block_mem_sizes[1];
-
           device_dw = get_from_pool(w_size, "dw");
           set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
         }
@@ -12914,9 +12916,16 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 
     if (param_name!="none")
     {
+      float *grad = pair.second;
       Tensor *tensor = NamedTensorsT[param_name];
       optimizer->init_states(param_name, tensor->dims_prod);
-      optimizer->step(tensor->tensor_ptr, pair.second, tensor->dims, param_name, streams[i]);
+      optimizer->step(tensor->tensor_ptr, grad, tensor->dims, param_name, streams[i]);
+
+      int grid_size, block_size; 
+      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
+      grid_size = grid_block_mem_sizes[0];
+      block_size = grid_block_mem_sizes[1];
+      set_to_zero_kernel<<<grid_size, block_size, 0, streams[i]>>>(grad, tensor->dims_prod);
     }
     i+=1;
   }
