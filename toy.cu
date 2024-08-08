@@ -3341,7 +3341,7 @@ extern "C" float build_vocab(char *filename, float _max_tokens)
   max_tokens = _max_tokens;
 
   if (!file) {
-    std::cerr << "Error opening file!" << std::endl;
+    std::cerr << "Error opening file " << filename << std::endl;
     return 1;
   }
 
@@ -3408,9 +3408,12 @@ extern "C" float tokenize(Tensor *tensor, char *filename)
 
 extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
 {
-  pthread_mutex_lock(&vocab_mutex); // Files are not trhead safe
+  //tensor shape: [workers, seq_len, batch_size, vocab_size]
+
+  //pthread_mutex_lock(&vocab_mutex); // Files are not trhead safe
   std::ifstream file(filename);
 
+  //std::cout << "Loading" <<  filename << "\n";
   if (!file) {
     std::cerr << "Error opening file!" << std::endl;
     return 1;
@@ -3418,6 +3421,8 @@ extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float
 
 
   std::vector<float> dims = tensor->dims;
+  float dims_prod = tensor->dims_prod;
+
 
   std::vector<float> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
@@ -3428,12 +3433,11 @@ extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float
   std::vector<float> batchless_dims = BatchLessDims(seqless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
-
   float *image_data_float = tensor->cpu_tensor_ptr;
   int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
 
 
-  //TODO: add pad and left pad
+  //TODO: add pad and left
 
   std::string line;
   int words_count = 0;
@@ -3444,34 +3448,63 @@ extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float
 
     while (lineStream >> word)
     {
-      ProcessString(word);
-
-      int idx;
-
-      idx = (Vocab.count(word)>0) ? Vocab[word] : UNK_TOK;
-      
-
-      idx = idx + idx_offset;
-      tensor->cpu_tensor_ptr[idx] = 1;
-
       words_count++;
-      idx_offset += seqless_dims_prod;
-
       if (words_count>trunc_to)
         break;
+
+      ProcessString(word);
+
+      int idx, pre_idx;
+
+      idx = (Vocab.count(word)>0) ? Vocab[word] : UNK_TOK; // inplace onehot
+      idx = (idx<0) ? 0 : idx;
+
+
+      pre_idx = idx;
+      idx = idx + idx_offset;
+
+      if(idx>dims_prod)
+      {
+        std::string _err = "Tokenizer IDX " + std::to_string(idx) + " is higher than allowed dims: " +std::to_string(dims_prod) + " from pre-idx: " + std::to_string(pre_idx);
+        LogErrorS(_err);
+      }
+
+      tensor->cpu_tensor_ptr[idx] = 1;
+
+      idx_offset += seqless_dims_prod; //moves to the next sequence element
+      /*
+      if(idx_offset>dims_prod)
+      {
+        std::string _err = "Tokenizer Index " + std::to_string(idx_offset) + " is higher than allowed dims: " +std::to_string(dims_prod);
+        LogErrorS(_err);
+      }
+      */
     }
     if (words_count>trunc_to)
       break;
   }
 
   file.close();
-  pthread_mutex_unlock(&vocab_mutex);
+  //pthread_mutex_unlock(&vocab_mutex);
 
   return 0;
 }
 
 
+extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
+{
+  std::vector<float> dims = tensor->dims;
 
+  std::vector<float> workerless_dims = BatchLessDims(dims);
+  int workerless_dims_prod = DimsProd(workerless_dims);
+
+  int idx_offset = (int) (workerless_dims_prod*worker_idx);
+
+  for(int i=0; i<workerless_dims_prod; i++)
+    tensor->cpu_tensor_ptr[i+idx_offset] = 0.0f;
+  
+  return 0;
+}
 
 
 extern "C" float * split_str_to_float(char *in_string, int gather_position)
@@ -5610,13 +5643,16 @@ void move_to_pool(float dims_prod, float *tensor_ptr, std::string from)
   if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
   {
     //if(!(tensors_in_pool.size()<30&&dims_prod==1))
-    if(tensors_in_pool.size()<100)
+    /*
+    if(tensors_in_pool.size()<1000)
       TensorPool[dims_prod].push_back(tensor_ptr);
     else
     {
       std::cout << "FREEING TENSOR WITH dims prod: " << dims_prod << " from: " << from <<  "\n";
       cudaCheck(cudaFree(tensor_ptr));
     }
+    */
+    TensorPool[dims_prod].push_back(tensor_ptr);
   }  
 }
 
@@ -7644,7 +7680,7 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at)
   std::cout << "dims prod:" << new_dims_prod  << "\n";
   */
 
-  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, false, "");
+  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, true, "");
   return indexed;
 }
 
@@ -7725,7 +7761,7 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name)
   //cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyHostToHost));
 
 
-  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, false, "");
+  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, true, "");
   return indexed;
 }
 
@@ -7927,22 +7963,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
         tgt_tensor->scopeless_name = scopeless_name;
       } //else
         //scope_tensors[scope].push_back(tgt_tensor->tensor_ptr);
-
-
-      
-      
-    } /*else {
-      std::cout << "ULAULAULAULAULAULUALUALUALUA" << "\n";
-      Tensor *attr_tensor;
-      attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
-      todo_backward_tensors.push_back(attr_tensor);
-
-      std::string scopeless_name = tgt_tensor->scopeless_name;
-      tgt_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name);
-      tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
-      tgt_tensor->scopeless_name = scopeless_name;
-    }*/
-    //OP: copy dy 
+    } 
   }
 
 
@@ -8602,9 +8623,11 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
   tensor_x->Sync();
   tensor_w->Sync();
 
-  int grid_size = dims_prod;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
   add_forward<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
   
 
@@ -8688,6 +8711,7 @@ __global__ void hadamard_kernel(float *y, const float *x,
     if (i < dims_prod)
         y[i] = x[i] * w[i];
 }
+
 extern "C" Tensor *CudaHadamard(int is_forward_func,
                           Tensor *tensor_x, Tensor *tensor_w) {
 
@@ -8756,14 +8780,17 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
   }
 
 
-  float* device_y;
-  cudaCheck(cudaMalloc(&device_y, dims_prod * sizeof(float)));
+  float *device_y = get_from_pool(dims_prod, "hadamard");
 
 
-  int grid_size = dims_prod;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  hadamard_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  tensor_x->Sync();
+  tensor_w->Sync();
+  hadamard_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
   //PrintTensorF(device_y, 2, 2);
 
 
@@ -8947,7 +8974,7 @@ extern "C" void *onehot(Tensor *tensor, float num_classes)
 
 extern "C" float shape(Tensor tensor)
 {
-  std::cout << "\nTensor \033[95m" << tensor.name << "\033[0m:\n   ";
+  std::cout << "\nTensor \033[95m" << tensor.name<<"/"<<tensor.scopeless_name << "\033[0m:\n   ";
   PrintDims(tensor.dims);
 
   return 0;
@@ -9976,11 +10003,9 @@ extern "C" void *gelu(Tensor *tensor)
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
-  tensor->Sync();
   float *y = get_from_pool(dims_prod,"gelu");
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
 
-
+  tensor->Sync();
   gelu_forward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
   
 
@@ -10039,11 +10064,9 @@ extern "C" void *sigmoid(Tensor *tensor)
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
-  tensor->Sync();
-  float *y = get_from_pool(dims_prod, "sigmoid");
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
-
+  float *y = get_from_pool(dims_prod, "sigmoid");  
   
+  tensor->Sync();
   sigmoid_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
   
 
@@ -10100,18 +10123,14 @@ extern "C" void *_tanh(Tensor *tensor)
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
-  tensor->Sync();
   float *y = get_from_pool(dims_prod, "tanh");
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
 
-  
+  tensor->Sync();
   tanh_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
-  
-
-  
+    
   int is_forward_func=1;
-  
-  
+
+  std::cout << "tanh tensor attribution from " << tensor->name<<"/"<<tensor->scopeless_name << "\n";
 
   Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
   new_tensor->AttrLNode(tensor, tanh_op);
@@ -10138,11 +10157,9 @@ extern "C" void *relu(Tensor *tensor)
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  shared_mem_size = grid_block_mem_sizes[2];
-
+  
 
   float *y = get_from_pool(dims_prod, "relu");
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(y, dims_prod);
 
   tensor->Sync();
   relu_forward<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
@@ -12161,6 +12178,34 @@ extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
 
 
 
+__global__ void hadamard_backward_kernel(const float *x, const float *w,
+                            float *dx, float *dw, const float *dy,
+                            int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i < dims_prod)
+    {
+      dx[i] = x[i] * dy[i];
+      dw[i] = w[i] * dy[i];
+    }
+}
+
+
+void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod)
+{
+  std::cout << "hadamard_backward" <<  "\n";
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  hadamard_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, w, dx, dw, dy, dims_prod);
+}
+
+
+
+
 // Parallelizes over B, C
 __global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
                            const float* probs, const float* targets,
@@ -12358,13 +12403,14 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
   if(!in_int(op, gradless_ops) && !from_gradless)
   {
 
+    //std::cout << "\nTraversing: " << back_node->name << "/" << back_node->scopeless_name << ", op: " << back_node->op << ", parent_op: " << parent_op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
     if(device_dy==nullptr&&!in_int(op, loss_ops))
     {
-      LogErrorS("dy derivate is null at the backward mode.");
+      std::string _err = "dy derivate is null at the backward mode with op "+std::to_string(op);
+      LogErrorS(_err);
       return;
     }
 
-    //std::cout << "\nTraversing: " << back_node->name << ", op: " << back_node->op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
 
 
     if (back_node->weight) // dw is updated by pointer
@@ -12375,7 +12421,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
     if (back_node->leaf)
     {
 
-      //std::cout << "Accumulating grad of: " << tensor_name << "\n";
+      //std::cout << "\n\nAccumulating grad of: " << tensor_name << "\n\n\n";
 
       if(var_to_grad.count(tensor_name)>0)
       {
@@ -12482,17 +12528,20 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
         //device_dw = get_from_pool(w_size, "dw"); //lock pool even if dx is not used.
         if(op!=add_op)
         {
-          std::cout << "\n\n\n\n\n\n\n\nULULULLULULULULULULULLULULULULULULU" << "\n\n\n\n\n\n\n\n\n";
-          dw = make_zeros_float(w_size);
-          cudaCheck(cudaMalloc(&device_dw, w_size*sizeof(float)));
-          cudaCheck(cudaMemcpy(device_dw, dw, w_size*sizeof(float), cudaMemcpyHostToDevice));
-          delete[] dw;
+          //std::cout << "ulululu of op " << std::to_string(op) << "\n";
+
+          int grid_size, block_size; 
+          std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(w_size);
+          grid_size = grid_block_mem_sizes[0];
+          block_size = grid_block_mem_sizes[1];
+
+          device_dw = get_from_pool(w_size, "dw");
+          set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
         }
       }
     }
     
 
-    //std::cout << "malloc device_dx " << "\n";
 
     // input gradient
     std::string from = "dx of "+ std::to_string(op);
@@ -12505,7 +12554,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
       block_size = grid_block_mem_sizes[1];
 
       device_dx = get_from_pool(x_size, from);
-      set_to_zero_kernel<<<grid_size, block_size>>>(device_dx, x_size);
+      set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dx, x_size);
     }
     
 
@@ -12565,6 +12614,9 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
       case add_op:
         device_dx = device_dy;
         device_dw = device_dy;
+        break;
+      case hadamard_op:
+        hadamard_backward(inp, w, device_dx, device_dw, device_dy, x_size);
         break;
       default:
         std::string _error = "The operation "+std::to_string(op)+" does not yet have the backward implementation";
@@ -12632,7 +12684,7 @@ extern "C" float backprop()
     if (op==attribution)
     {
       tensor_name = back_node->name;
-      //std::cout << "backward attribution of " << tensor_name << "\n";
+      //std::cout << "\n\n\n   backward attribution of " << tensor_name << "\n";
       device_dy = var_to_grad[tensor_name];
       //if (device_dy==nullptr)
       //  std::cout << "propagating null device_dy"  << "\n";
@@ -12858,6 +12910,7 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   for (auto& pair : NamedParamGrads)
   {
     std::string param_name = pair.first;
+    //std::cout << "Optimizing " << param_name << "\n";
 
     if (param_name!="none")
     {
@@ -14135,8 +14188,6 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
                                             {first_arg, var_name});
-    //scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-    //                                        {var_name});
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
                                             {scope_str, var_name});
@@ -14579,7 +14630,7 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     ExprAST *Init = VarNames[i].second.get();
 
 
-    Value *var_name, *scopeless_name;
+    Value *var_name;
     var_name = Builder->CreateGlobalString(VarName);
 
     bool is_self = GetSelf();
@@ -14588,8 +14639,7 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {first_arg, var_name});
-    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {var_name});
+                                            
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {scope_str, var_name});
@@ -14621,7 +14671,7 @@ Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
     
-    Value *var_name, *scopeless_name, *type;
+    Value *var_name, *type;
     var_name = Builder->CreateGlobalString(VarName);
     type = Builder->CreateGlobalString(Type);
 
@@ -14631,8 +14681,7 @@ Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {first_arg, var_name});
-    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {var_name});
+                                            
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {scope_str, var_name});
@@ -14663,7 +14712,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
     
-    Value *var_name, *scopeless_name, *type;
+    Value *var_name, *type;
     var_name = Builder->CreateGlobalString(VarName);
     type = Builder->CreateGlobalString(Type);
 
@@ -14673,8 +14722,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {first_arg, var_name});
-    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {var_name});
+                                            
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {scope_str, var_name});
@@ -14704,7 +14752,7 @@ Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
     
-    Value *var_name, *scopeless_name, *type;
+    Value *var_name, *type;
     var_name = Builder->CreateGlobalString(VarName);
     type = Builder->CreateGlobalString(Type);
 
@@ -14714,8 +14762,7 @@ Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {first_arg, var_name});
-    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {var_name});
+                                            
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {scope_str, var_name});
@@ -14742,7 +14789,7 @@ Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first;
     
-    Value *var_name, *scopeless_name, *type;
+    Value *var_name, *type;
     var_name = Builder->CreateGlobalString(VarName);
     type = Builder->CreateGlobalString(Type);
 
@@ -14752,8 +14799,7 @@ Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {first_arg, var_name});
-    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {var_name});
+                                            
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {scope_str, var_name});
@@ -16690,6 +16736,15 @@ FunctionType *unbugTy = FunctionType::get(
   );
   TheModule->getOrInsertFunction("wtokenize", wtokenizeTy);
 
+  
+  //
+  FunctionType *write_zeroswTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("write_zerosw", write_zeroswTy);
+
 
   //
   FunctionType *InitObjectVecWithNullTy = FunctionType::get(
@@ -17403,7 +17458,7 @@ int main() {
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
-                      "build_vocab", "tokenize", "wtokenize"};
+                      "build_vocab", "tokenize", "wtokenize", "write_zerosw"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
