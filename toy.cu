@@ -62,8 +62,8 @@
 pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex;
 
 float TERMINATE_VARARG = -40370000000.0f;
-float UNK_TOK = -10.0f;
-float PAD_TOK = -10.0f;
+int UNK_TOK = 1.0f;
+int PAD_TOK = 0.0f;
 
 #define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
 
@@ -401,6 +401,7 @@ enum BackwardTypes {
   scalar_sub_op = 35,
   scalar_mult_op = 36,
   scalar_div_op = 37,
+  dropout_op = 38,
 };
 
 int nn_mode=training_mode;
@@ -3327,7 +3328,7 @@ extern "C" float cpu_idx(Tensor *tensor, float idx)
 
 std::map<std::string, int> Vocab;
 float max_tokens;
-float last_tok_id = 0;
+float last_tok_id = 2;
 
 
 void ProcessString(std::string& str) {
@@ -3365,7 +3366,7 @@ extern "C" float build_vocab(char *filename, float _max_tokens)
     while (lineStream >> word) {
       ProcessString(word);
       
-      if (Vocab.count(word)==0 && last_tok_id<max_tokens)
+      if (Vocab.count(word)==0 && last_tok_id<(max_tokens-2)) // -2 for padding and unk tokens
       {
         Vocab[word] = last_tok_id;
         last_tok_id+=1;
@@ -3403,8 +3404,8 @@ extern "C" float tokenize(Tensor *tensor, char *filename)
       int idx;
 
       std::cout << word << "\n";
-      idx = (Vocab.count(word)>0) ? Vocab[word] : -100;
-      //idx = (idx>max_tokens) ? max_tokens : idx;
+      idx = (Vocab.count(word)>0) ? Vocab[word] : UNK_TOK;
+      
 
       std::cout << idx << std::endl;
     }
@@ -3501,6 +3502,106 @@ extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float
   return 0;
 }
 
+
+extern "C" float wtokenize_pad_left(Tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+{
+  //tensor shape: [workers, seq_len, batch_size, vocab_size]
+
+
+  std::ifstream file(filename);
+
+  //std::cout << "Loading" <<  filename << "\n";
+  if (!file) {
+    std::cerr << "Error opening file!" << std::endl;
+    return 1;
+  }
+
+
+  std::vector<float> dims = tensor->dims;
+  float dims_prod = tensor->dims_prod;
+
+
+  std::vector<float> workerless_dims = BatchLessDims(dims);
+  int workerless_dims_prod = DimsProd(workerless_dims);
+
+  std::vector<float> seqless_dims = BatchLessDims(workerless_dims);
+  int seqless_dims_prod = DimsProd(seqless_dims);
+
+  std::vector<float> batchless_dims = BatchLessDims(seqless_dims);
+  int batchless_dims_prod = DimsProd(batchless_dims);
+
+  float *image_data_float = tensor->cpu_tensor_ptr;
+  int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+
+
+  //TODO: add pad and left
+
+  int *indices  = new int[trunc_to];
+  int *padded_indices  = new int[trunc_to];
+  for (int i = 0; i < trunc_to; i++)
+    padded_indices[i] = PAD_TOK;
+
+
+  std::string line;
+  int words_count = 0;
+  while (std::getline(file, line)) 
+  {       
+    std::istringstream lineStream(line); // Create a string stream from the line
+    std::string word;
+
+    while (lineStream >> word)
+    {
+      words_count++;
+      if (words_count>trunc_to)
+        break;
+
+      ProcessString(word);
+
+      int idx;
+
+      idx = (Vocab.count(word)>0) ? Vocab[word] : UNK_TOK; // inplace onehot
+      idx = (idx<0) ? 0 : idx;
+
+      indices[words_count-1] = idx;      
+    }
+    if (words_count>trunc_to)
+      break;
+  }
+  file.close();
+
+
+  if (words_count<=trunc_to)
+  {
+  int offset = trunc_to-words_count;
+  for(int i=0; i<words_count; i++)
+  {
+    padded_indices[i+offset] = indices[i];
+  }
+  } else 
+    padded_indices = indices;
+
+
+  int idx;
+  for(int i=0; i<trunc_to; i++)
+  {
+    idx = padded_indices[i] + idx_offset;
+
+    tensor->cpu_tensor_ptr[idx] = 1;
+
+    idx_offset += seqless_dims_prod; //moves to the next sequence element
+  }
+  
+  /*
+  std::cout << "[";
+  for (int i = 0; i < trunc_to; i++)
+    std::cout << padded_indices[i] << ", ";
+  std::cout << "]" << "\n\n";  
+  */
+
+  delete[] indices, padded_indices;
+
+  return 0;
+}
 
 extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
 {
@@ -7873,7 +7974,12 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   
   
 
-  delete scope_tensor;
+  if(nn_mode==eval_mode)
+  {
+    //ForwardCleanupToPool(tensor, previous_scope);
+    //delete scope_tensor; //backprop deletes all used tensors, and it also necessitates them
+    to_free_tensor_forward(scope_tensor, scope);
+  }
   NamedTensorsT.erase(scope_tensor_name);
 
   scope_tensors[scope].clear();
@@ -8736,12 +8842,14 @@ extern "C" Tensor *CudaEqual(int is_forward_func,
   float* device_y = get_from_pool(dims_prod, "eq");
 
 
-  int grid_size = dims_prod;
-  int block_size = 512;
+  int grid_size, block_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
   
   tensor_x->Sync();
   tensor_w->Sync();
-  equal_forward<<<grid_size, block_size,0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
+  equal_forward<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
   
   
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
@@ -12271,6 +12379,73 @@ void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, floa
 }
 
 
+__global__ void dropout_mask_kernel(float *y, float *m, const float *x, float rate, float scale,
+                               int dims_prod,
+                               unsigned long long seed) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i < dims_prod)
+    {
+      curandState state;
+      curand_init(seed, i, 0, &state);
+
+      float r = curand_uniform(&state);
+      if(r<rate)
+        m[i] = 0;
+      else
+        m[i] = scale;
+      
+      y[i] = m[i]*x[i];
+    }
+}
+
+extern "C" void *dropout(Tensor *tensor, float rate)
+{
+  if (nn_mode==training_mode)
+  {
+    float dims_prod = tensor->dims_prod;
+
+    int grid_size, block_size;
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+
+    float *dropout_ptr = get_from_pool(dims_prod, "dropout forward");
+    float *device_y = get_from_pool(dims_prod, "dropout forward output");
+
+    float scale = 1 / (1-rate);
+
+    unsigned long long seed = time_seed();
+    dropout_mask_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, dropout_ptr, tensor->tensor_ptr, rate, scale, dims_prod, seed);
+    
+    Tensor *dropout_tensor = createTensor(dropout_ptr, tensor->dims, dims_prod, true, "");
+    dropout_tensor->scopeless_name="";
+
+    Tensor *new_tensor = createTensor(device_y, tensor->dims, dims_prod, false, "");
+    new_tensor->AttrNodes(tensor, dropout_tensor, dropout_op);
+    return new_tensor;
+  }
+  return tensor;
+}
+
+
+__global__ void dropout_backward_kernel(float *dx, float *m, const float *dy,
+                               int dims_prod) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i < dims_prod)
+      dx[i] = m[i]*dy[i];
+}
+void dropout_backward(float *dx, float *mask, float *dy, float dims_prod)
+{
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  dropout_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, mask, dy, dims_prod);
+}
+
 
 
 // Parallelizes over B, C
@@ -12487,28 +12662,29 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
     tensor_name = back_node->scopeless_name;
     if (back_node->leaf)
     {
-
-      //std::cout << "\n\nAccumulating grad of: " << tensor_name << "\n\n\n";
-
-      if(var_to_grad.count(tensor_name)>0)
+      if(tensor_name!="")
       {
-        
-        float *acc_y = var_to_grad[tensor_name];
-        
-        int grid_size, block_size, shared_mem_size;
-        std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-        grid_size = grid_block_mem_sizes[0];
-        block_size = grid_block_mem_sizes[1];
+        if(var_to_grad.count(tensor_name)>0)
+        {
+          
+          float *acc_y = var_to_grad[tensor_name];
+          
+          int grid_size, block_size, shared_mem_size;
+          std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+          grid_size = grid_block_mem_sizes[0];
+          block_size = grid_block_mem_sizes[1];
 
-        
-        add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
+          
+          add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
 
-        to_pool(dims_prod, acc_y, "dy of leaf");
-        
-        //to_free(device_dy);
+          to_pool(dims_prod, acc_y, "dy of leaf");
+          
+          //to_free(device_dy);
 
-      } else
-        var_to_grad[tensor_name] = device_dy;
+        } else
+          var_to_grad[tensor_name] = device_dy;
+      }
+      //std::cout << "\n\nAccumulating grad of: " << tensor_name << "\n\n\n";
       
       to_pool(dims_prod, device_dy, "dy of leaf");
       to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor");
@@ -12597,7 +12773,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
       } else {
       
         //device_dw = get_from_pool(w_size, "dw"); //lock pool even if dx is not used.
-        if(op!=add_op && !in_int(op, tensor_scalar_ops))
+        if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op)
         {
           //std::cout << "ulululu of op " << std::to_string(op) << "\n";
           device_dw = get_from_pool(w_size, "dw");
@@ -12688,6 +12864,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
         break;
       case hadamard_op:
         hadamard_backward(inp, w, device_dx, device_dw, device_dy, x_size);
+        break;
+      case dropout_op:
+        dropout_backward(device_dx, w, device_dy, x_size);
+        device_dw = device_dy;
         break;
       default:
         std::string _error = "The operation "+std::to_string(op)+" does not yet have the backward implementation";
@@ -12914,10 +13094,12 @@ void SGD_optim::step(float *param, float *grad, std::vector<float> dims, std::st
 
  
   int params_count = DimsProd(dims);
-  int block_size = 512;
-  int num_blocks = ceil_div(params_count, block_size);
+  int grid_size, block_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
 
-  sgd_kernel<<<num_blocks, block_size, 0, stream>>>(param, grad, m, params_count,
+  sgd_kernel<<<grid_size, block_size, 0, stream>>>(param, grad, m, params_count,
                                            lr, momentum, weight_decay, grad_clip);
 }
 
@@ -12956,13 +13138,15 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
   float beta1_correction = 1.0f - powf(beta1, timestep);
   float beta2_correction = 1.0f - powf(beta2, timestep);
 
-  
 
   int params_count = DimsProd(dims);
-  int block_size = 512;
-  int num_blocks = ceil_div(params_count, block_size);
+  
+  int grid_size, block_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
 
-  adamw_kernel<<<num_blocks, block_size, 0, stream>>>(param, grad, m, v, params_count,
+  adamw_kernel<<<grid_size, block_size, 0, stream>>>(param, grad, m, v, params_count,
                                            lr, beta1, beta2, beta1_correction, beta2_correction,
                                            eps, weight_decay, grad_clip);
 }
@@ -12994,6 +13178,7 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
       std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
       grid_size = grid_block_mem_sizes[0];
       block_size = grid_block_mem_sizes[1];
+
       set_to_zero_kernel<<<grid_size, block_size, 0, streams[i]>>>(grad, tensor->dims_prod);
     }
     i+=1;
@@ -16189,6 +16374,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("NormalizeImg", NormalizeImgTy);
+
+
+  //
+  FunctionType *dropoutTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("dropout", dropoutTy);
   
 
   //
@@ -16813,6 +17007,15 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("wtokenize", wtokenizeTy);
+
+  
+  //
+  FunctionType *wtokenize_pad_leftTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("wtokenize_pad_left", wtokenize_pad_leftTy);
 
   
   //
@@ -17512,7 +17715,7 @@ int main() {
 
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor",
-                             "RandomCrop", "RandomHorizontalFlip", "NormalizeImg"};
+                             "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
                             "save_img", "gpuw"};
@@ -17537,7 +17740,8 @@ int main() {
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
-                      "build_vocab", "tokenize", "wtokenize", "write_zerosw"};
+                      "build_vocab", "tokenize", "wtokenize", "write_zerosw",
+                      "wtokenize_pad_left"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
