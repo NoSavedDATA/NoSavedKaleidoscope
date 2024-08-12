@@ -2838,7 +2838,6 @@ extern "C" float *load_img(char *img_name)
     current_data_attr_dims.push_back((float)height);
     current_data_attr_dims.push_back((float)channels);
 
-    //stbi_image_free(image_data);
 
     float *image_data_float = new float[width * height * channels];
   
@@ -2847,11 +2846,15 @@ extern "C" float *load_img(char *img_name)
       for (int x = 0; x < width; ++x) {
         for (int c = 0; c < channels; ++c) {
           // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
-          image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          //image_data_float[(y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+
+          // Convert BHWC into BCHW
+          image_data_float[c * (height * width) + y * width + x] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
         }
       }
     }
 
+    stbi_image_free(image_data);
     return image_data_float;
     
   } else {
@@ -2921,7 +2924,8 @@ extern "C" float * gload_img(Tensor tensor, char *img_name, float batch_idx)
       for (int x = 0; x < width; ++x) {
         for (int c = 0; c < channels; ++c) {
           // Assuming unsigned char has 8 bits, scale by 1/255.0 to get a float value between 0.0 and 1.0
-          image_data_float[batch_offset + (y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          //image_data_float[batch_offset + (y * width + x) * channels + c] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
+          image_data_float[batch_offset + c * (height * width) + y * width + x] = (float)image_data[(y * width + x) * channels + c] / 255.0f;
         }
       }
     }
@@ -5468,36 +5472,57 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 }
 
 
-extern "C" void *gpu(Tensor tensor)
+float *get_from_pool(float dims_prod, std::string from);
+
+extern "C" void *gpu(Tensor *tensor, Tensor *pinned_tensor)
 {
   //std::cout << "\nGpu transfer for: " << tensor.name << "\n";
   
   float *tensor_ptr, *tensor_cpu;
 
-  tensor_ptr = tensor.tensor_ptr;
-  tensor_cpu = tensor.cpu_tensor_ptr;
-  float dims_prod = tensor.dims_prod;
+  tensor_cpu = pinned_tensor->cpu_tensor_ptr;
+  std::vector<float> dims;
+  dims = pinned_tensor->dims;
+  float dims_prod = pinned_tensor->dims_prod;
   
 
   
-  cudaError_t err = cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+  if (tensor->dims_prod==dims_prod)
+    tensor_ptr = tensor->tensor_ptr;
+  else
+    tensor_ptr = get_from_pool(dims_prod, "gpuw");
 
 
-  if (err != cudaSuccess) {
-    // Handle error
-    fprintf(stderr, "CPU to GPU tensor transfer failed: %s\n", cudaGetErrorString(err));
-  } 
-  //std::cout << "Transfer succeed" << "\n\n";
+  Loader *loader=nullptr;
+  CudaStreams *cuda_stream=nullptr;
+  if (dims_prod<2000){
+    cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+  }
+  else
+  {
+    cuda_stream = AllocateStream();
+    cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+  }
 
-  
-  Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "gpu");
-  new_tensor->op = gpu_op;
-  return new_tensor;
+
+
+  if (nn_mode==eval_mode)
+  {
+
+  } else {
+    
+    Tensor *attr_tensor;
+    attr_tensor = createTensor(tensor_ptr, dims, dims_prod, true, "");
+    attr_tensor->op = gpu_op;
+    todo_backward_tensors.push_back(attr_tensor); // pass to gc
+    
+  }
+
+  tensor->AttrTensor(tensor_ptr, dims, dims_prod, cuda_stream, loader);
+  tensor->from_grad_or_load = true;
+
+  return 0;
 }
-
-float *get_from_pool(float dims_prod, std::string from);
-
-
 
 
 
@@ -5562,7 +5587,7 @@ extern "C" float gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
     Tensor *attr_tensor;
     attr_tensor = createTensor(tensor_ptr, batchless_dims, batchless_dims_prod, true, "");
     attr_tensor->op = gpu_op;
-    todo_backward_tensors.push_back(attr_tensor);
+    todo_backward_tensors.push_back(attr_tensor); // pass to gc
     
   }
 
@@ -7848,6 +7873,9 @@ __global__ void idx_last_dim_kernel(float *tgt,
     }
 }
 
+
+
+
 extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name)
 {
   std::cout << "Idx tensor " << tensor_name << " with tensor " << idx_tensor_name << "\n";
@@ -7909,6 +7937,7 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name)
 
 std::vector<std::string> seen_functions_for_pool_allocation;
 
+
 extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope)
 {
   std::string tensor_name = tensor->name;
@@ -7927,8 +7956,10 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
 
 
   arg_tensor = get_from_pool(dims_prod, "arg tensor");
-  //cudaMalloc(&arg_tensor, dims_prod*sizeof(float));
-
+  
+  //if (dims_prod!=0)//
+  //  cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);//
+  
   if (dims_prod!=0)
   {
     int grid_size, block_size, shared_mem_size; 
@@ -7936,14 +7967,14 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
     grid_size = grid_block_mem_sizes[0];
     block_size = grid_block_mem_sizes[1];
 
+    tensor->Sync();
     copy_tensor_kernel<<<grid_size,block_size,0,main_stream->stream>>>(arg_tensor, tensor_ptr, dims_prod);
-    //cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);
   }
   
 
   Tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
   new_tensor->scopeless_name = tensor->scopeless_name;
-  new_tensor->from_grad_or_load = tensor->from_grad_or_load;
+  new_tensor->from_grad_or_load = tensor->from_grad_or_load;//
   NamedTensorsT[arg_tensor_name] = new_tensor;
   return 0;
 }
@@ -7974,17 +8005,17 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   
   
 
-  if(nn_mode==eval_mode)
-  {
-    //ForwardCleanupToPool(tensor, previous_scope);
-    //delete scope_tensor; //backprop deletes all used tensors, and it also necessitates them
-    to_free_tensor_forward(scope_tensor, scope);
-  }
+
+  if(nn_mode==eval_mode)//
+    to_free_tensor_forward(scope_tensor, scope);//
+  //delete scope_tensor;
   NamedTensorsT.erase(scope_tensor_name);
 
   scope_tensors[scope].clear();
   return 0;
 }
+
+
 
 
 extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope, float idx_at)
@@ -8099,7 +8130,8 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
       grid_size = grid_block_mem_sizes[0];
       block_size = grid_block_mem_sizes[1];
 
-
+      tgt_tensor->Sync();
+      tensor->Sync();
       copy_tensor_kernel<<<grid_size,block_size,0,main_stream->stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
 
       if(nn_mode==training_mode)
@@ -8150,6 +8182,7 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor)
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
+  tensor->Sync();
   copy_tensor_kernel<<<grid_size, block_size>>>(new_tensor, tensor->tensor_ptr, dims_prod);
   //cudaCheck(cudaMemcpy(new_tensor, tensor->tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -8658,7 +8691,7 @@ extern "C" Tensor *CudaMult(int is_forward_func,
                           Tensor *tensor_x, Tensor *tensor_w) {
 
   //std::cout << "      L " << LtensorName << "  &  R " << RtensorName << "\n";
-    
+  
   std::vector<float> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
@@ -10234,6 +10267,73 @@ extern "C" void *sigmoid(Tensor *tensor)
 
 
 
+
+__global__ void matrixMul(float *A, float *B, float *C, int N) {
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i < N && j < N) {
+        float   
+ Csub = 0;
+        // Tile dimensions
+        const int tile_size = 16;
+
+        // Shared memory
+        __shared__ float As[tile_size][tile_size];
+        __shared__ float Bs[tile_size][tile_size];
+
+        // Loop over tiles
+        for (int k = 0; k < N; k += tile_size) {
+            // Load tiles into shared memory
+            As[threadIdx.y][threadIdx.x] = A[i * N + k + threadIdx.x];
+            Bs[threadIdx.y][threadIdx.x] = B[(k + threadIdx.y) * N + j];
+            __syncthreads();
+
+            // Perform matrix multiplication on tiles
+            for (int l = 0; l < tile_size; ++l) {
+                Csub += As[threadIdx.y][l] * Bs[l][threadIdx.x];
+            }
+            __syncthreads();
+        }
+
+        C[i * N + j] = Csub;
+    }
+}
+
+
+
+
+extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tensor *tensor_xr, Tensor *tensor_wr)
+{
+  std::vector<float> Ldims, Rdims;
+  Ldims = tensor_xl->dims;
+  Rdims = tensor_wl->dims;
+
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
+  std::vector<float> new_dims = NewDimsOnMult(Ldims, Rdims);
+  int input_dims_prod = DimsProd(linear_layer_dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+  float *device_xl = tensor_xl->tensor_ptr;
+  float *device_wl = tensor_wl->tensor_ptr;
+  float *device_xr = tensor_xr->tensor_ptr;
+  float *device_wr = tensor_wr->tensor_ptr;
+
+
+  std::cout << "xl" << device_xl->name << "\n";
+  std::cout << "wl" << device_wl->name << "\n";
+  std::cout << "xr" << device_xr->name << "\n";
+  std::cout << "wr" << device_wr->name << "\n";
+
+  Tensor *new_tensor = createTensor(device_xl, dims, new_dims_prod, false, "");
+  new_tensor->AttrLNode(tensor_xl, sigmoid_op);
+  return new_tensor;
+}
+
+
+
+
+
 __global__ void tanh_forward_kernel(const float* inp, float* out, int N) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < N)
@@ -10649,6 +10749,7 @@ void BatchNorm2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
   this->W = W;
   this->B = B;
 
+  /*
   switch(tensor->op)
   {
     case conv2d:
@@ -10670,7 +10771,9 @@ void BatchNorm2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
       checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
       checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
       break;
-  }
+  }*/
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
   
   
   checkCUDNN(cudnnCreateTensorDescriptor(&output_desc));
@@ -10917,7 +11020,8 @@ void batchnormd2d_backward(float *inp,
 
 void BN2dRelu::SetDescriptors(int H, int W, int B, Tensor *tensor)
 {
-  std::cout << "BN2dRelu::SetDescriptors" << "\n";
+  //std::cout << "BN2dRelu::SetDescriptors" << "\n";
+  /*
   switch(tensor->op)
   {
     case conv2d:
@@ -10939,7 +11043,9 @@ void BN2dRelu::SetDescriptors(int H, int W, int B, Tensor *tensor)
       checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
       checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
       break;
-  }
+  }*/
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
 
   
   checkCUDNN(cudnnCreateTensorDescriptor(&intermediate_desc));
@@ -11236,7 +11342,7 @@ void Relu::SetDescriptors(int C, int H, int W, int B, Tensor *tensor)
   this->W = W;
   this->B = B;
 
-
+  
   switch(tensor->op)
   {
     case conv2d:
@@ -11415,7 +11521,7 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
   //std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
 
 
-
+  /*
   switch(tensor->op)
   {
     case conv2d:
@@ -11438,8 +11544,11 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
       checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
       checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
       break;
-  }
+  }*/
 
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
+  
   // Initialize filter descriptor
   cudnnFilterDescriptor_t filter_desc;
   checkCUDNN(cudnnCreateFilterDescriptor(&filter_desc));
@@ -11874,7 +11983,7 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
   out_W = std::floor((W - ks + 2 * padding) / stride) + 1;
   //std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
 
-
+  /*
   switch(tensor->op)
   {
     case conv2d:
@@ -11896,7 +12005,9 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
       checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
       checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
       break;
-  }
+  }*/
+  checkCUDNN(cudnnCreateTensorDescriptor(&input_desc));
+  checkCUDNN(cudnnSetTensor4dDescriptor(input_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, B, C, H, W));
   
 
 
@@ -16597,8 +16708,8 @@ static void InitializeModule() {
 
   //
   FunctionType *gpuTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("gpu", gpuTy);
@@ -17694,9 +17805,9 @@ int main() {
   BinopPrecedence[tok_higher_eq] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
-  BinopPrecedence['%'] = 35;  // highest.
-  BinopPrecedence['/'] = 39;
-  BinopPrecedence['*'] = 40;  // highest.
+  BinopPrecedence['%'] = 35;
+  BinopPrecedence['*'] = 39;
+  BinopPrecedence['/'] = 40;
   BinopPrecedence['^'] = 50;
   BinopPrecedence['@'] = 60;
 
@@ -17718,7 +17829,7 @@ int main() {
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
-                            "save_img", "gpuw"};
+                            "save_img", "gpu", "gpuw"};
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
 
   return_pinned_methods = {"gpu", "gpuw"};
@@ -17736,7 +17847,7 @@ int main() {
   //native_methods = concat_str_vec(native_methods, return_pinned_methods);
 
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
-                      "LenStrVec", "gpu", "zeros_vec", "ones_vec",
+                      "LenStrVec", "zeros_vec", "ones_vec",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
