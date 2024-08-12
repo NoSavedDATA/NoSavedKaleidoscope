@@ -402,10 +402,11 @@ enum BackwardTypes {
   scalar_mult_op = 36,
   scalar_div_op = 37,
   dropout_op = 38,
+  sigmoid_add2weights_op = 39,
 };
 
 int nn_mode=training_mode;
-std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops;
+std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops;
 
 
 std::map<int, std::string> token_to_string = {
@@ -6483,6 +6484,7 @@ std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1
 
   grid_size = ceil_div(dims_prod, block_size);
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  //shared_mem_size = std::min(2 * block_size * sizeof(float), deviceProp.sharedMemPerBlock);
 
   std::vector<int> ret = {grid_size, block_size, shared_mem_size};
   return ret;
@@ -10272,15 +10274,16 @@ __global__ void matrixMul(float *A, float *B, float *C, int N) {
     int i = blockIdx.y * blockDim.y + threadIdx.y;
     int j = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (i < N && j < N) {
-        float   
- Csub = 0;
-        // Tile dimensions
-        const int tile_size = 16;
+    
+    // Tile dimensions
+    const int tile_size = 16;
 
-        // Shared memory
-        __shared__ float As[tile_size][tile_size];
-        __shared__ float Bs[tile_size][tile_size];
+    // Shared memory
+    __shared__ float As[tile_size][tile_size];
+    __shared__ float Bs[tile_size][tile_size];
+
+    if (i < N && j < N) {
+        float Csub = 0;
 
         // Loop over tiles
         for (int k = 0; k < N; k += tile_size) {
@@ -10302,6 +10305,41 @@ __global__ void matrixMul(float *A, float *B, float *C, int N) {
 
 
 
+__global__ void sigmoid_add2weights_kernel(const float *xl, const float *wl, const float *xr,
+                                           const float *wr, float *out, int N) {
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+
+
+    const int tile_size = 16;
+    // Shared memory
+    __shared__ float As[tile_size][tile_size];
+    __shared__ float Bs[tile_size][tile_size];
+
+
+    if (i < N && j < N) {
+        float Csub = 0;
+        // Tile dimensions
+
+        // Loop over tiles
+        for (int k = 0; k < N; k += tile_size) {
+            // Load tiles into shared memory
+            As[threadIdx.y][threadIdx.x] = xl[i * N + k + threadIdx.x];
+            Bs[threadIdx.y][threadIdx.x] = wl[(k + threadIdx.y) * N + j];
+            __syncthreads();
+
+            // Perform matrix multiplication on tiles
+            for (int l = 0; l < tile_size; ++l) {
+                Csub += As[threadIdx.y][l] * Bs[l][threadIdx.x];
+            }
+            __syncthreads();
+        }
+
+        out[i * N + j] = Csub;
+    }
+}
+
+
 
 extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tensor *tensor_xr, Tensor *tensor_wr)
 {
@@ -10320,17 +10358,113 @@ extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tenso
   float *device_wr = tensor_wr->tensor_ptr;
 
 
-  std::cout << "xl" << device_xl->name << "\n";
-  std::cout << "wl" << device_wl->name << "\n";
-  std::cout << "xr" << device_xr->name << "\n";
-  std::cout << "wr" << device_wr->name << "\n";
+  std::cout << "\nxl" << tensor_xl->name << "\n";
+  std::cout << "wl" << tensor_wl->name << "\n";
+  std::cout << "xr" << tensor_xr->name << "\n";
+  std::cout << "wr" << tensor_wr->name << "\n";
 
-  Tensor *new_tensor = createTensor(device_xl, dims, new_dims_prod, false, "");
-  new_tensor->AttrLNode(tensor_xl, sigmoid_op);
+  float *out = get_from_pool(new_dims_prod, "sigmoid_add2weights");
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(new_dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  shared_mem_size = std::min(2 * block_size * sizeof(float), deviceProp.sharedMemPerBlock);;
+  
+
+  sigmoid_add2weights_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_xl, device_wl, device_xr, device_wr, out, new_dims_prod);
+
+
+  Tensor *l = createTensor(nullptr, new_dims, new_dims_prod, false, "");
+  Tensor *r = createTensor(nullptr, new_dims, new_dims_prod, false, "");
+
+  l->AttrNodes(tensor_xl, tensor_wl, add_op);
+  r->AttrNodes(tensor_xr, tensor_wr, add_op);
+
+  Tensor *new_tensor = createTensor(out, new_dims, new_dims_prod, false, "");
+  new_tensor->AttrNodes(l, r, sigmoid_add2weights_op);
   return new_tensor;
 }
 
 
+void sigmoid_add2weights_backward(Tensor *root, float *dy)
+{
+  std::cout << "sigmoid_add2weights_backward" << "\n";
+  float *out = root->tensor_ptr;
+
+
+  Tensor *l, *r, *xl, *wl, *xr, *wr;
+  /**/
+  l = root->L_Node;
+  r = root->R_Node;
+
+  xl = l->L_Node;
+  wl = l->R_Node;
+
+  xr = r->L_Node;
+  wr = r->R_Node;
+
+  
+  float *aux1, *aux2, *aux3, *aux4;
+  cudaMalloc(&aux1, xl->dims_prod*sizeof(float));
+  //cudaMalloc(&aux2, wl->dims_prod*sizeof(float));
+  cudaMalloc(&aux3, xr->dims_prod*sizeof(float));
+  //cudaMalloc(&aux4, wr->dims_prod*sizeof(float));
+  
+  cudaMemset(aux1, 0, xl->dims_prod*sizeof(float));
+  //cudaMemset(aux2, 0, wl->dims_prod*sizeof(float));
+  cudaMemset(aux3, 0, xr->dims_prod*sizeof(float));
+  //cudaMemset(aux4, 0, wr->dims_prod*sizeof(float));
+
+
+
+  std::string tensor_name = xl->scopeless_name;
+  if(var_to_grad.count(tensor_name)>0)
+  {
+    float *acc_y = var_to_grad[tensor_name];
+
+    int grid_size, block_size;
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(xl->dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+    
+    add_inplace<<<grid_size, block_size>>>(acc_y, aux1, xl->dims_prod);
+
+    to_pool(xl->dims_prod, acc_y, "sigmoid_add2weights_backward xl grad");
+
+  } else
+    var_to_grad[tensor_name] = aux1;
+  
+
+  tensor_name = xr->scopeless_name;
+  if(var_to_grad.count(tensor_name)>0)
+  {
+    float *acc_y = var_to_grad[tensor_name];
+
+    int grid_size, block_size;
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(xr->dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+    
+    add_inplace<<<grid_size, block_size>>>(acc_y, aux3, xr->dims_prod);
+
+    to_pool(xl->dims_prod, acc_y, "sigmoid_add2weights_backward xl grad");
+
+  } else
+    var_to_grad[tensor_name] = aux3;
+
+
+  // Free only intermediate pointers, there is no need to free node tensor pointers.
+
+
+  // No need to free root, weight and leaf nodes.
+  to_free_tensor(l);
+  to_free_tensor(r);
+
+  
+  std::cout << "\n\n\n";
+}
 
 
 
@@ -12738,7 +12872,7 @@ extern "C" float clean_forward(char *scope, char *previous_scope)
 }
 
 
-void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, int parent_op)
+void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, bool from_custom, int parent_op)
 {
   if(back_node==nullptr)
     return;
@@ -12757,7 +12891,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
   {
 
     //std::cout << "\nTraversing: " << back_node->name << "/" << back_node->scopeless_name << ", op: " << back_node->op << ", parent_op: " << parent_op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
-    if(device_dy==nullptr&&!in_int(op, loss_ops))
+    if(device_dy==nullptr && !in_int(op, loss_ops) && !from_custom)
     {
       std::string _err = "dy derivate is null at the backward mode with op "+std::to_string(op);
       LogErrorS(_err);
@@ -12773,36 +12907,40 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
     tensor_name = back_node->scopeless_name;
     if (back_node->leaf)
     {
-      if(tensor_name!="")
+      if (!from_custom)
       {
-        if(var_to_grad.count(tensor_name)>0)
+        if(tensor_name!="")
         {
-          
-          float *acc_y = var_to_grad[tensor_name];
-          
-          int grid_size, block_size, shared_mem_size;
-          std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-          grid_size = grid_block_mem_sizes[0];
-          block_size = grid_block_mem_sizes[1];
+          if(var_to_grad.count(tensor_name)>0)
+          {
+            
+            float *acc_y = var_to_grad[tensor_name];
+            
+            int grid_size, block_size, shared_mem_size;
+            std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+            grid_size = grid_block_mem_sizes[0];
+            block_size = grid_block_mem_sizes[1];
 
-          
-          add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
+            
+            add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
 
-          to_pool(dims_prod, acc_y, "dy of leaf");
-          
-          //to_free(device_dy);
+            to_pool(dims_prod, acc_y, "dy of leaf");
 
-        } else
-          var_to_grad[tensor_name] = device_dy;
+
+          } else
+            var_to_grad[tensor_name] = device_dy;
+        }
+        to_pool(dims_prod, device_dy, "dy of leaf");
       }
       //std::cout << "\n\nAccumulating grad of: " << tensor_name << "\n\n\n";
       
-      to_pool(dims_prod, device_dy, "dy of leaf");
       to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor");
       
       to_free_tensor(back_node);
       return;
     }
+
+    from_custom = from_custom || (in_int(op, custom_ops));
 
     int B, C, OC;
     float x_size, w_size, b_size;
@@ -12884,7 +13022,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
       } else {
       
         //device_dw = get_from_pool(w_size, "dw"); //lock pool even if dx is not used.
-        if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op)
+        if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op && !from_custom)
         {
           //std::cout << "ulululu of op " << std::to_string(op) << "\n";
           device_dw = get_from_pool(w_size, "dw");
@@ -12899,7 +13037,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
     std::string from = "dx of "+ std::to_string(op);
     
 
-    if(op!=add_op && op!=scalar_add_op) {
+    if(op!=add_op && op!=scalar_add_op && !from_custom) {
       int grid_size, block_size; 
       std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(x_size);
       grid_size = grid_block_mem_sizes[0];
@@ -12966,9 +13104,6 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
       case tanh_op:
         tanh_backward(out, x_size, device_dx, device_dy);
         break;
-      case cross_entropy_op:
-        CrossEntropyBackward(inp, w, B, C, device_dx);
-        break;
       case add_op:
         device_dx = device_dy;
         device_dw = device_dy;
@@ -12980,8 +13115,21 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
         dropout_backward(device_dx, w, device_dy, x_size);
         device_dw = device_dy;
         break;
+
+      // Custom Ops
+      case sigmoid_add2weights_op:
+        sigmoid_add2weights_backward(back_node, device_dy);
+        device_dx = device_dy;
+        device_dw = device_dy;
+        break;
+
+      // Loss Ops
+      case cross_entropy_op:
+        CrossEntropyBackward(inp, w, B, C, device_dx);
+        break;
+
       default:
-        std::string _error = "The operation "+std::to_string(op)+" does not yet have the backward implementation";
+        std::string _error = "The operation "+std::to_string(op)+" does not yet have a backward implementation";
         LogErrorS(_error);
         break;
     }
@@ -13004,13 +13152,13 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, i
 
 
   // Garbage Collector on all lines below
-  TraversePreOrder(back_node->L_Node, device_dx, from_gradless, op);
+  TraversePreOrder(back_node->L_Node, device_dx, from_gradless, from_custom, op);
   //from_gradless = (from_gradless || in_int(op, loss_ops));
-  TraversePreOrder(back_node->R_Node, device_dw, from_gradless, op);
+  TraversePreOrder(back_node->R_Node, device_dw, from_gradless, from_custom, op);
   
 
   
-  if(!in_int(op, loss_ops)) //loss op has leaves only
+  if(!in_int(op, loss_ops) && back_node->tensor_ptr!=nullptr) //loss op has leaves only
     to_pool(dims_prod, back_node->tensor_ptr, "op tensor");
 
 
@@ -13056,7 +13204,7 @@ extern "C" float backprop()
     }
 
     
-    TraversePreOrder(back_node, device_dy, false, op);
+    TraversePreOrder(back_node, device_dy, false, false, op);
   }
 
 
@@ -16407,6 +16555,15 @@ static void InitializeModule() {
   
 
   //
+  FunctionType *sigmoid_add2weightsTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("sigmoid_add2weights", sigmoid_add2weightsTy);
+  
+
+  //
   FunctionType *tanhTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy},
@@ -17785,6 +17942,8 @@ int main() {
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
   loss_ops = {cross_entropy_op};
 
+  custom_ops = {sigmoid_add2weights_op};
+
   tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
   preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op};
   gradless_ops = {rand_like_op, onehot_op, max_op, argmax_op, equal_op,
@@ -17826,7 +17985,7 @@ int main() {
 
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor",
-                             "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout"};
+                             "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
                             "save_img", "gpu", "gpuw"};
