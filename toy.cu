@@ -8644,11 +8644,7 @@ extern "C" float floorE(float v) {
 
 
 __global__ void mult_kernel(const float *x, const float *w,
-                      float *out, int B, int C, int OC,
-                      int x_size, int w_size, int dims_prod) {
-  //int i = blockIdx.y * blockDim.y + threadIdx.y;
-  //int j = blockIdx.x * blockDim.x + threadIdx.x;
-
+                      float *out, int B, int C, int OC, int dims_prod) {
   int tx = threadIdx.x;
   int ty = threadIdx.y;
   int x_block = blockIdx.x;
@@ -8657,25 +8653,20 @@ __global__ void mult_kernel(const float *x, const float *w,
   const int _aux = 768;
   
 
-  const int tile_height = 27;
-  const int tile_width = 27;
+  const int tile_height = 16;
+  const int tile_width = 16;
 
-  int row = y_block*tile_height + ty;
-  int col = x_block*tile_width + tx;
+  int row = y_block*tile_width + ty;
+  int col = x_block*tile_height + tx;
 
 
-  int batch_upper_bound = std::min((row + 1)*C, B*C);
-  int oc_upper_bound = std::min((col + 1)*C, OC*C);
 
   float y = 0.0f;
 
 
-  
-
   __shared__ float x_smem[tile_height][tile_width];
   __shared__ float w_smem[tile_height][tile_width];
   
-
   
   for (int i=0; i < ceilf(C/(float)tile_width); ++i)
   {
@@ -8683,13 +8674,13 @@ __global__ void mult_kernel(const float *x, const float *w,
     // tile_tid tells which exact column to use from the subset
     // assume w is transposed already
 
-    int _col = i * tile_width + tx;
+    int _col  = i * tile_width + tx;
     int _col2 = i * tile_width + ty;
     
     if(row<B && _col<C)
-      x_smem[ty][tx] = x[row*C + _col];
+      x_smem[tx][ty] = x[row*C + _col];
     else
-      x_smem[ty][tx] = 0;
+      x_smem[tx][ty] = 0;
     
     if (col<OC && _col2<C)
       w_smem[ty][tx] = w[col*C + _col2];
@@ -8699,8 +8690,8 @@ __global__ void mult_kernel(const float *x, const float *w,
     __syncthreads();
 
 
-    for(int j=0; j<tile_width; ++j)
-      y += x_smem[ty][j] * w_smem[j][tx];
+    for(int j=0; j<tile_height; ++j)
+      y += x_smem[j][ty] * w_smem[j][tx];
     
     __syncthreads();
     
@@ -8710,16 +8701,389 @@ __global__ void mult_kernel(const float *x, const float *w,
     out[row*OC+col] = y;
 }
 
-/*
-void matmul_forward2(float* out,
-                     const float* inp, const float* weight, const float* bias,
-                     int B, int T, int C, int OC,
-                     const int sqrt_block_size) {*/
+
+
+
+
+
+
+__global__ void mult_backwarddx(const float *x, const float *w,
+                      float *dx, const float *dy,
+                      int x_size, int w_size,
+                      int B, int C, int OC, int dims_prod) {
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // max(B, C)
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // max(OC, C)
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+
+  float sum = 0.0f;
+
+  
+  const int tile_height = 16;
+  const int tile_width = 16;
+
+
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+
+
+  int offset = tile_height*tile_width;
+
+  float tmp = 0.0f;
+  // consider row as B and col as C
+  __syncthreads();
+  
+  for (int i=0; i<ceilf(OC/(float)tile_width); ++i)
+  {
+    int _col = i*tile_width + tx;
+    int _row = i*tile_width + ty;
+
+    if( row<B  && _col<OC)
+      smem[tx*tile_width +ty] = dy[row*OC + _col];
+    else
+      smem[tx*tile_width +ty] = 0;
+
+    if(_row<OC &&  col<C)
+      smem[offset+ty*tile_width +tx] = w[_row*C + col];
+    else
+      smem[offset+ty*tile_width +tx] = 0;
+    
+    __syncthreads();
+    
+
+    for(int j=0; j<tile_height; ++j)
+      tmp += smem[j*tile_width +ty] * smem[offset+j*tile_width +tx];
+    
+    __syncthreads();
+  }
+  if(row<B && col<C)
+    dx[row * C + col] = tmp;
+  
+
+
+}
+
+
+
+
+
+__global__ void mult_backwarddw(const float *x,
+                      float *dw, float *aux_matrix, float *tiled_matrix, const float *dy,
+                      int B, int C, int OC) {
+
+  int c = blockIdx.y * blockDim.y + threadIdx.y; // C
+  int oc = blockIdx.x * blockDim.x + threadIdx.x; // OC
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+
+
+  
+  // backward type 1
+  const int tile_height = 16;
+  const int tile_width = 16;
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+
+
+  // consider row as C and col as OC
+
+  int offset = tile_height*tile_height;
+
+  float tmp=0.0f;
+  __syncthreads();
+
+  for (int i=0; i<ceilf(B/(float)tile_width); i++)
+  {
+    int _b1 = i * tile_width + tx;
+    int _b2 = i * tile_width + ty;
+
+    if(_b1<B && oc<OC)
+      smem[tx*tile_height+ty] = dy[_b1*OC + oc];
+    else
+      smem[tx*tile_height+ty] = 0.0f;
+
+    if(_b2<B && c<C)
+      smem[offset+ty*tile_height+tx] = x[_b2*C + c];
+    else
+      smem[offset+ty*tile_height+tx] = 0.0f;
+
+    __syncthreads();
+
+    
+    for (int j=0; j<tile_height; j++)
+      tmp += smem[ty*tile_height+j] * smem[offset+tx*tile_height+j];
+
+    
+
+    __syncthreads();
+  }
+
+  if(oc<OC && c<C)
+    dw[oc * C + c] += tmp;
+
+  
+
+  
+  /*
+  // backward type 2
+  float tmp=0.0f;
+  // consider row as C and col as OC
+  if (oc<OC&&c<C)
+  {
+    for (int i=0; i<B; ++i)
+    {
+      tmp += dy[i * OC + oc] * x[i * C + c];
+    }
+    dw[oc * C + c] += tmp;
+  }
+  */
+
+  
+}
+
+
+
+
+
+__global__ void mult_backward(const float *x, const float *w,
+                      float *dx, float *dw, const float *dy,
+                      int B, int C, int OC, int dims_prod) {
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // max(B, C)
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // max(OC, C)
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  
+  const int tile_height = 16;
+  const int tile_width = 16;
+
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+  int offset = tile_height*tile_width;
+
+
+  float tmp = 0.0f;
+  // consider row as B and col as C
+  
+  __syncthreads();
+  for (int i=0; i<ceilf(OC/(float)tile_width); ++i)
+  {
+    int _col = i*tile_width + tx;
+    int _row = i*tile_width + ty;
+
+    if( row<B  && _col<OC)
+      smem[tx*tile_width +ty] = dy[row*OC + _col]; // [B, OC]
+    else
+      smem[tx*tile_width +ty] = 0;
+
+    if(_row<OC &&  col<C)
+      smem[offset+ty*tile_width +tx] = w[_row*C + col];   // [OC, C]
+    else
+      smem[offset+ty*tile_width +tx] = 0;
+    
+    __syncthreads();
+    
+
+    for(int j=0; j<tile_height; ++j)
+      tmp += smem[j*tile_width +ty] * smem[offset+j*tile_width +tx];
+    
+    __syncthreads();
+  }
+  if(row<B && col<C)
+    dx[row * C + col] = tmp;
+  
+
+  /*
+  // consider row as B and col as C
+  if (row<B&&col<C)
+  {
+    for (int i=0; i<OC; ++i)
+    {
+      tmp += dy[row * OC + i] * w[i * C + col];
+    }
+    dx[row * C + col] = tmp;
+  }
+  */
+
+
+  /*
+  for (int i=0; i<tile_width; ++i)
+  {
+    for (int j=0; j<tile_width; ++j)
+    {
+      x_smem[i][j] = 0;
+      w_smem[i][j] = 0;
+      __syncthreads();
+
+    }
+  }
+  */
+
+
+  //smem[tx*tile_width +ty] = 0;
+  //smem[offset+ty*tile_width +tx] = 0;
+
+
+
+  /*
+  tmp = 0.0f;
+  // consider row as C and col as OC
+  __syncthreads();
+  
+  for (int i=0; i<std::ceil((float)B/(float)tile_width); ++i)
+  {
+
+    smem[tx*tile_width +ty] = 0;
+    smem[offset+ty*tile_width +tx] = 0;
+
+    __syncthreads();
+
+
+    int _row  = i*tile_width + tx;
+    int _row2 = i*tile_width + ty;
+
+    if( _row<B  && col<OC)
+      smem[tx*tile_width +ty] = dy[_row*OC + col]; // [B, OC]
+
+    if(_row2<B  && row<C)
+      smem[offset+ty*tile_width +tx] = x[_row2*C + row];  // [B, C]
+    
+    
+    __syncthreads();
+    
+
+    for(int j=0; j<tile_height; ++j)
+      tmp += smem[ty*tile_height+j] * smem[offset+j*tile_height+tx];
+      //tmp += smem[j*tile_width +ty] * smem[offset+j*tile_width +tx];
+    
+    __syncthreads();
+  }
+  if(row<C && col<OC)
+    dw[col * C + row] += tmp;
+  */
+  
+  
+  tmp = 0.0f;
+
+  // consider row as C and col as OC
+  if (row<C&&col<OC)
+  {
+    for (int i=0; i<B; ++i)
+    {
+      tmp += dy[i * OC + col] * x[i * C + row];
+    }
+    dw[col * C + row] += tmp;
+  }
+  
+  
+}
+
+
+
+void matmul_backward(float *inp,  float *weight,
+                     int B, int C, int OC,
+                     float *dinp, float *dw,
+                     float *dout)
+{
+  //std::cout << "\nmatmul_backward. B: " << B << " C: " << C << " OC: " << OC << "\n";
+
+  /*
+  int tile_height, tile_width;
+  tile_height = 16;
+  tile_width = 16;
+  dim3 block_size(tile_height, tile_width);
+  dim3 grid_size(std::ceil((float)std::max(OC,C)/float(tile_height)), std::ceil((float)std::max(B,C)/(float)tile_width));
+  int shared_mem_size = 2*tile_height*tile_width*sizeof(float);
+
+  //std::cout << "Launching kernel with bx: " << std::max(OC,C) << ", by: " << std::max(B,C) << "\n";
+
+  mult_backward<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, dinp, dw, dout, B, C, OC, B*OC);
+  */
+
+
+
+
+  
+  int tile_height, tile_width;
+  tile_height = 16;
+  tile_width = 16;
+  dim3 block_size(tile_height, tile_width);
+  dim3 grid_size(std::ceil(C/float(tile_height)), std::ceil(B/(float)tile_width));
+  int shared_mem_size = 2*tile_height*tile_width*sizeof(float);
+
+
+  mult_backwarddx<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, dinp, dout, B*C, OC*C, B, C, OC, B*OC);
+  
+
+
+
+  /*
+
+  float *tiled_matrix = get_from_pool(tile_height*tile_width, "tiled");
+  float *aux_matrix = get_from_pool(tile_height*tile_width, "tiled");
+
+  tile_height = 16;
+  tile_width = 16;
+  dim3 block_size2(tile_height, tile_width);
+  dim3 grid_size2(std::ceil(OC/float(tile_height)), std::ceil(C/(float)tile_width));
+  shared_mem_size = 2*tile_height*tile_width*sizeof(float);
+
+
+  mult_backwarddw<<<grid_size2, block_size2, shared_mem_size, main_stream->stream>>>(inp, dw, aux_matrix, tiled_matrix, dout, B, C, OC);
+
+  std::cout << "\n\n\nAUX IS" << "\n";
+  PrintTensorF(aux_matrix, tile_height, tile_width);
+  std::cout << "\nTILED IS" << "\n";
+  PrintTensorF(tiled_matrix, tile_height, tile_width);
+
+  move_to_pool(tile_height*tile_width, tiled_matrix, "tiled");
+  move_to_pool(tile_height*tile_width, aux_matrix, "tiled");
+  */
+  
+
+
+  
+
+  
+  float one = 1.0f, zero = 0.0f;
+  // backward to input
+  
+  /*
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
+                             weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
+                             dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));                         
+  
+  */
+
+  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                             inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
+                             dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+  
+
+  //PrintTensorF(dw,7,7);
+
+}
+
+
 void matmul_forward2(float* out,
                      const float* inp, const float* weight,
                      int B, int C, int OC) {
-                     //const int sqrt_block_size
-                     
+    
+    
     
     const float alpha = 1.0f;
     const float beta = 0.0f;
@@ -8732,16 +9096,16 @@ void matmul_forward2(float* out,
 
 
 
-    //int grid_size, block_size, shared_mem_size;
-    //std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C*OC);
-    //grid_size = grid_block_mem_sizes[0];
-    //block_size = grid_block_mem_sizes[1];
     
-    dim3 block_size(27,27);
-    dim3 grid_size(std::ceil(OC/27.0), std::ceil(B/27.0));
+    int height, width;
+    height = 16;
+    width = 16;
+    dim3 block_size(height, width);
+    dim3 grid_size(std::ceil(OC/float(height)), std::ceil(B/(float)width));
     int shared_mem_size = 2*768*sizeof(float);
 
-    mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, B, C, OC, B*C, C*OC, B*OC);
+    mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, B, C, OC, B*OC);
+    
 
 
 
@@ -8750,30 +9114,10 @@ void matmul_forward2(float* out,
         int block_size = sqrt_block_size * sqrt_block_size;
         int grid_size = ceil_div(OC * B * T, block_size);
         add_bias<<<grid_size, block_size>>>(out, bias, B, T, OC);
-        
     }
     */
+
 }
-
-void matmul_backward(float *inp,  float *weight,
-                     int B, int C, int OC,
-                     float *dinp, float *dw,
-                     float *dout)
-{
-  //std::cout << "matmul_backward. B: " << B << " C: " << C << " OC: " << OC << "\n";
-
-  float one = 1.0f, zero = 0.0f;
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
-                             weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
-                             dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
-                             inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
-                             dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-
-  
-}
-
 
 
 extern "C" Tensor *CudaMult(int is_forward_func,
@@ -8804,8 +9148,6 @@ extern "C" Tensor *CudaMult(int is_forward_func,
     LogErrorS("Tensors multiplication requires at least 2 dimensions.");
 
 
-  
-  //PrintTensorF(device_w, Rdims[0], Rdims[1]);
 
   tensor_x->Sync();
   tensor_w->Sync();
@@ -8813,15 +9155,7 @@ extern "C" Tensor *CudaMult(int is_forward_func,
   matmul_forward2(device_y, device_x, device_w,
                   linear_layer_dims[0], linear_layer_dims[1],
                   Rdims[0]);
-                  //64
-                  //);
 
-
-  /*
-  std::cout << "CUDA MULT" << "\n";
-  PrintDims(Ldims);
-  PrintDims(Rdims);
-  */
   
   
   std::vector<float> new_dims = NewDimsOnMult(Ldims, Rdims);
@@ -10356,149 +10690,65 @@ extern "C" void *sigmoid(Tensor *tensor)
 
 
 
-
-__global__ void matrixMul(float *A, float *B, float *C, int N) {
-    int i = blockIdx.y * blockDim.y + threadIdx.y;
-    int j = blockIdx.x * blockDim.x + threadIdx.x;
-
-    
-    // Tile dimensions
-    const int tile_size = 16;
-
-    // Shared memory
-    __shared__ float As[tile_size][tile_size];
-    __shared__ float Bs[tile_size][tile_size];
-
-    if (i < N && j < N) {
-        float Csub = 0;
-
-        // Loop over tiles
-        for (int k = 0; k < N; k += tile_size) {
-            // Load tiles into shared memory
-            As[threadIdx.y][threadIdx.x] = A[i * N + k + threadIdx.x];
-            Bs[threadIdx.y][threadIdx.x] = B[(k + threadIdx.y) * N + j];
-            __syncthreads();
-
-            // Perform matrix multiplication on tiles
-            for (int l = 0; l < tile_size; ++l) {
-                Csub += As[threadIdx.y][l] * Bs[l][threadIdx.x];
-            }
-            __syncthreads();
-        }
-
-        C[i * N + j] = Csub;
-    }
-}
-
-
-
-
 __global__ void sigmoid_add2weights_kernel(const float *xl, const float *wl, const float *xr,
-                                           const float *wr, float *out, int B, int D_in, int D_out) {
-    //int i = blockIdx.y * blockDim.y + threadIdx.y;
-    //int j = blockIdx.x * blockDim.x + threadIdx.x;
+                                           const float *wr, float *out, int B, int C, int OC) {
+    int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
 
-    int tid = threadIdx.x;
-    int idx = blockIdx.x * blockDim.x + tid;
+  const int _aux = 768;
+  
 
-    const int _aux = 768;
+  const int tile_size = 16;
 
-    //int d_idx = idx;
-
-    int row = idx / D_out;
-    int col = idx % D_out;
-
-
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
 
 
-    __shared__ float xl_smem[_aux];
-    __shared__ float wl_smem[_aux];
-    __shared__ float xr_smem[_aux];
-    __shared__ float wr_smem[_aux];
 
-    /*
+  float y = 0.0f;
 
-    const int tile_size = 16;
+
+  extern __shared__ float smem[];
+
+  int wl_offset = tile_size*tile_size;
+  int xr_offset = wl_offset*2;
+  int wr_offset = xr_offset*2;
+
+  
+  
+  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
+  {
+    // each tile has a subset of columns to work with
+    // tile_tid tells which exact column to use from the subset
+    // assume w is transposed already
+
+    int _col  = i * tile_size + tx;
+    int _col2 = i * tile_size + ty;
     
-    int tile_tid = tid%tile_size;
-
-    for (int i=0; i<(D_out+tile_size-1)/tile_size; ++i)
-    {
-      // each tile has a subset of columns to work with
-      // tile_tid tells which exact column to use from the subset
-      // assume w are transposed already
-
-      int _col = i * tile_size + tile_tid;
-      xl_smem[threadIdx.x] = xl[row*D_out + _col];
-      wl_smem[threadIdx.x] = wl[row*D_out + _col];
-
-      __syncthreads();
-
-    }
+    if(row<B && _col<C)
+      smem[tx* tile_size +ty] = xl[row*C + _col];
+    else
+      smem[tx* tile_size +ty] = 0;
+    
+    if (col<OC && _col2<C)
+      smem[wl_offset+ty* tile_size +tx] = wl[col*C + _col2];
+    else
+      smem[wl_offset+ty* tile_size +tx] = 0;
+    
+    __syncthreads();
 
 
+    for(int j=0; j<tile_size; ++j)
+      y += smem[j* tile_size +ty] * smem[wl_offset+j* tile_size +tx];
+    
+    __syncthreads();
+    
+  }
 
-
-    __shared__ float As[tile_size][tile_size];
-    __shared__ float Bs[tile_size][tile_size];
-
-    int i=0;
-    int j=0;
-
-    if (i < D_out && j < D_out) {
-        float Csub = 0;
-        // Tile dimensions
-
-        // Loop over tiles
-        for (int k = 0; k < D_out; k += tile_size) {
-            // Load tiles into shared memory
-            As[threadIdx.y][threadIdx.x] = xl[i * D_out + k + threadIdx.x];
-            Bs[threadIdx.y][threadIdx.x] = wl[(k + threadIdx.y) * D_out + j];
-            __syncthreads();
-
-            // Perform matrix multiplication on tiles
-            for (int l = 0; l < tile_size; ++l) {
-                Csub += As[threadIdx.y][l] * Bs[l][threadIdx.x];
-            }
-            __syncthreads();
-        }
-
-        out[i * D_out + j] = Csub;
-    }
-
-
-
-
-    const int tile_size = 16;
-    // Shared memory
-    __shared__ float As[tile_size][tile_size];
-    __shared__ float Bs[tile_size][tile_size];
-
-
-    int i=0;
-    int j=0;
-
-    if (i < D_out && j < D_out) {
-        float Csub = 0;
-        // Tile dimensions
-
-        // Loop over tiles
-        for (int k = 0; k < D_out; k += tile_size) {
-            // Load tiles into shared memory
-            As[threadIdx.y][threadIdx.x] = xl[i * D_out + k + threadIdx.x];
-            Bs[threadIdx.y][threadIdx.x] = wl[(k + threadIdx.y) * D_out + j];
-            __syncthreads();
-
-            // Perform matrix multiplication on tiles
-            for (int l = 0; l < tile_size; ++l) {
-                Csub += As[threadIdx.y][l] * Bs[l][threadIdx.x];
-            }
-            __syncthreads();
-        }
-
-        out[i * D_out + j] = Csub;
-    }
-    */
+  if(row<B && col<OC)
+    out[row*OC+col] = y;
 }
 
 
@@ -10515,8 +10765,8 @@ extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tenso
   int new_dims_prod = DimsProd(new_dims);
 
   int B = linear_layer_dims[0];
-  int D_in = new_dims[1];
-  int D_out = new_dims[1];
+  int C = new_dims[1];
+  int OC = new_dims[1];
 
   float *device_xl = tensor_xl->tensor_ptr;
   float *device_wl = tensor_wl->tensor_ptr;
@@ -10524,30 +10774,33 @@ extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tenso
   float *device_wr = tensor_wr->tensor_ptr;
 
 
+  /*
   std::cout << "\nxl" << tensor_xl->name << "\n";
   std::cout << "wl" << tensor_wl->name << "\n";
   std::cout << "xr" << tensor_xr->name << "\n";
   std::cout << "wr" << tensor_wr->name << "\n";
+  */
 
   float *out = get_from_pool(new_dims_prod, "sigmoid_add2weights");
 
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(new_dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  int tile_size = 16;
+  dim3 grid_size(std::ceil(B/(float)tile_size), std::ceil(OC/(float)tile_size));
+  dim3 block_size(tile_size, tile_size);
 
-  shared_mem_size = std::min(2 * block_size * sizeof(float), deviceProp.sharedMemPerBlock);;
+  int shared_mem_size = std::min(4 * tile_size*tile_size * sizeof(float), deviceProp.sharedMemPerBlock);;
   
 
-  std::cout << "PRE SIGMOID KERNEL" << "\n";
-  sigmoid_add2weights_kernel<<<grid_size, block_size, 0, main_stream->stream>>>
+  //std::cout << "PRE SIGMOID KERNEL" << "\n";
+  sigmoid_add2weights_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>
           (
             device_xl, device_wl, device_xr, device_wr,
             out,
-            B, D_in, D_out
+            B, C, OC
           );
-  std::cout << "POST SIGMOID KERNEL" << "\n";
+  //std::cout << "POST SIGMOID KERNEL" << "\n";
 
+
+  // Add tensor to tree only for the later clean up
   Tensor *l = createTensor(nullptr, new_dims, new_dims_prod, false, "");
   Tensor *r = createTensor(nullptr, new_dims, new_dims_prod, false, "");
 
@@ -10563,7 +10816,7 @@ extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tenso
 
 void sigmoid_add2weights_backward(Tensor *root, float *dy)
 {
-  std::cout << "sigmoid_add2weights_backward" << "\n";
+  //std::cout << "sigmoid_add2weights_backward" << "\n";
   float *out = root->tensor_ptr;
 
 
