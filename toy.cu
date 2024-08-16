@@ -14,11 +14,9 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 
-
 #include "include/KaleidoscopeJIT.h"
 
 
-#include <cudnn.h>
 #include <algorithm>
 #include <cstdarg>
 #include <cassert>
@@ -47,6 +45,7 @@
 #include <sstream>
 
 
+
 // Cuda
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +54,10 @@
 #include <cublasLt.h>
 #include <omp.h>
 #include <curand_kernel.h>
+//#include <nvcuda/wmma.h>
+#include <cuda_fp16.h>
+#include "cutlass/gemm/device/gemm.h"
+#include <cudnn.h>
 
 #include "include/cu_commons.h"
 
@@ -67,6 +70,11 @@ int PAD_TOK = 0.0f;
 
 #define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
 
+#define WMMA_M 16
+#define WMMA_N 16
+#define WMMA_K 16
+
+#define WARP_SIZE 32
 
 // Files
 #define STB_IMAGE_IMPLEMENTATION
@@ -8642,215 +8650,97 @@ extern "C" float floorE(float v) {
 
 
 
+__global__ void mult_backward_fused(const float *x, const float *w,
+                      float *dx, float *dw, const float *dy, const int tile_offset,
+                      const int B, const int C, const int OC) {
 
-
-
-
-__global__ void mult_backwarddx(const float *x, const float *w,
-                      float *dx, const float *dy,
-                      int x_size, int w_size,
-                      int B, int C, int OC, int dims_prod) {
-
-  int row = blockIdx.y * blockDim.y + threadIdx.y; // max(B, C)
-  int col = blockIdx.x * blockDim.x + threadIdx.x; // max(OC, C)
+  //int row = blockIdx.y * blockDim.y + threadIdx.y; // max(B, C)
+  //int col = blockIdx.x * blockDim.x + threadIdx.x; // max(OC, C)
+  int row_major = blockIdx.x * blockDim.x + threadIdx.y;
+  int col_major = blockIdx.x * blockDim.x + threadIdx.x;
   int tx = threadIdx.x;
   int ty = threadIdx.y;
 
-
-  float sum = 0.0f;
-
-  
-  const int tile_height = 16;
-  const int tile_width = 16;
+  int col_dx, row_dx, col_dw, row_dw;
 
 
-
-
-  extern __shared__ char _smem[];
-  auto smem = reinterpret_cast<float*>(_smem);
-
-
-
-  int offset = tile_height*tile_width;
-
-  float tmp = 0.0f;
-  // consider row as B and col as C
-  __syncthreads();
-  
-  for (int i=0; i<ceilf(OC/(float)tile_width); ++i)
-  {
-    int _col = i*tile_width + tx;
-    int _row = i*tile_width + ty;
-
-    if( row<B  && _col<OC)
-      smem[tx*tile_width +ty] = dy[row*OC + _col];
-    else
-      smem[tx*tile_width +ty] = 0;
-
-    if(_row<OC &&  col<C)
-      smem[offset+ty*tile_width +tx] = w[_row*C + col];
-    else
-      smem[offset+ty*tile_width +tx] = 0;
-    
-    __syncthreads();
-    
-
-    for(int j=0; j<tile_height; ++j)
-      tmp += smem[j*tile_width +ty] * smem[offset+j*tile_width +tx];
-    
-    __syncthreads();
-  }
-  if(row<B && col<C)
-    dx[row * C + col] = tmp;
-  
-
-
-}
-
-
-
-
-
-__global__ void mult_backwarddw(const float *x,
-                      float *dw, float *aux_matrix, float *tiled_matrix, const float *dy,
-                      int B, int C, int OC) {
-
-  int c = blockIdx.y * blockDim.y + threadIdx.y; // C
-  int oc = blockIdx.x * blockDim.x + threadIdx.x; // OC
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-
-
-
-  
-  // backward type 1
-  const int tile_height = 16;
-  const int tile_width = 16;
-
-
-  extern __shared__ char _smem[];
-  auto smem = reinterpret_cast<float*>(_smem);
-
-
-
-  // consider row as C and col as OC
-
-  int offset = tile_height*tile_height;
-
-  float tmp=0.0f;
-  __syncthreads();
-
-  for (int i=0; i<ceilf(B/(float)tile_width); i++)
-  {
-    int _b1 = i * tile_width + tx;
-    int _b2 = i * tile_width + ty;
-
-    if(_b1<B && oc<OC)
-      smem[tx*tile_height+ty] = dy[_b1*OC + oc];
-    else
-      smem[tx*tile_height+ty] = 0.0f;
-
-    if(_b2<B && c<C)
-      smem[offset+ty*tile_height+tx] = x[_b2*C + c];
-    else
-      smem[offset+ty*tile_height+tx] = 0.0f;
-
-    __syncthreads();
-
-    
-    for (int j=0; j<tile_height; j++)
-      tmp += smem[ty*tile_height+j] * smem[offset+tx*tile_height+j];
-
-    
-
-    __syncthreads();
-  }
-
-  if(oc<OC && c<C)
-    dw[oc * C + c] += tmp;
-
-  
-
-  
-  /*
-  // backward type 2
-  float tmp=0.0f;
-  // consider row as C and col as OC
-  if (oc<OC&&c<C)
-  {
-    for (int i=0; i<B; ++i)
-    {
-      tmp += dy[i * OC + oc] * x[i * C + c];
-    }
-    dw[oc * C + c] += tmp;
-  }
-  */
-
-  
-}
-
-
-
-
-__global__ void mult_kernel(const float *x, const float *w,
-                      float *out, const int tile_offset, const int B, const int C, const int OC) {
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-
-  
   const int tile_size = 27;
 
-  int row = y_block*tile_size + ty;
-  int col = x_block*tile_size + tx;
 
 
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
 
   int offset = tile_offset;
+  int dw_dy_offset = 2*tile_offset;
+  int dw_x_offset = 3*tile_offset;
 
-  float y = 0.0f;
 
-
-  extern __shared__ float smem[];
 
   
-  
-  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
+  float tmp_dx = 0.0f;
+  float tmp_dw = 0.0f;
+  // consider row as B and col as C for dx
+  row_dx = row_major/C;
+  col_dx = col_major%C;
+
+
+  // consider row as C and col as OC for dw
+  row_dw = col_major%C; // Also, invert col_major with row_make BECAUSE I HAVE NO FKING IDEA WHY. 20 HOURS IMPLEMETNING THIS F MATRIX MULTIPLY TILING OPS. WHYYYYYYYYYYY????
+  col_dw = row_major%OC;
+
+  for (int i=0; i<ceilf(std::max(B,OC)/(float)tile_size); ++i)
   {
-    // each tile has a subset of columns to work with
-    // tile_tid tells which exact column to use from the subset
-    // assume w is transposed already
+    int _col = i*tile_size + tx;
+    int _row = i*tile_size + ty;
 
-    int _col  = i * tile_size + tx;
-    int _col2 = i * tile_size + ty;
+
+    if(i<ceilf(OC/(float)tile_size))
+    { 
+      if( row_dx<B  && _col<OC)
+        smem[tx*tile_size +ty] = dy[row_dx*OC + _col]; // [B, OC]
+      else
+        smem[tx*tile_size +ty] = 0;
+
+      if(_row<OC &&  col_dx<C)
+        smem[offset+ty*tile_size +tx] = w[_row*C + col_dx];   // [OC, C]
+      else
+        smem[offset+ty*tile_size +tx] = 0;
+    }
     
-    if(row<B && _col<C)
-      smem[tx* tile_size +ty] = x[row*C + _col];
-    else
-      smem[tx* tile_size +ty] = 0;
-    
-    if (col<OC && _col2<C)
-      smem[offset+ty* tile_size +tx] = w[col*C + _col2];
-    else
-      smem[offset+ty* tile_size +tx] = 0;
-    
+
+    if(i<ceilf(B/(float)tile_size))
+    { 
+      if( _col<B  && col_dw<OC)
+        smem[dw_dy_offset+tx*tile_size +ty] = dy[_col*OC + col_dw]; // [B, OC]
+      else
+        smem[dw_dy_offset+tx*tile_size +ty] = 0;
+
+      if(_row<B  && row_dw<C)
+        smem[dw_x_offset+ty*tile_size +tx] = x[_row*C + row_dw];  // [B, C]
+      else
+        smem[dw_x_offset+ty*tile_size +tx] = 0;
+      
+    }
+
+
     __syncthreads();
-
+    
 
     for(int j=0; j<tile_size; ++j)
-      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
+    {
+      tmp_dx += smem[j*tile_size +ty] * smem[offset+j*tile_size +tx];
+      tmp_dw += smem[dw_dy_offset+j*tile_size +ty] * smem[dw_x_offset+j*tile_size +tx];
+    }
+      
     
     __syncthreads();
-    
   }
-
-  if(row<B && col<OC)
-    out[row*OC+col] = y;
+  if(row_dx<B && col_dx<C)
+    dx[row_dx * C + col_dx] = tmp_dx;
+  if(col_dw<OC && row_dw<C)
+    dw[col_dw * C + row_dw] += tmp_dw;
 }
-
-
-
 
 
 __global__ void mult_backward(const float *x, const float *w,
@@ -8954,6 +8844,292 @@ __global__ void mult_backward(const float *x, const float *w,
 
 
 
+
+__global__ void mult_backwarddx(const float *w,
+                      float *dx, const float *dy, const int tile_offset,
+                      const int B, const int C, const int OC) {
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // max(B, C)
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // max(OC, C)
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+
+  float sum = 0.0f;
+
+  
+  const int tile_height = 16;
+  const int tile_width = 16;
+
+
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+
+
+  int offset = tile_offset;
+
+  float tmp = 0.0f;
+  // consider row as B and col as C
+  __syncthreads();
+  
+  for (int i=0; i<ceilf(OC/(float)tile_width); ++i)
+  {
+    int _col = i*tile_width + tx;
+    int _row = i*tile_width + ty;
+
+    if( row<B  && _col<OC)
+      smem[tx*tile_width +ty] = dy[row*OC + _col];
+    else
+      smem[tx*tile_width +ty] = 0;
+
+    if(_row<OC &&  col<C)
+      smem[offset+ty*tile_width +tx] = w[_row*C + col];
+    else
+      smem[offset+ty*tile_width +tx] = 0;
+    
+    __syncthreads();
+    
+
+    for(int j=0; j<tile_height; ++j)
+      tmp += smem[j*tile_width +ty] * smem[offset+j*tile_width +tx];
+    
+    __syncthreads();
+  }
+  if(row<B && col<C)
+    dx[row * C + col] = tmp;
+  
+
+
+}
+
+
+
+
+
+__global__ void mult_backwarddw(const float *x,
+                      float *dw, const float *dy, const int tile_offset,
+                      int B, int C, int OC) {
+
+  int row_major = blockIdx.y * blockDim.y + threadIdx.y; // C
+  int col_major = blockIdx.x * blockDim.x + threadIdx.x; // OC
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+
+
+  
+  // backward type 1
+  const int tile_size = 27;
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+
+
+  // consider row as C and col as OC
+
+  int offset = tile_offset;
+
+  float tmp = 0.0f;
+  // consider row as C and col as OC
+  int row = col_major%C; // Also, invert col_major with row_make BECAUSE I HAVE NO FKING IDEA WHY. 20 HOURS IMPLEMETNING THIS F MATRIX MULTIPLY TILING OPS. WHYYYYYYYYYYY????
+  int col = row_major%OC;
+
+  
+  for (int i=0; i<std::ceil(B/(float)tile_size); ++i)
+  {
+
+    int _row  = i*tile_size + tx;
+    int _row2 = i*tile_size + ty;
+
+    if( _row<B  && col<OC)
+      smem[tx*tile_size +ty] = dy[_row*OC + col]; // [B, OC]
+    else
+      smem[tx*tile_size +ty] = 0;
+
+    if(_row2<B  && row<C)
+      smem[offset+ty*tile_size +tx] = x[_row2*C + row];  // [B, C]
+    else
+      smem[offset+ty*tile_size +tx] = 0;
+    
+    
+    __syncthreads();
+    
+
+    for(int j=0; j<tile_size; ++j)
+      tmp += smem[j*tile_size+ty] * smem[offset+j*tile_size+tx];
+    
+    __syncthreads();
+  }
+  if(col<OC && row<C)
+    dw[col * C + row] += tmp;
+
+  
+
+  
+  /*
+  // backward type 2
+  float tmp=0.0f;
+  // consider row as C and col as OC
+  if (oc<OC&&c<C)
+  {
+    for (int i=0; i<B; ++i)
+    {
+      tmp += dy[i * OC + oc] * x[i * C + c];
+    }
+    dw[oc * C + c] += tmp;
+  }
+  */
+
+  
+}
+
+
+
+
+__global__ void mult_kernel(const float *x, const float *w,
+                      float *out, const int tile_offset, const int B, const int C, const int OC) {
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  
+  const int tile_size = 27;
+
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
+
+
+
+  int offset = tile_offset;
+
+  float y = 0.0f;
+
+
+  extern __shared__ float smem[];
+
+  //wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, half> C_frag;
+
+  
+#pragma unroll
+  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
+  {
+    // each tile has a subset of columns to work with
+    // tile_tid tells which exact column to use from the subset
+    // assume w is transposed already
+
+    int _col  = i * tile_size + tx;
+    int _col2 = i * tile_size + ty;
+    
+    if(row<B && _col<C)
+      smem[tx* tile_size +ty] = x[row*C + _col];
+    else
+      smem[tx* tile_size +ty] = 0;
+    
+    if (col<OC && _col2<C)
+      smem[offset+ty* tile_size +tx] = w[col*C + _col2];
+    else
+      smem[offset+ty* tile_size +tx] = 0;
+    
+    __syncthreads();
+
+#pragma unroll
+    for(int j=0; j<tile_size; ++j)
+      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
+    
+    __syncthreads();
+    
+  }
+
+  if(row<B && col<OC)
+    out[row*OC+col] = y;
+}
+
+
+
+
+// warp-level reduction for summing values
+__inline__ __device__ float warpReduceSum(float val) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        val += __shfl_down_sync(0xFFFFFFFF, val, offset);
+    }
+    return val;
+}
+
+
+__global__ void mult_kernel2(const float *x, const float *w,
+                      float *out, const int tile_offset, const int B, const int C, const int OC) {
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  int tid = ty*blockDim.x + tx;
+  int warpId = tid / 32; // warp index within a block //starred
+  int laneId = tid % 32; // thread index within a warp
+
+  
+  const int tile_size = 27;
+
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
+
+
+
+  int offset = tile_offset;
+
+  float y = 0.0f;
+
+
+  extern __shared__ float smem[];
+
+
+  float x_ij, w_ij;
+  
+#pragma unroll
+  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
+  {
+    // each tile has a subset of columns to work with
+    // tile_tid tells which exact column to use from the subset
+    // assume w is transposed already
+
+    int _col  = i * tile_size + tx;
+    int _col2 = i * tile_size + ty;
+    
+    if(row<B && _col<C)
+      x_ij = x[row*C + _col];
+    else
+      x_ij = 0;
+    
+    if (col<OC && _col2<C)
+      w_ij = w[col*C + _col2];
+    else
+      w_ij = 0;
+    
+    __syncthreads();
+
+#pragma unroll
+    for(int j=0; j<tile_size; ++j)
+    {
+      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
+    }
+    
+    __syncthreads();
+    
+  }
+
+  if(row<B && col<OC)
+    out[row*OC+col] = y;
+}
+
+
+
+
 void matmul_backward(float *inp,  float *weight,
                      int B, int C, int OC,
                      float *dinp, float *dw,
@@ -8961,67 +9137,110 @@ void matmul_backward(float *inp,  float *weight,
 {
   //std::cout << "\nmatmul_backward. B: " << B << " C: " << C << " OC: " << OC << "\n";
 
-  
-  int tile_size;
+  /*
+  int tile_size, tile_size_sq;
   tile_size = 27;
+  tile_size_sq = tile_size*tile_size;
   dim3 block_size(tile_size, tile_size);
   dim3 grid_size(std::ceil(std::max(B*C,std::max(B*OC,OC*C))/(float)tile_size));
   //dim3 grid_size(std::ceil((float)std::max(OC,C)/float(tile_size)), std::ceil((float)std::max(B,C)/(float)tile_size));
-  int shared_mem_size = 2*tile_size*tile_size*sizeof(float);
+  int shared_mem_size = 4*tile_size_sq*sizeof(float);
 
   //std::cout << "Launching kernel with bx: " << std::max(OC,C) << ", by: " << std::max(B,C) << "\n";
 
-  mult_backward<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, dinp, dw, dout, tile_size*tile_size, B, C, OC);
+  mult_backward_fused<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, dinp, dw, dout, tile_size_sq, B, C, OC);
+  */
+  
   
 
+  /*
+  //cudaStream_t dx_stream;
+  //cudaStreamCreate(&dx_stream);
+  
+  int tile_size, tile_size_sq;
+  tile_size = 27;
+  tile_size_sq = tile_size*tile_size;
+  dim3 block_size(tile_size, tile_size);
+  dim3 grid_size(std::ceil(C/float(tile_size)), std::ceil(B/(float)tile_size));
+  int shared_mem_size = 2*tile_size_sq*sizeof(float);
 
+  mult_backwarddx<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(weight, dinp, dout, tile_size_sq, B, C, OC);
+  
+  dim3 grid_size2(std::ceil(OC*C)/(float)tile_size);
+  mult_backwarddw<<<grid_size2, block_size, shared_mem_size, main_stream->stream>>>(inp, dw, dout, tile_size_sq, B, C, OC);
+  //cudaStreamSynchronize(dx_stream);
+  //cudaStreamDestroy(dx_stream);
+  */
 
 
   /*
-  int tile_height, tile_width;
-  tile_height = 16;
-  tile_width = 16;
-  dim3 block_size(tile_height, tile_width);
-  dim3 grid_size(std::ceil(C/float(tile_height)), std::ceil(B/(float)tile_width));
-  int shared_mem_size = 2*tile_height*tile_width*sizeof(float);
+  float alpha = 1.0f, beta = 1.0f;
+  using ColumnMajor = cutlass::layout::ColumnMajor;
+  using RowMajor = cutlass::layout::RowMajor;
+
+  using CutlassGemm_dx = cutlass::gemm::device::Gemm<float,
+                                                  RowMajor,
+                                                  float,
+                                                  RowMajor,
+                                                  float,
+                                                  RowMajor>;
+
+  CutlassGemm_dx gemm_operator_dx;
+
+  CutlassGemm_dx::Arguments args({B, C, OC},
+                              {dout, OC},
+                              {weight, C},
+                              {dinp, C},
+                              {dinp, C},
+                              {alpha, beta});
+                              
+  gemm_operator_dx(main_stream->stream);
+  gemm_operator_dx(args);
 
 
-  mult_backwarddx<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, dinp, dout, B*C, OC*C, B, C, OC, B*OC);
+
+
+  using ColumnMajor = cutlass::layout::ColumnMajor;
+  using RowMajor = cutlass::layout::RowMajor;
+
+  using CutlassGemm_dw = cutlass::gemm::device::Gemm<float,
+                                                  ColumnMajor,
+                                                  float,
+                                                  RowMajor,
+                                                  float,
+                                                  RowMajor>;
+
+  CutlassGemm_dw gemm_operator_dw;
+
+  CutlassGemm_dw::Arguments args_dw({OC, C, B},
+                              {dout, OC},
+                              {inp, C},
+                              {dw, C},
+                              {dw, C},
+                              {alpha, beta});
+                              
+  gemm_operator_dw(main_stream->stream);
+  gemm_operator_dw(args_dw);
   */
   
-
-
-
-  /*
-  tile_height = 16;
-  tile_width = 16;
-  dim3 block_size2(tile_height, tile_width);
-  dim3 grid_size2(std::ceil(OC/float(tile_height)), std::ceil(C/(float)tile_width));
-  shared_mem_size = 2*tile_height*tile_width*sizeof(float);
-
-  mult_backwarddw<<<grid_size2, block_size2, shared_mem_size, main_stream->stream>>>(inp, dw, dout, B, C, OC);
-  */
+  
   
 
-
-  
-
-  
-  float one = 1.0f, zero = 0.0f;
   // backward to input
   
-  /*
+  
+  
+  float one = 1.0f, zero = 0.0f;
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
                              weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
                              dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));                         
   
   
-
+  
   // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
                              inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
                              dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-  */
   
 
   //PrintTensorF(dw,7,7);
@@ -9030,30 +9249,58 @@ void matmul_backward(float *inp,  float *weight,
 
 
 void matmul_forward2(float* out,
-                     const float* inp, const float* weight,
+                     float* inp, float* weight,
                      int B, int C, int OC) {
     
     
     
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
-    
-    //std::cout << "matmul_forward. B: " << B << " C: " << C << " OC: " << OC << "\n";
-    
+  const float alpha = 1.0f;
+  const float beta = 0.0f;
+  
+  //std::cout << "matmul_forward. B: " << B << " C: " << C << " OC: " << OC << "\n";
+  
 
 
-    //cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp, C, &beta, out, OC));
+  cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp, C, &beta, out, OC));
 
 
 
-    
-    int tile_size = 27;
-    
-    dim3 block_size(tile_size, tile_size);
-    dim3 grid_size(std::ceil(OC/float(tile_size)), std::ceil(B/(float)tile_size));
-    int shared_mem_size = 2*tile_size*tile_size*sizeof(float);
+  /*
+  int tile_size = 27;
+  
+  dim3 block_size(tile_size, tile_size);
+  dim3 grid_size(std::ceil(OC/float(tile_size)), std::ceil(B/(float)tile_size));
+  int shared_mem_size = 2*tile_size*tile_size*sizeof(float);
 
-    mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, tile_size*tile_size, B, C, OC);
+  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, tile_size*tile_size, B, C, OC);
+  */
+  
+
+  /*
+
+  using ColumnMajor = cutlass::layout::ColumnMajor;
+  using RowMajor = cutlass::layout::RowMajor;
+
+  using CutlassGemm = cutlass::gemm::device::Gemm<float,
+                                                  RowMajor,
+                                                  float,
+                                                  ColumnMajor,
+                                                  float,
+                                                  RowMajor>;
+
+  CutlassGemm gemm_operator;
+
+  CutlassGemm::Arguments args({B, OC, C},
+                              {inp, C},
+                              {weight, C},
+                              {out, OC},
+                              {out, OC},
+                              {alpha, beta});
+                              
+  gemm_operator(main_stream->stream);
+  gemm_operator(args);
+  */
+  
     
 
 
@@ -9454,22 +9701,6 @@ extern "C" void *CudaDiv(int is_forward_func,
 
 
 float eps = 1e-8;
-
-// warp-level reduction for finding the maximum value
-__device__ float warpReduceMax(float val) {
-    for (int offset = 16; offset > 0; offset /= 2) {
-        val = fmaxf(val, __shfl_down_sync(0xFFFFFFFF, val, offset));
-    }
-    return val;
-}
-
-// warp-level reduction for summing values
-__device__ float warpReduceSum(float val) {
-    for (int offset = 16; offset > 0; offset /= 2) {
-        val += __shfl_down_sync(0xFFFFFFFF, val, offset);
-    }
-    return val;
-}
 
 
 // Parallelizes over B, C
@@ -10961,6 +11192,14 @@ void relu_backward(float* inp, float dims_prod, float* dinp, float* dout) {
   
 }
 
+// warp-level reduction for finding the maximum value
+__inline__ __device__ float warpReduceMax(float val) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        val = fmaxf(val, __shfl_down_sync(0xFFFFFFFF, val, offset));
+    }
+    return val;
+}
+
 
 __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int C) {
     // out is (N, C) just like inp. Each row of inp will get softmaxed.
@@ -11002,6 +11241,7 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
     // now the 0th thread reduces the maxvals in shared memory, i.e. across warps
     if (tid == 0) {
         float val = maxvals[tid];
+      #pragma unroll
         for (int i = 1; i < warpsPerBlock; i++) {
             val = fmaxf(val, maxvals[i]);
         }
@@ -11013,19 +11253,21 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
     float offset = maxvals[0];
 
     // compute expf and write the result to global memory
-    for (int i = tid; i < C; i += blockDim.x) {
+  #pragma unroll
+    for (int i = tid; i < C; i += blockDim.x)
         out[idx * C + i] = expf(x[i] - offset);
-    }
 
     // okay now we calculated exp(x - max(x))
     // step 2: sum all the values and divide by the sum
 
     // thread coarsening for sum
+    // out[idx, :]
     x = out + idx * C;
     float sumval = 0.0f;
-    for (int i = tid; i < C; i += blockDim.x) {
+  #pragma unroll
+    for (int i = tid; i < C; i += blockDim.x)
         sumval += x[i];
-    }
+    
     // within-warp reduction for sumval
     sumval = warpReduceSum(sumval);
 
@@ -11036,9 +11278,10 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
     // inter-thread reduction of sum
     if (tid == 0) {
         float val = sumvals[tid];
-        for (int i = 1; i < warpsPerBlock; ++i) {
+      #pragma unroll
+        for (int i = 1; i < warpsPerBlock; ++i)
             val += sumvals[i];
-        }
+        
         sumvals[0] = val;
     }
     __syncthreads();
@@ -11046,6 +11289,7 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
     float sum = sumvals[0];
 
     // divide the whole row by the sum
+  #pragma unroll
     for (int i = tid; i < C; i += blockDim.x) {
         out[idx * C + i] = x[i] / sum;
     }
