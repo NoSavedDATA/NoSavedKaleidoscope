@@ -8648,6 +8648,125 @@ extern "C" float floorE(float v) {
 
 
 
+__global__ void mult_kernel2(const float *x, const float *w,
+                      float *out, const int tile_offset, const int B, const int C, const int OC) {
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  int tid = ty*blockDim.x + tx;
+  int warpId = tid / 32; // warp index within a block //starred
+  int laneId = tid % 32; // thread index within a warp
+
+  
+  const int tile_size = 16;
+
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
+
+  int warpsPerBlock = (tile_size*tile_size) / 32;
+
+  int offset = tile_offset;
+
+  float y = 0.0f;
+
+
+  extern __shared__ float smem[];
+
+
+  float x_ij, w_ij;
+  
+  //Type 1
+/*
+#pragma unroll
+  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
+  {
+    // each tile has a subset of columns to work with
+    // tile_tid tells which exact column to use from the subset
+    // assume w is transposed already
+
+    int _col  = i * tile_size + tx;
+    int _col2 = i * tile_size + ty;
+    
+    if(row<B && _col<C)
+      x_ij = x[row*C + _col];
+    else
+      x_ij = 0;
+    
+    if (col<OC && _col2<C)
+      w_ij = w[col*C + _col2];
+    else
+      w_ij = 0;
+    
+    __syncthreads();
+
+#pragma unroll
+    for(int j=0; j<tile_size; ++j)
+    {
+      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
+    }
+    
+    __syncthreads();
+    
+  }
+
+  if(row<B && col<OC)
+    out[row*OC+col] = y;
+*/
+
+
+
+  float tmp=0.0f;
+  float all_res=0.0f;
+  float res, ret;
+  // consider row as C and col as OC
+    
+  for (int i=0; i<ceilf(C/(float)(tile_size*tile_size)); ++i)
+  {
+    if (((i*warpsPerBlock+warpId)*32+laneId)<C)
+    {
+      x_ij = w[row*C + (i*warpsPerBlock+warpId)*32+laneId]; 
+      w_ij = w[col*C + (i*warpsPerBlock+warpId)*32+laneId];
+    } else {
+      x_ij=0;
+      w_ij=0;
+    }
+    res = x_ij*w_ij;
+    //ret = warpReduceMultSum(res); ///
+    if (laneId==0)
+      tmp+=ret;
+    
+    __syncthreads();
+  }
+    
+  //if(laneId==0)
+  if(row<B && col<OC &&laneId==0)
+    out[row*OC+col] = tmp;
+
+
+
+
+  // Type 3
+  /*
+  float tmp=0.0f;
+  // consider row as C and col as OC
+  if (row<B&&col<OC)
+  {
+    
+    for (int i=0; i<C; ++i)
+    {
+      tmp += x[row*C + i] * w[col*C + i];
+    }
+    out[row * OC + col] = tmp;
+  }
+  */
+  
+  
+
+}
+
+
 
 
 __global__ void mult_backward_fused(const float *x, const float *w,
@@ -8849,8 +8968,8 @@ __global__ void mult_backwarddx(const float *w,
                       float *dx, const float *dy, const int tile_offset,
                       const int B, const int C, const int OC) {
 
-  int row = blockIdx.y * blockDim.y + threadIdx.y; // max(B, C)
-  int col = blockIdx.x * blockDim.x + threadIdx.x; // max(OC, C)
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // B
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // C
   int tx = threadIdx.x;
   int ty = threadIdx.y;
 
@@ -8858,8 +8977,7 @@ __global__ void mult_backwarddx(const float *w,
   float sum = 0.0f;
 
   
-  const int tile_height = 16;
-  const int tile_width = 16;
+  const int tile_size = 16;
 
 
 
@@ -8875,26 +8993,26 @@ __global__ void mult_backwarddx(const float *w,
   // consider row as B and col as C
   __syncthreads();
   
-  for (int i=0; i<ceilf(OC/(float)tile_width); ++i)
+  for (int i=0; i<ceilf(OC/(float)tile_size); ++i)
   {
-    int _col = i*tile_width + tx;
-    int _row = i*tile_width + ty;
+    int _col = i*tile_size + tx;
+    int _row = i*tile_size + ty;
 
     if( row<B  && _col<OC)
-      smem[tx*tile_width +ty] = dy[row*OC + _col];
+      smem[tx*tile_size +ty] = dy[row*OC + _col];
     else
-      smem[tx*tile_width +ty] = 0;
+      smem[tx*tile_size +ty] = 0;
 
     if(_row<OC &&  col<C)
-      smem[offset+ty*tile_width +tx] = w[_row*C + col];
+      smem[offset+ty*tile_size +tx] = w[_row*C + col];
     else
-      smem[offset+ty*tile_width +tx] = 0;
+      smem[offset+ty*tile_size +tx] = 0;
     
     __syncthreads();
     
 
-    for(int j=0; j<tile_height; ++j)
-      tmp += smem[j*tile_width +ty] * smem[offset+j*tile_width +tx];
+    for(int j=0; j<tile_size; ++j)
+      tmp += smem[j*tile_size +ty] * smem[offset+j*tile_size +tx];
     
     __syncthreads();
   }
@@ -8922,7 +9040,7 @@ __global__ void mult_backwarddw(const float *x,
 
   
   // backward type 1
-  const int tile_size = 27;
+  const int tile_size = 16;
 
 
   extern __shared__ char _smem[];
@@ -8999,7 +9117,7 @@ __global__ void mult_kernel(const float *x, const float *w,
   int y_block = blockIdx.y;
 
   
-  const int tile_size = 27;
+  const int tile_size = 16;
 
   int row = y_block*tile_size + ty;
   int col = x_block*tile_size + tx;
@@ -9053,79 +9171,6 @@ __global__ void mult_kernel(const float *x, const float *w,
 
 
 
-// warp-level reduction for summing values
-__inline__ __device__ float warpReduceSum(float val) {
-    for (int offset = 16; offset > 0; offset /= 2) {
-        val += __shfl_down_sync(0xFFFFFFFF, val, offset);
-    }
-    return val;
-}
-
-
-__global__ void mult_kernel2(const float *x, const float *w,
-                      float *out, const int tile_offset, const int B, const int C, const int OC) {
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-
-  int tid = ty*blockDim.x + tx;
-  int warpId = tid / 32; // warp index within a block //starred
-  int laneId = tid % 32; // thread index within a warp
-
-  
-  const int tile_size = 27;
-
-  int row = y_block*tile_size + ty;
-  int col = x_block*tile_size + tx;
-
-
-
-  int offset = tile_offset;
-
-  float y = 0.0f;
-
-
-  extern __shared__ float smem[];
-
-
-  float x_ij, w_ij;
-  
-#pragma unroll
-  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
-  {
-    // each tile has a subset of columns to work with
-    // tile_tid tells which exact column to use from the subset
-    // assume w is transposed already
-
-    int _col  = i * tile_size + tx;
-    int _col2 = i * tile_size + ty;
-    
-    if(row<B && _col<C)
-      x_ij = x[row*C + _col];
-    else
-      x_ij = 0;
-    
-    if (col<OC && _col2<C)
-      w_ij = w[col*C + _col2];
-    else
-      w_ij = 0;
-    
-    __syncthreads();
-
-#pragma unroll
-    for(int j=0; j<tile_size; ++j)
-    {
-      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
-    }
-    
-    __syncthreads();
-    
-  }
-
-  if(row<B && col<OC)
-    out[row*OC+col] = y;
-}
 
 
 
@@ -9154,11 +9199,10 @@ void matmul_backward(float *inp,  float *weight,
   
 
   /*
-  //cudaStream_t dx_stream;
-  //cudaStreamCreate(&dx_stream);
-  
+  cudaStream_t dx_stream;
+  cudaStreamCreate(&dx_stream);
   int tile_size, tile_size_sq;
-  tile_size = 27;
+  tile_size = 16;
   tile_size_sq = tile_size*tile_size;
   dim3 block_size(tile_size, tile_size);
   dim3 grid_size(std::ceil(C/float(tile_size)), std::ceil(B/(float)tile_size));
@@ -9167,10 +9211,11 @@ void matmul_backward(float *inp,  float *weight,
   mult_backwarddx<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(weight, dinp, dout, tile_size_sq, B, C, OC);
   
   dim3 grid_size2(std::ceil(OC*C)/(float)tile_size);
-  mult_backwarddw<<<grid_size2, block_size, shared_mem_size, main_stream->stream>>>(inp, dw, dout, tile_size_sq, B, C, OC);
-  //cudaStreamSynchronize(dx_stream);
-  //cudaStreamDestroy(dx_stream);
+  //mult_backwarddw<<<grid_size2, block_size, shared_mem_size, main_stream->stream>>>(inp, dw, dout, tile_size_sq, B, C, OC);
+  cudaStreamSynchronize(dx_stream);
+  cudaStreamDestroy(dx_stream);
   */
+  
 
 
   /*
@@ -9231,9 +9276,11 @@ void matmul_backward(float *inp,  float *weight,
   
   
   float one = 1.0f, zero = 0.0f;
+  
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
                              weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
                              dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));                         
+  
   
   
   
@@ -9241,7 +9288,6 @@ void matmul_backward(float *inp,  float *weight,
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
                              inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
                              dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-  
 
   //PrintTensorF(dw,7,7);
 
@@ -9265,15 +9311,15 @@ void matmul_forward2(float* out,
 
 
 
-  /*
-  int tile_size = 27;
+  
+  int tile_size = 16;
   
   dim3 block_size(tile_size, tile_size);
   dim3 grid_size(std::ceil(OC/float(tile_size)), std::ceil(B/(float)tile_size));
   int shared_mem_size = 2*tile_size*tile_size*sizeof(float);
 
-  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, tile_size*tile_size, B, C, OC);
-  */
+  //mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, tile_size*tile_size, B, C, OC);
+  
   
 
   /*
@@ -9305,13 +9351,13 @@ void matmul_forward2(float* out,
 
 
 
-    /* //bias
-    if (bias != NULL) {
-        int block_size = sqrt_block_size * sqrt_block_size;
-        int grid_size = ceil_div(OC * B * T, block_size);
-        add_bias<<<grid_size, block_size>>>(out, bias, B, T, OC);
-    }
-    */
+  /* //bias
+  if (bias != NULL) {
+      int block_size = sqrt_block_size * sqrt_block_size;
+      int grid_size = ceil_div(OC * B * T, block_size);
+      add_bias<<<grid_size, block_size>>>(out, bias, B, T, OC);
+  }
+  */
 
 }
 
@@ -11199,6 +11245,15 @@ __inline__ __device__ float warpReduceMax(float val) {
     }
     return val;
 }
+
+// warp-level reduction for summing values
+__inline__ __device__ float warpReduceSum(float val) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        val += __shfl_down_sync(0xFFFFFFFF, val, offset);
+    }
+    return val;
+}
+
 
 
 __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int C) {
