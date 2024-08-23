@@ -3458,7 +3458,6 @@ extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float
   std::vector<float> batchless_dims = BatchLessDims(seqless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
-  float *image_data_float = tensor->cpu_tensor_ptr;
   int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
 
 
@@ -3543,14 +3542,16 @@ extern "C" float wtokenize_pad_left(Tensor *tensor, char *filename, float trunc_
   std::vector<float> batchless_dims = BatchLessDims(seqless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
-  float *image_data_float = tensor->cpu_tensor_ptr;
   int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
 
 
-  //TODO: add pad and left
 
   int *indices  = new int[trunc_to];
   int *padded_indices  = new int[trunc_to];
+
+  //for (int i=0; i<tensor->dims_prod; i++)
+  //  tensor->cpu_tensor_ptr[i] = 0.0f;
+
   for (int i = 0; i < trunc_to; i++)
     padded_indices[i] = PAD_TOK;
 
@@ -3610,8 +3611,10 @@ extern "C" float wtokenize_pad_left(Tensor *tensor, char *filename, float trunc_
     std::cout << padded_indices[i] << ", ";
   std::cout << "]" << "\n\n";  
   */
+  
 
-  delete[] indices, padded_indices;
+  delete[] indices;
+  delete[] padded_indices;
 
   return 0;
 }
@@ -5452,7 +5455,25 @@ extern "C" float silent_sleep(float id)
 }
 
 
+std::chrono::high_resolution_clock::time_point START_TIME;
 
+extern "C" float start_timer(float id)
+{
+  START_TIME = std::chrono::high_resolution_clock::now();
+ 
+  return 0;
+}
+
+extern "C" float end_timer(float id)
+{
+  std::chrono::high_resolution_clock::time_point endTime = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsedTime = endTime - START_TIME;
+
+  // Print the elapsed time in seconds
+  std::cout << "Elapsed time: " << elapsedTime.count() << " seconds.\n";
+
+  return 0;
+}
 
 
 
@@ -12499,6 +12520,10 @@ void Conv2d::InitFilters()
 
     if (Init=="xavu_relu")
       filter = make_xavier_uniform_float_relu(ks*ks, ks*ks*C, ks*ks*OC);
+    if (Init == "xavu_tanh")
+      filter = make_xavier_uniform_float_tanh(ks*ks, ks*ks*C, ks*ks*OC);
+    if (Init == "init_gpt")
+      filter = make_gpt_init(ks*ks);
     if (Init=="xavu")
       filter = make_xavier_uniform_float(ks*ks, ks*ks*C, ks*ks*OC);
     if (Init=="zeros")
@@ -13281,8 +13306,8 @@ __global__ void hadamard_backward_kernel(const float *x, const float *w,
 
     if (i < dims_prod)
     {
-      dx[i] = x[i] * dy[i];
-      dw[i] = w[i] * dy[i];
+      dx[i] = w[i] * dy[i];
+      dw[i] = x[i] * dy[i];
     }
 }
 
@@ -13370,7 +13395,7 @@ void dropout_backward(float *dx, float *mask, float *dy, float dims_prod)
 // Parallelizes over B, C
 __global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
                            const float* probs, const float* targets,
-                           int B, int C) {
+                           int B, int C, float scale) {
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     //int i = threadIdx.x;
@@ -13390,7 +13415,7 @@ __global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
         //float indicator = (v==ix) ? 1.0f : 0.0f;
         float indicator = ix;
 
-        dlogits_b[v] += (p - indicator) / B;
+        dlogits_b[v] += (p - indicator) * scale;
         
     }
 }
@@ -13399,7 +13424,8 @@ __global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
 void CrossEntropyBackward(float *y_hat,
                           float *y,
                           int B, int C, 
-                          float *dloss)
+                          float *dloss,
+                          float scale)
 {
   
   int grid_size = B;
@@ -13425,7 +13451,7 @@ void CrossEntropyBackward(float *y_hat,
   block_size = grid_block_mem_sizes[1];
 
   
-  crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C);
+  crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C, scale);
   move_to_pool(B*C, probs,"ce probs");
 
   
@@ -13433,13 +13459,15 @@ void CrossEntropyBackward(float *y_hat,
 
 
 
-extern "C" float cross_entropy(Tensor *y_hat, Tensor *y)
+extern "C" float cross_entropy(Tensor *y_hat, Tensor *y, float scale)
 {
   
   Tensor *loss_tensor = new Tensor();
 
 
   loss_tensor->AttrNodes(y_hat, y, cross_entropy_op);
+  loss_tensor->scalar = scale;
+
 
   todo_backward_tensors.push_back(loss_tensor);
 
@@ -13694,7 +13722,6 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         }
       } else {
       
-        //device_dw = get_from_pool(w_size, "dw"); //lock pool even if dx is not used.
         if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op && !from_custom)
         {
           //std::cout << "ulululu of op " << std::to_string(op) << "\n";
@@ -13798,7 +13825,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
 
       // Loss Ops
       case cross_entropy_op:
-        CrossEntropyBackward(inp, w, B, C, device_dx);
+        CrossEntropyBackward(inp, w, B, C, device_dx, back_node->scalar);
         break;
 
       default:
@@ -15592,6 +15619,129 @@ extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
 
 
 
+
+extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight)
+{
+  //std::cout << "CREATING TENSOR " << tensor_name << "\n";
+
+  Tensor *tensor;
+
+  std::vector<float> dims = NamedDims[tensor_name];
+  NamedDims[tensor_name].clear(); //TODO: Global vars are bad with threads.
+
+  int product = DimsProd(dims);
+
+  float *tensor_ptr;
+  float *tensor_cpu;
+
+  if(product>0)
+  {
+    if (std::strcmp(init, "randu") == 0)
+      tensor_cpu = make_random_float_uniform(product);
+    if (std::strcmp(init, "zeros") == 0)
+      tensor_cpu = make_zeros_float(product);
+    if (std::strcmp(init, "ones") == 0)
+      tensor_cpu = make_ones_float(product);
+    if (std::strcmp(init, "xavu") == 0)
+      tensor_cpu = make_xavier_uniform_float(product, dims[dims.size()-1], dims[dims.size()-2]);
+    if (std::strcmp(init, "xavu_relu") == 0)
+      tensor_cpu = make_xavier_uniform_float_relu(product, dims[dims.size()-1], dims[dims.size()-2]);
+    if (std::strcmp(init, "xavu_tanh") == 0)
+      tensor_cpu = make_xavier_uniform_float_tanh(product, dims[dims.size()-1], dims[dims.size()-2]);
+    if (std::strcmp(init, "init_gpt") == 0)
+      tensor_cpu = make_gpt_init(product);
+    if (std::strcmp(init, "int") == 0)
+      tensor_cpu = make_random_int(product, 10);
+    if (std::strcmp(init, "binary") == 0)
+      tensor_cpu = make_random_int(product, 1);
+
+    cudaCheck(cudaGetLastError());
+    tensor_ptr = get_from_pool(product,"create tensor");
+    //std::cout << "cpy of: " << tensor_name << "\n";
+    cudaCheck(cudaMemcpy(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
+    delete[] tensor_cpu;
+  }
+
+
+  
+  /*
+  if(NamedTensorsT.count(tensor_name)>0)
+  {
+    tensor = NamedTensorsT[tensor_name];
+    if (tensor!=nullptr)
+    
+      delete tensor;
+      //cudaCheck(cudaFree(aux_ptr));
+  }
+  
+  */
+
+
+  tensor = createTensor(tensor_ptr, dims, product, true, tensor_name);
+  tensor->scopeless_name = scopeless_name;
+  if((bool)is_weight)
+    tensor->SetIsWeight();
+  tensor->op = create_tensor_op;
+
+  
+  NamedTensorsT[tensor_name] = tensor;
+  delete[] tensor_name;
+  delete[] scopeless_name;
+
+
+  return 0;
+}
+
+
+Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    
+    Value *var_name, *scopeless_name, *init;
+    
+    init = Builder->CreateGlobalString(TensorInit);
+    var_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {Builder->CreateGlobalString(VarName)});
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
+                                            {first_arg, var_name});
+    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                            {var_name});
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
+                                            {scope_str, var_name});
+
+    Value *aux;
+    for (int j=0; j<V_Dims.size(); j++)
+    {
+      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
+      Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
+                                                  {var_name, aux});
+    }
+
+    Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
+                                              {var_name, scopeless_name, init,
+                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight)});
+  }
+
+
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
 extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
 {
   std::vector<float> dims = NamedDims[tensor_name];
@@ -15625,129 +15775,6 @@ extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
   move_to_pool(pool_product, pool_tensor, "create pinned");
   
 }
-
-extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight)
-{
-  //std::cout << "CREATING TENSOR " << tensor_name << "\n";
-
-  Tensor *tensor;
-
-  std::vector<float> dims = NamedDims[tensor_name];
-  NamedDims[tensor_name].clear(); //TODO: Global vars are bad with threads.
-
-  int product = DimsProd(dims);
-
-  float *tensor_ptr;
-  float *tensor_cpu;
-
-  if(product>0)
-  {
-    if (std::strcmp(init, "randu") == 0)
-      tensor_cpu = make_random_float_uniform(product);
-    else if (std::strcmp(init, "zeros") == 0)
-      tensor_cpu = make_zeros_float(product);
-    else if (std::strcmp(init, "ones") == 0)
-      tensor_cpu = make_ones_float(product);
-    else if (std::strcmp(init, "xavu") == 0)
-      tensor_cpu = make_xavier_uniform_float(product, dims[dims.size()-1], dims[dims.size()-2]);
-    else if (std::strcmp(init, "xavu_relu") == 0)
-      tensor_cpu = make_xavier_uniform_float_relu(product, dims[dims.size()-1], dims[dims.size()-2]);
-    else if (std::strcmp(init, "int") == 0)
-      tensor_cpu = make_random_int(product, 10);
-    else if (std::strcmp(init, "binary") == 0)
-      tensor_cpu = make_random_int(product, 1);
-
-    cudaCheck(cudaGetLastError());
-    tensor_ptr = get_from_pool(product,"create tensor");
-    //std::cout << "cpy of: " << tensor_name << "\n";
-    cudaCheck(cudaMemcpy(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
-    delete[] tensor_cpu;
-  }
-
-
-  
-  /*
-  if(NamedTensorsT.count(tensor_name)>0)
-  {
-    tensor = NamedTensorsT[tensor_name];
-    if (tensor!=nullptr)
-      delete tensor;
-  }
-
-  
-  if (NamedTensorsT.count(tensor_name) > 0)
-  {
-    float *aux_ptr = NamedTensorsT[tensor_name].tensor_ptr;
-    if (aux_ptr!=nullptr)
-      cudaCheck(cudaFree(aux_ptr));
-  }
-  */
-
-
-  tensor = createTensor(tensor_ptr, dims, product, true, tensor_name);
-  tensor->scopeless_name = scopeless_name;
-  if((bool)is_weight)
-    tensor->SetIsWeight();
-  tensor->op = create_tensor_op;
-
-  
-  NamedTensorsT[tensor_name] = tensor;
-  delete[] tensor_name, scopeless_name;
-
-
-  return 0;
-}
-
-
-Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    
-    Value *var_name, *scopeless_name;
-    //var_name = Builder->CreateGlobalString(VarName);
-
-    var_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {Builder->CreateGlobalString(VarName)});
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
-                                            {first_arg, var_name});
-    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {var_name});
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
-                                            {scope_str, var_name});
-
-    Value *aux;
-    for (int j=0; j<V_Dims.size(); j++)
-    {
-      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
-      Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
-                                                  {var_name, aux});
-    }
-
-    Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
-                                              {var_name, scopeless_name, Builder->CreateGlobalString(TensorInit),
-                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight)});
-  }
-
-
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
 
 Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
@@ -16414,7 +16441,9 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
   // Convert the retained token to a std::string
   char *result = splits[idx];
 
-  delete[] name, pattern, input;
+  delete[] name;
+  //delete[] pattern;
+  delete[] input;
   return result;
 }
 
@@ -17450,7 +17479,7 @@ static void InitializeModule() {
   //
   FunctionType *cross_entropyTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo(), Type::getInt8Ty(*TheContext)->getPointerTo()}, 
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("cross_entropy", cross_entropyTy);
@@ -17462,8 +17491,8 @@ static void InitializeModule() {
   
   //
   FunctionType *load_imgTy = FunctionType::get(
-      PointerType::get(Type::getFloatTy(*TheContext), 0),
-      {PointerType::get(Type::getInt8Ty(*TheContext), 0)},
+      floatPtrTy,
+      {int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("load_img", load_imgTy);
@@ -17564,6 +17593,24 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("silent_sleep", silent_sleepTy);
+
+
+  //  
+  FunctionType *start_timerTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("start_timer", start_timerTy);
+
+
+  //  
+  FunctionType *end_timerTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("end_timer", end_timerTy);
   
 
 
@@ -18670,7 +18717,7 @@ int main() {
   //native_methods = concat_str_vec(native_methods, return_pinned_methods);
 
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
-                      "LenStrVec", "zeros_vec", "ones_vec",
+                      "LenStrVec", "zeros_vec", "ones_vec", "start_timer", "end_timer",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
@@ -18680,7 +18727,7 @@ int main() {
   native_fn = concat_str_vec(native_methods, native_functions);
 
 
-  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavn"};
+  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "init_gpt", "xavn"};
 
 
   // Prime the first token.
