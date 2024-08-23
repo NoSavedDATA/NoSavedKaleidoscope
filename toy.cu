@@ -5324,6 +5324,7 @@ static std::map<std::string, float> NamedClassValues;
 static std::map<std::string, std::string> NamedObjects;
 
 static std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
+static std::map<std::string, char *> ScopeNamesToClean;
 
 
 // Aux to not lose pointers
@@ -7067,10 +7068,10 @@ std::map<size_t, std::vector<char *>> CharPool;
 
 void move_to_char_pool(size_t length, char *char_ptr, std::string from)
 {
-  if (length==0)
-    return;
   delete[] char_ptr;
   return;
+  if (length==0)
+    return;
   //std::cout << "\nmove_to_pool from: " << from << "\n";
   
 
@@ -7311,8 +7312,10 @@ extern "C" void CleanScopeVars(char *scope)
 
   std::vector<std::pair<std::string, std::string>> scope_vars = ScopeVarsToClean[scope];
 
-  for(auto &pair : scope_vars)
+  for (auto _it = ScopeVarsToClean[scope].begin(); _it != ScopeVarsToClean[scope].end(); )
   {
+    auto &pair = *_it;
+    /*
     if (pair.second=="str")
     {
       auto it = NamedStrs.find(pair.first);
@@ -7321,10 +7324,27 @@ extern "C" void CleanScopeVars(char *scope)
         NamedStrs.erase(it);
       }
     }
+    */
+    
+    
+    if (pair.second=="float")
+    {
+      //std::cout << "ERASING " << pair.first << ".\n";
+      auto it = NamedClassValues.find(pair.first);
+      if (it != NamedClassValues.end()) {
+        
+        NamedClassValues.erase(it);
+        //std::cout << "ERASED" <<  "\n";
+      }
+    }  
+    
+    _it = ScopeVarsToClean[scope].erase(_it);
   }
   
+  ScopeVarsToClean[scope].clear();
+
   pthread_mutex_unlock(&clean_scope_mutex);
-  //delete[] scope;
+  
 }
 
 
@@ -7336,20 +7356,34 @@ extern "C" char * RandomStrOnDemand()
 
 extern "C" void StoreOnDemandNoFree(char *name, float value){
   
+  pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = value;
+  pthread_mutex_unlock(&clean_scope_mutex);
 }
 
 
-extern "C" void StoreArgOnDemand(char *name, float value){
+extern "C" void StoreArgOnDemand(char *scope, char *name, float value){
   //std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
+  
+  pthread_mutex_lock(&clean_scope_mutex);
+  
   NamedClassValues[name] = value;
+
+  std::string _name = name;
+  
+  ScopeVarsToClean[scope].push_back(std::make_pair(_name, "float"));
+  pthread_mutex_unlock(&clean_scope_mutex);
+
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
+
+
 }
 
-extern "C" float StoreStrOnDemand(char *name, char * value){
+extern "C" float StoreStrOnDemand(char *name, char *value){
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
+  
   NamedStrs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
@@ -7359,6 +7393,7 @@ extern "C" float StoreStrOnDemand(char *name, char * value){
 extern "C" void *LoadStrOnDemand(char *name){
   
   //char *ret = CopyString(NamedStrs[name]);
+  
   char *ret = NamedStrs[name];
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
@@ -7398,7 +7433,9 @@ extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
 
 extern "C" void StoreOnDemand(char *name, float value){
   
+  pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = value;
+  pthread_mutex_unlock(&clean_scope_mutex);
   move_to_char_pool(strlen(name)+1, name, "StoreOnDemand");
   //delete[] name;
 }
@@ -7406,6 +7443,7 @@ extern "C" float LoadOnDemand(char *object_var_name) {
   //std::cout << "Load on demand for: " << object_var_name << "\n";
   //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n";
 
+  
   float ret = NamedClassValues[object_var_name];
   
   move_to_char_pool(strlen(object_var_name)+1, object_var_name, "free");
@@ -7480,18 +7518,15 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   // Look this variable up in the function.
 
 
-  
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
-  std::string functionName = TheFunction->getName().str();
+  //std::string functionName = TheFunction->getName().str();
   
+
   //std::cout << "Create value V" << "\n";
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *V;
+  Value *V, *var_name;
 
-
-  Value *var_name, *object_name, *object_var_name;
-  
 
 
   /*
@@ -7526,7 +7561,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     if (type=="float")
     {
         V = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"), {var_name});
-        //V = Builder->CreateCall(TheModule->getFunction("UnbugFloat"), {V}, "unbugfloat");
+        
         return V;
       
     }
@@ -7551,7 +7586,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   if (type=="float")
   {
     
-    V = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"),{var_name});
+    V = Builder->CreateCall(TheModule->getFunction("LoadOnDemand"), {var_name});
     
 
     //if (!seen_var_attr) //TODO: Solve this bug
@@ -15673,8 +15708,9 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
       delete tensor;
       //cudaCheck(cudaFree(aux_ptr));
   }
-  
   */
+  
+  
 
 
   tensor = createTensor(tensor_ptr, dims, product, true, tensor_name);
@@ -16090,12 +16126,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
                                                     {first_arg});
       has_first_arg_copy = true;
     }
-
-    first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                                    {_pre_dot_str});
+    
                                                     
-    first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
-                {previous_scope, first_arg});
+    first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                {previous_scope, _pre_dot_str});
 
     changed_first_arg = true;
   }
@@ -16697,11 +16731,11 @@ Function *FunctionAST::codegen() {
                                     {scope_str, var_name});
 
       Builder->CreateCall(TheModule->getFunction("StoreArgOnDemand"),
-                                                  {var_name, &Arg});
+                                                  {scope_str, var_name, &Arg});
     } else if (in_str(arg_name, strVars))
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Store scope vars to clean for this too
                                     {scope_str, var_name});
 
 
@@ -16755,11 +16789,12 @@ Function *FunctionAST::codegen() {
   if(has_self)
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
 
-  //if(has_scope)
-  //  Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
-
   if(has_scope)
-    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
+  {
+    Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str}); 
+  }
+
   
   if(has_previous_scope)
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
@@ -18176,7 +18211,7 @@ FunctionType *unbugTy = FunctionType::get(
   // 
   FunctionType *StoreOnDemandTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false //
   );
   TheModule->getOrInsertFunction("StoreOnDemand", StoreOnDemandTy);
@@ -18185,7 +18220,7 @@ FunctionType *unbugTy = FunctionType::get(
   // 
   FunctionType *StoreOnDemandNoFreeTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false //
   );
   TheModule->getOrInsertFunction("StoreOnDemandNoFree", StoreOnDemandNoFreeTy);
@@ -18203,7 +18238,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *LoadOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      {int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("LoadOnDemand", LoadOnDemandTy);
@@ -18212,7 +18247,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *LoadOnDemandNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt8Ty(*TheContext)->getPointerTo()},
+      {int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("LoadOnDemandNoFree", LoadOnDemandNoFreeTy);
