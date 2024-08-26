@@ -136,7 +136,7 @@ char *RandomString(size_t length) {
   std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
 
   char *random_string = new char[length+1];
-  for (size_t i = 0; i < length+2; i++) { //TODO: does length+2 break?
+  for (size_t i = 0; i < length; i++) { //TODO: does length+2 break?
     int random_index = distribution(generator);
     random_string[i] = charset[random_index];
   }
@@ -5893,7 +5893,7 @@ extern "C" void *LoadTensor(char *tensor_name){
   return ret;
 }
 
-
+/*
 extern "C" void *LoadDims(char *tensor_name) // TODO: invert this back
 {
   std::cout << "LOADING DIMS"  << "\n";
@@ -5906,6 +5906,7 @@ extern "C" void *LoadDims(char *tensor_name) // TODO: invert this back
 
   return &NamedDims[random_str];
 }
+*/
 
 
 extern "C" float print(char* str, float x){
@@ -7070,10 +7071,12 @@ void move_to_char_pool(size_t length, char *char_ptr, std::string from)
 {
   delete[] char_ptr;
   return;
+
   if (length==0)
     return;
   //std::cout << "\nmove_to_pool from: " << from << "\n";
   
+
 
   pthread_mutex_lock(&char_pool_mutex);
   std::vector<char *> chars_in_pool = CharPool[length];
@@ -7096,10 +7099,10 @@ char *get_from_char_pool(size_t length, std::string from)
   if (length==0)
     return nullptr;
 
-
   char *char_ptr;
-  char_ptr = (char*)malloc(length);
+  char_ptr = new char[length];
   return char_ptr;
+
 
   
   pthread_mutex_lock(&char_pool_mutex);
@@ -7152,9 +7155,10 @@ extern "C" void FreeChar(char *_char) {
 
 extern "C" char *CopyString(char *in_str)
 {
-  size_t length = strlen(in_str) + 1;
-  char *copied = get_from_char_pool(length, "copy");
+  size_t length = strlen(in_str);
+  char *copied = get_from_char_pool(length+1, "copy");
   memcpy(copied, in_str, length);
+  copied[length] = '\0';
 
   return copied;
 }
@@ -7162,12 +7166,14 @@ extern "C" char *CopyString(char *in_str)
 extern "C" char * ConcatStr(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
-  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat");
+  size_t length_rc = strlen(rc);
+  char *result_cstr = get_from_char_pool(length_lc+length_rc+1, "concat");  // +1 for null terminator
+
   //char* result_cstr = new char[length_lc+length_rc]; 
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
+  result_cstr[length_lc + length_rc] = '\0';
 
   return result_cstr;
 }
@@ -7175,15 +7181,16 @@ extern "C" char * ConcatStr(char *lc, char *rc)
 extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  size_t length_rc = strlen(rc);
   //char* result_cstr = new char[length_lc+length_rc];
-  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat free left");
+  char *result_cstr = get_from_char_pool(length_lc+length_rc+1, "concat free left");  // +1 for null terminator
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
+  result_cstr[length_lc + length_rc] = '\0';
 
 
-  move_to_char_pool(length_lc+1, lc, "concat free left");
+  move_to_char_pool(length_lc+1, lc, "concat free left"); // Is +1 still necessary?
   //delete[] lc;
   
   return result_cstr;
@@ -7192,14 +7199,15 @@ extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  size_t length_rc = strlen(rc);
   //char* result_cstr = new char[length_lc+length_rc];
-  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat free right");
+  char *result_cstr = get_from_char_pool(length_lc+length_rc+1, "concat free right");  // +1 for null terminator
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
+  result_cstr[length_lc + length_rc] = '\0';
 
-  move_to_char_pool(length_rc, rc, "concat free right");
+  move_to_char_pool(length_rc+1, rc, "concat free right");
   //delete[] rc;
   
   return result_cstr;
@@ -7208,14 +7216,15 @@ extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 extern "C" char * ConcatStrFree(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
-  char* result_cstr = new char[length_lc+length_rc]; 
+  size_t length_rc = strlen(rc); // +1 for null terminator
+  char* result_cstr = new char[length_lc+length_rc+1]; 
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
+  result_cstr[length_lc + length_rc] = '\0';
 
   move_to_char_pool(length_lc+1, lc, "concat free");
-  move_to_char_pool(length_rc, rc, "concat free");
+  move_to_char_pool(length_rc+1, rc, "concat free");
   //delete[] lc, rc;
 
   return result_cstr;
@@ -7248,6 +7257,7 @@ extern "C" char * ConcatFloatToStr(char *lc, float r)
   std::string result_str = l + std::to_string(_r);
   char* result_cstr = new char[result_str.length() + 1];
   std::strcpy(result_cstr, result_str.c_str());
+  result_cstr[result_str.length()] = '\0';
 
   
   return result_cstr;
@@ -7287,6 +7297,20 @@ extern "C" char * ConcatNumToStrFree(char *lc, float r)
   return result_cstr;
 }
 
+extern "C" void AddFloatToScopeCleanList(char *scope, char *name)
+{
+  std::string _name, _scope;
+  _name = name;
+  _scope = scope;
+
+  
+  //std::cout << "will erase " << name << " from scope " << scope << "\n";
+  pthread_mutex_lock(&clean_scope_mutex);
+  ScopeVarsToClean[_scope].push_back(std::make_pair(_name, "float"));
+  pthread_mutex_unlock(&clean_scope_mutex);
+  
+}
+
 extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
 {
   
@@ -7299,14 +7323,12 @@ extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
       return;
     }
     
-
   ScopeVarsToClean[scope].push_back(std::make_pair(name, type));
   
   delete[] name;
 }
 extern "C" void CleanScopeVars(char *scope)
 {
-  //TODO: this leads to segmentation fault with 3+ workers. 
   
   pthread_mutex_lock(&clean_scope_mutex);
 
@@ -7326,17 +7348,13 @@ extern "C" void CleanScopeVars(char *scope)
     }
     */
     
-    
     if (pair.second=="float")
     {
       //std::cout << "ERASING " << pair.first << ".\n";
       auto it = NamedClassValues.find(pair.first);
-      if (it != NamedClassValues.end()) {
-        
+      if (it != NamedClassValues.end())
         NamedClassValues.erase(it);
-        //std::cout << "ERASED" <<  "\n";
-      }
-    }  
+    }
     
     _it = ScopeVarsToClean[scope].erase(_it);
   }
@@ -7440,11 +7458,10 @@ extern "C" void StoreOnDemand(char *name, float value){
   //delete[] name;
 }
 extern "C" float LoadOnDemand(char *object_var_name) {
-  //std::cout << "Load on demand for: " << object_var_name << "\n";
-  //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n";
-
   
+  pthread_mutex_lock(&clean_scope_mutex);
   float ret = NamedClassValues[object_var_name];
+  pthread_mutex_unlock(&clean_scope_mutex);
   
   move_to_char_pool(strlen(object_var_name)+1, object_var_name, "free");
   //delete[] object_var_name;
@@ -7452,10 +7469,10 @@ extern "C" float LoadOnDemand(char *object_var_name) {
 }
 
 extern "C" float LoadOnDemandNoFree(char *object_var_name) {
-  //std::cout << "Load on demand for: " << object_var_name << "\n";
-  //std::cout << "Value: " << NamedClassValues[object_var_name] << "\n";
-
+  
+  pthread_mutex_lock(&clean_scope_mutex);
   float ret = NamedClassValues[object_var_name];
+  pthread_mutex_unlock(&clean_scope_mutex);
   
   return ret;
 }
@@ -8075,6 +8092,8 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   if(nn_mode==eval_mode)//
     to_free_tensor_forward(scope_tensor, scope);//
+  else
+    to_free_tensor(scope_tensor);
   //delete scope_tensor;
   NamedTensorsT.erase(scope_tensor_name);
 
@@ -13923,8 +13942,9 @@ extern "C" float backprop()
     Tensor *back_node = todo_backward_tensors.back();
     todo_backward_tensors.pop_back();
 
+    to_free_tensor(back_node);
+
     op = back_node->op;
-    
     
     if (op==attribution)
     {
@@ -15355,7 +15375,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-// Create Var
+// Create Float Var
 Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -15385,11 +15405,16 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
 
     Value *var_name = Builder->CreateGlobalString(VarName);
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+    var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                        {scope_str, var_name});
+
+
+    Builder->CreateCall(TheModule->getFunction("AddFloatToScopeCleanList"),
                                         {scope_str, var_name});
 
     Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {var_name, InitVal});
+                                        {var_name, InitVal});
+                                                  
     
   }
 
@@ -15450,12 +15475,13 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
                                             {scope_str, var_name});
     
 
-    
+    /*
     Builder->CreateCall(TheModule->getFunction("AddToScopeCleanList"),
                         {scope_str,
                          Builder->CreateCall(TheModule->getFunction("CopyString"), {var_name}),
                          Builder->CreateGlobalString("str") //stack?
                         });
+    */    
 
                         
     Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
@@ -16108,7 +16134,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
 
 
-  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                         {scope_str});
 
@@ -16127,7 +16152,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       has_first_arg_copy = true;
     }
     
-                                                    
+    
     first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                 {previous_scope, _pre_dot_str});
 
@@ -16190,7 +16215,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     
       if (isSelf&&!isAttribute)
         ArgsV.push_back(first_arg);
-      if (!isSelf&&isAttribute)
+      if (!isSelf&&isAttribute) // e.g: x.view()
       {
         Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                         {previous_scope, _pre_dot_str});
@@ -16198,8 +16223,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
         //must_free_arg0 = true; //TODO: break?
       }
       
-      if (isSelf && isAttribute)
-      { // e.g: self.can_load_.first_nonzero()
+      if (isSelf && isAttribute) // e.g: self.can_load_.first_nonzero()
+      { 
         // Extend first arg
         ArgsV.push_back(first_arg);
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -16346,8 +16371,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
   
-  Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
 
+  Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   
   if (changed_first_arg)
   {
@@ -16448,8 +16473,9 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
 
   
   std::vector<char *> splits;
-  char *input = (char*)malloc(strlen(self) + 1);
-  memcpy(input, self, strlen(self) + 1);
+  char *input = (char*)malloc(strlen(self)+1);
+  memcpy(input, self, strlen(self));
+  input[strlen(self)] = '\0';
   //strcpy(input, self);
 
   char *saveptr;
@@ -18188,6 +18214,15 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("AddToScopeCleanList", AddToScopeCleanListTy);
+
+  
+  //
+  FunctionType * AddFloatToScopeCleanListTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("AddFloatToScopeCleanList", AddFloatToScopeCleanListTy);
 
   
   //
