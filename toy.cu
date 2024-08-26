@@ -62,7 +62,7 @@
 #include "include/cu_commons.h"
 
 
-pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex;
+pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex;
 
 float TERMINATE_VARARG = -40370000000.0f;
 int UNK_TOK = 1.0f;
@@ -128,21 +128,146 @@ using namespace llvm::orc;
 // \033[33m yellow
 // \033[95m purple
 
+unsigned int get_millisecond_time() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return static_cast<unsigned int>(ts.tv_sec + ts.tv_nsec / 1000);
+}
+
+class RandomSeedManager {
+private:
+    unsigned int seed;
+    std::mutex mtx;  // Mutex for thread safety
+
+public:
+    RandomSeedManager() {
+        seed = get_millisecond_time();
+    }
+
+    void set_seed(unsigned int seed)
+    {
+      this->seed = seed;
+    }
+
+    // Generate a thread-safe random number using a custom seed manager
+    int generate_random_number(int min, int max) {
+        
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return min + (seed % (max - min + 1));
+    }
+};
+
+
+RandomSeedManager seed_manager;
+
+
+
+class MT19937 {
+public:
+    MT19937(uint32_t seed) {
+        // Initialize the state vector
+        state[0] = seed;
+        for (int i = 1; i < n; i++) {
+            state[i] = f * (state[i - 1] ^ (state[i - 1] >> (w - 2))) + i;
+        }
+        index = n;
+    }
+
+    uint32_t extract() {
+        if (index >= n) {
+            twist();
+        }
+
+        uint32_t y = state[index++];
+        // Tempering
+        y ^= (y >> u);
+        y ^= (y << s) & b;
+        y ^= (y << t) & c;
+        y ^= (y >> l);
+
+        return y;
+    }
+
+private:
+    static const int w = 32;
+    static const int n = 624;
+    static const int m = 397;
+    static const int r = 31;
+    static const uint32_t a = 0x9908B0DF;
+    static const int u = 11;
+    static const uint32_t d = 0xFFFFFFFF;
+    static const int s = 7;
+    static const uint32_t b = 0x9D2C5680;
+    static const int t = 15;
+    static const uint32_t c = 0xEFC60000;
+    static const int l = 18;
+    static const uint32_t f = 1812433253;
+
+    uint32_t state[n];
+    int index;
+
+    void twist() {
+        for (int i = 0; i < n; i++) {
+            uint32_t x = (state[i] & 0x80000000) + (state[(i + 1) % n] & 0x7FFFFFFF);
+            uint32_t xA = x >> 1;
+            if (x % 2 != 0) {
+                xA ^= a;
+            }
+            state[i] = state[(i + m) % n] ^ xA;
+        }
+        index = 0;
+    }
+};
+
+
+
+
+
 
 const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 char *RandomString(size_t length) {
-  std::random_device rd;
-  std::mt19937 generator(rd());
-  std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
+  
 
-  char *random_string = new char[length+1];
-  for (size_t i = 0; i < length; i++) { //TODO: does length+2 break?
-    int random_index = distribution(generator);
-    random_string[i] = charset[random_index];
+  pthread_mutex_lock(&random_seed_mutex);
+  
+  unsigned int seed = get_millisecond_time();
+  //srand(seed);
+  //seed_manager.set_seed(seed);
+  
+  MT19937 mt(seed);
+
+  char *random_string = new char[length];
+
+  for (int i = 0; i < length-1; i++) {
+
+      //int random_index = rand() % charset.length();
+      //int random_index = seed_manager.generate_random_number(0, charset.length()-1);
+      //int random_index = rand_r(&seed) % (charset.length()-1);
+
+      //int random_index = seed % charset.length();
+      //seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+
+      int random_index = mt.extract() % charset.length();
+
+      random_string[i] = charset[random_index];
   }
 
+
+  //std::cout << "" << random_string << "\n";
+  pthread_mutex_unlock(&random_seed_mutex);
+
+  
   return random_string;
 }
+
+
+
+
+
+
+
+
+
 
 bool ends_with(std::string str_input, std::string str_end)
 {
@@ -7071,12 +7196,10 @@ void move_to_char_pool(size_t length, char *char_ptr, std::string from)
 {
   delete[] char_ptr;
   return;
-
   if (length==0)
     return;
   //std::cout << "\nmove_to_pool from: " << from << "\n";
   
-
 
   pthread_mutex_lock(&char_pool_mutex);
   std::vector<char *> chars_in_pool = CharPool[length];
@@ -7099,10 +7222,10 @@ char *get_from_char_pool(size_t length, std::string from)
   if (length==0)
     return nullptr;
 
-  char *char_ptr;
-  char_ptr = new char[length];
-  return char_ptr;
 
+  char *char_ptr;
+  char_ptr = (char*)malloc(length);
+  return char_ptr;
 
   
   pthread_mutex_lock(&char_pool_mutex);
@@ -7155,10 +7278,9 @@ extern "C" void FreeChar(char *_char) {
 
 extern "C" char *CopyString(char *in_str)
 {
-  size_t length = strlen(in_str);
-  char *copied = get_from_char_pool(length+1, "copy");
+  size_t length = strlen(in_str) + 1;
+  char *copied = get_from_char_pool(length, "copy");
   memcpy(copied, in_str, length);
-  copied[length] = '\0';
 
   return copied;
 }
@@ -7166,14 +7288,12 @@ extern "C" char *CopyString(char *in_str)
 extern "C" char * ConcatStr(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc);
-  char *result_cstr = get_from_char_pool(length_lc+length_rc+1, "concat");  // +1 for null terminator
-
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat");
   //char* result_cstr = new char[length_lc+length_rc]; 
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
-  result_cstr[length_lc + length_rc] = '\0';
 
   return result_cstr;
 }
@@ -7181,16 +7301,15 @@ extern "C" char * ConcatStr(char *lc, char *rc)
 extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
   //char* result_cstr = new char[length_lc+length_rc];
-  char *result_cstr = get_from_char_pool(length_lc+length_rc+1, "concat free left");  // +1 for null terminator
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat free left");
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
-  result_cstr[length_lc + length_rc] = '\0';
 
 
-  move_to_char_pool(length_lc+1, lc, "concat free left"); // Is +1 still necessary?
+  move_to_char_pool(length_lc+1, lc, "concat free left");
   //delete[] lc;
   
   return result_cstr;
@@ -7199,15 +7318,14 @@ extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
   //char* result_cstr = new char[length_lc+length_rc];
-  char *result_cstr = get_from_char_pool(length_lc+length_rc+1, "concat free right");  // +1 for null terminator
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat free right");
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
-  result_cstr[length_lc + length_rc] = '\0';
 
-  move_to_char_pool(length_rc+1, rc, "concat free right");
+  move_to_char_pool(length_rc, rc, "concat free right");
   //delete[] rc;
   
   return result_cstr;
@@ -7216,15 +7334,14 @@ extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 extern "C" char * ConcatStrFree(char *lc, char *rc)
 {
   size_t length_lc = strlen(lc);
-  size_t length_rc = strlen(rc); // +1 for null terminator
-  char* result_cstr = new char[length_lc+length_rc+1]; 
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  char* result_cstr = new char[length_lc+length_rc]; 
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
-  result_cstr[length_lc + length_rc] = '\0';
 
   move_to_char_pool(length_lc+1, lc, "concat free");
-  move_to_char_pool(length_rc+1, rc, "concat free");
+  move_to_char_pool(length_rc, rc, "concat free");
   //delete[] lc, rc;
 
   return result_cstr;
@@ -7257,7 +7374,6 @@ extern "C" char * ConcatFloatToStr(char *lc, float r)
   std::string result_str = l + std::to_string(_r);
   char* result_cstr = new char[result_str.length() + 1];
   std::strcpy(result_cstr, result_str.c_str());
-  result_cstr[result_str.length()] = '\0';
 
   
   return result_cstr;
@@ -16134,6 +16250,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
 
 
+  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"),
                                         {scope_str});
 
@@ -16215,7 +16332,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     
       if (isSelf&&!isAttribute)
         ArgsV.push_back(first_arg);
-      if (!isSelf&&isAttribute) // e.g: x.view()
+      if (!isSelf&&isAttribute)
       {
         Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                         {previous_scope, _pre_dot_str});
@@ -16223,8 +16340,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
         //must_free_arg0 = true; //TODO: break?
       }
       
-      if (isSelf && isAttribute) // e.g: self.can_load_.first_nonzero()
-      { 
+      if (isSelf && isAttribute)
+      { // e.g: self.can_load_.first_nonzero()
         // Extend first arg
         ArgsV.push_back(first_arg);
         ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -16473,9 +16590,8 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
 
   
   std::vector<char *> splits;
-  char *input = (char*)malloc(strlen(self)+1);
-  memcpy(input, self, strlen(self));
-  input[strlen(self)] = '\0';
+  char *input = (char*)malloc(strlen(self) + 1);
+  memcpy(input, self, strlen(self) + 1);
   //strcpy(input, self);
 
   char *saveptr;
@@ -16486,10 +16602,14 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
     token = strtok_r(nullptr, pattern, &saveptr); // Get the next token
   }
 
+
+  //std::cout << "splitting " << name << "\n";
+
   if(splits.size()<=1)
   {
-    std::string _err = "Failed to split.";
+    std::string _err = "\nFailed to split.";
     LogErrorS(_err);
+    std::cout << "" << name << "\n";
     return nullptr;
   }
 
@@ -16502,8 +16622,8 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
   char *result = splits[idx];
 
   delete[] name;
-  //delete[] pattern;
   delete[] input;
+
   return result;
 }
 
@@ -18707,6 +18827,7 @@ int main() {
     printf("Mutex initialization failed\n");
     return 1;
   }
+  pthread_mutex_init(&random_seed_mutex, NULL);
   
 
 
