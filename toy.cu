@@ -131,8 +131,23 @@ using namespace llvm::orc;
 unsigned int get_millisecond_time() {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-    return static_cast<unsigned int>(ts.tv_sec + ts.tv_nsec / 1000);
+    return static_cast<unsigned int>(ts.tv_sec + (ts.tv_nsec / 1000));
 }
+
+unsigned int generate_custom_seed() {
+    // Combine time, process ID, and thread ID to generate a seed
+    auto now = std::chrono::high_resolution_clock::now();
+    auto duration = now.time_since_epoch();
+    unsigned int nanoseconds = get_millisecond_time();
+
+    unsigned int tid = std::hash<std::thread::id>{}(std::this_thread::get_id());
+
+
+    unsigned int seed = nanoseconds ^ tid;
+    return seed;
+}
+
+
 
 class RandomSeedManager {
 private:
@@ -220,43 +235,66 @@ private:
 };
 
 
+class LCG {
+public:
+    LCG(uint32_t seed) : state(seed) {}
+
+    uint32_t next() {
+        state = (a * state + c) % m;
+        return state;
+    }
+
+    void setSeed(uint32_t seed) {
+        state = seed;
+    }
+
+private:
+    uint32_t state;
+    static constexpr uint32_t a = 1664525; // Multiplier
+    static constexpr uint32_t c = 1013904223; // Increment
+    static constexpr uint32_t m = 0xFFFFFFFF; // Modulus (2^32 - 1)
+};
 
 
+bool in_str(std::string str, std::vector<std::string> list);
+
+//MT19937 mt(generate_custom_seed());
+LCG rng(generate_custom_seed());
 
 
-const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+std::vector<std::string> rds;
+
+
 char *RandomString(size_t length) {
-  
+  //unsigned int seed = generate_custom_seed();
 
+  const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   pthread_mutex_lock(&random_seed_mutex);
-  
-  unsigned int seed = get_millisecond_time();
-  //srand(seed);
-  //seed_manager.set_seed(seed);
-  
-  MT19937 mt(seed);
 
-  char *random_string = new char[length];
+  //MT19937 mt(generate_custom_seed());
+  //LCG rng(generate_custom_seed());
 
-  for (int i = 0; i < length-1; i++) {
+  char *random_string = new char[length+1];
 
-      //int random_index = rand() % charset.length();
-      //int random_index = seed_manager.generate_random_number(0, charset.length()-1);
-      //int random_index = rand_r(&seed) % (charset.length()-1);
+  for (int i = 0; i < length; i++) {
 
-      //int random_index = seed % charset.length();
-      //seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-
-      int random_index = mt.extract() % charset.length();
-
+      //int random_index = mt.extract() % charset.length();
+      int random_index = rng.next() % charset.length();
       random_string[i] = charset[random_index];
   }
 
+  //random_string[length] = '\0';
 
   //std::cout << "" << random_string << "\n";
+
   pthread_mutex_unlock(&random_seed_mutex);
 
   
+  //std::string aux = random_string;
+  //if(!in_str(aux,rds))
+  //  rds.push_back(aux);
+  
+
   return random_string;
 }
 
@@ -264,8 +302,43 @@ char *RandomString(size_t length) {
 
 
 
+/*
+const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+char *RandomString(size_t length) {
+  std::random_device rd;
+  std::mt19937 generator(rd());
+  std::uniform_int_distribution<int> distribution(0, charset.size() - 1);
+
+  char *random_string = new char[length+1];
+  for (size_t i = 0; i < length; i++) {
+    int random_index = distribution(generator);
+    random_string[i] = charset[random_index];
+  }
+
+  return random_string;
+}
+*/
 
 
+/*
+const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+char *RandomString(size_t length) {
+    
+  
+  //unsigned int seed = generate_custom_seed();
+  std::random_device rd;
+  unsigned int rand_seed = rd();
+
+  char *random_string = new char[length+1];
+
+  for (size_t i = 0; i < length; i++) {
+      int random_index = rand_r(&rand_seed) % charset.size();
+      random_string[i] = charset[random_index];
+  }
+
+  return random_string;
+}
+*/
 
 
 
@@ -5598,6 +5671,8 @@ extern "C" float end_timer(float id)
   // Print the elapsed time in seconds
   std::cout << "Elapsed time: " << elapsedTime.count() << " seconds.\n";
 
+  //std::cout << "Length " << rds.size() << "\n";
+
   return 0;
 }
 
@@ -7282,6 +7357,8 @@ extern "C" char *CopyString(char *in_str)
   char *copied = get_from_char_pool(length, "copy");
   memcpy(copied, in_str, length);
 
+  //std::cout << "copy " << in_str << "\n";
+
   return copied;
 }
 
@@ -7294,6 +7371,8 @@ extern "C" char * ConcatStr(char *lc, char *rc)
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
+
+  //std::cout << "ConcatStr " << result_cstr << "\n";
 
   return result_cstr;
 }
@@ -7311,6 +7390,8 @@ extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 
   move_to_char_pool(length_lc+1, lc, "concat free left");
   //delete[] lc;
+
+  //std::cout << "ConcatStrFreeLeft " << result_cstr << "\n";
   
   return result_cstr;
 }
@@ -7327,6 +7408,8 @@ extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 
   move_to_char_pool(length_rc, rc, "concat free right");
   //delete[] rc;
+
+  //std::cout << "ConcatStrFreeRight " << result_cstr << "\n";
   
   return result_cstr;
 }
@@ -7343,6 +7426,8 @@ extern "C" char * ConcatStrFree(char *lc, char *rc)
   move_to_char_pool(length_lc+1, lc, "concat free");
   move_to_char_pool(length_rc, rc, "concat free");
   //delete[] lc, rc;
+  
+  //std::cout << "ConcatStrFree " << result_cstr << "\n";
 
   return result_cstr;
 }
@@ -7427,7 +7512,7 @@ extern "C" void AddFloatToScopeCleanList(char *scope, char *name)
   
 }
 
-extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
+extern "C" void AddToScopeCleanList(char *scope, char *name)
 {
   
   std::vector<std::pair<std::string, std::string>> scope_vars = ScopeVarsToClean[scope];
@@ -7439,7 +7524,9 @@ extern "C" void AddToScopeCleanList(char *scope, char *name, char *type)
       return;
     }
     
-  ScopeVarsToClean[scope].push_back(std::make_pair(name, type));
+  pthread_mutex_lock(&clean_scope_mutex);
+  ScopeVarsToClean[scope].push_back(std::make_pair(name, "str"));
+  pthread_mutex_unlock(&clean_scope_mutex);
   
   delete[] name;
 }
@@ -7453,20 +7540,22 @@ extern "C" void CleanScopeVars(char *scope)
   for (auto _it = ScopeVarsToClean[scope].begin(); _it != ScopeVarsToClean[scope].end(); )
   {
     auto &pair = *_it;
-    /*
+    
+
     if (pair.second=="str")
     {
+      //NamedStrs.erase(pair.first);
+
+      /*
       auto it = NamedStrs.find(pair.first);
-      if (it != NamedStrs.end()) {
-        delete[] it->second;
+      if (it != NamedStrs.end())
         NamedStrs.erase(it);
-      }
+      */
     }
-    */
     
     if (pair.second=="float")
     {
-      //std::cout << "ERASING " << pair.first << ".\n";
+      
       auto it = NamedClassValues.find(pair.first);
       if (it != NamedClassValues.end())
         NamedClassValues.erase(it);
@@ -7475,7 +7564,9 @@ extern "C" void CleanScopeVars(char *scope)
     _it = ScopeVarsToClean[scope].erase(_it);
   }
   
-  ScopeVarsToClean[scope].clear();
+  //ScopeVarsToClean[scope].clear(); // clear does not actually clears it
+  auto it = ScopeVarsToClean.find(scope);
+  ScopeVarsToClean.erase(it);
 
   pthread_mutex_unlock(&clean_scope_mutex);
   
@@ -15594,10 +15685,10 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     /*
     Builder->CreateCall(TheModule->getFunction("AddToScopeCleanList"),
                         {scope_str,
-                         Builder->CreateCall(TheModule->getFunction("CopyString"), {var_name}),
-                         Builder->CreateGlobalString("str") //stack?
+                         Builder->CreateCall(TheModule->getFunction("CopyString"), {var_name})
                         });
-    */    
+    */
+        
 
                         
     Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
@@ -16924,7 +17015,7 @@ Function *FunctionAST::codegen() {
 
 
 
-  Value *aux = Builder->CreateGlobalString(function_name);
+  //Value *aux = Builder->CreateGlobalString(function_name);
 
 
   
@@ -18330,7 +18421,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType * AddToScopeCleanListTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("AddToScopeCleanList", AddToScopeCleanListTy);
