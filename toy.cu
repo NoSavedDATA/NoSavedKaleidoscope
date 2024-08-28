@@ -7515,6 +7515,7 @@ extern "C" void AddFloatToScopeCleanList(char *scope, char *name)
 extern "C" void AddToScopeCleanList(char *scope, char *name)
 {
   
+  pthread_mutex_lock(&clean_scope_mutex);
   std::vector<std::pair<std::string, std::string>> scope_vars = ScopeVarsToClean[scope];
   
   for(auto &pair : scope_vars)
@@ -7524,7 +7525,6 @@ extern "C" void AddToScopeCleanList(char *scope, char *name)
       return;
     }
     
-  pthread_mutex_lock(&clean_scope_mutex);
   ScopeVarsToClean[scope].push_back(std::make_pair(name, "str"));
   pthread_mutex_unlock(&clean_scope_mutex);
   
@@ -7544,21 +7544,24 @@ extern "C" void CleanScopeVars(char *scope)
 
     if (pair.second=="str")
     {
-      //NamedStrs.erase(pair.first);
+      NamedStrs.erase(pair.first);
 
       /*
       auto it = NamedStrs.find(pair.first);
       if (it != NamedStrs.end())
         NamedStrs.erase(it);
-      */
+      */      
+      
     }
     
     if (pair.second=="float")
     {
-      
+      NamedClassValues.erase(pair.first);
+      /*
       auto it = NamedClassValues.find(pair.first);
       if (it != NamedClassValues.end())
         NamedClassValues.erase(it);
+      */
     }
     
     _it = ScopeVarsToClean[scope].erase(_it);
@@ -7609,7 +7612,9 @@ extern "C" float StoreStrOnDemand(char *name, char *value){
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   
+  pthread_mutex_lock(&clean_scope_mutex);
   NamedStrs[name] = value;
+  pthread_mutex_unlock(&clean_scope_mutex);
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
 
@@ -7619,7 +7624,9 @@ extern "C" void *LoadStrOnDemand(char *name){
   
   //char *ret = CopyString(NamedStrs[name]);
   
+  pthread_mutex_lock(&clean_scope_mutex);
   char *ret = NamedStrs[name];
+  pthread_mutex_unlock(&clean_scope_mutex);
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
 
@@ -15682,12 +15689,12 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
                                             {scope_str, var_name});
     
 
-    /*
+    
     Builder->CreateCall(TheModule->getFunction("AddToScopeCleanList"),
                         {scope_str,
                          Builder->CreateCall(TheModule->getFunction("CopyString"), {var_name})
                         });
-    */
+    
         
 
                         
@@ -16676,7 +16683,9 @@ extern "C" void *SplitString(char *self, char *pattern)
 
 extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
 {
+  pthread_mutex_lock(&clean_scope_mutex);
   char *self = NamedStrs[name];
+  pthread_mutex_unlock(&clean_scope_mutex);
   //std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
 
   
