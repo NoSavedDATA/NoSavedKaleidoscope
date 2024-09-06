@@ -128,11 +128,7 @@ using namespace llvm::orc;
 // \033[33m yellow
 // \033[95m purple
 
-unsigned int get_millisecond_time() {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return static_cast<unsigned int>(ts.tv_sec + (ts.tv_nsec / 1000));
-}
+
 
 unsigned int generate_custom_seed() {
     // Combine time, process ID, and thread ID to generate a seed
@@ -149,31 +145,43 @@ unsigned int generate_custom_seed() {
 
 
 
-class RandomSeedManager {
-private:
-    unsigned int seed;
-    std::mutex mtx;  // Mutex for thread safety
-
+class PhiloxRNG {
 public:
-    RandomSeedManager() {
-        seed = get_millisecond_time();
+    using uint32 = uint32_t;
+    using uint64 = uint64_t;
+
+    PhiloxRNG(uint64 seed1, uint64 seed2) : key{ static_cast<uint32>(seed1), static_cast<uint32>(seed1 >> 32),
+                                                 static_cast<uint32>(seed2), static_cast<uint32>(seed2 >> 32) } {}
+
+    std::array<uint32, 4> operator()() {
+        std::array<uint32, 4> ctr = { counter++, 0, 0, 0 };
+        for (int i = 0; i < rounds; i++) {
+            ctr = singleRound(ctr);
+        }
+        return ctr;
     }
 
-    void set_seed(unsigned int seed)
-    {
-      this->seed = seed;
-    }
+private:
+    uint32 counter = 0;
+    uint32 key[4];
+    static constexpr int rounds = 10;
 
-    // Generate a thread-safe random number using a custom seed manager
-    int generate_random_number(int min, int max) {
-        
-        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-        return min + (seed % (max - min + 1));
+    std::array<uint32, 4> singleRound(const std::array<uint32, 4>& ctr) const {
+        std::array<uint32, 4> output;
+        const uint64 mult = 0xD2511F53;
+        const uint64 add = 0xCD9E8D57;
+
+        uint64 x = static_cast<uint64>(ctr[0]) * mult;
+        uint64 y = static_cast<uint64>(ctr[2]) * add;
+
+        output[0] = static_cast<uint32>(y >> 32) ^ ctr[1] ^ key[0];
+        output[1] = static_cast<uint32>(x >> 32) ^ ctr[3] ^ key[1];
+        output[2] = static_cast<uint32>(y) ^ ctr[2];
+        output[3] = static_cast<uint32>(x) ^ ctr[0];
+
+        return output;
     }
 };
-
-
-RandomSeedManager seed_manager;
 
 
 
@@ -2742,6 +2750,7 @@ struct Tensor {
   float *dy=nullptr;
   float scalar;
   int b_size=0;
+  bool is_pinned;
 
   CudaStreams *cuda_stream = nullptr;
   Loader *loader = nullptr;
@@ -2775,6 +2784,7 @@ struct Tensor {
     cuda_stream = _cuda_stream;
     loader = _loader;
     from_cudnn = "";
+    is_pinned=false;
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -2788,6 +2798,7 @@ struct Tensor {
     name = new_name;
     weight=false;
     from_grad_or_load=true;
+    is_pinned=true;
   }
 
   void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr){
@@ -2796,6 +2807,7 @@ struct Tensor {
     dims_prod = new_dims_prod;
     cuda_stream = _cuda_stream;
     loader = _loader;
+    is_pinned=false;
   }
 
   
@@ -2809,6 +2821,7 @@ struct Tensor {
     dy=nullptr;
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load||new_R_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
+    is_pinned=false;
   }
 
   void AttrLNode(Tensor *new_L_Tensor, int op_type)
@@ -2821,6 +2834,7 @@ struct Tensor {
     dy=nullptr;
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
+    is_pinned=false;
   }
 
   void AttributionBackwardNode(std::string _name, Tensor *new_R_Tensor)
@@ -2834,17 +2848,20 @@ struct Tensor {
     L_Node=nullptr;
     dy=nullptr;
     weight=false;
+    is_pinned=false;
   }
   void SetIsWeight()
   {
     weight=true;
     from_grad_or_load=true;
+    is_pinned=false;
   }
   void SetBias(float *b, int b_size)
   {
     this->b=b;
     this->b_size=b_size;
     leaf=true;
+    is_pinned=false;
   }
   void Sync()
   {
@@ -4468,7 +4485,7 @@ static std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
 
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu_relu";
+  std::string init = "";
   //std::make_unique<NumberExprAST>(NumVal)
   
   while (true) {
@@ -4580,7 +4597,7 @@ static std::unique_ptr<ExprAST> ParseBatchNorm2dExpr() {
 
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu_relu";
+  std::string init = "";
   //std::make_unique<NumberExprAST>(NumVal)
   
   while (true) {
@@ -4691,7 +4708,7 @@ static std::unique_ptr<ExprAST> ParseBN2dReluExpr() {
 
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu_relu";
+  std::string init = "";
   //std::make_unique<NumberExprAST>(NumVal)
   
   while (true) {
@@ -5797,6 +5814,7 @@ extern "C" float gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
     cuda_stream = AllocateStream();
     cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
     //cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+    pinned_tensor->cuda_stream = cuda_stream;
   }
   /*
   else
@@ -5962,9 +5980,9 @@ extern "C" float LenStrVec(std::vector<char*> vec)
 extern "C" void * ShuffleStrVec(std::vector<char*> vec)
 {
   std::random_device rd;
-  std::mt19937 g(rd());
+  std::mt19937 g(rd()^get_millisecond_time());
 
-  //std::cout << "Shuffling vector: " << &vec << " of size " << vec.size() << "\n";
+
   std::shuffle(vec.begin(), vec.end(), g);
 
   
@@ -6051,36 +6069,6 @@ float *get_from_pool(float dims_prod, std::string from)
 
   cudaCheck(cudaMalloc(&tensor_ptr, dims_prod*sizeof(float)));
   return tensor_ptr;
-}
-
-
-
-extern "C" float eval()
-{
-  std::cout << "SETTING NN MODE TO EVAL" << "\n";
-  
-
-  for(int i=0; i<TensorPool.size(); i++)
-  {
-    for(int j=0; j<TensorPool[i].size();j++)
-    {
-      cudaCheck(cudaFree(TensorPool[i][j]));
-    }
-    TensorPool[i].clear();
-  }
-
-  TensorPool.clear();
-  
-
-  nn_mode = eval_mode;
-  return 0;
-}
-
-extern "C" float train()
-{
-  std::cout << "SETTING NN MODE TO TRAIN" << "\n";
-  nn_mode = training_mode;
-  return 0;
 }
 
 
@@ -6702,15 +6690,15 @@ std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1
   if (pre_block_size==-1)
   {
     if (dims_prod<64)
-      block_size=32;
+      block_size = 32;
     else if (dims_prod<128)
-      block_size=64;
+      block_size = 64;
     else if (dims_prod<256)
-      block_size=128;
+      block_size = 128;
     else if (dims_prod<512)
-      block_size=256;
+      block_size = 256;
     else
-      block_size=deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+      block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
   } else
     block_size = pre_block_size;
 
@@ -7202,24 +7190,26 @@ extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
 extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class, char *method, int nested_function, int isSelf, int isAttribute)
 {
 
-
   std::string _first_arg = first_arg;
   std::string pre_dot = pre_dotc;
 
-  
   delete[] pre_dotc;
 
-  //delete[] first_arg; //TODO: break?
 
   //std::cout << "\n\n\nIncoming first arg: " << first_arg << " from pre-dot: " << pre_dot << ";\n   class: " << _class << ", method: " << method << "\n   is nested: " << nested_function <<".\n";
   //std::cout << "   is self: " << isSelf << ", is attribute: " << isAttribute << "\n\n\n";
 
+  //for(auto& pair : NamedObjects)
+  //  std::cout << "NamedObjects: " << pair.first << ": " << pair.second<< "\n";
+
+  //TODO:
   if (!isSelf && isAttribute)
   {
     std::string ret = NamedObjects[pre_dot];
     return str_to_char(ret);
-    //return const_cast<char*>(ret.c_str());
   }
+  
+  
   
   if (pre_dot!="self")
   {
@@ -7230,13 +7220,12 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
   }
 
   return str_to_char(_first_arg);
-  //return const_cast<char*>(_first_arg.c_str());
 }
 
 
 extern "C" void InstantiateObject(char *scope, char *obj_name)
 {
-  //std::cout << "\n\nInstantiateObject of: " << scope << obj_name << "\n";
+  std::cout << "\n\nInstantiateObject of: " << scope << obj_name << "\n";
   std::string _obj_name = obj_name;
 
   NamedObjects[scope+_obj_name] = _obj_name + RandomString(13);
@@ -9600,19 +9589,19 @@ void matmul_forward2(float* out,
 
 
 
-  
+  /*
   int tile_size = 16;
   
   dim3 block_size(tile_size, tile_size);
   dim3 grid_size(std::ceil(OC/float(tile_size)), std::ceil(B/(float)tile_size));
   int shared_mem_size = 2*tile_size*tile_size*sizeof(float);
 
-  //mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, tile_size*tile_size, B, C, OC);
+  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, tile_size*tile_size, B, C, OC);
+  */
   
   
 
   /*
-
   using ColumnMajor = cutlass::layout::ColumnMajor;
   using RowMajor = cutlass::layout::RowMajor;
 
@@ -11640,6 +11629,70 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
 }
 
 
+
+__global__ void online_softmax(const float* inp, float* out, int N, int C) {
+    // online softmax paper: http://arxiv.org/abs/1805.02867
+    // online softmax reduces loops from 3 to 2
+    // which is done by calculating sumval and maxval in one loop
+    const int warpsPerBlock = blockDim.x / warpSize;
+    int tid = threadIdx.x;
+
+    if (tid >= C) {
+        return;
+    }
+
+    int warpId = tid / warpSize;
+    int laneId = tid % warpSize;
+    // one warp one row
+    int row = blockIdx.x * warpsPerBlock + warpId;
+
+    if (row >= N) {
+        return;
+    }
+
+    const float* x = inp + row * C;
+    float* const y = out + row * C;
+
+    // merge calculating maxval and sumval in one loop
+    // which is an arithmetic improvment from online softmax over normal softmax
+    float maxval = -INFINITY, sumval = 0.0f, bigger;
+    for (int i = laneId; i < C; i += warpSize) {
+        // when updating the maxval, dynamically updates the previous sumval by
+        // multiplying e^{previous_maxval - current_maxval}
+        bigger = fmaxf(maxval, x[i]);
+        sumval = sumval * expf(maxval - bigger) + expf(x[i] - bigger);
+        maxval = bigger;
+    }
+
+    // use warp functions instead of cooperative groups for better readibility
+    // calculate the warp wised maxval and sumval
+    float offsetMaxval, offsetSumval;
+    for (int offset = warpSize / 2; offset > 0; offset >>= 1) {
+        __syncwarp();
+        offsetMaxval = __shfl_down_sync(0xFFFFFFFF, maxval, offset);
+        offsetSumval = __shfl_down_sync(0xFFFFFFFF, sumval, offset);
+        if (offsetMaxval > maxval) {
+            sumval *= expf(maxval - offsetMaxval);
+            maxval = offsetMaxval;
+        } else {
+            offsetSumval *= expf(offsetMaxval - maxval);
+        }
+        sumval += offsetSumval;
+    }
+
+    // sync the warp wised maxval and sumval
+    // which are also the maxval and sumval of one row in C
+    maxval = __shfl_sync(0xFFFFFFFF, maxval, 0);
+    sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+    for (int i = laneId; i < C; i += warpSize) {
+        y[i] = expf(x[i] - maxval) / sumval;
+    }
+}
+
+
+
+
 extern "C" void *softmax(Tensor *tensor)
 {
   float *tensor_ptr = tensor->tensor_ptr;
@@ -11650,16 +11703,33 @@ extern "C" void *softmax(Tensor *tensor)
   int B = dims[0];
   int C = dims[1];
 
-  int grid_size = B;
-  int block_size = 32;
+
+  int grid_size, block_size, shared_mem_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
 
   tensor->Sync();
   float *probs = get_from_pool(B*C, "softmax");
   set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
 
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_ptr, probs, B, C);
 
+  
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size  = B;
+  block_size = grid_block_mem_sizes[1];
+
+  shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_ptr, probs, B, C);
+  
+  /*
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*32*C);
+  grid_size  = B*32;
+  block_size = grid_block_mem_sizes[1];
+
+  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, probs, B, C);
+  */
   
   Tensor *new_tensor = createTensor(probs, dims, tensor->dims_prod, false, "");
   new_tensor->op=softmax_op;
@@ -11895,21 +11965,23 @@ void BatchNorm2d::InitMovingAverages()
   cudaCheck(cudaMemcpy(bias, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
   
+
   aux = make_zeros_float(C);
   cudaCheck(cudaMalloc(&running_mean, C*sizeof(float)));
   cudaCheck(cudaMemcpy(running_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
-  
-  aux = make_ones_float(C);
-  cudaCheck(cudaMalloc(&running_var, C*sizeof(float)));
-  cudaCheck(cudaMemcpy(running_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
-  delete[] aux;
-  
+
   aux = make_zeros_float(C);
   cudaCheck(cudaMalloc(&saved_mean, C*sizeof(float)));
   cudaCheck(cudaMemcpy(saved_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
   
+  
+  aux = make_ones_float(C);
+  cudaCheck(cudaMalloc(&running_var, C*sizeof(float)));
+  cudaCheck(cudaMemcpy(running_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
+  delete[] aux;
+
   aux = make_ones_float(C);
   cudaCheck(cudaMalloc(&saved_var, C*sizeof(float)));
   cudaCheck(cudaMemcpy(saved_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
@@ -11933,13 +12005,15 @@ float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C)
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
+  
+
   float *output = get_from_pool(B * H * W * C, "batchnorm2d");
   //set_to_one_kernel<<<grid_size, block_size>>>(output, B * H * W * C);
   
   
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
-  float gamma = 0.1f;
+  float gamma = 0.9f;
   float eps = 0.00001f;
 
   
@@ -11968,6 +12042,7 @@ float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C)
   }
   else
   {
+    checkCUDNN(cudnnDeriveBNTensorDescriptor(scale_bias_mean_var_desc, input_desc, CUDNN_BATCHNORM_SPATIAL));
     checkCUDNN(cudnnBatchNormalizationForwardInference(
       cudnn,
       CUDNN_BATCHNORM_SPATIAL,
@@ -12790,6 +12865,8 @@ void Conv2d::InitFilters()
       filter = make_xavier_uniform_float_relu(ks*ks, ks*ks*C, ks*ks*OC);
     if (Init == "xavu_tanh")
       filter = make_xavier_uniform_float_tanh(ks*ks, ks*ks*C, ks*ks*OC);
+    if (Init=="he_normal_relu")
+      filter = make_he_normal_float_relu(ks*ks, ks*ks*C);
     if (Init == "init_gpt")
       filter = make_gpt_init(ks*ks);
     if (Init=="xavu")
@@ -13082,6 +13159,9 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
 
   out_H = std::floor((H - ks + 2 * padding) / stride) + 1;
   out_W = std::floor((W - ks + 2 * padding) / stride) + 1;
+
+  this->out_H=out_H;
+  this->out_W=out_W;
   //std::cout << "Out H: " << out_H << " out W: " << out_W << "\n";
 
   /*
@@ -13195,9 +13275,6 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, char *conv_namec, 
   tensor->Sync();
   output = conv->Forward(tensor, H, W, B, C);
 
-  int ks_H = conv->ks;
-  int ks_W = conv->ks;
-  
 
   
   
@@ -13478,14 +13555,15 @@ __global__ void normalize_img_kernel(float *output_tensor, const float *input_te
                                      const float *mean, const float *std,
                                      int batch_size, int channels, int height, int width) {
   // Thread ID
-  int batch_idx = blockIdx.x;
+  int b = blockIdx.x;
   int c = blockIdx.y;
   int hw = blockIdx.z * blockDim.x + threadIdx.x;
   
   int h = hw / width;
   int w = hw % width;
 
-  int idx = ((batch_idx * channels + c) * height + h) * width + w;
+  //int idx = ((batch_idx * channels + c) * height + h) * width + w;
+  int idx = b * channels * height * width + c * height * width + h * width + w;
     
   output_tensor[idx] = (input_tensor[idx]-mean[c])/std[c];    
 }
@@ -13673,14 +13751,14 @@ __global__ void crossentropy_softmax_backward_kernel1(float* dlogits,
         int b = i / (C);
         int v = i % C;
 
-        float* dlogits_b = dlogits + b * C;
-        const float* probs_b = probs + b * C;
+        float *dlogits_b = dlogits + b * C;
+        const float *probs_b = probs + b * C;
 
         //float ix = targets[v];
-        float ix = targets[b * C + v];
+        float ix = targets[b * C + v]; // one-hot tensor
         float p = probs_b[v];
 
-        //float indicator = (v==ix) ? 1.0f : 0.0f;
+        //float indicator = (v==ix) ? 1.0f : 0.0f; // one-hot already
         float indicator = ix;
 
         dlogits_b[v] += (p - indicator) * scale;
@@ -13696,25 +13774,51 @@ void CrossEntropyBackward(float *y_hat,
                           float scale)
 {
   
+  /*
   int grid_size = B;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+  */
   
 
   float *probs = get_from_pool(B*C,"ce probs");
 
   //int grid_size, block_size;
   //size_t shared_mem_size;
-  /*
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B, 32);
-  grid_size = grid_block_mem_sizes[0];
+  
+
+  int grid_size, block_size, shared_mem_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size  = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  shared_mem_size = grid_block_mem_sizes[2];
+
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
+
+
+  /*
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*32*C);
+  grid_size  = B*32;
+  block_size = grid_block_mem_sizes[1];
+  
+  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(y_hat, probs, B, C);
   */
+  
+  
+  
+
+  
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size  = B;
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
   softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(y_hat, probs, B, C);
-  std::vector<int> grid_block_mem_sizes;
-  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C, 32);
+  
+  
+
+
+  
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
@@ -14212,6 +14316,7 @@ extern "C" float backprop()
 class Optimizer {
 public:
   virtual ~Optimizer() = default;
+  std::map<std::string, float *> NamedV, NamedM;
 
   int timestep = 1;
   float lr = 0.0f;
@@ -14226,7 +14331,6 @@ public:
 };
 
 class SGD_optim : public Optimizer {
-  std::map<std::string, float *> NamedV, NamedM;
   float lr, momentum, weight_decay, grad_clip;
 
   public:
@@ -14238,7 +14342,6 @@ class SGD_optim : public Optimizer {
 };
 
 class AdamW_optim : public Optimizer {
-  std::map<std::string, float *> NamedV, NamedM;
   float lr, beta1, beta2, weight_decay, grad_clip;
 
   public:
@@ -14262,14 +14365,14 @@ __global__ void sgd_kernel(float* params_memory, const float* grads_memory, floa
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    if (i >= num_parameters) return;  // guard
    
-   float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
+   float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip) + weight_decay * params_memory[i];
    float m = m_memory[i];
    
    // update the first moment (momentum)
    m = m*momentum + grad;
    m_memory[i] = m;
   
-   params_memory[i] -= learning_rate * m + weight_decay * params_memory[i];
+   params_memory[i] -= learning_rate * m;
 }
 
 __global__ void adamw_kernel(float* params_memory, const float* grads_memory, float* m_memory, float* v_memory, long num_parameters,
@@ -14389,6 +14492,7 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   for (int i = 0; i < num_streams; ++i)
     cudaStreamCreate(&streams[i]);
 
+  cudaStreamSynchronize(main_stream->stream);
   int i=0;
   for (auto& pair : NamedParamGrads)
   {
@@ -14472,14 +14576,87 @@ extern "C" float OneCycleLR(float base_lr, float step, float max_steps)
   return min_lr;
 }
 
-extern "C" float CosineLR(float base_lr, float step, float max_steps)
+extern "C" float CosineLR(float base_lr, float min_lr, float step, float max_steps)
 {
-  float min_lr = base_lr*0.05;
+  //float min_lr = base_lr*0.05;
 
   if(step<max_steps)
     return min_lr + (base_lr-min_lr) * (1 + std::cos(M_PI * (step/max_steps))) / 2;
   return min_lr;
 }
+
+
+
+
+
+extern "C" float eval()
+{
+  std::cout << "\n\n\nSETTING NN MODE TO EVAL" << "\n\n";
+  
+
+  for(int i=0; i<TensorPool.size(); i++)
+  {
+    for(int j=0; j<TensorPool[i].size();j++)
+      cudaCheck(cudaFree(TensorPool[i][j]));
+    
+    TensorPool[i].clear();
+  }
+
+  TensorPool.clear();
+  
+  for (auto& pair : NamedParamGrads)
+  {
+    std::cout << "Erasing gradient memory of: " << pair.first << "\n";
+    cudaCheck(cudaFree(pair.second));
+    NamedParamGrads.erase(pair.first);
+  }
+
+  NamedParamGrads.clear();
+
+
+  //std::cout << "\n\nALL TENSORS ARE" << "\n\n";
+  //for (auto& pair : NamedTensorsT)
+  //  std::cout << pair.first << "\n"; 
+
+
+  for (auto &pair: optimizer->NamedV)
+    cudaCheck(cudaFree(pair.second));
+    
+  for (auto &pair: optimizer->NamedM)
+    cudaCheck(cudaFree(pair.second));
+
+
+  /*
+  for (auto& pair : NamedTensorsT)
+  {
+    Tensor *tensor = pair.second;
+
+    if (tensor->is_pinned)
+    {
+      std::cout << "Erasing tensor: " << pair.first << ", is pinned: " << tensor->is_pinned << "\n";
+      tensor->Sync();
+      cudaCheck(cudaFree(tensor->tensor_ptr));
+
+      //delete[] tensor->cpu_tensor_ptr;
+    }
+  }
+  */
+  
+  
+
+  nn_mode = eval_mode;
+
+  std::cout << "\n\n\n";
+  return 0;
+}
+
+extern "C" float train()
+{
+  std::cout << "SETTING NN MODE TO TRAIN" << "\n\n";
+  nn_mode = training_mode;
+  return 0;
+}
+
 
 
 
@@ -14509,12 +14686,12 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
       
-      std::cout << "1 1 attr\n";
+      //std::cout << "1 1 attr\n";
 
 
       Builder->CreateCall(TheModule->getFunction("AttrTensor"),
                           {LtensorName, RtensorPtr, scope_str});
-      std::cout << "Post attr call\n\n";
+      //std::cout << "Post attr call\n\n";
     } else
     {
       std::cout << "1 1 INDEXED attr\n";
@@ -15345,18 +15522,9 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
                    void *(*start_routine) (void *arg), void *arg)
 {
-  pthread_t t;
-  t=0;
-  
   std::cout << "Creating thread" << "\n";
   pthread_create(thread, attr, start_routine, arg);
   std::cout << "Created" << "\n";
-
-  //pthread_create(&t, attr, start_routine, arg);
-
-  //pthread_join(t, nullptr);
-
-  //std::cout << "Join\n";
 }
 
 
@@ -15820,16 +15988,20 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Value *var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     
+    std::string pre_dot = GetPreDot();
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+    
     if (!GetIsVec())
     {
+      if (is_self||is_attr) 
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
+                                              {first_arg, var_name});
       Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
                                               {scope_str, var_name});
     }
     else if (Init) // init of vec[size]
     {
-      std::string pre_dot = GetPreDot();
-      bool is_self = GetSelf();
-      bool is_attr = GetIsAttribute();
 
       if (is_self||is_attr) 
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"), //TODO: Break?
@@ -15895,6 +16067,26 @@ extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
 
 
 
+extern "C" float print_randoms(float N, float std) {
+    //float std = sqrt(2/fan_in);
+    
+    int n = (int) N;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<> dist(0.0, std);
+
+    float* arr = (float*)malloc(n * sizeof(float));
+    std::cout << "[";
+    for (size_t i = 0; i < n; i++)
+      std::cout << dist(gen) << " ";
+    std::cout << "]";
+
+    return 0;
+}
+
+
+
 extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight)
 {
   //std::cout << "CREATING TENSOR " << tensor_name << "\n";
@@ -15923,6 +16115,8 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
       tensor_cpu = make_xavier_uniform_float_relu(product, dims[dims.size()-1], dims[dims.size()-2]);
     if (std::strcmp(init, "xavu_tanh") == 0)
       tensor_cpu = make_xavier_uniform_float_tanh(product, dims[dims.size()-1], dims[dims.size()-2]);
+    if (std::strcmp(init, "he_normal_relu") == 0)
+      tensor_cpu = make_he_normal_float_relu(product, dims[dims.size()-1]);
     if (std::strcmp(init, "init_gpt") == 0)
       tensor_cpu = make_gpt_init(product);
     if (std::strcmp(init, "int") == 0)
@@ -16502,7 +16696,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       return LogErrorV(_error);
     }
   }
-  std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
+  //std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
 
 
 
@@ -16518,6 +16712,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     // deal with firstarg on self.mcts(self.actions)
     Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
+    //Value *fa = first_arg;
 
     //deal with scope on model.forward()
     Value *_scope = (!in_str(tgt_function, native_methods)) ? previous_scope : scope_str;
@@ -17462,6 +17657,7 @@ static void InitializeModule() {
   FunctionType *CosineLRTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext)}, 
       false
@@ -18536,6 +18732,15 @@ FunctionType *unbugTy = FunctionType::get(
 
 
   //
+  FunctionType *print_randomsTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
+
+
+  //
   FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
@@ -19013,12 +19218,12 @@ int main() {
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
-                      "wtokenize_pad_left"};
+                      "wtokenize_pad_left", "print_randoms"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
 
-  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "init_gpt", "xavn"};
+  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn"};
 
 
   // Prime the first token.
