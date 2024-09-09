@@ -7199,6 +7199,7 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
   //std::cout << "\n\n\nIncoming first arg: " << first_arg << " from pre-dot: " << pre_dot << ";\n   class: " << _class << ", method: " << method << "\n   is nested: " << nested_function <<".\n";
   //std::cout << "   is self: " << isSelf << ", is attribute: " << isAttribute << "\n\n\n";
 
+  //std::cout << "\n\n\n";
   //for(auto& pair : NamedObjects)
   //  std::cout << "NamedObjects: " << pair.first << ": " << pair.second<< "\n";
 
@@ -7207,6 +7208,7 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
   if (!isSelf && isAttribute)
   {
     std::string ret = NamedObjects[pre_dot];
+    //std::cout << "\nReturning " << ret << "\n\n\n\n";
     return str_to_char(ret);
   }
   
@@ -7227,7 +7229,7 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
 
 extern "C" void InstantiateObject(char *scope, char *obj_name)
 {
-  std::cout << "\n\nInstantiateObject of: " << scope << obj_name << "\n";
+  //std::cout << "\n\n\n\nInstantiateObject of: " << scope << obj_name << "\n\n\n";
   std::string _obj_name = obj_name;
 
   NamedObjects[scope+_obj_name] = _obj_name + RandomString(13);
@@ -13119,7 +13121,7 @@ extern "C" float CreateConv2dOnDemand(char *tensor_name, char *init,
 
 extern "C" float CreateBatchNorm2dOnDemand(char *tensor_name, float C)
 {
-  std::cout << "\nCreate BatchNorm2d on demand:\n   C: " << C  << "\n";
+  std::cout << "\nCreate BatchNorm2d " << tensor_name << " on demand:\n   C: " << C  << "\n";
 
   auto conv = std::make_unique<BatchNorm2d>((int)C, tensor_name);
 
@@ -15985,10 +15987,11 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   // Register all variables and emit their initializer.
 
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
+  {
     const std::string &VarName = VarNames[i].first;
 
-    Value *var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    Value *var_name;// = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     
     std::string pre_dot = GetPreDot();
     bool is_self = GetSelf();
@@ -15996,14 +15999,17 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     
     if (!GetIsVec())
     {
+      var_name = Builder->CreateGlobalString(VarName);
+
       if (is_self||is_attr) 
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                               {first_arg, var_name});
       Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
                                               {scope_str, var_name});
     }
     else if (Init) // init of vec[size]
     {
+      var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
 
       if (is_self||is_attr) 
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"), //TODO: Break?
@@ -16426,7 +16432,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
     std::cout << "Parsing Conv2d var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
-                                              {var_name, type,
+                                              {var_name, 
                                                C->codegen(first_arg, scope_str, previous_scope)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
@@ -16783,20 +16789,12 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
   
-
+  
   Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   
   if (changed_first_arg)
-  {
-    /*
-    std::string __print = "Freeing first arg " + tgt_function + " ";
-    Builder->CreateCall(TheModule->getFunction("print"),
-      {Builder->CreateGlobalString(__print), ConstantFP::get(*TheContext, APFloat(0.0f))});
-    Builder->CreateCall(TheModule->getFunction("print"),
-      {first_arg, ConstantFP::get(*TheContext, APFloat(0.0f))});
-    */
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
-  }
+  
 
   if (has_first_arg_copy)
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg_copy});
