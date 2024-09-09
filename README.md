@@ -25,13 +25,13 @@ Limitations:
 
 **Pre-requisites**:
 
-- WSL 2
+- WSL 2 or Ubuntu 22
 
 - clang version 19;
 
 - Install CUDA toolkit 12.0 [here](https://developer.nvidia.com/cuda-12-0-0-download-archive?target_os=Linux&target_arch=x86_64&Distribution=WSL-Ubuntu&target_version=2.0&target_type=deb_local);
 
-- Install [cuDNN](https://developer.nvidia.com/cudnn-downloads) 9.1.1;
+- Install [cuDNN](https://developer.nvidia.com/cudnn-downloads) 9.4.0;
 
 - Install OpenCV:
   
