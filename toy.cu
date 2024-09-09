@@ -56,7 +56,7 @@
 #include <curand_kernel.h>
 //#include <nvcuda/wmma.h>
 #include <cuda_fp16.h>
-#include "cutlass/gemm/device/gemm.h"
+//#include "cutlass/gemm/device/gemm.h"
 #include <cudnn.h>
 
 #include "include/cu_commons.h"
@@ -7203,11 +7203,13 @@ extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class
   //  std::cout << "NamedObjects: " << pair.first << ": " << pair.second<< "\n";
 
   //TODO:
+  
   if (!isSelf && isAttribute)
   {
     std::string ret = NamedObjects[pre_dot];
     return str_to_char(ret);
   }
+  
   
   
   
