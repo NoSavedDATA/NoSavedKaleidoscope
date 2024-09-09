@@ -6,6 +6,9 @@
 #include <cmath>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <float.h>
+#include <iostream>
+#include <random>
 
 
 template<class T>
@@ -39,11 +42,24 @@ void cublasCheck(cublasStatus_t status, const char *file, int line)
 // ----------------------------------------------------------------------------
 // random utils
 
+unsigned int get_millisecond_time() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return static_cast<unsigned int>(ts.tv_sec + (ts.tv_nsec / 1000));
+}
+
+std::random_device rd;  // obtain a random seed
+std::mt19937 WEIGHT_PRNG(rd()^get_millisecond_time()); // initialize the Mersenne Twister generator
+
 float* make_random_float_uniform(size_t N) {
+    
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
+    
     float* arr = (float*)malloc(N * sizeof(float));
-    for (size_t i = 0; i < N; i++) {
-        arr[i] = ((float)rand() / RAND_MAX); // range 0..1
-    }
+    for (size_t i = 0; i < N; i++)
+        arr[i] = dist(WEIGHT_PRNG);
+        //arr[i] = ((float)rand() / RAND_MAX); // range 0..1
+    
     return arr;
 }
 
@@ -68,7 +84,6 @@ float* make_zeros_float(size_t N) {
     memset(arr, 0, N * sizeof(float)); // all zero
     return arr;
 }
-
 float* make_ones_float(size_t N) {
     float* arr = (float*)malloc(N * sizeof(float));
     for (size_t i = 0; i < N; i++) {
@@ -77,23 +92,75 @@ float* make_ones_float(size_t N) {
     return arr;
 }
 
+float* make_min_float(size_t N) {
+    float* arr = (float*)malloc(N * sizeof(float));
+    float min_float = -50000;
+    memset(arr, min_float, N * sizeof(float));
+    return arr;
+}
+
 float* make_xavier_uniform_float(size_t N, float fan_in, float fan_out) {
-    float xavier_scale = 1.4142*sqrt(6/(fan_in+fan_out));
+    float xavier_scale = sqrt(6/(fan_in+fan_out));
+
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
 
     float* arr = (float*)malloc(N * sizeof(float));
-    for (size_t i = 0; i < N; i++) {
-        arr[i] = xavier_scale*(((float)rand() / RAND_MAX) * 2.0 - 1.0); // range -1..1
-    }
+    for (size_t i = 0; i < N; i++)
+        arr[i] = xavier_scale*dist(WEIGHT_PRNG);
+        //arr[i] = xavier_scale*(((float)rand() / RAND_MAX) * 2.0 - 1.0); // range -1..1
+    
     return arr;
 }
 
 float* make_xavier_uniform_float_relu(size_t N, float fan_in, float fan_out) {
     float xavier_scale = 1.4142*sqrt(6/(fan_in+fan_out));
 
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
+
     float* arr = (float*)malloc(N * sizeof(float));
-    for (size_t i = 0; i < N; i++) {
-        arr[i] = xavier_scale*(((float)rand() / RAND_MAX) * 2.0 - 1.0); // range -1..1
-    }
+    for (size_t i = 0; i < N; i++)
+        arr[i] = xavier_scale*dist(WEIGHT_PRNG);
+        //arr[i] = xavier_scale*(((float)rand() / RAND_MAX) * 2.0 - 1.0); // range -1..1
+    
+    return arr;
+}
+
+float* make_xavier_uniform_float_tanh(size_t N, float fan_in, float fan_out) {
+    float xavier_scale = 1.6667*sqrt(6/(fan_in+fan_out));
+
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
+
+    float* arr = (float*)malloc(N * sizeof(float));
+    for (size_t i = 0; i < N; i++)
+        arr[i] = xavier_scale*dist(WEIGHT_PRNG);
+        //arr[i] = xavier_scale*(((float)rand() / RAND_MAX) * 2.0 - 1.0); // range -1..1
+    
+    return arr;
+}
+
+
+
+float* make_he_normal_float_relu(size_t N, float fan_in) {
+    //float std = sqrt(2/fan_in);
+    float std = 2/fan_in;
+
+    std::normal_distribution<> dist(0.0, std);
+
+    float* arr = (float*)malloc(N * sizeof(float));
+    for (size_t i = 0; i < N; i++)
+        arr[i] = dist(WEIGHT_PRNG);
+
+    return arr;
+}
+
+float* make_gpt_init(size_t N) {
+    
+    std::normal_distribution<double> dist(0.0, 0.02);
+
+    float* arr = (float*)malloc(N * sizeof(float));
+    for (size_t i = 0; i < N; i++)
+        arr[i] = dist(WEIGHT_PRNG);
+    
     return arr;
 }
 
