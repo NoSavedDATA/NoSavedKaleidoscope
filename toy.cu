@@ -85,6 +85,12 @@ int PAD_TOK = 0.0f;
 
 cudaDeviceProp deviceProp;
 
+int block_size_aux = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+
+const int TILE_SIZE = (int)floorf(sqrtf((float)block_size_aux)); 
+
+
+
 static cublasHandle_t cublas_handle;
 static cublasLtHandle_t cublaslt_handle;
 cudnnHandle_t cudnn;
@@ -541,6 +547,7 @@ enum Token {
   tok_maxpool2d = -41,
   tok_avgpool2d = -42,
   tok_batchnorm2d = -43,
+  tok_lstm = -47,
   tok_bn2drelu = -45,
   tok_relu = -46,
   tok_vec = -37,
@@ -617,6 +624,7 @@ enum BackwardTypes {
   scalar_div_op = 37,
   dropout_op = 38,
   sigmoid_add2weights_op = 39,
+  lstm_op = 40,
 };
 
 int nn_mode=training_mode;
@@ -663,16 +671,17 @@ std::map<int, std::string> token_to_string = {
 
   { tok_space, "tok_space" },
 
-  { tok_post_class_attr_attr, ".attr." },
-  { tok_post_class_attr_identifier, ".identifier" },
+  { tok_post_class_attr_attr, ".attr."},
+  { tok_post_class_attr_identifier, ".identifier"},
   
   // var definition
-  { tok_var, "float" },
-  { tok_tensor, "tensor" },
-  { tok_var_str, "var str" },
-  { tok_attr_var, "tok attr var" },
-  { tok_attr_tensor, "tok attr tensor" },
-  { tok_conv2d, "Conv2d" },
+  { tok_var, "float"},
+  { tok_tensor, "tensor"},
+  { tok_var_str, "var str"},
+  { tok_attr_var, "tok attr var"},
+  { tok_attr_tensor, "tok attr tensor"},
+  { tok_conv2d, "Conv2d"},
+  { tok_lstm, "LSTM"},
   { tok_maxpool2d, "MaxPool2d"},
   { tok_avgpool2d, "AvgPool2d"},
   { tok_batchnorm2d, "BatchNorm2d"},
@@ -880,6 +889,11 @@ static int get_token() {
       {
         LastChar = getchar();
         return tok_conv2d;
+      }
+      if (IdentifierStr == "LSTM")
+      {
+        LastChar = getchar();
+        return tok_lstm;
       }
       if (IdentifierStr == "MaxPool2d")
       {
@@ -1462,6 +1476,25 @@ class BN2dReluExprAST : public VarExprAST {
       std::unique_ptr<ExprAST> C)
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+};
+
+
+
+class LSTMExprAST : public VarExprAST {
+  public:
+    std::unique_ptr<ExprAST> C, OC;
+    std::string TensorInit;
+
+    LSTMExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
+      const std::string &TensorInit)
+      : VarExprAST(std::move(VarNames), std::move(Type)),
+                   C(std::move(C)), OC(std::move(OC)),
+                   TensorInit(TensorInit) {}
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
 };
@@ -3732,9 +3765,8 @@ extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float
 
 extern "C" float wtokenize_pad_left(Tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
 {
-  //tensor shape: [workers, seq_len, batch_size, vocab_size]
-
-
+  // x e [W, T, B]
+  
   std::ifstream file(filename);
 
   //std::cout << "Loading" <<  filename << "\n";
@@ -3801,11 +3833,11 @@ extern "C" float wtokenize_pad_left(Tensor *tensor, char *filename, float trunc_
 
   if (words_count<=trunc_to)
   {
-  int offset = trunc_to-words_count;
-  for(int i=0; i<words_count; i++)
-  {
-    padded_indices[i+offset] = indices[i];
-  }
+    int offset = trunc_to-words_count;
+    for(int i=0; i<words_count; i++)
+    {
+      padded_indices[i+offset] = indices[i];
+    }
   } else 
     padded_indices = indices;
 
@@ -3829,10 +3861,117 @@ extern "C" float wtokenize_pad_left(Tensor *tensor, char *filename, float trunc_
   
 
   delete[] indices;
-  delete[] padded_indices;
+  if (words_count<=trunc_to)
+    delete[] padded_indices;
 
   return 0;
 }
+
+
+
+extern "C" float wtokenize_pad_left_batch_first(Tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+{
+  // x e [W, B, T]
+
+  std::ifstream file(filename);
+
+  //std::cout << "Loading" <<  filename << "\n";
+  if (!file) {
+    std::cerr << "Error opening file!" << std::endl;
+    return 1;
+  }
+
+
+  std::vector<float> dims = tensor->dims;
+  float dims_prod = tensor->dims_prod;
+
+
+  std::vector<float> workerless_dims = BatchLessDims(dims);
+  int workerless_dims_prod = DimsProd(workerless_dims);
+
+  std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+  int batchless_dims_prod = DimsProd(batchless_dims);
+
+  std::vector<float> seqless_dims = BatchLessDims(batchless_dims);
+  int seqless_dims_prod = DimsProd(seqless_dims);
+
+  int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+
+
+
+  int *indices  = new int[trunc_to];
+  int *padded_indices  = new int[trunc_to];
+
+  //for (int i=0; i<tensor->dims_prod; i++)
+  //  tensor->cpu_tensor_ptr[i] = 0.0f;
+
+  for (int i = 0; i < trunc_to; i++)
+    padded_indices[i] = PAD_TOK;
+
+
+  std::string line;
+  int words_count = 0;
+  while (std::getline(file, line)) 
+  {       
+    std::istringstream lineStream(line); // Create a string stream from the line
+    std::string word;
+
+    while (lineStream >> word)
+    {
+      words_count++;
+      if (words_count>trunc_to)
+        break;
+
+      ProcessString(word);
+
+      int idx;
+
+      idx = (Vocab.count(word)>0) ? Vocab[word] : UNK_TOK; // inplace onehot
+      idx = (idx<0) ? 0 : idx;
+
+      indices[words_count-1] = idx;      
+    }
+    if (words_count>trunc_to)
+      break;
+  }
+  file.close();
+
+
+
+  // pad indices
+  if (words_count<=trunc_to)
+  {
+    int offset = trunc_to-words_count;
+    for(int i=0; i<words_count; i++)
+    {
+      padded_indices[i+offset] = indices[i];
+    }
+  } else 
+    padded_indices = indices;
+
+
+
+  // one-hot and save it into the tensor
+  int idx;
+  for(int i=0; i<trunc_to; i++)
+  {
+    idx = padded_indices[i] + idx_offset;
+
+    tensor->cpu_tensor_ptr[idx] = 1;
+
+    idx_offset += seqless_dims_prod; //moves to the next sequence element
+  }
+
+  
+  
+  delete[] indices;
+  if (words_count<=trunc_to)
+    delete[] padded_indices;
+
+  return 0;
+}
+
+
 
 extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
 {
@@ -4467,6 +4606,114 @@ static std::unique_ptr<ExprAST> ParseConv2dExpr() {
 
 
 
+//
+static std::unique_ptr<ExprAST> ParseLSTMExpr() {
+  
+  getNextToken(); // eat the LSTM.
+  
+  if (CurTok != '[')
+    return LogError("LSTM declaration expected [");
+    getNextToken();
+
+  std::vector<std::unique_ptr<ExprAST>> dims;
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::string init = "xavu_relu";
+  //std::make_unique<NumberExprAST>(NumVal)
+  
+  while (true) {
+    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      return LogError("Expected tensor dimension number.");
+    
+    if (CurTok==tok_number)
+    {
+      if (std::fmod(NumVal, 1.0) != 0)
+        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
+    
+      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      getNextToken();
+    } else if (CurTok==tok_identifier)
+      if (in_str(IdentifierStr, tensor_inits))
+      {
+        init = IdentifierStr;
+        getNextToken();
+      } else
+        dims.push_back(std::move(ParseIdentifierExpr()));
+    else {
+      dims.push_back(std::move(ParseSelfExpr()));
+    }
+
+    
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+  }
+
+  
+
+  if (CurTok != ']')
+    return LogError("Expected ].");
+    getNextToken();
+
+  if (dims.size()!=2 && dims.size()!=3)
+    return LogError("LSTM requires input and output hiddens count.");
+
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true;
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected LSTM identifier name.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    functionVars[Name] = "LSTMForward";
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Expected one or more identifiers after LSTM.");
+  }
+
+
+
+  auto aux = std::make_unique<LSTMExprAST>(std::move(VarNames), "lstm",
+                                             std::move(dims[0]), std::move(dims[1]),
+                                             init);
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
+
 
 
 //
@@ -5036,6 +5283,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParsePinnedTensorExpr();
   case tok_conv2d:
     return ParseConv2dExpr();
+  case tok_lstm:
+    return ParseLSTMExpr();
   case tok_maxpool2d:
     return ParseMaxPool2dExpr();
   case tok_avgpool2d:
@@ -8125,6 +8374,7 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope)
 
   tensor->Sync();
   copy_tensor_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_tensor, device_x, new_dims_prod);
+  
 
   /*
   PrintTensorF(new_tensor, 1, 1);
@@ -8942,7 +9192,7 @@ __global__ void mult_kernel2(const float *x, const float *w,
   int laneId = tid % 32; // thread index within a warp
 
   
-  const int tile_size = 16;
+  const int tile_size = 27;
 
   int row = y_block*tile_size + ty;
   int col = x_block*tile_size + tx;
@@ -9247,7 +9497,7 @@ __global__ void mult_backward(const float *x, const float *w,
 
 
 __global__ void mult_backwarddx(const float *w,
-                      float *dx, const float *dy, const int tile_offset,
+                      float *dx, const float *dy, const int tile_size, const int tile_offset,
                       const int B, const int C, const int OC) {
 
   int row = blockIdx.y * blockDim.y + threadIdx.y; // B
@@ -9259,7 +9509,6 @@ __global__ void mult_backwarddx(const float *w,
   float sum = 0.0f;
 
   
-  const int tile_size = 16;
 
 
 
@@ -9298,11 +9547,9 @@ __global__ void mult_backwarddx(const float *w,
     
     __syncthreads();
   }
+
   if(row<B && col<C)
     dx[row * C + col] = tmp;
-  
-
-
 }
 
 
@@ -9310,7 +9557,7 @@ __global__ void mult_backwarddx(const float *w,
 
 
 __global__ void mult_backwarddw(const float *x,
-                      float *dw, const float *dy, const int tile_offset,
+                      float *dw, const float *dy, const int tile_size, const int tile_offset,
                       int B, int C, int OC) {
 
   int row_major = blockIdx.y * blockDim.y + threadIdx.y; // C
@@ -9322,7 +9569,7 @@ __global__ void mult_backwarddw(const float *x,
 
   
   // backward type 1
-  const int tile_size = 16;
+  
 
 
   extern __shared__ char _smem[];
@@ -9392,14 +9639,13 @@ __global__ void mult_backwarddw(const float *x,
 
 
 __global__ void mult_kernel(const float *x, const float *w,
-                      float *out, const int tile_offset, const int B, const int C, const int OC) {
+                      float *out, const int tile_size, const int tile_offset, const int B, const int C, const int OC) {
   int tx = threadIdx.x;
   int ty = threadIdx.y;
   int x_block = blockIdx.x;
   int y_block = blockIdx.y;
 
   
-  const int tile_size = 16;
 
   int row = y_block*tile_size + ty;
   int col = x_block*tile_size + tx;
@@ -9464,6 +9710,29 @@ void matmul_backward(float *inp,  float *weight,
 {
   //std::cout << "\nmatmul_backward. B: " << B << " C: " << C << " OC: " << OC << "\n";
 
+
+
+  
+  // backward to input
+  float one = 1.0f, zero = 0.0f;
+  
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
+                             weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
+                             dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));                         
+  
+  
+  
+  
+  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                             inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
+                             dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+  
+
+
+
+
+
   /*
   int tile_size, tile_size_sq;
   tile_size = 27;
@@ -9480,24 +9749,35 @@ void matmul_backward(float *inp,  float *weight,
   
   
 
+
+
+
   /*
-  cudaStream_t dx_stream;
-  cudaStreamCreate(&dx_stream);
-  int tile_size, tile_size_sq;
-  tile_size = 16;
-  tile_size_sq = tile_size*tile_size;
-  dim3 block_size(tile_size, tile_size);
-  dim3 grid_size(std::ceil(C/float(tile_size)), std::ceil(B/(float)tile_size));
+  cudaStream_t dw_stream;
+  cudaStreamCreate(&dw_stream);
+
+  int tile_size_sq;
+
+  tile_size_sq = TILE_SIZE*TILE_SIZE;
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(std::ceil(C/float(TILE_SIZE)), std::ceil(B/(float)TILE_SIZE));
   int shared_mem_size = 2*tile_size_sq*sizeof(float);
 
-  mult_backwarddx<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(weight, dinp, dout, tile_size_sq, B, C, OC);
+  mult_backwarddx<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(weight, dinp, dout, TILE_SIZE, tile_size_sq, B, C, OC);
   
-  dim3 grid_size2(std::ceil(OC*C)/(float)tile_size);
-  //mult_backwarddw<<<grid_size2, block_size, shared_mem_size, main_stream->stream>>>(inp, dw, dout, tile_size_sq, B, C, OC);
-  cudaStreamSynchronize(dx_stream);
-  cudaStreamDestroy(dx_stream);
+
+  
+  dim3 grid_size2(std::ceil((OC*C)/(float)TILE_SIZE));
+  mult_backwarddw<<<grid_size2, block_size, shared_mem_size, dw_stream>>>(inp, dw, dout, TILE_SIZE, tile_size_sq, B, C, OC);
+
+  cudaStreamSynchronize(dw_stream);
+  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamDestroy(dw_stream);
   */
   
+
+
+
 
 
   /*
@@ -9553,23 +9833,6 @@ void matmul_backward(float *inp,  float *weight,
   
   
 
-  // backward to input
-  
-  
-  
-  float one = 1.0f, zero = 0.0f;
-  
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
-                             weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
-                             dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));                         
-  
-  
-  
-  
-  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
-                             inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
-                             dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
 
   //PrintTensorF(dw,7,7);
 
@@ -9585,6 +9848,8 @@ void matmul_forward2(float* out,
   const float alpha = 1.0f;
   const float beta = 0.0f;
   
+
+
   //std::cout << "matmul_forward. B: " << B << " C: " << C << " OC: " << OC << "\n";
   
 
@@ -9593,17 +9858,18 @@ void matmul_forward2(float* out,
 
 
 
-  /*
-  int tile_size = 16;
   
-  dim3 block_size(tile_size, tile_size);
-  dim3 grid_size(std::ceil(OC/float(tile_size)), std::ceil(B/(float)tile_size));
-  int shared_mem_size = 2*tile_size*tile_size*sizeof(float);
+  /*
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(std::ceil(OC/float(TILE_SIZE)), std::ceil(B/(float)TILE_SIZE));
+  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
-  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, tile_size*tile_size, B, C, OC);
+  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
   */
   
   
+  
+
 
   /*
   using ColumnMajor = cutlass::layout::ColumnMajor;
@@ -9629,10 +9895,8 @@ void matmul_forward2(float* out,
   gemm_operator(args);
   */
   
+
     
-
-
-
   /* //bias
   if (bias != NULL) {
       int block_size = sqrt_block_size * sqrt_block_size;
@@ -9640,7 +9904,6 @@ void matmul_forward2(float* out,
       add_bias<<<grid_size, block_size>>>(out, bias, B, T, OC);
   }
   */
-
 }
 
 
@@ -11904,6 +12167,43 @@ class MaxPool2d
 };
 
 
+class LSTM
+{
+  public:
+    
+    int C, OC, B, T;
+    std::string Init, Name;
+    float *W, *U, *x_out, *fused_out, *all_ht, *all_ct;
+
+    LSTM(int C, int OC, std::string Init, std::string Name)
+        : C(C), OC(OC), Init(Init), Name(Name) {
+      NamedTensorsT[Name] = new Tensor();
+      B = 0;
+      T = 0;
+
+      x_out = nullptr;
+      fused_out = nullptr;
+
+      float *w_cpu, *u_cpu;
+      w_cpu = make_lstm_init_xavier(C, OC);
+      u_cpu = make_lstm_init_xavier(C, OC);
+
+      cudaMalloc(&W, C*4*OC*sizeof(float));
+      cudaMalloc(&U, C*4*OC*sizeof(float));
+      cudaMemcpy(W, w_cpu, OC*4*OC*sizeof(float), cudaMemcpyHostToDevice); // ht weight
+      cudaMemcpy(U, u_cpu,  C*4*OC*sizeof(float), cudaMemcpyHostToDevice); // x weight
+
+      delete[] w_cpu;
+      delete[] u_cpu;
+    }
+
+  
+  void SetDescriptors(int, int);
+  float *Forward(Tensor *, Tensor *, Tensor *, int, int);
+  void Backward(float *, float *, float *);
+
+};
+
 
 //global
 static std::map<std::string, std::unique_ptr<BN2dRelu>> NamedBN2dRelu;
@@ -11911,6 +12211,504 @@ static std::map<std::string, std::unique_ptr<Relu>> NamedRelu;
 static std::map<std::string, std::unique_ptr<MaxPool2d>> NamedMaxPool2d;
 static std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
 static std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
+static std::map<std::string, std::unique_ptr<LSTM>> NamedLSTM;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__global__ void lstm_single_step_kernel(float *fused_out, const float *x, const float *W, const float *ht,
+                      const int t, const int T, const int tile_size, const int tile_offset,
+                      const int B, const int OC, const int fourX_OC, const int tanh_offset) {
+  // x  e [B,  4*OC]
+  // ht e [T, B, OC]
+  // W  e [4*OC, OC]
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  
+
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
+
+
+
+  int offset = tile_offset;
+
+  float y = 0.0f;
+
+
+  extern __shared__ float smem[];
+
+
+  
+
+  if (t==0)
+  {
+    for (int i=0; i < ceilf(OC/(float)tile_size); ++i)
+    {
+      // each tile has a subset of columns to work with
+      // tile_tid tells which exact column to use from the subset
+      // it assumes that W is transposed already
+
+      int _col  = i * tile_size + tx;
+      int _col2 = i * tile_size + ty;
+      
+      if(row<B && _col<OC)
+        smem[tx* tile_size +ty] = ht[(t-1)*B*OC+row*OC + _col];
+      else
+        smem[tx* tile_size +ty] = 0;
+      
+      if (col<fourX_OC && _col2<OC)
+        smem[offset+ty* tile_size +tx] = W[col*fourX_OC + _col2];
+      else
+        smem[offset+ty* tile_size +tx] = 0;
+      
+      __syncthreads();
+
+
+      for(int j=0; j<tile_size; ++j)
+        y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
+      
+      __syncthreads();
+      
+    }
+  }
+
+
+
+  if(row<B && col<fourX_OC)
+  {
+    
+    if (col<tanh_offset)
+    {
+      if (t==0)
+        y = 1/(1+exp(-(x[fourX_OC*(row*T + t) + col])));
+      else
+        y = 1/(1+exp(-(y + x[fourX_OC*(row*T + t) + col])));
+    }
+    else
+    {
+      if (t==0)
+      y = tanhf( x[fourX_OC*(row*T + t) + col] );
+      else
+      y = tanhf( y + x[fourX_OC*(row*T + t) + col] );
+    }
+
+    // Now we have tensors i, f, o and c_
+    // Output dim is: [B, 4*OC]
+    // Continuing on this kernel will result on partial usage of this kernel threads, we therefore move the result to the global memory and call another kernel
+
+    fused_out[t*B*fourX_OC + row*fourX_OC + col] = y;
+  }
+}
+
+
+
+
+
+
+__global__ void lstm_elementwise_ops_kernel(const float *fused_out,
+                      float *ht, float *ct,
+                      const int tile_size, const int tile_offset,
+                      const int t, const int T,
+                      const int B, const int OC, const int fourX_OC,
+                      const int f_offset, const int o_offset, const int c_offset) {
+  // ht        e [T, B, OC]
+  // ct        e [T, B, OC]
+  // fused out e [B,  4*OC]
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+  
+
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
+
+
+  float _ct;
+
+
+  if(row<B && col<OC)
+  {
+    // ct = f*ct + i*c_
+    if(t==0)
+      _ct = fused_out[t*B*fourX_OC + row*fourX_OC + col]*fused_out[t*B*fourX_OC + row*fourX_OC + c_offset + col];
+    else
+      _ct = fused_out[t*B*fourX_OC + row*fourX_OC + f_offset + col]*ct[t*B*OC + row*OC + col] + fused_out[t*B*fourX_OC + row*fourX_OC + col]*fused_out[t*B*fourX_OC + row*fourX_OC + c_offset + col];
+
+    // ht = o*tanh(ct)
+    ht[t*B*OC + row*OC + col] = fused_out[t*B*fourX_OC + row*fourX_OC + o_offset + col]*tanhf(_ct);
+    ct[t*B*OC + row*OC + col] = _ct;
+  }
+}
+
+
+void LSTM::SetDescriptors(int B, int T)
+{
+
+  if (x_out!=nullptr)
+  {
+    cudaFree(x_out);
+    cudaFree(fused_out);
+    cudaFree(all_ht);
+    cudaFree(all_ct);
+  }
+
+  x_out = get_from_pool(B*T*4*OC, "lstm x@U out");
+  fused_out = get_from_pool(T*B*4*OC, "lstm ht@W");
+
+  all_ht = get_from_pool(T*B*OC, "lstm all ht");
+  all_ct = get_from_pool(T*B*OC, "lstm all ct");
+
+
+  int grid_size, block_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(T*B*OC);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+
+  //set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(all_ht, B*T*OC);
+
+
+  this->B=B;
+  this->T=T;
+}
+
+
+float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int B, int T)
+{
+
+  int tile_size_sq = TILE_SIZE*TILE_SIZE;
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( (B*T) / (float)TILE_SIZE)  );
+  int shared_mem_size = 2*tile_size_sq*sizeof(float);
+
+
+  
+  
+  if (B!=this->B || T!=this->T)
+    SetDescriptors(B,T);
+  
+  
+
+  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_x->tensor_ptr, U, x_out, TILE_SIZE, tile_size_sq, B*T, C, 4*OC);
+
+  move_to_pool(B*T, tensor_ht->tensor_ptr, "input ht");
+  move_to_pool(B*T, tensor_ct->tensor_ptr, "input ct");
+  
+  
+
+  dim3 grid_size_lstm(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
+  dim3 grid_size_elementwises(  std::ceil( (OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
+
+  
+
+  int f_offset =     OC;
+  int o_offset = 2 * OC;
+  int c_offset = 3 * OC;
+
+  for (int t=0; t<T; ++t)
+  {
+    std::cout << "Forward t: " << t << "\n";
+    lstm_single_step_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x_out, W, all_ht,
+                                                                                      t, T, TILE_SIZE, tile_size_sq, B, OC, 4*OC, 3*OC);
+
+    lstm_elementwise_ops_kernel<<<grid_size_elementwises, block_size, 0, main_stream->stream>>>(fused_out,
+                                                                                      all_ht, all_ct,
+                                                                                      TILE_SIZE, tile_size_sq,
+                                                                                      t, T,
+                                                                                      B, OC, 4*OC,
+                                                                                      f_offset, o_offset, c_offset);
+  }
+
+
+  tensor_ht->tensor_ptr = all_ht + (int)((T-1)*B*OC);
+  tensor_ct->tensor_ptr = all_ct + (int)((T-1)*B*OC);
+
+  return tensor_ht->tensor_ptr;
+}
+
+
+
+
+
+__global__ void lstm_elementwise_ops_backward_kernel(const float *fused_out,
+                      const float *ct,
+                      float *d_ht, float *d_ct, float *d_ifoc,
+                      const int tile_size, const int tile_offset,
+                      const int t, const int _t, const int T,
+                      const int B, const int OC, const int fourX_OC,
+                      const int f_offset, const int o_offset, const int c_offset) {
+  // ht        e [T, B, OC]
+  // ct        e [T, B, OC]
+  // fused out e [B,  4*OC]
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+  
+
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
+
+
+
+  if(row<B && col<OC)
+  {
+    float d_ct_aux, tanh_ct, _d_ht;
+
+    _d_ht = d_ht[row*OC + col];
+    tanh_ct = tanhf(ct[_t*B*OC + row*OC + col]);
+
+    // ht = o*tanh(ct)
+
+    d_ifoc[row*fourX_OC + o_offset + col] = _d_ht*tanh_ct;
+
+    d_ct_aux = fused_out[_t*B*fourX_OC + row*fourX_OC + o_offset + col]*d_ht;
+    d_ct_aux = (1 - tanh_ct*tanh_ct)*d_ct_aux;
+
+    if(t==0) // set to zero instead of accumulate on the first iter
+      d_ct[row*OC + col] = d_ct_aux;
+    else
+    {
+      d_ct[row*OC + col] += d_ct_aux;
+      d_ct_aux = d_ct[row*OC + col];
+    }
+
+    // ct = f*ct + i*c_
+
+    d_ifoc[row*fourX_OC + col] = fused_out[_t*B*fourX_OC + row*fourX_OC + c_offset + col]*d_ct_aux;
+    d_ifoc[row*fourX_OC + c_offset + col] = fused_out[_t*B*fourX_OC + row*fourX_OC + col]*d_ct_aux;
+
+    d_ifoc[row*fourX_OC + f_offset + col] = ct[_t*B*OC + row*OC + col]*d_ct_aux;
+    d_ct[row*OC + col] = fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]*d_ct_aux;
+
+    //fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]
+    //_ct = fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]*ct[_t*B*OC + row*OC + col] + fused_out[_t*B*fourX_OC + row*fourX_OC + col]*fused_out[_t*B*fourX_OC + row*fourX_OC + c_offset + col];
+
+  }
+}
+
+
+
+__global__ void lstm_single_step_backward_d_ht_kernel(const float *fused_out, const float *d_ifoc,
+                      float *d_ht, const float *W,
+                      const int t, const int _t, const int T,
+                      const int tile_size, const int tile_offset,
+                      const int B, const int C, const int fourX_OC, const int tanh_offset) {
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // B
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // C
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  float sum = 0.0f;
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+
+
+  int offset = tile_offset;
+
+  float tmp = 0.0f;
+  // consider row as B and col as C
+  __syncthreads();
+  
+  for (int i=0; i<ceilf(OC/(float)tile_size); ++i)
+  {
+    int _col = i*tile_size + tx;
+    int _row = i*tile_size + ty;
+
+    if( row<B  && _col<OC)
+      smem[tx*tile_size +ty] = dy[row*OC + _col];
+    else
+      smem[tx*tile_size +ty] = 0;
+
+    if(_row<fourX_OC &&  col<OC)
+      smem[offset+ty*tile_size +tx] = w[_row*fourX_OC + col];
+    else
+      smem[offset+ty*tile_size +tx] = 0;
+    
+    __syncthreads();
+    
+
+    for(int j=0; j<tile_size; ++j)
+      tmp += smem[j*tile_size +ty] * smem[offset+j*tile_size +tx];
+    
+    __syncthreads();
+  }
+
+  if(row<B && col<C)
+    dx[row * C + col] = tmp;
+}
+
+
+
+
+void LSTM::Backward(float *x, float *dx, float *dy)
+{
+
+  int tile_size_sq = TILE_SIZE*TILE_SIZE;
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( (B*T) / (float)TILE_SIZE)  );
+  int shared_mem_size = 2*tile_size_sq*sizeof(float);
+
+
+  dim3 grid_size_elementwises(  std::ceil( (OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
+  dim3 grid_size_lstm(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
+
+  
+  float *d_ht = get_from_pool(B*OC, "d_ht");
+  float *d_ct = get_from_pool(B*OC, "d_ct");
+  float *d_ifoc = get_from_pool(B*4*OC, "d_ct");
+
+
+
+  std::cout << "Copy dy to d_ht" << "\n";
+  copy_tensor_kernel<<<std::ceil(B*OC/tile_size_sq), tile_size_sq, 0, main_stream->stream>>>(d_ht, dy, B*OC);
+  //set_to_zero_kernel<<<std::ceil(B*OC/tile_size_sq), tile_size_sq, 0, main_stream->stream>>>(d_ct, dy, B*OC);
+
+
+
+  int f_offset =     OC;
+  int o_offset = 2 * OC;
+  int c_offset = 3 * OC;
+
+  int reversed_t_;
+  for (int t=0; t<T; ++t)
+  {
+    reversed_t_ = T-t;
+    
+    std::cout << "backward t: " << t << "\n";
+
+    lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, 0, main_stream->stream>>>(fused_out,
+                                                                                      all_ct,
+                                                                                      d_ht, d_ct, d_ifoc,
+                                                                                      TILE_SIZE, tile_size_sq,
+                                                                                      t, reversed_t_, T,
+                                                                                      B, OC, 4*OC,
+                                                                                      f_offset, o_offset, c_offset);
+                                                                                      
+    lstm_single_step_backward_dx_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, d_ifoc, all_ht, W,
+                                                                                      t, reversed_t_, T, TILE_SIZE, tile_size_sq, B, OC, 4*OC, 3*OC);
+    //lstm_single_step_backward_x_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x, W, all_ht,
+    //                                                                                  t, T, TILE_SIZE, tile_size_sq, B, OC, 4*OC, 3*OC);
+
+  }
+
+}
+
+
+void lstm_backward(float *x, float *dx, float *dy, std::string name)
+{
+
+  std::unique_ptr<LSTM> lstm = std::move(NamedLSTM[name]);
+
+  std::cout << "lstm backward of " << name << "\n";
+
+  lstm->Backward(x, dx, dy);
+
+  NamedLSTM[name] = std::move(lstm);
+
+}
+
+
+
+
+
+extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, char *conv_namec, int is_obj_attr_or_self)
+{
+  //TODO: remove self arg and concatenate it instead during the function call
+  
+  
+  std::string _self = self;
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = _self + conv_name;
+
+  std::cout << "LSTM forward of " << conv_name << " with input " << tensor_x->name << ", ht: " << tensor_ht->name << "\n";
+
+
+  
+
+  float *tensor_ptr, *output, *d_filter;
+  
+  std::vector<float> dims = tensor_x->dims;
+  float input_dims_prod = DimsProd(dims);
+
+  float B = dims[0];
+  float T = dims[dims.size()-2];
+  float C = dims[dims.size()-1];
+
+
+
+  std::unique_ptr<LSTM> lstm = std::move(NamedLSTM[conv_name]);
+
+  if ((int)C!=(int)lstm->C)
+  {
+    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the LSTM are: " + std::to_string(lstm->C);
+    LogError(error);
+    
+    NamedLSTM[conv_name] = std::move(lstm);
+    return nullptr;
+  }
+
+
+
+  tensor_x->Sync();
+  tensor_ht->Sync();
+  tensor_ct->Sync();
+
+  output = lstm->Forward(tensor_x, tensor_ht, tensor_ct, (int) B, (int)T);
+
+
+  
+
+  int is_forward_func = 1;
+  
+
+
+  std::vector<float> new_dims = {(float)B, (float)lstm->OC}; 
+
+
+
+  /*
+  Tensor *conv_tensor = NamedTensorsT[conv_name];
+  conv_tensor->NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
+  conv_tensor->SetIsWeight();
+  */
+
+  NamedLSTM[conv_name] = std::move(lstm);
+  
+  
+  std::cout << "Returning from lstm forward."  << "\n";
+
+  Tensor *aux = createTensor(nullptr, {}, 0, false, conv_name);
+
+  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  new_tensor->AttrNodes(tensor_x, aux, lstm_op);
+  return new_tensor;
+}
 
 
 
@@ -13141,6 +13939,19 @@ extern "C" float CreateBN2dReluOnDemand(char *tensor_name, float C)
 }
 
 
+extern "C" float CreateLSTMOnDemand(char *tensor_name, char *init,
+                                      float C, float OC)
+{
+  std::cout << "\nCreate lstm on demand:\n   C: " << C << " OC " << OC << "\n";
+
+  auto lstm = std::make_unique<LSTM>((int)C, (int)OC, init, tensor_name);
+
+  std::cout << "Adding " << tensor_name << " to NamedLSTM dict\n";
+  NamedLSTM[tensor_name] = std::move(lstm);
+  return 0;
+}
+
+
 extern "C" float CreateReluOnDemand(char *tensor_name)
 {
   auto conv = std::make_unique<Relu>(tensor_name);
@@ -14191,6 +15002,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         dropout_backward(device_dx, w, device_dy, x_size);
         device_dw = device_dy;
         break;
+      case lstm_op:
+        lstm_backward(inp, device_dx, device_dy, param_name);
+        break;
+      
 
       // Custom Ops
       case sigmoid_add2weights_op:
@@ -16478,6 +17293,47 @@ Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 }
 
 
+Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+
+    Value *var_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {first_arg, var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {scope_str, var_name});
+    
+    
+
+
+    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateLSTMOnDemand"),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
+                                               C->codegen(first_arg, scope_str, previous_scope), OC->codegen(first_arg, scope_str, previous_scope)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
 Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -16759,7 +17615,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   else
   {
     //std::cout << "Override: " << CalleeOverride << "\n";
-    if (CalleeOverride=="ConvForward2d"||CalleeOverride=="MaxPoolForward2d"||CalleeOverride=="BatchNormForward2d"||CalleeOverride=="BN2dReluForward"||CalleeOverride=="ReluForward")
+    if (CalleeOverride=="ConvForward2d"||CalleeOverride=="MaxPoolForward2d"||CalleeOverride=="BatchNormForward2d"||CalleeOverride=="BN2dReluForward"||CalleeOverride=="ReluForward"||CalleeOverride=="LSTMForward")
     {
       CalleeF = getFunction(CalleeOverride);
       Value *conv_name = Builder->CreateGlobalString(tgt_function);
@@ -17752,6 +18608,15 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *LSTMForwardTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("LSTMForward", LSTMForwardTy);
+
+
+  //
   FunctionType *MaxPoolForward2dTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
@@ -18475,6 +19340,15 @@ FunctionType *unbugTy = FunctionType::get(
 
   
   //
+  FunctionType *wtokenize_pad_left_batch_firstTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("wtokenize_pad_left_batch_first", wtokenize_pad_left_batch_firstTy);
+
+  
+  //
   FunctionType *write_zeroswTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -18753,6 +19627,18 @@ FunctionType *unbugTy = FunctionType::get(
       false
   );
   TheModule->getOrInsertFunction("CreateConv2dOnDemand", CreateConv2dOnDemandTy);
+
+
+  //
+  FunctionType *CreateLSTMOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       int8PtrTy,
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("CreateLSTMOnDemand", CreateLSTMOnDemandTy);
 
 
   //
@@ -19095,6 +19981,8 @@ int main() {
   
   cudnnCreate(&cudnn);
 
+  std::cout << "Tile size is: " << TILE_SIZE << ".\n\n";
+
 
   // Create Global CUDA Streams
   for(int i=0; i<num_parallel_streams; i++)
@@ -19218,7 +20106,7 @@ int main() {
                       "load_preprocess_img", "max", "min", "unbug", "is_null",
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
-                      "wtokenize_pad_left", "print_randoms"};
+                      "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
