@@ -88,7 +88,7 @@ cudaDeviceProp deviceProp;
 int block_size_aux = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
 const int TILE_SIZE = (int)floorf(sqrtf((float)block_size_aux)); 
-
+const int TILE_SIZE_SQ = TILE_SIZE*TILE_SIZE;
 
 
 static cublasHandle_t cublas_handle;
@@ -6270,6 +6270,9 @@ std::map<float, std::vector<float *>> TensorPool;
 
 void move_to_pool(float dims_prod, float *tensor_ptr, std::string from)
 {
+  //if (dims_prod==50*256)
+  //  std::cout << "push B*OC of " << from << "\n";
+
   if (dims_prod==0)
     return;
   //std::cout << "move_to_pool from: " << from << "\n";
@@ -6294,6 +6297,9 @@ void move_to_pool(float dims_prod, float *tensor_ptr, std::string from)
 
 float *get_from_pool(float dims_prod, std::string from)
 {
+  //if (dims_prod==50*256)
+  //  std::cout << "get B*OC of " << from << "\n";
+
   if (dims_prod==0)
     return nullptr;
 
@@ -8495,8 +8501,9 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
 
   tensor_ptr = tensor->tensor_ptr;
 
-
-  arg_tensor = get_from_pool(dims_prod, "arg tensor");
+  std::string _name = "arg tensor of ";
+  _name = _name + tensor_name;
+  arg_tensor = get_from_pool(dims_prod, _name);
   
   //if (dims_prod!=0)//
   //  cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);//
@@ -8540,7 +8547,9 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   int dims_prod = scope_tensor->dims_prod;
 
 
-  move_to_pool(tensor->dims_prod, tensor->tensor_ptr, "remove tensor scope");
+  std::string _name = "remove tensor scope of ";
+  _name = _name + tensor_name;
+  move_to_pool(tensor->dims_prod, tensor->tensor_ptr, _name);
   tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod, scope_tensor->cuda_stream, scope_tensor->loader);
   tensor->from_grad_or_load = scope_tensor->from_grad_or_load;
   
@@ -9497,7 +9506,8 @@ __global__ void mult_backward(const float *x, const float *w,
 
 
 __global__ void mult_backwarddx(const float *w,
-                      float *dx, const float *dy, const int tile_size, const int tile_offset,
+                      float *dx, const float *dy,
+                      const int tile_size, const int tile_offset,
                       const int B, const int C, const int OC) {
 
   int row = blockIdx.y * blockDim.y + threadIdx.y; // B
@@ -9631,7 +9641,6 @@ __global__ void mult_backwarddw(const float *x,
     dw[oc * C + c] += tmp;
   }
   */
-
   
 }
 
@@ -9713,6 +9722,7 @@ void matmul_backward(float *inp,  float *weight,
 
 
   
+  /*
   // backward to input
   float one = 1.0f, zero = 0.0f;
   
@@ -9727,7 +9737,7 @@ void matmul_backward(float *inp,  float *weight,
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
                              inp, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &one,
                              dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-  
+  */
 
 
 
@@ -9752,7 +9762,7 @@ void matmul_backward(float *inp,  float *weight,
 
 
 
-  /*
+  
   cudaStream_t dw_stream;
   cudaStreamCreate(&dw_stream);
 
@@ -9767,13 +9777,13 @@ void matmul_backward(float *inp,  float *weight,
   
 
   
-  dim3 grid_size2(std::ceil((OC*C)/(float)TILE_SIZE));
-  mult_backwarddw<<<grid_size2, block_size, shared_mem_size, dw_stream>>>(inp, dw, dout, TILE_SIZE, tile_size_sq, B, C, OC);
+  dim3 grid_size2(std::ceil((OC*C)/(float)TILE_SIZE_SQ));
+  mult_backwarddw<<<grid_size2, block_size, shared_mem_size, main_stream->stream>>>(inp, dw, dout, TILE_SIZE, tile_size_sq, B, C, OC);
 
   cudaStreamSynchronize(dw_stream);
   cudaStreamSynchronize(main_stream->stream);
   cudaStreamDestroy(dw_stream);
-  */
+  
   
 
 
@@ -9861,7 +9871,7 @@ void matmul_forward2(float* out,
   
   /*
   dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil(OC/float(TILE_SIZE)), std::ceil(B/(float)TILE_SIZE));
+  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
   int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
   mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
@@ -12173,11 +12183,12 @@ class LSTM
     
     int C, OC, B, T;
     std::string Init, Name;
-    float *W, *U, *x_out, *fused_out, *all_ht, *all_ct;
+    float *W, *U, *x_out, *fused_out, *all_ht, *all_ct, *dW, *dU;
+    bool changed_descriptors;
 
     LSTM(int C, int OC, std::string Init, std::string Name)
         : C(C), OC(OC), Init(Init), Name(Name) {
-      NamedTensorsT[Name] = new Tensor();
+      changed_descriptors = false;
       B = 0;
       T = 0;
 
@@ -12185,13 +12196,25 @@ class LSTM
       fused_out = nullptr;
 
       float *w_cpu, *u_cpu;
-      w_cpu = make_lstm_init_xavier(C, OC);
-      u_cpu = make_lstm_init_xavier(C, OC);
+      //w_cpu = make_N_orthogonals(4, OC, OC);
+      w_cpu = make_lstm_init_xavier(OC, OC);
+      u_cpu = make_lstm_init_xavier(OC,  C);
+      
+      //w_cpu = make_lstm_torch(OC, OC);
+      //u_cpu = make_lstm_torch(OC, C);
 
-      cudaMalloc(&W, C*4*OC*sizeof(float));
-      cudaMalloc(&U, C*4*OC*sizeof(float));
-      cudaMemcpy(W, w_cpu, OC*4*OC*sizeof(float), cudaMemcpyHostToDevice); // ht weight
-      cudaMemcpy(U, u_cpu,  C*4*OC*sizeof(float), cudaMemcpyHostToDevice); // x weight
+
+      cudaMalloc(&W, 4*OC*OC*sizeof(float));
+      cudaMalloc(&U, 4*OC*C* sizeof(float));
+      cudaMemcpy(W, w_cpu, 4*OC*OC*sizeof(float), cudaMemcpyHostToDevice); // ht weight
+      cudaMemcpy(U, u_cpu, 4*OC* C*sizeof(float), cudaMemcpyHostToDevice); // x weight
+
+      Tensor *tensor_W = createTensor(W, {4*(float)OC*(float)OC}, 4*OC*OC, true, Name+"W");
+      Tensor *tensor_U = createTensor(U, {4*(float)OC*(float)C},  4*OC*C,  true, Name+"U");
+      
+
+      NamedTensorsT[Name+"W"] = tensor_W;
+      NamedTensorsT[Name+"U"] = tensor_U;
 
       delete[] w_cpu;
       delete[] u_cpu;
@@ -12199,6 +12222,7 @@ class LSTM
 
   
   void SetDescriptors(int, int);
+  void SetBackwardDescriptors();
   float *Forward(Tensor *, Tensor *, Tensor *, int, int);
   void Backward(float *, float *, float *);
 
@@ -12257,7 +12281,7 @@ __global__ void lstm_single_step_kernel(float *fused_out, const float *x_out, co
 
   
 
-  if (t==0)
+  if (t>0)
   {
     for (int i=0; i < ceilf(OC/(float)tile_size); ++i)
     {
@@ -12269,7 +12293,7 @@ __global__ void lstm_single_step_kernel(float *fused_out, const float *x_out, co
       int _col2 = i * tile_size + ty;
       
       if(row<B && _col<OC)
-        smem[tx* tile_size +ty] = ht[(t-1)*B*OC + row*OC + _col];
+        smem[tx* tile_size +ty] = ht[((t-1)*B + row)*OC + _col];
       else
         smem[tx* tile_size +ty] = 0;
       
@@ -12297,23 +12321,23 @@ __global__ void lstm_single_step_kernel(float *fused_out, const float *x_out, co
     if (col<tanh_offset)
     {
       if (t==0) //TODO: maybe create a separate kernel to solve the ifs?
-        y = 1/(1+exp(-(x_out[fourX_OC*(row*T + t) + col])));
+        y = 1/(1+exp(-(     x_out[(row*T + t)*fourX_OC + col] ) ));
       else
-        y = 1/(1+exp(-(y + x_out[fourX_OC*(row*T + t) + col])));
+        y = 1/(1+exp(-( y + x_out[(row*T + t)*fourX_OC + col] ) ));
     }
     else
     {
       if (t==0)
-        y = tanhf( x_out[fourX_OC*(row*T + t) + col] );
+        y = tanhf(     x_out[(row*T + t)*fourX_OC + col] );
       else
-        y = tanhf( y + x_out[fourX_OC*(row*T + t) + col] );
+        y = tanhf( y + x_out[(row*T + t)*fourX_OC + col] );
     }
 
     // Now we have tensors i, f, o and c_
-    // Output dim is: [B, 4*OC]
+    // Output dim is: [T, B, 4*OC]
     // Continuing on this kernel will result on partial usage of this kernel threads, we therefore move the result to the global memory and call another kernel
 
-    fused_out[t*B*fourX_OC + row*fourX_OC + col] = y;
+    fused_out[(t*B + row)*fourX_OC + col] = y;
   }
 }
 
@@ -12342,22 +12366,25 @@ __global__ void lstm_elementwise_ops_kernel(const float *fused_out,
   int col = x_block*tile_size + tx;
 
 
-  float _ct;
-
-
   if(row<B && col<OC)
   {
+    float _ct;
+    float idx = (t*B + row);
+    int tb_offset = idx*fourX_OC; //TODO: factorize index
+    int ht_tb_offset = idx*OC;
+
     // ct = f*ct + i*c_
     if(t==0)
-      _ct = fused_out[t*B*fourX_OC + row*fourX_OC + col]*fused_out[t*B*fourX_OC + row*fourX_OC + c_offset + col];
+      _ct = fused_out[tb_offset + col]*fused_out[tb_offset + c_offset + col];
     else
-      _ct = fused_out[t*B*fourX_OC + row*fourX_OC + f_offset + col]*ct[(t-1)*B*OC + row*OC + col] + fused_out[t*B*fourX_OC + row*fourX_OC + col]*fused_out[t*B*fourX_OC + row*fourX_OC + c_offset + col];
+      _ct = fused_out[tb_offset + f_offset + col]*ct[((t-1)*B + row)*OC + col] + fused_out[tb_offset + col]*fused_out[tb_offset + c_offset + col];
 
     // ht = o*tanh(ct)
-    ht[t*B*OC + row*OC + col] = fused_out[t*B*fourX_OC + row*fourX_OC + o_offset + col]*tanhf(_ct);
-    ct[t*B*OC + row*OC + col] = _ct;
+    ht[ht_tb_offset + col] = fused_out[tb_offset + o_offset + col]*tanhf(_ct);
+    ct[ht_tb_offset + col] = _ct;
   }
 }
+
 
 
 void LSTM::SetDescriptors(int B, int T)
@@ -12389,16 +12416,16 @@ void LSTM::SetDescriptors(int B, int T)
 
   this->B=B;
   this->T=T;
+  changed_descriptors=true;
 }
 
 
 float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int B, int T)
 {
 
-  int tile_size_sq = TILE_SIZE*TILE_SIZE;
   dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( (B*T) / (float)TILE_SIZE)  );
-  int shared_mem_size = 2*tile_size_sq*sizeof(float);
+  dim3 grid_size(  std::ceil( (4*OC) / (float)TILE_SIZE),   std::ceil( (B*T) / (float)TILE_SIZE)  );
+  int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
 
   
@@ -12408,17 +12435,24 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
   
   
 
-  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_x->tensor_ptr, U, x_out, TILE_SIZE, tile_size_sq, B*T, C, 4*OC);
+  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_x->tensor_ptr, U, x_out, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
 
-  move_to_pool(B*T, tensor_ht->tensor_ptr, "input ht");
-  move_to_pool(B*T, tensor_ct->tensor_ptr, "input ct");
+
+  //move_to_pool(tensor_ht->dims_prod, tensor_ht->tensor_ptr, "input ht");
+  //move_to_pool(tensor_ct->dims_prod, tensor_ct->tensor_ptr, "input ct");
   
   
 
-  dim3 grid_size_lstm(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
-  dim3 grid_size_elementwises(  std::ceil( (OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
+  dim3 grid_size_lstm(  std::ceil( (4*OC) / (float)TILE_SIZE),   std::ceil( B / (float)TILE_SIZE)  );
+  dim3 grid_size_elementwises(  std::ceil( (OC) / (float)TILE_SIZE),   std::ceil( B / (float)TILE_SIZE)  );
 
-  
+
+
+  //std::cout << "\nx out"  << "\n";
+  //PrintTensorF(x_out, B*T, 4*OC);
+  //std::cout << "\n";
+
+
 
   int f_offset =     OC;
   int o_offset = 2 * OC;
@@ -12426,16 +12460,19 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
 
   for (int t=0; t<T; ++t)
   {
-    std::cout << "Forward t: " << t << "\n";
-    lstm_single_step_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x_out, W, all_ht,
-                                                                                      t, T, TILE_SIZE, tile_size_sq, B, OC, 4*OC, 3*OC);
+    //std::cout << "Forward t: " << t << "\n";
 
-    //std::cout << "Fused out"  << "\n";
+
+    lstm_single_step_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x_out, W, all_ht,
+                                                                                      t, T, TILE_SIZE, TILE_SIZE_SQ, B, OC, 4*OC, 3*OC);
+
+    //std::cout << "\nFused out"  << "\n";
     //PrintTensorF(fused_out, B, 4*OC);
+    //std::cout << "\n";
 
     lstm_elementwise_ops_kernel<<<grid_size_elementwises, block_size, 0, main_stream->stream>>>(fused_out,
                                                                                       all_ht, all_ct,
-                                                                                      TILE_SIZE, tile_size_sq,
+                                                                                      TILE_SIZE, TILE_SIZE_SQ,
                                                                                       t, T,
                                                                                       B, OC, 4*OC,
                                                                                       f_offset, o_offset, c_offset);
@@ -12452,93 +12489,44 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
 
 
 
-__global__ void lstm_elementwise_ops_backward_kernel(const float *fused_out,
-                      const float *ct,
-                      float *d_ht, float *d_ct, float *d_ifoc,
-                      const int tile_size, const int tile_offset,
-                      const int t, const int _t, const int T,
-                      const int B, const int OC, const int fourX_OC,
-                      const int f_offset, const int o_offset, const int c_offset) {
-  // d_ht      e [B,    OC]
-  // d_ct      e [B,    OC]
-  // d_ifoc    e [B,  4*OC]
-  // ct        e [T, B, OC]
-  // fused out e [B,  4*OC]
-
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-  
-
-  int row = y_block*tile_size + ty;
-  int col = x_block*tile_size + tx;
 
 
 
-  if(row<B && col<OC)
-  {
-    float d_ct_aux, _ct, tanh_ct, _d_ht;
-
-    _d_ht = d_ht[row*OC + col];
-    _ct = ct[_t*B*OC + row*OC + col];
-    tanh_ct = tanhf(_ct);
-
-    // ht = o*tanh(ct)
-
-    
-    float i = fused_out[_t*B*fourX_OC + row*fourX_OC + col];
-    float f = fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col];
-    float o = fused_out[_t*B*fourX_OC + row*fourX_OC + o_offset + col];
-    float c = fused_out[_t*B*fourX_OC + row*fourX_OC + c_offset + col];
-
-    d_ifoc[row*fourX_OC + o_offset + col] = _d_ht*tanh_ct;
-
-    d_ct_aux = o*_d_ht;
-    d_ct_aux = (1 - tanh_ct*tanh_ct)*d_ct_aux;
-
-    if(t==0) // set to zero instead of accumulate on the first iter
-      d_ct[row*OC + col] = d_ct_aux;
-    else
-    {
-      d_ct[row*OC + col] += d_ct_aux;
-      d_ct_aux = d_ct[row*OC + col];
-    }
-
-    // ct = f*ct + i*c_
-
-    d_ifoc[row*fourX_OC + col] = c*d_ct_aux;
-    d_ifoc[row*fourX_OC + c_offset + col] = i*d_ct_aux;
-
-    d_ifoc[row*fourX_OC + f_offset + col] = _ct*d_ct_aux;
-    d_ct[row*OC + col] = f*d_ct_aux;
-
-
-    d_ifoc[row*fourX_OC + col] = (i*(1-i))*d_ifoc[row*fourX_OC + col];
-    d_ifoc[row*fourX_OC + f_offset + col] = (f*(1-f))*d_ifoc[row*fourX_OC + f_offset + col];
-    d_ifoc[row*fourX_OC + o_offset + col] = (o*(1-o))*d_ifoc[row*fourX_OC + o_offset + col];
-    d_ifoc[row*fourX_OC + c_offset + col] = (1-c*c)*d_ifoc[row*fourX_OC + c_offset + col];
-
-    //fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]
-    //_ct = fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]*ct[_t*B*OC + row*OC + col] + fused_out[_t*B*fourX_OC + row*fourX_OC + col]*fused_out[_t*B*fourX_OC + row*fourX_OC + c_offset + col];
-
-  }
-}
 
 
 
-__global__ void lstm_single_step_backward_dx_kernel(const float *fused_out, const float *d_ifoc,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__global__ void lstm_single_step_backward_dht_kernel(const float *d_ifoc,
                       float *d_ht, const float *w,
                       const int t, const int _t, const int T,
                       const int tile_size, const int tile_offset,
-                      const int B, const int C, const int OC, const int tanh_offset) {
+                      const int B, const int C, const int OC) {
 
   int row = blockIdx.y * blockDim.y + threadIdx.y; // B
-  int col = blockIdx.x * blockDim.x + threadIdx.x; // OC
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // C
   int tx = threadIdx.x;
   int ty = threadIdx.y;
 
-  float sum = 0.0f;
+  // d_ht      e [B,      OC]
+  // W         e [4*OC,   OC]
+  // d_ifoc    e [T, B, 4*OC]
+
 
 
   extern __shared__ char _smem[];
@@ -12561,7 +12549,7 @@ __global__ void lstm_single_step_backward_dx_kernel(const float *fused_out, cons
 
 
     if( row<B  && _col<OC)
-      smem[tx*tile_size +ty] = d_ifoc[row*OC + _col];
+      smem[tx*tile_size +ty] = d_ifoc[_t*B*OC + row*OC + _col];
     else
       smem[tx*tile_size +ty] = 0;
 
@@ -12583,38 +12571,299 @@ __global__ void lstm_single_step_backward_dx_kernel(const float *fused_out, cons
   }
 
   if(row<B && col<C)
-    d_ht[row * C + col] = tmp/4;
+    d_ht[row * C + col] = tmp;
+}
+
+
+
+__global__ void lstm_backward_dx_kernel(const float *d_ifoc,
+                      float *dx, const float *w,
+                      const int tile_size, const int tile_offset,
+                      const int B, const int T, const int C, const int OC) {
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // BT
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // OC
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  // d_ifoc e [T, B, 4*OC]
+  // dx     e [B, T,    C]
+
+  float sum = 0.0f;
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+
+
+  int offset = tile_offset;
+
+  float tmp = 0.0f;
+  // consider row as BT and col as C
+  
+  __syncthreads();
+
+  int b = row / T;
+  int t = row % T;
+  
+
+  for (int i=0; i<ceilf(OC/(float)tile_size); ++i)
+  {
+    int _col = i*tile_size + tx;
+    int _row = i*tile_size + ty;
+
+
+    if( row<B*T  && _col<OC)
+      smem[tx*tile_size +ty] = d_ifoc[(t*B + b)*OC + _col];
+    else
+      smem[tx*tile_size +ty] = 0;
+
+
+    if(_row<OC &&  col<C)
+      smem[offset+ty*tile_size +tx] = w[_row*C + col];
+    else
+      smem[offset+ty*tile_size +tx] = 0;
+    
+
+    __syncthreads();
+
+
+
+    for(int j=0; j<tile_size; ++j)
+      tmp += smem[j*tile_size +ty] * smem[offset+j*tile_size +tx];
+    
+    __syncthreads();
+  }
+
+  if(row<B*T && col<C)
+    dx[(b*T + t)*C + col] = tmp;
 }
 
 
 
 
-void LSTM::Backward(float *x, float *dx, float *dy)
-{
-
-  int tile_size_sq = TILE_SIZE*TILE_SIZE;
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( (B*T) / (float)TILE_SIZE)  );
-  int shared_mem_size = 2*tile_size_sq*sizeof(float);
 
 
-  dim3 grid_size_elementwises(  std::ceil( (OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
-  dim3 grid_size_lstm(  std::ceil( (4*OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
-  dim3 grid_size_d_ht(  std::ceil( (OC) / float(TILE_SIZE)),   std::ceil( B / (float)TILE_SIZE)  );
+__global__ void lstm_elementwise_ops_backward_kernel(const float *fused_out,
+                      const float *ct,
+                      float *d_ht, float *d_ct, float *d_ifoc,
+                      const float *w,
+                      const int tile_size, const int tile_offset,
+                      const int t, const int _t, const int T,
+                      const int B, const int OC, const int fourX_OC,
+                      const int f_offset, const int o_offset, const int c_offset) {
+  // d_ht      e [B,      OC]
+  // d_ct      e [B,      OC]
+  // d_ifoc    e [T, B, 4*OC]
+  // ct        e [T, B,   OC]
+  // fused out e [T, B, 4*OC]
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+  
+
+  int row = y_block*tile_size + ty;
+  int col = x_block*tile_size + tx;
+
+
+  int tb_offset = (_t*B + row)*fourX_OC;
+
+  if(row<B && col<OC)
+  {
+    float d_ct_aux, _ct, tanh_ct, _d_ht;
+
+    _d_ht = d_ht[row*OC + col];
+    _ct = ct[(_t*B + row)*OC + col];
+    tanh_ct = tanhf(_ct);
+
+
+    // ct = f*ct + i*c_
+    // ht = o*tanh(ct)
+
+    
+    float i = fused_out[tb_offset + col];
+    float f = fused_out[tb_offset + f_offset + col];
+    float o = fused_out[tb_offset + o_offset + col];
+    float c = fused_out[tb_offset + c_offset + col];
+
+    float d_i, d_f, d_o, d_c;
+
+    d_o = _d_ht * tanh_ct;
+
+    d_ct_aux = o * _d_ht;
+    d_ct_aux = (1 - tanh_ct*tanh_ct) * d_ct_aux;
+
+    if(t!=0) // set to zero instead of accumulating on the first iter
+      d_ct_aux += d_ct[row*OC + col];
+
+    // ct = f*ct + i*c_
+
+    d_i = c * d_ct_aux;
+    d_c = i * d_ct_aux;
+
+    d_f = _ct * d_ct_aux;
+    d_ct[row*OC + col] = f * d_ct_aux;
+
+
+    d_ifoc[tb_offset +            col] = (i*(1-i)) * d_i;
+    d_ifoc[tb_offset + f_offset + col] = (f*(1-f)) * d_f;
+    d_ifoc[tb_offset + o_offset + col] = (o*(1-o)) * d_o;
+    d_ifoc[tb_offset + c_offset + col] = (1- c*c ) * d_c;
+
+    //fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]
+    //_ct = fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]*ct[_t*B*OC + row*OC + col] + fused_out[_t*B*fourX_OC + row*fourX_OC + col]*fused_out[_t*B*fourX_OC + row*fourX_OC + c_offset + col];
+
+  }
+  
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+  int offset = tile_offset;
+
+  float tmp = 0.0f;
+  // consider row as B and col as C
+  
+  __syncthreads();
+  
+
+  for (int i=0; i<ceilf(fourX_OC/(float)tile_size); ++i)
+  {
+    int _col = i*tile_size + tx;
+    int _row = i*tile_size + ty;
+
+
+    if( row<B  && _col<fourX_OC)
+      smem[tx*tile_size +ty] = d_ifoc[tb_offset + _col];
+    else
+      smem[tx*tile_size +ty] = 0;
+
+
+    if(_row<fourX_OC &&  col<OC)
+      smem[offset+ty*tile_size +tx] = w[_row*OC + col];
+    else
+      smem[offset+ty*tile_size +tx] = 0;
+    
+
+    __syncthreads();
+
+
+
+    for(int j=0; j<tile_size; ++j)
+      tmp += smem[j*tile_size +ty] * smem[offset+j*tile_size +tx];
+    
+    __syncthreads();
+  }
+
+  if(row<B && col<OC)
+    d_ht[row*OC + col] = tmp;
+}
+
+
+
+
+
+
+__global__ void mult_backwarddw_scale(const float *x,
+                      float *dw, const float *dy, const int tile_size, const int tile_offset,
+                      const int B, const int C, const int OC, const int scale) {
+
+  int row_major = blockIdx.y * blockDim.y + threadIdx.y; // C
+  int col_major = blockIdx.x * blockDim.x + threadIdx.x; // OC
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+
+
+  extern __shared__ char _smem[];
+  auto smem = reinterpret_cast<float*>(_smem);
+
+
+
+  // consider row as C and col as OC
+
+  int offset = tile_offset;
+
+  float tmp = 0.0f;
+  // consider row as C and col as OC
+  int row = col_major%C; // Also, invert col_major with row_make BECAUSE I HAVE NO FKING IDEA WHY. 20 HOURS IMPLEMETNING THIS F MATRIX MULTIPLY TILING OPS. WHYYYYYYYYYYY????
+  int col = row_major%OC;
 
   
+  for (int i=0; i<std::ceil(B/(float)tile_size); ++i)
+  {
+
+    int _row  = i*tile_size + tx;
+    int _row2 = i*tile_size + ty;
+
+    if( _row<B  && col<OC)
+      smem[tx*tile_size +ty] = dy[_row*OC + col]; // [B, OC]
+    else
+      smem[tx*tile_size +ty] = 0;
+
+    if(_row2<B  && row<C)
+      smem[offset+ty*tile_size +tx] = x[_row2*C + row];  // [B, C]
+    else
+      smem[offset+ty*tile_size +tx] = 0;
+    
+    
+    __syncthreads();
+    
+
+    for(int j=0; j<tile_size; ++j)
+      tmp += smem[j*tile_size+ty] * smem[offset+j*tile_size+tx];
+    
+    __syncthreads();
+  }
+  if(col<OC && row<C)
+    dw[col * C + row] += tmp * scale; 
+}
+
+
+void LSTM::SetBackwardDescriptors()
+{
+  std::cout << "Changed LSTM descriptors." << "\n";
+
+  dW = get_from_pool(4*OC*OC, "lstm dW");
+  dU = get_from_pool(4*OC*C, "lstm dU");
+
+  set_to_zero_kernel<<<std::ceil(4*OC*OC/TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 4*OC*OC);
+  set_to_zero_kernel<<<std::ceil(4*OC*C/TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
+
+  changed_descriptors=false;
+}
+
+
+void LSTM::Backward(float *x, float *dx, float *dy)
+{
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
+
+
   float *d_ht = get_from_pool(B*OC, "d_ht");
   float *d_ct = get_from_pool(B*OC, "d_ct");
-  float *d_ifoc = get_from_pool(B*4*OC, "d_ct");
+  float *d_ifoc = get_from_pool(T*B*4*OC, "d_ct");
+
+  //std::cout << "Copy dy to d_ht" << "\n";
+  copy_tensor_kernel<<<std::ceil((float)B*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ht, dy, B*OC);
+  set_to_zero_kernel<<<std::ceil((float)B*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
+  set_to_zero_kernel<<<std::ceil((float)T*(float)B*4*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ifoc, T*B*4*OC);
 
 
+  if (changed_descriptors)
+    SetBackwardDescriptors();
+  
 
-  std::cout << "Copy dy to d_ht" << "\n";
-  copy_tensor_kernel<<<std::ceil(B*OC/tile_size_sq), tile_size_sq, 0, main_stream->stream>>>(d_ht, dy, B*OC);
-  set_to_zero_kernel<<<std::ceil(B*OC/tile_size_sq), tile_size_sq, 0, main_stream->stream>>>(d_ct, B*OC);
+  
 
   //PrintTensorF(d_ht, B, OC);
 
+
+
+  dim3 grid_size_elementwises(  std::ceil( (float)OC / (float)TILE_SIZE),   std::ceil( (float)B / (float)TILE_SIZE)  );
+  dim3 grid_size_d_ht(          std::ceil( (float)OC / (float)TILE_SIZE),   std::ceil( (float)B / (float)TILE_SIZE)  );
 
 
   int f_offset =     OC;
@@ -12626,33 +12875,59 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   {
     reversed_t_ = T-t-1;
     
+    //std::cout << "backward t: " << t << ", reversed t: " << reversed_t_ << "\n";
 
-    lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, 0, main_stream->stream>>>(fused_out,
+    lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, shared_mem_size, main_stream->stream>>>(fused_out,
                                                                                       all_ct,
                                                                                       d_ht, d_ct, d_ifoc,
-                                                                                      TILE_SIZE, tile_size_sq,
+                                                                                      W,
+                                                                                      TILE_SIZE, TILE_SIZE_SQ,
                                                                                       t, reversed_t_, T,
                                                                                       B, OC, 4*OC,
                                                                                       f_offset, o_offset, c_offset);
 
     //PrintTensorF(fused_out+reversed_t_*B*4*OC, B, 4*OC);
     //PrintTensorF(d_ifoc, B, OC);
-                                                                                      
-    lstm_single_step_backward_dx_kernel<<<grid_size_d_ht, block_size, shared_mem_size, main_stream->stream>>>(fused_out, d_ifoc, d_ht, W,
-                                                                                      t, reversed_t_, T, TILE_SIZE, tile_size_sq, B, OC, 4*OC, 3*OC);
-    PrintTensorF(d_ht, B, OC);
-
-    std::cout << "backward t: " << t << ", reversed t: " << reversed_t_ << "\n";
-
-    //lstm_single_step_backward_x_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x, W, all_ht,
-    //                                                                                  t, T, TILE_SIZE, tile_size_sq, B, OC, 4*OC, 3*OC);
-
+    /*
+    lstm_single_step_backward_dht_kernel<<<grid_size_d_ht, block_size, shared_mem_size, main_stream->stream>>>(d_ifoc,
+                                                                                      d_ht, W,
+                                                                                      t, reversed_t_, T,
+                                                                                      TILE_SIZE, TILE_SIZE_SQ,
+                                                                                      B, OC, 4*OC);
+    */
+    //PrintTensorF(d_ht, B, OC);
   }
+  //PrintTensorF(d_ht, B, OC);
+
+  dim3 grid_size_dx(  std::ceil( (float)C  / (float)TILE_SIZE),   std::ceil( (float)B*(float)T   / (float)TILE_SIZE)  );
+  dim3 grid_size_dw(  std::ceil( 4*(float)OC*(float)OC / (float)TILE_SIZE_SQ)  );
+  dim3 grid_size_du(  std::ceil( 4*(float)OC*(float)C  / (float)TILE_SIZE_SQ)  );
+
+
+  // all_ht    e [T, B,    OC]
+  // all_ct    e [T, B,    OC]
+  // fused out e [T, B,  4*OC]
+  // d_ifoc    e [T, B,  4*OC]
+
+  // x         e [B, T,    OC]
+
+
+
+  //std::cout << "lstm dx" << "\n";
+  lstm_backward_dx_kernel<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(d_ifoc, dx, U,
+                                                                                      TILE_SIZE, TILE_SIZE_SQ, B, T, C, 4*OC);
+
+  //std::cout << "lstm dw" << "\n";
+  mult_backwarddw_scale<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(all_ht, dW, d_ifoc, TILE_SIZE, TILE_SIZE_SQ, B*T, OC, 4*OC,1);
+  //std::cout << "lstm du" << "\n";
+  mult_backwarddw_scale<<<grid_size_du, block_size, shared_mem_size, main_stream->stream>>>(x, dU, d_ifoc, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC,1);
+
 
   move_to_pool(B*OC, d_ht, "d_ht");
   move_to_pool(B*OC, d_ct, "d_ct");
-  move_to_pool(B*4*OC, d_ifoc, "d_ht");
+  move_to_pool(T*B*4*OC, d_ifoc, "d_ht");
 } 
+
 
 
 void lstm_backward(float *x, float *dx, float *dy, std::string name)
@@ -12660,7 +12935,7 @@ void lstm_backward(float *x, float *dx, float *dy, std::string name)
 
   std::unique_ptr<LSTM> lstm = std::move(NamedLSTM[name]);
 
-  std::cout << "lstm backward of " << name << "\n";
+  //std::cout << "lstm backward of " << name << "\n";
 
   lstm->Backward(x, dx, dy);
 
@@ -12682,7 +12957,7 @@ extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Te
   if (is_obj_attr_or_self)
     conv_name = _self + conv_name;
 
-  std::cout << "LSTM forward of " << conv_name << " with input " << tensor_x->name << ", ht: " << tensor_ht->name << "\n";
+  //std::cout << "LSTM forward of " << conv_name << " with input " << tensor_x->name << ", ht: " << tensor_ht->name << "\n";
 
 
   
@@ -12737,12 +13012,13 @@ extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Te
   NamedLSTM[conv_name] = std::move(lstm);
   
   
-  std::cout << "Returning from lstm forward."  << "\n";
+  //std::cout << "Returning from lstm forward."  << "\n";
 
-  Tensor *aux = createTensor(nullptr, {}, 0, false, conv_name);
+  //Tensor *aux = createTensor(nullptr, {}, 0, false, conv_name);
 
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->AttrNodes(tensor_x, aux, lstm_op);
+  new_tensor->AttrLNode(tensor_x, lstm_op);
+  new_tensor->scopeless_name = conv_name;
   return new_tensor;
 }
 
@@ -14740,11 +15016,9 @@ int DoesTreeContainWeight(Tensor *back_node)
 
 void ForwardCleanupToPool(Tensor *back_node, std::string scope)
 {
-  if(back_node==nullptr)
+  if(back_node==nullptr||back_node->weight)
     return;
   
-  if(back_node->weight)
-    return;
 
   
   if (!in_str(scope, scopes));
@@ -15039,7 +15313,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         device_dw = device_dy;
         break;
       case lstm_op:
-        lstm_backward(inp, device_dx, device_dy, param_name);
+        lstm_backward(inp, device_dx, device_dy, back_node->scopeless_name);
+        //device_dw = device_dx; //
         break;
       
 
@@ -15060,8 +15335,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         LogErrorS(_error);
         break;
     }
-    
-    
+
+    //if (ends_with(tensor_name, "ht"))
+    //  PrintTensorF(device_dx, 4, 256);
+  
   } else
   {
     //std::cout << "\n\nFROM A GRADLESS OP" << "\n\n\n";
@@ -15448,7 +15725,7 @@ extern "C" float eval()
 {
   std::cout << "\n\n\nSETTING NN MODE TO EVAL" << "\n\n";
   
-
+  /*
   for(int i=0; i<TensorPool.size(); i++)
   {
     for(int j=0; j<TensorPool[i].size();j++)
@@ -15456,8 +15733,8 @@ extern "C" float eval()
     
     TensorPool[i].clear();
   }
-
   TensorPool.clear();
+  */
   
   for (auto& pair : NamedParamGrads)
   {
@@ -16968,6 +17245,8 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
       tensor_cpu = make_zeros_float(product);
     if (std::strcmp(init, "ones") == 0)
       tensor_cpu = make_ones_float(product);
+    if (std::strcmp(init, "normal") == 0)
+      tensor_cpu = make_normal(product);
     if (std::strcmp(init, "xavu") == 0)
       tensor_cpu = make_xavier_uniform_float(product, dims[dims.size()-1], dims[dims.size()-2]);
     if (std::strcmp(init, "xavu_relu") == 0)
@@ -16984,7 +17263,9 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
       tensor_cpu = make_random_int(product, 1);
 
     cudaCheck(cudaGetLastError());
-    tensor_ptr = get_from_pool(product,"create tensor");
+    std::string _name = "create tensor ";
+    _name = _name + tensor_name;
+    tensor_ptr = get_from_pool(product, _name);
     //std::cout << "cpy of: " << tensor_name << "\n";
     cudaCheck(cudaMemcpy(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
     delete[] tensor_cpu;
@@ -20147,7 +20428,7 @@ int main() {
   native_fn = concat_str_vec(native_methods, native_functions);
 
 
-  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn"};
+  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal"};
 
 
   // Prime the first token.
