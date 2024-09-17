@@ -33,25 +33,13 @@ Limitations:
 
 - Install [cuDNN](https://developer.nvidia.com/cudnn-downloads) 9.4.0;
 
-- Install OpenCV:
-  
-```bash
-sudo apt install libopencv-dev
-```
-
-- Install cBLAS
-
-```bash
-sudo apt install libeigen3-dev
-```
-
-- Install LLVM dependencies:
+- Install OpenCV, cBLAS and LLVM dependencies:
   
 ```bash
 chmod +x *.sh
 sudo ./llvm.sh 19 all
 
-sudo apt-get install llvm clang zlib1g-dev libzstd-dev
+sudo apt-get install llvm clang zlib1g-dev libzstd-dev libeigen3-dev libopencv-dev
 ```
 - Add commands `nsk` to `PATH`:
 
