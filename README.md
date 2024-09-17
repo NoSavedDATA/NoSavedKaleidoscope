@@ -53,11 +53,11 @@ sudo apt-get install llvm clang zlib1g-dev libzstd-dev libeigen3-dev libopencv-d
 ./update_submodules.sh
 ```
 
-- Test using `nsk`, type `1+1;`, it should return `2.00`.
-
 ---
 
 ## Compiler
+
+- Run the C++ executable to generate the compiler executable.
 
 CUDA:
 ```bash
@@ -65,6 +65,9 @@ clang++ -g -O3 -rdynamic toy.cu `llvm-config --cxxflags --ldflags --system-libs 
 ```
 
  > `dl.lib` e `rt.lib` (isso é uma tentativa de adicionar as bibliotecas `dl.lib` ou `rt.lib` ao linker com `-ldl` e `-lrt`)
+
+
+- Test using `nsk`, type `1+1;`, it should return `2.00`.
 
 ---
 
