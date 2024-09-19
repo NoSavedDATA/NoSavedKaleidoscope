@@ -1,0 +1,278 @@
+start_timer(0)
+class Dataset
+    def __init__(f batch_size, f seq_len, f num_workers, s path)
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.seq_len = seq_len
+
+        float _len, yield_ptr, running_workers
+        self._len = 0
+        self.yield_ptr = 0
+        self.running_workers = 1
+
+        
+        float_vec can_load_, can_process_
+        self.can_load_ = zeros_vec(num_workers)
+        self.can_process_ = ones_vec(num_workers)
+
+        str_vec files
+        self.files = glob(path)
+
+        pinned_tensor[num_workers, seq_len, batch_size, 32768] self.p_x
+        pinned_tensor[num_workers, batch_size] self.p_y
+
+
+    def len()
+        self._len  = LenStrVec(self.files)
+        self.files = ShuffleStrVec(self.files)
+        self._len
+
+
+    def terminate_workers()
+        print("Terminating workers", 0)
+        self.running_workers = 0
+        sleep(3)
+        0
+
+
+    def increment_yield_ptr()
+        lock "yield"
+            if (self.yield_ptr + self.batch_size*(self.num_workers+2)) > self._len
+                self.yield_ptr = 0
+                self.files = ShuffleStrVec(self.files)
+                0
+            else
+                self.yield_ptr = self.yield_ptr + self.batch_size
+        self.yield_ptr
+
+
+    def getitem_w(f idx, f b, f w)
+        str aux
+
+        aux = self.files[idx]
+        
+        wtokenize_pad_left(self.p_x, aux, self.seq_len, w, b)
+        
+
+        self.p_y[w,b] = to_float(aux.split_idx("/", -2))
+        
+        0
+
+
+    def worker(f w)
+
+        float bs, can_process, yield_ptr
+        bs = self.batch_size
+
+
+        while self.running_workers == 1
+            
+            can_process = self.can_process_[w]
+            
+            if 1==can_process
+
+                self.can_load_[w] = 0
+                self.can_process_[w] = 0
+
+                yield_ptr = self.increment_yield_ptr()
+                
+                write_zerosw(self.p_x, w)
+                for b=0, b < bs
+                    self.getitem_w(yield_ptr+b, b, w)
+                    
+
+
+                self.can_load_[w] = 1
+                
+                0
+
+
+    def attr_w(t x, t y)
+
+        float w = -1
+
+        while w == -1
+            w = self.can_load_.first_nonzero()
+        
+        
+        
+        #print("ATTRIBUTING", w)
+
+        self.can_process_[w] = 0
+        self.can_load_[w] = 0
+        
+        
+        x.gpuw(self.p_x, w)
+        y.gpuw(self.p_y, w)
+
+        
+        self.can_process_[w] = 1
+
+        return x, y
+
+
+class GRU
+    def __init__(f vocab_size, f hiddens, f out_hiddens)
+
+        param[hiddens, vocab_size, xavu] self.embedding
+
+        param[hiddens, hiddens, xavu] self.Wz
+        param[hiddens, hiddens, xavu] self.Uz
+        param[hiddens, hiddens, xavu_tanh] self.Wr
+        param[hiddens, hiddens, xavu_tanh] self.Ur
+        param[hiddens, hiddens, xavu] self.Wh
+        param[hiddens, hiddens, xavu] self.Uh
+        param[hiddens, hiddens, xavu] self.W
+        param[hiddens, hiddens, xavu] self.U
+
+        param[out_hiddens, hiddens, xavu] self.cls
+
+
+    def forward(t x_i, t ht)
+        tensor[0] z, r, h_
+
+        x_i = x_i@self.embedding
+
+
+        #z = sigmoid_add2weights(x_i, self.Wz, ht, self.Uz)
+        z = sigmoid(x_i@self.Wz + ht@self.Uz)
+        r = sigmoid(x_i@self.Wr + ht@self.Ur)
+        h_ = tanh(x_i@self.Wr + r@self.Ur)
+
+        ht = z*ht + (1-z)*h_
+
+        return ht
+
+    
+    def classify(t ht)
+        tensor[0] out
+
+        #ht = dropout(ht, 0.2)
+
+        out = ht@self.cls
+
+        return out
+
+
+build_vocab("/mnt/d/datasets/acl_IMDB/vocab.txt", 32768);
+
+GRU gru
+gru.__init__(32768,256,2);
+
+float batch_size = 50
+float seq_len = 200
+float lr = 0.001
+
+
+#float max_steps = 5
+float max_steps = round(25000/batch_size)*4
+
+Dataset dataset
+dataset.__init__(batch_size, seq_len, 3, "/mnt/d/datasets/IMDB/train/*/*.txt");
+dataset.len();
+
+
+
+finish
+    async dataset.worker(0)
+    async dataset.worker(1)
+    async dataset.worker(2)
+
+
+    sleep(1)
+
+    for i=0, i<max_steps
+        print("i",i)
+
+        tensor[batch_size,256,zeros] ht
+        
+        tensor[0] x, y, x_i, out
+
+        dataset.attr_w(x, y)
+
+
+        for j=0, j<seq_len
+            x_i = x[j]
+            gru.forward(x_i, ht)
+
+        gru.classify(ht)
+        
+        y = y.onehot(2)
+
+        cross_entropy(out, y, 1/(batch_size*seq_len))
+        
+        backprop()
+        
+
+        AdamW(lr, 0.9, 0.999, 0.0001, 5)
+        0
+
+
+    dataset.terminate_workers()
+    0
+
+
+
+0;
+
+
+eval()
+
+
+batch_size = 50
+
+float val_steps = round(25000/batch_size)
+#float val_steps = 100
+
+Dataset val_dataset
+val_dataset.__init__(batch_size, seq_len, 3, "/mnt/d/datasets/IMDB/test/*/*.txt");
+val_dataset.len();
+
+
+
+tensor[1,zeros] acc
+
+
+finish
+    async val_dataset.worker(0)
+    async val_dataset.worker(1)
+    async val_dataset.worker(2)
+
+
+    sleep(1)
+
+    for i=0, i<val_steps
+        print("i",i)
+
+        tensor[batch_size,256,zeros] ht
+        
+        tensor[0] x, y, x_i, out
+        tensor[1] batch_acc
+
+        val_dataset.attr_w(x, y)
+
+
+        for j=0, j<seq_len
+            x_i = x[j]
+            gru.forward(x_i, ht)
+        
+        gru.classify(ht)
+
+        
+        out = out.argmax(-1)
+        
+
+        batch_acc = out==y
+        acc = acc + batch_acc.mean()
+        clean_forward()
+
+    val_dataset.terminate_workers()
+    0
+
+acc = acc/val_steps
+
+print("Accuracy",0)
+acc;
+
+
+end_timer(0);
