@@ -1,5 +1,7 @@
 # No Saved Kaleidoscope Compiler
 
+Official repository of: [https://arxiv.org/pdf/2409.11600](https://arxiv.org/pdf/2409.11600).
+
 NSK is a LLVM/C++ programming language. 
 
 All the code is open sourced.
