@@ -155,6 +155,13 @@ float *make_orthogonal(size_t rows, size_t cols) {
     Eigen::HouseholderQR<Eigen::MatrixXf> qr(random_matrix);
     Eigen::MatrixXf Q = qr.householderQ();
 
+
+    if (rows >= cols)
+        Q = Q.leftCols(cols); // First "cols" columns are orthogonal
+    else
+        Q = Q.topRows(rows); // First "rows" rows are orthogonal
+
+
     // Allocate memory for the orthogonal weights
     float* weights = (float*)malloc(rows * cols * sizeof(float));
 
@@ -180,25 +187,26 @@ void make_1_orthogonal(int n, float *w, size_t rows, size_t cols) {
     Eigen::MatrixXf random_matrix(rows, cols);
     
     // Fill the matrix with random values
-    for (size_t i = 0; i < rows; i++) {
-        for (size_t j = 0; j < cols; j++) {
+    for (size_t i = 0; i < rows; i++)
+        for (size_t j = 0; j < cols; j++)
             random_matrix(i, j) = dist(WEIGHT_PRNG);
-        }
-    }
+
+    
 
     // Perform QR decomposition to get orthogonal matrix Q
     Eigen::HouseholderQR<Eigen::MatrixXf> qr(random_matrix);
     Eigen::MatrixXf Q = qr.householderQ();
 
-    // Allocate memory for the orthogonal weights
     
+    if (rows >= cols)
+        Q = Q.leftCols(cols); // First "cols" columns are orthogonal
+    else
+        Q = Q.topRows(rows); // First "rows" rows are orthogonal
 
-    // Copy the orthogonal matrix Q to the weight array
-    for (size_t i = 0; i < rows; i++) {
-        for (size_t j = 0; j < cols; j++) {
+    for (size_t i = 0; i < rows; i++)
+        for (size_t j = 0; j < cols; j++)
             w[n*rows*cols + i * cols + j] = Q(i, j);
-        }
-    }
+    
 
 }
 
@@ -242,8 +250,7 @@ float* make_xavier_uniform_float_tanh(size_t N, float fan_in, float fan_out) {
 
 
 float* make_he_normal_float_relu(float N, float fan_in) {
-    //float std = sqrt(2/fan_in);
-    float std = 2/fan_in;
+    float std = sqrt(2/fan_in);
 
     std::normal_distribution<> dist(0.0, std);
 
