@@ -12339,11 +12339,9 @@ class Embedding
     int C, OC, B;
     std::string Init, Name;
     float *W, *dW;
-    bool changed_descriptors;
 
     Embedding(int C, int OC, std::string Init, std::string Name)
         : C(C), OC(OC), Init(Init), Name(Name) {
-      changed_descriptors = false;
       B = 0;
 
 
@@ -12382,19 +12380,20 @@ class LSTM
     
     int C, OC, B, T;
     std::string Init, Name;
-    float *W, *U, *x_out, *fused_out, *all_ht, *all_ct, *dW, *dU;
-    bool changed_descriptors;
+    float *W, *U, *x_out, *fused_out, *b, *all_ht, *all_ct, *dW, *dU, *dB, *d_ht, *d_ct, *d_ifoc;
+    bool changed_descriptors, first_backward;
 
     LSTM(int C, int OC, std::string Init, std::string Name)
         : C(C), OC(OC), Init(Init), Name(Name) {
       changed_descriptors = false;
+      first_backward = true;
       B = 0;
       T = 0;
 
       x_out = nullptr;
       fused_out = nullptr;
 
-      float *w_cpu, *u_cpu;
+      float *w_cpu, *u_cpu, *b_cpu;
       w_cpu = make_N_orthogonals(4, OC, OC);
       //w_cpu = make_lstm_init_xavier(OC, OC);
       u_cpu = make_lstm_init_xavier(OC,  C);
@@ -12402,20 +12401,26 @@ class LSTM
       //w_cpu = make_lstm_torch(OC, OC);
       //u_cpu = make_lstm_torch(OC, C);
 
+      b_cpu = make_lstm_bias(OC);
+
 
       cudaMalloc(&W, 4*OC*OC*sizeof(float));
-      cudaMalloc(&U, 4*OC*C* sizeof(float));
+      cudaMalloc(&U, 4*OC* C*sizeof(float));
+      cudaMalloc(&b, 4*OC*   sizeof(float));
       cudaMemcpy(W, w_cpu, 4*OC*OC*sizeof(float), cudaMemcpyHostToDevice); // ht weight
       cudaMemcpy(U, u_cpu, 4*OC* C*sizeof(float), cudaMemcpyHostToDevice); // x weight
+      cudaMemcpy(b, b_cpu, 4*OC*   sizeof(float), cudaMemcpyHostToDevice); // bias
  
       Tensor *tensor_W = createTensor(W, {4*(float)OC, (float)OC}, 4*OC*OC, true, Name+"W");
-      Tensor *tensor_U = createTensor(U, {4*(float)OC, (float)C},  4*OC*C,  true, Name+"U");
+      Tensor *tensor_U = createTensor(U, {4*(float)OC, (float)C},  4*OC* C, true, Name+"U");
+      Tensor *tensor_B = createTensor(b, {4*(float)OC},            4*OC  ,  true, Name+"b");
       tensor_W->SetIsWeight();
       tensor_U->SetIsWeight();
       
 
       NamedTensorsT[Name+"W"] = tensor_W;
       NamedTensorsT[Name+"U"] = tensor_U;
+      NamedTensorsT[Name+"B"] = tensor_B;
 
       delete[] w_cpu;
       delete[] u_cpu;
@@ -12424,6 +12429,7 @@ class LSTM
   
   void SetDescriptors(int, int);
   void SetBackwardDescriptors();
+  void FirstBackward();
   float *Forward(Tensor *, Tensor *, Tensor *, int, int);
   void Backward(float *, float *, float *);
 
@@ -12449,138 +12455,7 @@ static std::map<std::string, std::unique_ptr<Embedding>> NamedEmbedding;
 
 
 
-__global__ void embedding_forward_kernel(const float *x, const float *w,
-                      float *out, const int tile_size, const int B, const int C, const int OC) {
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-
-  
-  int row = y_block*tile_size + ty; // B
-  int col = x_block*tile_size + tx; // OC
-
-
-
-  // w e [V, OC]
-
-
-  if(row<B && col<OC)
-    out[row*OC + col] = w[((int)x[row])*OC + col];
-}
-
-
-
-float *Embedding::Forward(Tensor *tensor, int B)
-{
-  float *out = get_from_pool(B*OC, "embedding out");
-
-  this->B = B;
-
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
-  
-  embedding_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor->tensor_ptr, W, out, TILE_SIZE, B, C, OC);
-
-  return out;
-}
-
-
-__global__ void embedding_backward_kernel(const float *x,
-                      float *dw, const float *dy, const int tile_size,
-                      int B, int C, int OC) {
-
-  int row = blockIdx.y * blockDim.y + threadIdx.y; // B
-  int col = blockIdx.x * blockDim.x + threadIdx.x; // OC
-
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-
-
-
-  
-
-  if(row<B && col<OC)
-  {
-    
-    float *_dw = dw + ((int)x[row])*OC + col;
-    //float _dy = dy[row*OC + col];
-
-    atomicAdd(_dw, dy[row*OC + col]);
-    
-    //dw[row*C + col] = tmp;
-  }
-
-  
-}
-
-
-void Embedding::Backward(float *x, float *dx, float *dy)
-{
-  set_to_zero_kernel<<<std::ceil(OC*C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
-
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
-  embedding_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
-}
-
-
-
-
-
-
-extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, char *conv_namec, int is_obj_attr_or_self)
-{
-  //TODO: remove self arg and concatenate it instead during the function call
-  
-  
-  std::string _self = self;
-  std::string conv_name = conv_namec;
-  if (is_obj_attr_or_self)
-    conv_name = _self + conv_name;
-
-  //std::cout << "Embedding forward of " << conv_name << " with input " << tensor_x->name <<  "\n";
-
-
-
-  float *tensor_ptr, *output;
-  
-  std::vector<float> dims = tensor_x->dims;
-  float input_dims_prod = DimsProd(dims);
-
-
-  std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[conv_name]);
-
-  tensor_x->Sync();
-
-  output = embedding->Forward(tensor_x, tensor_x->dims_prod);
-  
-
-  int is_forward_func = 1;
-  
-
-  std::vector<float> new_dims = tensor_x->dims;
-  new_dims.push_back((float)embedding->OC); 
-
-  //PrintDims(new_dims);
-
-
-  NamedEmbedding[conv_name] = std::move(embedding);
-  
-  
-  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->AttrLNode(tensor_x, embedding_op);
-  new_tensor->scopeless_name = conv_name;
-  return new_tensor;
-}
-
-
-
-
-
-
-
-__global__ void lstm_single_step_kernel(float *fused_out, const float *x_out, const float *W, const float *ht,
+__global__ void lstm_single_step_kernel(float *fused_out, const float *x_out, const float *W, const float *ht, const float *b,
                       const int t, const int T, const int tile_size, const int tile_offset,
                       const int B, const int OC, const int fourX_OC, const int tanh_offset) {
   // x_out  e [B,  4*OC]
@@ -12649,16 +12524,16 @@ __global__ void lstm_single_step_kernel(float *fused_out, const float *x_out, co
     if (col<tanh_offset)
     {
       if (t==0) //TODO: maybe create a separate kernel to solve the ifs?
-        y = 1/(1+exp(-(     x_out[(row*T + t)*fourX_OC + col] ) ));
+        y = 1/(1+exp(-(     x_out[(row*T + t)*fourX_OC + col] +b[col]) ));
       else
-        y = 1/(1+exp(-( y + x_out[(row*T + t)*fourX_OC + col] ) ));
+        y = 1/(1+exp(-( y + x_out[(row*T + t)*fourX_OC + col] +b[col]) ));
     }
     else
     {
       if (t==0)
-        y = tanhf(     x_out[(row*T + t)*fourX_OC + col] );
+        y = tanhf(     x_out[(row*T + t)*fourX_OC + col] +b[col]);
       else
-        y = tanhf( y + x_out[(row*T + t)*fourX_OC + col] );
+        y = tanhf( y + x_out[(row*T + t)*fourX_OC + col] +b[col]);
     }
 
     // Now we have tensors i, f, o and c_
@@ -12791,7 +12666,7 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
     //std::cout << "Forward t: " << t << "\n";
 
 
-    lstm_single_step_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x_out, W, all_ht,
+    lstm_single_step_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x_out, W, all_ht, b,
                                                                                       t, T, TILE_SIZE, TILE_SIZE_SQ, B, OC, 4*OC, 3*OC);
 
     //std::cout << "\nFused out"  << "\n";
@@ -12976,7 +12851,7 @@ __global__ void lstm_backward_dx_kernel(const float *d_ifoc,
 
 __global__ void lstm_elementwise_ops_backward_kernel(const float *fused_out,
                       const float *ct,
-                      float *d_ht, float *d_ct, float *d_ifoc,
+                      float *d_ht, float *d_ct, float *d_ifoc, float *dB,
                       const float *w,
                       const int tile_size, const int tile_offset,
                       const int t, const int _t, const int T,
@@ -13042,9 +12917,17 @@ __global__ void lstm_elementwise_ops_backward_kernel(const float *fused_out,
     d_ifoc[tb_offset + o_offset + col] = (o*(1-o)) * d_o;
     d_ifoc[tb_offset + c_offset + col] = (1- c*c ) * d_c;
 
+
     //fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]
     //_ct = fused_out[_t*B*fourX_OC + row*fourX_OC + f_offset + col]*ct[_t*B*OC + row*OC + col] + fused_out[_t*B*fourX_OC + row*fourX_OC + col]*fused_out[_t*B*fourX_OC + row*fourX_OC + c_offset + col];
 
+    /**/
+    float *db = dB + col;
+    atomicAdd(db,          d_ifoc[tb_offset +            col]);
+    atomicAdd(db+f_offset, d_ifoc[tb_offset + f_offset + col]);
+    atomicAdd(db+o_offset, d_ifoc[tb_offset + o_offset + col]);
+    atomicAdd(db+c_offset, d_ifoc[tb_offset + c_offset + col]);
+    
   }
   
   extern __shared__ char _smem[];
@@ -13099,16 +12982,31 @@ void LSTM::SetBackwardDescriptors()
 {
   std::cout << "Changed LSTM descriptors." << "\n";
 
+
+  d_ht = get_from_pool(B*OC, "d_ht");
+  d_ct = get_from_pool(B*OC, "d_ct");
+  d_ifoc = get_from_pool(T*B*4*OC, "d_ct");
+
+  changed_descriptors=false;
+}
+
+void LSTM::FirstBackward()
+{
+  std::cout << "First LSTM backward." << "\n";
+
   dW = get_from_pool(4*OC*OC, "lstm dW");
-  dU = get_from_pool(4*OC*C, "lstm dU");
+  dU = get_from_pool(4*OC* C, "lstm dU");
+  dB = get_from_pool(4*OC,    "lstm dB");
 
   set_to_zero_kernel<<<std::ceil(4*OC*OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 4*OC*OC);
-  set_to_zero_kernel<<<std::ceil(4*OC*C /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
+  set_to_zero_kernel<<<std::ceil(4*OC* C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
+  set_to_zero_kernel<<<std::ceil(4*OC   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dB, 4*OC);
 
   NamedParamGrads[Name+"W"] = dW;
   NamedParamGrads[Name+"U"] = dU;
+  NamedParamGrads[Name+"B"] = dB;
 
-  changed_descriptors=false;
+  first_backward=false;
 }
 
 
@@ -13118,19 +13016,19 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
 
-  float *d_ht = get_from_pool(B*OC, "d_ht");
-  float *d_ct = get_from_pool(B*OC, "d_ct");
-  float *d_ifoc = get_from_pool(T*B*4*OC, "d_ct");
+
+  if (first_backward)
+    FirstBackward();
+  if (changed_descriptors)
+    SetBackwardDescriptors();
+
+  
 
   //std::cout << "Copy dy to d_ht" << "\n";
   copy_tensor_kernel<<<std::ceil((float)B*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ht, dy, B*OC);
   set_to_zero_kernel<<<std::ceil((float)B*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
   set_to_zero_kernel<<<std::ceil((float)T*(float)B*4*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ifoc, T*B*4*OC);
 
-
-  if (changed_descriptors)
-    SetBackwardDescriptors();
-  
 
   
 
@@ -13156,7 +13054,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
 
     lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, shared_mem_size, main_stream->stream>>>(fused_out,
                                                                                       all_ct,
-                                                                                      d_ht, d_ct, d_ifoc,
+                                                                                      d_ht, d_ct, d_ifoc, dB,
                                                                                       W,
                                                                                       TILE_SIZE, TILE_SIZE_SQ,
                                                                                       t, reversed_t_, T,
@@ -13219,16 +13117,14 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   cudaStreamDestroy(dw_stream);
   
 
-
-
-
-
-
-
+  /*
   move_to_pool(B*OC, d_ht, "d_ht");
   move_to_pool(B*OC, d_ct, "d_ct");
   move_to_pool(T*B*4*OC, d_ifoc, "d_ht");
+  */
 } 
+
+
 
 
 
@@ -13326,6 +13222,156 @@ extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Te
   new_tensor->scopeless_name = conv_name;
   return new_tensor;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__global__ void embedding_forward_kernel(const float *x, const float *w,
+                      float *out, const int tile_size, const int B, const int C, const int OC) {
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  
+  int row = y_block*tile_size + ty; // B
+  int col = x_block*tile_size + tx; // OC
+
+
+
+  // w e [V, OC]
+
+
+  if(row<B && col<OC)
+    out[row*OC + col] = w[((int)x[row])*OC + col];
+}
+
+
+
+float *Embedding::Forward(Tensor *tensor, int B)
+{
+  float *out = get_from_pool(B*OC, "embedding out");
+
+  this->B = B;
+
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
+  
+  embedding_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor->tensor_ptr, W, out, TILE_SIZE, B, C, OC);
+
+  return out;
+}
+
+
+__global__ void embedding_backward_kernel(const float *x,
+                      float *dw, const float *dy, const int tile_size,
+                      int B, int C, int OC) {
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // B
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // OC
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+
+
+  
+
+  if(row<B && col<OC)
+  {
+    
+    float *_dw = dw + ((int)x[row])*OC + col;
+    //float _dy = dy[row*OC + col];
+
+    atomicAdd(_dw, dy[row*OC + col]);
+    
+    //dw[row*C + col] = tmp;
+  }
+
+  
+}
+
+
+void Embedding::Backward(float *x, float *dx, float *dy)
+{
+  set_to_zero_kernel<<<std::ceil(OC*C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
+  embedding_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
+}
+
+
+
+
+
+
+extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, char *conv_namec, int is_obj_attr_or_self)
+{
+  //TODO: remove self arg and concatenate it instead during the function call
+  
+  
+  std::string _self = self;
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = _self + conv_name;
+
+  //std::cout << "Embedding forward of " << conv_name << " with input " << tensor_x->name <<  "\n";
+
+
+
+  float *tensor_ptr, *output;
+  
+  std::vector<float> dims = tensor_x->dims;
+  float input_dims_prod = DimsProd(dims);
+
+
+  std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[conv_name]);
+
+  tensor_x->Sync();
+
+  output = embedding->Forward(tensor_x, tensor_x->dims_prod);
+  
+
+  int is_forward_func = 1;
+  
+
+  std::vector<float> new_dims = tensor_x->dims;
+  new_dims.push_back((float)embedding->OC); 
+
+  //PrintDims(new_dims);
+
+
+  NamedEmbedding[conv_name] = std::move(embedding);
+  
+  
+  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  new_tensor->AttrLNode(tensor_x, embedding_op);
+  new_tensor->scopeless_name = conv_name;
+  return new_tensor;
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -15629,19 +15675,18 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         dropout_backward(device_dx, w, device_dy, x_size);
         device_dw = device_dy;
         break;
-      case lstm_op:
-        lstm_backward(inp, device_dx, device_dy, back_node->scopeless_name);
-        break;
-      case embedding_op:
-        embedding_backward(inp, device_dx, device_dy, back_node->scopeless_name);
-        break;
       
-
       // Custom Ops
       case sigmoid_add2weights_op:
         sigmoid_add2weights_backward(back_node, device_dy);
         device_dx = device_dy;
         device_dw = device_dy;
+        break;
+      case lstm_op:
+        lstm_backward(inp, device_dx, device_dy, back_node->scopeless_name);
+        break;
+      case embedding_op:
+        embedding_backward(inp, device_dx, device_dy, back_node->scopeless_name);
         break;
 
       // Loss Ops
@@ -15954,8 +15999,10 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
     {
       float *grad = pair.second;
       Tensor *tensor = NamedTensorsT[param_name];
+
       //std::cout << "param dims: "  << "\n";
       //PrintDims(tensor->dims);
+
       optimizer->init_states(param_name, tensor->dims_prod);
       optimizer->step(tensor->tensor_ptr, grad, tensor->dims, param_name, streams[i]);
 
