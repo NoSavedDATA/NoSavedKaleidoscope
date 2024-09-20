@@ -97,7 +97,7 @@ clang++ test.cu --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/l
 - After LSTM cuda kernel fusion:
 
 <div align="center">
-  <img src="assets/Scooby not Doo.jpg" alt="Logo" width="350" height="350">
+  <img src="assets/Scooby not Doo.png" alt="Logo" width="350" height="350">
 </div>
 
 ## Changelogs
