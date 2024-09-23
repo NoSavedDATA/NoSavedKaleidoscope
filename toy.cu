@@ -12413,7 +12413,7 @@ class LSTM
  
       Tensor *tensor_W = createTensor(W, {4*(float)OC, (float)OC}, 4*OC*OC, true, Name+"W");
       Tensor *tensor_U = createTensor(U, {4*(float)OC, (float)C},  4*OC* C, true, Name+"U");
-      Tensor *tensor_B = createTensor(b, {4*(float)OC},            4*OC  ,  true, Name+"b");
+      Tensor *tensor_B = createTensor(b, {4*(float)OC},            4*OC   , true, Name+"b");
       tensor_W->SetIsWeight();
       tensor_U->SetIsWeight();
       
@@ -16953,7 +16953,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   
 
   // find unique function name (_async 0, _async1, _async2 etc)
-  int fnIndex = 0;
+  int fnIndex = 1;
   while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
     fnIndex++;
   
@@ -17052,13 +17052,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-  /* 
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-  std::string functionName = TheFunction->getName().str();
-  BasicBlock *CurrentBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
-  Builder->CreateBr(CurrentBB);
-  */
-  
+
   
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
@@ -17091,12 +17085,8 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   );
   
   std::cout << "Created join call" << "\n";
-  
-  /*
-  BasicBlock *PostAsyncBB = BasicBlock::Create(*TheContext, "postasync", TheFunction);
-  Builder->CreateBr(PostAsyncBB); // Branch from the async block to the post async block
-  Builder->SetInsertPoint(PostAsyncBB);
-  */
+
+
 
   thread_pointers.push_back(pthreadPtr);
 
@@ -17119,7 +17109,6 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   //std::cout << "\n\nFinish codegen for: " << functionName <<  "\n";
 
 
-  //std::vector<Value *> thread_pointers;
   
 
   for (int i=0; i < Bodies.size(); i++)
@@ -18128,9 +18117,25 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   Value *name;
   
 
+  int thread = 0;
+
   //TODO: Solve scope_str discontinuity on async functions
   if (starts_with(functionName.c_str(), "__async_"))
+  {
+    std::cout << "\n\n\n\n\nASYNC" << "\n\n\n\n\n";
     scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+
+    std::string copy = functionName;
+    std::string prefix = "__async_";
+
+    size_t pos = copy.find(prefix);
+    copy.erase(pos, prefix.length());
+    thread = std::stoi(copy);
+  }
+  
+  std::cout << "\n\n\nFunction name: " << functionName << "\n";
+  std::cout << "THREAD IS: " << thread << "\n\n\n\n";
+
 
 
   //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
@@ -18701,6 +18706,9 @@ Function *FunctionAST::codegen() {
   scope_str = Builder->CreateAlloca(int8PtrTy);
   previous_scope = Builder->CreateAlloca(int8PtrTy);
   */
+
+  
+
 
   if (function_name=="__anon_expr")
   {
