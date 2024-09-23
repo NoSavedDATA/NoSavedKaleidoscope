@@ -102,6 +102,12 @@ clang++ test.cu --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/l
 
 ## Changelogs
 
+0.1
+  - It is now possible to code custom datasets (there is no str dict yet);
+  - Batch Norm and more activation functions support;
+  - Embedding module added;
+  - Fused LSTM kernels.
+
 0.01
   - Launched Cifar and MNIST like hardcoded datasets for neural network training;
   - MLP and Conv2d support;
