@@ -619,7 +619,7 @@ enum BackwardTypes {
   crop_op = 28,
   random_horizontal_flip_op = 29,
   normalize_img_op = 30,
-  rand_like_op = 31,
+  randu_like_op = 31,
   scalar_add_op = 34,
   scalar_sub_op = 35,
   scalar_mult_op = 36,
@@ -3600,6 +3600,9 @@ extern "C" float cpu(int thread_id, Tensor *tensor)
   tensor_ptr = tensor->tensor_ptr;
   tensor_cpu = tensor->cpu_tensor_ptr;
 
+  cudaStream_t stream = ThreadsStream[thread_id];
+  cudaStreamSynchronize(stream);
+
   if (tensor_ptr==nullptr)
     LogErrorS("Cannot load tensor to cpu from an null tensor.");
 
@@ -3609,8 +3612,6 @@ extern "C" float cpu(int thread_id, Tensor *tensor)
   float dims_prod = tensor->dims_prod;
 
 
-  cudaStream_t stream = ThreadsStream[thread_id];
-  cudaStreamSynchronize(stream);
 
   cudaMallocHost(&tensor_cpu, dims_prod*sizeof(float));
   cudaMemcpy(tensor_cpu, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
@@ -8532,12 +8533,12 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                           idx_calc_args);
 
-      return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at, scope_str});
+      return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at, scope_str, thread_id});
     } else {
       VariableExprAST *idx = static_cast<VariableExprAST *>(Idx[0].get());
       Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
       
-      return Builder->CreateCall(TheModule->getFunction("IdxTensorWithTensor"), {var_name, idx_tensor_name});
+      return Builder->CreateCall(TheModule->getFunction("IdxTensorWithTensor"), {var_name, idx_tensor_name, thread_id});
       
     }
     
@@ -8622,7 +8623,7 @@ __global__ void repeat_interleave_kernel_last_dim(const float *tensor,
 
 
 
-extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope)
+extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope, int thread_id)
 {
   
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
@@ -8672,7 +8673,8 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope)
   block_size = grid_block_mem_sizes[1];
 
   tensor->Sync();
-  copy_tensor_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_tensor, device_x, new_dims_prod);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  copy_tensor_kernel<<<grid_size, block_size, 0, stream>>>(new_tensor, device_x, new_dims_prod);
   
 
   /*
@@ -8716,7 +8718,7 @@ __global__ void idx_last_dim_kernel(float *tgt,
 
 
 
-extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name)
+extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name, int thread_id)
 {
   std::cout << "Idx tensor " << tensor_name << " with tensor " << idx_tensor_name << "\n";
 
@@ -8762,7 +8764,8 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name)
     int grid_size = tensor->dims_prod;
     int block_size = 32;
     size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-    idx_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(new_tensor, tensor_ptr, idx_tensor_ptr, tensor->dims_prod, tensor->dims_prod/idx_tensor->dims_prod);
+    cudaStream_t stream = ThreadsStream[thread_id];
+    idx_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(new_tensor, tensor_ptr, idx_tensor_ptr, tensor->dims_prod, tensor->dims_prod/idx_tensor->dims_prod);
   }
 
   
@@ -8832,15 +8835,18 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   //std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";
 
+  //std::cout << NamedTensorsT.count(tgt_tensor) <<  ", " << NamedTensorsT.count(scope_tensor_name) << "\n";
   
   Tensor *tensor, *scope_tensor;
   tensor = NamedTensorsT[tgt_tensor];
 
+
   if (tensor->thread_id != thread_id)
   {
     //std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n";
-    //std::cout << "Returning from thread id " << thread_id << " into " << tensor->thread_id << "\n\n\n\n";
+    std::cout << "Returning from thread id " << thread_id << " into " << tensor->thread_id << "\n\n\n\n";
     cudaStreamSynchronize(ThreadsStream[thread_id]);
+    cudaStreamSynchronize(ThreadsStream[tensor->thread_id]);
   } else {
     //std::cout << "Returning from thread id " << thread_id << " into " << tensor->thread_id << "\n\n\n\n";
   }
@@ -8860,7 +8866,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   
 
 
-  if(nn_mode==eval_mode)//
+  if(nn_mode==eval_mode||thread_id!=0)//
     to_free_tensor_forward(scope_tensor, scope);//
   else
     to_free_tensor(scope_tensor);
@@ -9019,6 +9025,18 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
 }
 
 
+
+extern "C" float print_scope(char *scope, char *previous_scope, int thread_id)
+{
+
+  std::cout << "\n- Scope is: " << scope << ";\n";
+  std::cout << "- Previous scope was: " << previous_scope << ";\n";
+  std::cout << "- Thread id: " << thread_id << ".\n\n";
+
+  return 0;
+}
+
+
 // Copies a pinned_tensor's reserved memory into a tensor.
 extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor)
 {
@@ -9131,7 +9149,7 @@ __global__ void idx_attr_last_dim_kernel(float *tgt,
     }
 }
 
-extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name, Tensor *R_tensor)
+extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name, Tensor *R_tensor, int thread_id)
 { 
   std::cout << "ATTR Idx tensor " << tensor_name << " at index tensor " << idx_tensor_name << " with tensor " << R_tensor->name << "\n";
 
@@ -9183,7 +9201,9 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
     int grid_size = tensor->dims_prod;
     int block_size = 32;
     size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-    idx_attr_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, r_tensor_ptr, idx_tensor_ptr, tensor->dims_prod, tensor->dims_prod/idx_tensor->dims_prod);
+
+    cudaStream_t stream = ThreadsStream[thread_id];
+    idx_attr_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, r_tensor_ptr, idx_tensor_ptr, tensor->dims_prod, tensor->dims_prod/idx_tensor->dims_prod);
   }
 
 
@@ -11305,7 +11325,7 @@ __global__ void argmax_over_last_dim_kernel(const float *tensor,
 
 extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...) 
 {
-  //std::cout << "ARGMAX OF " << tensor.name << "\n";
+  //std::cout << "ARGMAX OF " << tensor->name << " at thread: " << thread_id << "\n";
   cudaCheck(cudaGetLastError());
 
   float *tensor_ptr = tensor->tensor_ptr;
@@ -11343,7 +11363,7 @@ extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...)
       break;
     if (in_float_vec(dim, sum_dims))  
     {
-      std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
+      std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.argmax() operation.";
       LogErrorS(_error);
       return nullptr;
     }
@@ -16288,7 +16308,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
         VariableExprAST *idx = static_cast<VariableExprAST *>(LHSE->Idx[0].get());
         Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
         
-        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdxTensor"), {LtensorName, idx_tensor_name, RtensorPtr});
+        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdxTensor"), {LtensorName, idx_tensor_name, RtensorPtr, thread_id});
 
       }
     }
@@ -17499,7 +17519,7 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 extern "C" float InitObjectVecWithNull(char *name, float vec_size) 
 {
-  //std::cout << "InitObjectVecWithNull of " << name << " with vec_size " << vec_size << "\n\n\n\n";
+  std::cout << "InitObjectVecWithNull of " << name << " with vec_size " << vec_size << "\n\n\n\n";
 
   for (int i=0; i<vec_size; i++)
   {
@@ -17570,13 +17590,14 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     }
     else if (Init) // init of vec[size]
     {
-      var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+      //var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+      var_name = Builder->CreateGlobalString(VarName);
 
       if (is_self||is_attr) 
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"), //TODO: Break?
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
                                               {first_arg, var_name});
       if (!(is_self||is_attr))
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"), //TODO: Break?
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
                                               {scope_str, var_name});
 
       //Value *object_hash = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
@@ -17597,7 +17618,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-extern "C" void *rand_like(int thread_id, Tensor tensor)
+extern "C" void *randu_like(int thread_id, Tensor tensor)
 {
   float dims_prod = tensor.dims_prod;
 
@@ -17611,7 +17632,7 @@ extern "C" void *rand_like(int thread_id, Tensor tensor)
   delete[] tensor_cpu;
 
   Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
-  new_tensor->op = rand_like_op;
+  new_tensor->op = randu_like_op;
   return new_tensor;
 }
 
@@ -18341,12 +18362,14 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     target_args_size+=1;
   }
 
+  
 
-  if (!(CalleeOverride!="none" || in_str(Callee, native_fn))) // user defined functions
+  if (!(CalleeOverride!="none" || in_str(Callee, native_fn))||Callee=="print_scope") // user defined functions
   {
     has_scope = true;
     
-    scope_str = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
+    if(Callee!="print_scope")
+      scope_str = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
     
     
     ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
@@ -18747,9 +18770,28 @@ extern "C" char *LoadObjectScopeName(char *self)
     LogErrorS(_error);
     return "";
   }
+
+  /*
+  for (auto &pair : objectVecs)
+  {
+    std::cout <<  pair.first << ": " << pair.second << "\n";
+  }
+  */
   std::string ret = objectVecs[self];
-  delete[] self;
+  if(ret.length()==0)
+  {
+    for (auto &pair : objectVecs)
+      std::cout <<  pair.first << ": " << pair.second << "\n";
+
+    std::string _self = self;
+    std::string _error = "Loaded object "+_self+" has zero length.";
+    LogErrorS(_error);
+  }
+
+
   //std::cout << "LoadObjectScopeName is: " << ret << ", from self: " << self << "\n";
+
+  delete[] self;
 
   return str_to_char(ret);
 }
@@ -19223,7 +19265,7 @@ static void InitializeModule() {
   //
   FunctionType *IdxTensorTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("IdxTensor", IdxTensorTy);
@@ -19232,7 +19274,7 @@ static void InitializeModule() {
   //
   FunctionType *IdxTensorWithTensorTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("IdxTensorWithTensor", IdxTensorWithTensorTy);
@@ -20014,7 +20056,16 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("PrintFloatVec", PrintFloatVecTy);
-  
+
+
+  //
+  FunctionType *print_scopeTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("print_scope", print_scopeTy);
+
 
   //
   FunctionType *first_nonzeroTy = FunctionType::get(
@@ -20609,7 +20660,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *AttrTensorOnIdxTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("AttrTensorOnIdxTensor", AttrTensorOnIdxTensorTy);
@@ -20644,12 +20695,12 @@ FunctionType *unbugTy = FunctionType::get(
   
   
   //
-  FunctionType *rand_likeTy = FunctionType::get(
+  FunctionType *randu_likeTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false 
   );
-  TheModule->getOrInsertFunction("rand_like", rand_likeTy);
+  TheModule->getOrInsertFunction("randu_like", randu_likeTy);
 
   
   //
@@ -20908,7 +20959,7 @@ int main() {
 
   tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
   preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op};
-  gradless_ops = {rand_like_op, onehot_op, max_op, argmax_op, equal_op,
+  gradless_ops = {randu_like_op, onehot_op, max_op, argmax_op, equal_op,
                   create_tensor_from_brackets_op};
   gradless_ops = concat_int_vec(gradless_ops, preprocessing_ops);
 
@@ -20946,7 +20997,7 @@ int main() {
 
 
 
-  return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "rand_like", "print_tensor",
+  return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like", "print_tensor",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
@@ -20977,7 +21028,7 @@ int main() {
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
-                      "wtokenize_pad_left_idx"};
+                      "wtokenize_pad_left_idx", "print_scope"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
