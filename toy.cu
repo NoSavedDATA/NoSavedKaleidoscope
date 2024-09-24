@@ -469,8 +469,9 @@ void move_to_char_pool(size_t, char *, std::string);
 char *get_from_char_pool(size_t, std::string);
 
 // Tensor related
-std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn,
-return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits;
+std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn, native_modules,
+return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,
+threaded_tensor_functions;
 
 
 
@@ -1115,7 +1116,7 @@ public:
   Value *TensorPtr;
 
 
-  virtual Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) = 0;
+  virtual Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) = 0;
   virtual void SetType(std::string Type) {
     this->Type=Type;
     this->ReturnType=Type;
@@ -1208,7 +1209,7 @@ class NameSolverAST : public ExprAST {
                     : Names(std::move(Names)) {} 
   
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1221,7 +1222,7 @@ class NumberExprAST : public ExprAST {
       this->SetType("float");
     } 
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1234,22 +1235,9 @@ class StringExprAST : public ExprAST {
       this->SetType("str");
     } 
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
-
-
-/// VariableExprAST - Expression class for referencing a variable, like "a".
-class ObjAttrExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> Body;
-  std::string PreDot;
-
-  public:
-    ObjAttrExprAST(std::unique_ptr<ExprAST> Body, const std::string &PreDot)
-                : Body(std::move(Body)), PreDot(PreDot) {}
-
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
-};
 
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
@@ -1264,7 +1252,7 @@ class VariableExprAST : public ExprAST {
       this->NameSolver->SetType(Type);
     }
 
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override {
     return Name;
@@ -1286,7 +1274,7 @@ class VecIdxExprAST : public ExprAST {
       this->NameSolver->SetType(Type);
     }
 
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override { return Name; }
 };
@@ -1304,7 +1292,7 @@ class ObjectVecIdxExprAST : public ExprAST {
       this->isVarLoad = true;
     }
 
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 /// VarExprAST - Expression class for var/in
@@ -1319,7 +1307,7 @@ class VarExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 class StrExprAST : public ExprAST {
@@ -1332,7 +1320,7 @@ class StrExprAST : public ExprAST {
           this->SetType("str");
         }
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1347,7 +1335,7 @@ class StrVecExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1365,7 +1353,7 @@ class NewVecExprAST : public ExprAST {
           this->SetType(Type);
         }
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1380,7 +1368,7 @@ public:
       std::unique_ptr<ExprAST> Init)
       : VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1399,7 +1387,7 @@ class TensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit), IsWeight(IsWeight) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1416,7 +1404,7 @@ class PinnedTensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1437,7 +1425,7 @@ class Conv2dExprAST : public VarExprAST {
                    Stride(std::move(Stride)), Padding(std::move(Padding)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1455,7 +1443,7 @@ class MaxPool2dExprAST : public VarExprAST {
                    Ks(std::move(Ks)),
                    Stride(std::move(Stride)), Padding(std::move(Padding)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1470,7 +1458,7 @@ class BatchNorm2dExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1485,7 +1473,7 @@ class BN2dReluExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1504,7 +1492,7 @@ class LSTMExprAST : public VarExprAST {
                    C(std::move(C)), OC(std::move(OC)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1522,7 +1510,7 @@ class EmbeddingExprAST : public VarExprAST {
                    C(std::move(C)), OC(std::move(OC)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1534,7 +1522,7 @@ class ReluExprAST : public VarExprAST {
       std::string Type)
       : VarExprAST(std::move(VarNames), std::move(Type)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1547,7 +1535,7 @@ public:
   UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
       : Opcode(Opcode), Operand(std::move(Operand)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1561,7 +1549,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1574,7 +1562,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1587,7 +1575,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1600,7 +1588,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 class BinaryTensorPinnedExprAST : public ExprAST {
@@ -1612,7 +1600,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1625,7 +1613,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1650,7 +1638,7 @@ class CallExprAST : public ExprAST {
         : NameSolver(std::move(NameSolver)), Callee(Callee), Args(std::move(Args)), Class(Class),
           PreDot(PreDot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 class ReturnExprAST : public ExprAST {
@@ -1664,7 +1652,7 @@ class ReturnExprAST : public ExprAST {
                   std::vector<std::unique_ptr<ExprAST>> Destiny)
         : Vars(std::move(Vars)), IsAs(std::move(IsAs)), Destiny(std::move(Destiny)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1679,7 +1667,7 @@ class IfExprAST : public ExprAST {
               std::vector<std::unique_ptr<ExprAST>> Else)
         : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 /// ForExprAST - Expression class for for.
@@ -1695,7 +1683,7 @@ class ForExprAST : public ExprAST {
         : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
           Step(std::move(Step)), Body(std::move(Body)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 /// WhileExprAST - Expression class for while.
@@ -1707,7 +1695,7 @@ class WhileExprAST : public ExprAST {
     WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
       : Cond(std::move(Cond)), Body(std::move(Body)) {}
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1719,7 +1707,7 @@ class AsyncExprAST : public ExprAST {
     AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
       : Body(std::move(Body)) {}
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1734,7 +1722,7 @@ class FinishExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), IsAsync(std::move(IsAsync)) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -1749,7 +1737,7 @@ class LockExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), Name(Name) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 class UnlockExprAST : public ExprAST {
@@ -1759,7 +1747,7 @@ class UnlockExprAST : public ExprAST {
     UnlockExprAST(std::string Name) : Name(Name) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
 
 
@@ -2747,6 +2735,7 @@ void SynchronizeStream(CudaStreams *cuda_stream)
 }
 
 CudaStreams *main_stream, *backward_stream;
+static std::map<int, cudaStream_t> ThreadsStream;
 
 
 void RegisterEvent(cudaStream_t stream)
@@ -2836,6 +2825,7 @@ struct Tensor {
   float *dy=nullptr;
   float scalar;
   int b_size=0;
+  int thread_id;
   bool is_pinned;
 
   CudaStreams *cuda_stream = nullptr;
@@ -2871,6 +2861,7 @@ struct Tensor {
     loader = _loader;
     from_cudnn = "";
     is_pinned=false;
+    thread_id = 0;
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -2885,6 +2876,7 @@ struct Tensor {
     weight=false;
     from_grad_or_load=true;
     is_pinned=true;
+    thread_id = 0;
   }
 
   void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr){
@@ -2894,6 +2886,7 @@ struct Tensor {
     cuda_stream = _cuda_stream;
     loader = _loader;
     is_pinned=false;
+    thread_id = 0;
   }
 
   
@@ -2908,6 +2901,7 @@ struct Tensor {
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load||new_R_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
     is_pinned=false;
+    thread_id = 0;
   }
 
   void AttrLNode(Tensor *new_L_Tensor, int op_type)
@@ -2921,6 +2915,7 @@ struct Tensor {
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
     is_pinned=false;
+    thread_id = 0;
   }
 
   void AttributionBackwardNode(std::string _name, Tensor *new_R_Tensor)
@@ -2935,12 +2930,14 @@ struct Tensor {
     dy=nullptr;
     weight=false;
     is_pinned=false;
+    thread_id = 0;
   }
   void SetIsWeight()
   {
     weight=true;
     from_grad_or_load=true;
     is_pinned=false;
+    thread_id = 0;
   }
   void SetBias(float *b, int b_size)
   {
@@ -2948,6 +2945,7 @@ struct Tensor {
     this->b_size=b_size;
     leaf=true;
     is_pinned=false;
+    thread_id = 0;
   }
   void Sync()
   {
@@ -3547,7 +3545,7 @@ extern "C" float * wload_img_resize(Tensor *tensor, char *img_name, float worker
 }
 
 
-extern "C" float save_img(Tensor *tensor, char *img_name)
+extern "C" float save_img(int thread_id, Tensor *tensor, char *img_name)
 {
   
   int c, h, w;
@@ -3595,7 +3593,7 @@ extern "C" float save_img(Tensor *tensor, char *img_name)
   return 0;
 }
 
-extern "C" float cpu(Tensor *tensor)
+extern "C" float cpu(int thread_id, Tensor *tensor)
 {
 
   float *tensor_ptr, *tensor_cpu;
@@ -3609,6 +3607,10 @@ extern "C" float cpu(Tensor *tensor)
     cudaCheck(cudaFree(tensor_cpu));
 
   float dims_prod = tensor->dims_prod;
+
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  cudaStreamSynchronize(stream);
 
   cudaMallocHost(&tensor_cpu, dims_prod*sizeof(float));
   cudaMemcpy(tensor_cpu, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
@@ -3734,7 +3736,7 @@ extern "C" float tokenize(Tensor *tensor, char *filename)
 
 extern "C" float wtokenize(Tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
 {
-  //tensor shape: [workers, seq_len, batch_size, vocab_size]
+  //tensor e [workers, seq_len, batch_size, vocab_size]
 
   //pthread_mutex_lock(&vocab_mutex); // Files are not trhead safe
   std::ifstream file(filename);
@@ -5885,6 +5887,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
   ArgNames.push_back("scope_str");
   Types.push_back("s");
   ArgNames.push_back("previous_scope");
+  Types.push_back("i");
+  ArgNames.push_back("thread_id");
 
   while (CurTok != ')')
   {
@@ -6244,7 +6248,7 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 
 float *get_from_pool(float dims_prod, std::string from);
 
-extern "C" void *gpu(Tensor *tensor, Tensor *pinned_tensor)
+extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
 {
   //std::cout << "\nGpu transfer for: " << tensor.name << "\n";
   
@@ -6296,7 +6300,7 @@ extern "C" void *gpu(Tensor *tensor, Tensor *pinned_tensor)
 
 
 
-extern "C" float gpuw(Tensor *tensor, Tensor *pinned_tensor, float idx)
+extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, float idx)
 {
   //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
   
@@ -6859,7 +6863,7 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 
 
 
-Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -6914,7 +6918,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (type==type_vec)
       {
-        Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
+        Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, name});
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
@@ -6944,7 +6948,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                                       {var_name, name});
     if (Type=="object_vec")
     {
-      Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope);
+      Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
                                                         {var_name, _idx});
     }
@@ -6954,14 +6958,14 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   
   return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
-Value *StringExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *StringExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
@@ -7071,7 +7075,7 @@ extern "C" float load_preprocess_img(Tensor tensor, char *img_name)
 //===----------------------------------------------------------------------===//
 
 
-extern "C" void *view(Tensor *tensor, float first_dim, ...)
+extern "C" void *view(int thread_id, Tensor *tensor, float first_dim, ...)
 {
   //std::cout << "Executing: " << tensor.name << "." << "view" << "\n";
    
@@ -7359,7 +7363,7 @@ __global__ void tensor_clip(float* x, float *y, float _min, float _max, int dims
 
 
 
-extern "C" void *CudaScalarMult(Tensor *tensor, float R) {
+extern "C" void *CudaScalarMult(Tensor *tensor, float R, int thread_id) {
   //std::cout << "CudaScalarMult by " << R << "\n";
   
   int kDataLen = tensor->dims_prod;
@@ -7373,7 +7377,9 @@ extern "C" void *CudaScalarMult(Tensor *tensor, float R) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  vec_mult<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
+  tensor->Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_mult<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
   new_tensor->AttrLNode(tensor, scalar_mult_op);
@@ -7382,7 +7388,7 @@ extern "C" void *CudaScalarMult(Tensor *tensor, float R) {
 }
 
 
-extern "C" void *CudaScalarDiv(Tensor tensor, float R) {
+extern "C" void *CudaScalarDiv(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7395,15 +7401,17 @@ extern "C" void *CudaScalarDiv(Tensor tensor, float R) {
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  
-  vec_div<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_div<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
 
-extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R) {
+extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7417,13 +7425,15 @@ extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  vec_reverse_div<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_reverse_div<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
 
-extern "C" void *CudaScalarAdd(Tensor *tensor, float R) {
+extern "C" void *CudaScalarAdd(Tensor *tensor, float R, int thread_id) {
   
   int dims_prod = tensor->dims_prod;
 
@@ -7436,14 +7446,16 @@ extern "C" void *CudaScalarAdd(Tensor *tensor, float R) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  vec_add<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor->tensor_ptr, device_y, dims_prod);
+  tensor->Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_add<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, dims_prod);
   
   Tensor *new_tensor = createTensor(device_y, tensor->dims, dims_prod, false, "");
   new_tensor->AttrLNode(tensor, scalar_add_op);
   return new_tensor;
 }
 
-extern "C" void *CudaScalarSub(Tensor *tensor, float R) {
+extern "C" void *CudaScalarSub(Tensor *tensor, float R, int thread_id) {
 
   int kDataLen = tensor->dims_prod;
 
@@ -7456,14 +7468,16 @@ extern "C" void *CudaScalarSub(Tensor *tensor, float R) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  vec_sub<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
+  tensor->Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_sub<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
   new_tensor->AttrLNode(tensor, scalar_sub_op);
   return new_tensor;
 }
 
-extern "C" void *CudaScalarEqual(Tensor tensor, float R) {
+extern "C" void *CudaScalarEqual(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7476,12 +7490,14 @@ extern "C" void *CudaScalarEqual(Tensor tensor, float R) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  vec_equal<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_equal<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarDiff(Tensor tensor, float R) {
+extern "C" void *CudaScalarDiff(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7494,12 +7510,14 @@ extern "C" void *CudaScalarDiff(Tensor tensor, float R) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  vec_diff<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_diff<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarMinor(Tensor tensor, float R) {
+extern "C" void *CudaScalarMinor(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7511,12 +7529,15 @@ extern "C" void *CudaScalarMinor(Tensor tensor, float R) {
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  vec_minor<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_minor<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarMinorEq(Tensor tensor, float R) {
+extern "C" void *CudaScalarMinorEq(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7528,12 +7549,15 @@ extern "C" void *CudaScalarMinorEq(Tensor tensor, float R) {
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  vec_minor_eq<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_minor_eq<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarHigher(Tensor tensor, float R) {
+extern "C" void *CudaScalarHigher(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7545,12 +7569,15 @@ extern "C" void *CudaScalarHigher(Tensor tensor, float R) {
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  vec_higher<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_higher<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarHigherEq(Tensor tensor, float R) {
+extern "C" void *CudaScalarHigherEq(Tensor tensor, float R, int thread_id) {
 
   int kDataLen = tensor.dims_prod;
 
@@ -7562,7 +7589,10 @@ extern "C" void *CudaScalarHigherEq(Tensor tensor, float R) {
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  vec_higher_eq<<<grid_size, block_size, 0, main_stream->stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_higher_eq<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
@@ -7570,7 +7600,7 @@ extern "C" void *CudaScalarHigherEq(Tensor tensor, float R) {
 
 
 //TODONOW
-extern "C" void *logE(Tensor tensor) {
+extern "C" void *logE(int thread_id, Tensor tensor) {
   //std::cout << "logE of: " << tensor.name << "\n";
 
   float * device_x = tensor.tensor_ptr;
@@ -7585,13 +7615,16 @@ extern "C" void *logE(Tensor tensor) {
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  vec_log<<<grid_size, block_size, 0, main_stream->stream>>>(device_x, device_y, kDataLen);
+
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_log<<<grid_size, block_size, 0, stream>>>(device_x, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
   return new_tensor;
 }
 
-extern "C" void *logE2(Tensor tensor) {
+extern "C" void *logE2(int thread_id, Tensor tensor) {
   std::cout << "logE2 of: " << tensor.name << "\n";
 
   float * device_x = tensor.tensor_ptr;
@@ -7606,7 +7639,10 @@ extern "C" void *logE2(Tensor tensor) {
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
-  vec_log2<<<grid_size, block_size, 0, main_stream->stream>>>(device_x, device_y, kDataLen);
+
+  tensor.Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  vec_log2<<<grid_size, block_size, 0, stream>>>(device_x, device_y, kDataLen);
 
   Tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
   return new_tensor;
@@ -8245,26 +8281,10 @@ extern "C" void *LoadFloatVecOnDemand(char *object_var_name) {
 }
 
 
-Value *ObjAttrExprAST::codegen(Value *ignored_first_arg, Value *scope_str, Value *previous_scope) {
-  /*
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  Value *first_arg, *ret;
-
-  first_arg = Builder->CreateAlloca(int8PtrTy);
-  Builder->CreateStore(Builder->CreateGlobalString(PreDot), first_arg);
-
-
-  ret = Body->codegen(first_arg, scope_str, previous_scope);
-  */
-  return ConstantFP::get(*TheContext, APFloat(0.0f));
-}
-
 
 
 bool seen_var_attr = false;
-Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -8302,7 +8322,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
   
 
-  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope);
+  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
   std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
@@ -8426,7 +8446,7 @@ extern "C" char * AuxFn(char * arg1)
 
 
 
-Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -8442,11 +8462,11 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   Value *V, *idx;
 
   if (Type!="object_vec")
-    idx = Idx[0]->codegen(first_arg, scope_str, previous_scope);
+    idx = Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
 
 
   Value *var_name, *object_name, *object_var_name;
-  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope);
+  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
   
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
   std::string Name = std::get<0>(name_solver->Names[0]);
@@ -8508,14 +8528,14 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(var_name);
       for (int i=0; i<Idx.size(); i++)
-        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope));
+        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                           idx_calc_args);
 
       return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at, scope_str});
     } else {
       VariableExprAST *idx = static_cast<VariableExprAST *>(Idx[0].get());
-      Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
       
       return Builder->CreateCall(TheModule->getFunction("IdxTensorWithTensor"), {var_name, idx_tensor_name});
       
@@ -8531,7 +8551,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -8541,7 +8561,7 @@ Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
   std::cout << "vec name " << vec->GetName() << "\n";
   std::cout << "ObjectVecIdxExprAST is vec: " << GetIsVec() << "\n";
 
-  Value *idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope);
+  Value *idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
 
 
   Value *var_name, *object_name, *object_var_name, *post_dot_str;
@@ -8801,7 +8821,7 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
 }
 
 
-extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope)
+extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope, int thread_id)
 {
   std::string tgt_tensor = tgt_tensorc;
   tgt_tensor = previous_scope + tgt_tensor;
@@ -8809,11 +8829,22 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   std::string scope_tensor_name = scope;
   scope_tensor_name = scope_tensor_name + tensor_name;
 
+
   //std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";
 
   
   Tensor *tensor, *scope_tensor;
   tensor = NamedTensorsT[tgt_tensor];
+
+  if (tensor->thread_id != thread_id)
+  {
+    //std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n";
+    //std::cout << "Returning from thread id " << thread_id << " into " << tensor->thread_id << "\n\n\n\n";
+    cudaStreamSynchronize(ThreadsStream[thread_id]);
+  } else {
+    //std::cout << "Returning from thread id " << thread_id << " into " << tensor->thread_id << "\n\n\n\n";
+  }
+
 
   scope_tensor = NamedTensorsT[scope_tensor_name];
   std::vector<float> dims = scope_tensor->dims;
@@ -8843,7 +8874,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
 
 
-extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope, float idx_at)
+extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope, float idx_at, int thread_id)
 {
   std::string scope_tensor_name = scope;
   scope_tensor_name = scope_tensor_name + tensor_name;
@@ -8904,9 +8935,11 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 
 
-extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
+extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int thread_id)
 {
   //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
+
+  //std::cout << "ATTRIBUTE TENSOR AT THREAD " << thread_id << "\n";
 
   Tensor *tgt_tensor = NamedTensorsT[tensor_name];
   
@@ -8918,7 +8951,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
   }
   else if (tensor->name==""||!tensor->leaf) // Free current and point to operation result
   {
-    if(nn_mode==eval_mode)
+    if(nn_mode==eval_mode||thread_id!=0)
     {
       if(tensor->from_grad_or_load) //if(DoesTreeContainWeight(tensor)>0)
         ForwardCleanupToPool(tensor, scope);
@@ -8939,7 +8972,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
     
   } else { // Copy incoming tensor to preserve it
   
-    if(tensor->op==tensor_leaf||nn_mode==eval_mode)
+    if(tensor->op==tensor_leaf||nn_mode==eval_mode||thread_id!=0)
     {
       if(tgt_tensor->dims != tensor->dims)
       {
@@ -8959,7 +8992,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
       tensor->Sync();
       copy_tensor_kernel<<<grid_size,block_size,0,main_stream->stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
 
-      if(nn_mode==training_mode)
+      if(nn_mode==training_mode&&thread_id==0)
       {
         Tensor *attr_tensor;
         attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
@@ -8979,7 +9012,9 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope)
   //if(nn_mode==eval_mode)
   //  CleanScopeTensors(scope);
 
+  tgt_tensor->thread_id = thread_id;
   NamedTensorsT[tensor_name] = tgt_tensor;
+  
   return 0;
 }
 
@@ -9159,7 +9194,7 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
 
 
 
-Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -9199,7 +9234,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
       return LogErrorV("Destino do '=' deve ser uma variável.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
     if (!Val)
       return nullptr;
 
@@ -9220,8 +9255,8 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
   std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
 
 
@@ -9245,37 +9280,37 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   {
   case '*':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                               {LtensorPtr, R}, "cudascalarmult");
+                               {LtensorPtr, R, thread_id}, "cudascalarmult");
   case '/':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
-                               {LtensorPtr, R}, "cudascalardiv");
+                               {LtensorPtr, R, thread_id}, "cudascalardiv");
   case 77:
     return Builder->CreateCall(TheModule->getFunction("CudaReverseScalarDiv"),
-                               {LtensorPtr, R}, "cudareversescalardiv");
+                               {LtensorPtr, R, thread_id}, "cudareversescalardiv");
   case '+':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
-                               {LtensorPtr, R}, "cudascalaradd");
+                               {LtensorPtr, R, thread_id}, "cudascalaradd");
   case '-':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
-                               {LtensorPtr, R}, "cudascalarsub");
+                               {LtensorPtr, R, thread_id}, "cudascalarsub");
   case tok_equal:
     return Builder->CreateCall(TheModule->getFunction("CudaScalarEqual"),
-                               {LtensorPtr, R}, "cudascalarequal");
+                               {LtensorPtr, R, thread_id}, "cudascalarequal");
   case tok_diff:
     return Builder->CreateCall(TheModule->getFunction("CudaScalarDiff"),
-                               {LtensorPtr, R}, "cudascalardiff");
+                               {LtensorPtr, R, thread_id}, "cudascalardiff");
   case '<':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarMinor"),
-                               {LtensorPtr, R}, "cudascalarminor");
+                               {LtensorPtr, R, thread_id}, "cudascalarminor");
   case '>':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarHigher"),
-                               {LtensorPtr, R}, "cudascalarhigher");
+                               {LtensorPtr, R, thread_id}, "cudascalarhigher");
   case tok_minor_eq:
     return Builder->CreateCall(TheModule->getFunction("CudaScalarMinorEq"),
-                               {LtensorPtr, R}, "cudascalarminoreq");
+                               {LtensorPtr, R, thread_id}, "cudascalarminoreq");
   case tok_higher_eq:
     return Builder->CreateCall(TheModule->getFunction("CudaScalarHigherEq"),
-                               {LtensorPtr, R}, "cudascalarhighereq");
+                               {LtensorPtr, R, thread_id}, "cudascalarhighereq");
   case ':':
     return LtensorPtr;
   case tok_space:
@@ -9296,7 +9331,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -9310,7 +9345,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
     seen_var_attr=true;
 
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
     if (!Val)
       return nullptr;
     
@@ -9322,7 +9357,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
     VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
     if (!LHSE)
       return LogErrorV("'=' destiny must be a variable.");
@@ -9335,7 +9370,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
     for (int i=0; i<LHSE->Idx.size(); i++)
     {
-      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
     }
 
     Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
@@ -9354,7 +9389,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
 
       Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
-                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope), Val});
+                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope, thread_id), Val});
     }
       
     else
@@ -9379,8 +9414,8 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
   
 
 
@@ -9406,19 +9441,19 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   {
   case '*':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                               {LtensorPtr, R}, "cudascalarmult");
+                               {LtensorPtr, R, thread_id}, "cudascalarmult");
   case '/':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
-                               {LtensorPtr, R}, "cudascalardiv");
+                               {LtensorPtr, R, thread_id}, "cudascalardiv");
   case 77:
     return Builder->CreateCall(TheModule->getFunction("CudaReverseScalarDiv"),
-                               {LtensorPtr, R}, "cudareversescalardiv");
+                               {LtensorPtr, R, thread_id}, "cudareversescalardiv");
   case '+':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
-                               {LtensorPtr, R}, "cudascalaradd");
+                               {LtensorPtr, R, thread_id}, "cudascalaradd");
   case '-':
     return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
-                               {LtensorPtr, R}, "cudascalarsub");
+                               {LtensorPtr, R, thread_id}, "cudascalarsub");
   case ':':
     return LtensorPtr;
   case tok_space:
@@ -10005,7 +10040,7 @@ void matmul_backward(float *inp,  float *weight,
 
 void matmul_forward2(float* out,
                      float* inp, float* weight,
-                     int B, int C, int OC) {
+                     int B, int C, int OC, int thread_id) {
     
     
     
@@ -10018,18 +10053,24 @@ void matmul_forward2(float* out,
   
 
 
-  cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp, C, &beta, out, OC));
+  if (thread_id==0)
+  {
+    cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp, C, &beta, out, OC));
+  }
+  else
+  {
+    cudaStream_t stream = ThreadsStream[thread_id];
 
+    dim3 block_size(TILE_SIZE, TILE_SIZE);
+    dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
+    int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
-
+    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, weight, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+  }
   
-  /*
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
-  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
-
-  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(inp, weight, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
-  */
+  
+  
+  
   
   
   
@@ -10072,9 +10113,9 @@ void matmul_forward2(float* out,
 
 
 extern "C" Tensor *CudaMult(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
 
-  //std::cout << "      L " << LtensorName << "  &  R " << RtensorName << "\n";
+
   
   std::vector<float> Ldims, Rdims;
   Ldims = tensor_x->dims;
@@ -10105,7 +10146,7 @@ extern "C" Tensor *CudaMult(int is_forward_func,
 
   matmul_forward2(device_y, device_x, device_w,
                   linear_layer_dims[0], linear_layer_dims[1],
-                  Rdims[0]);
+                  Rdims[0], thread_id);
 
   
   
@@ -10151,7 +10192,7 @@ __global__ void equal_forward(float *y, const float *x,
 }
 
 extern "C" Tensor *CudaAdd(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -10187,7 +10228,8 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  add_forward<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  add_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
   
 
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
@@ -10197,7 +10239,7 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
 
 
 extern "C" Tensor *CudaSub(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -10221,7 +10263,10 @@ extern "C" Tensor *CudaSub(int is_forward_func,
   int grid_size = dims_prod;
   int block_size = 512;
   
-  sub_forward<<<grid_size, block_size>>>(device_y, device_x, device_w, dims_prod);
+  tensor_x->Sync();
+  tensor_w->Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  sub_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
   
   
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
@@ -10231,7 +10276,7 @@ extern "C" Tensor *CudaSub(int is_forward_func,
 
 
 extern "C" Tensor *CudaEqual(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -10256,7 +10301,8 @@ extern "C" Tensor *CudaEqual(int is_forward_func,
   
   tensor_x->Sync();
   tensor_w->Sync();
-  equal_forward<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  equal_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
   
   
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
@@ -10274,7 +10320,7 @@ __global__ void hadamard_kernel(float *y, const float *x,
 }
 
 extern "C" Tensor *CudaHadamard(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
 
   //std::cout << "      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -10287,6 +10333,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
   float dims_prod = tensor_x->dims_prod;
 
 
+  cudaStream_t stream = ThreadsStream[thread_id];
   if (Ldims!=Rdims) //Then broadcast
   { //TODO: change kernel instead
     bool first_iter = true;
@@ -10301,7 +10348,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
       int grid_size = dims_prod;
       int block_size = 32;
       size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(device_w, aux_tensor, aux_size, tgt_dim_size);
+      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, stream>>>(device_w, aux_tensor, aux_size, tgt_dim_size);
 
       if (!first_iter)
       {
@@ -10324,7 +10371,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
       int grid_size = dims_prod;
       int block_size = 32;
       size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(device_x, aux_tensor, aux_size, tgt_dim_size);
+      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, stream>>>(device_x, aux_tensor, aux_size, tgt_dim_size);
 
       if (!first_iter)
       {
@@ -10351,7 +10398,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
 
   tensor_x->Sync();
   tensor_w->Sync();
-  hadamard_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, device_x, device_w, dims_prod);
+  hadamard_kernel<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
   //PrintTensorF(device_y, 2, 2);
 
 
@@ -10364,7 +10411,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
 
 
 extern "C" void *CudaDiv(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w) {
+                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
   
   //std::cout << "TENSOR TENSOR DIV" << "\n";
   
@@ -10378,6 +10425,7 @@ extern "C" void *CudaDiv(int is_forward_func,
   R_dims_prod = tensor_w->dims_prod;
 
 
+  cudaStream_t stream = ThreadsStream[thread_id];
   if (Ldims!=Rdims) //Then broadcast
   { //TODO: change kernel instead
     bool first_iter = true;
@@ -10392,7 +10440,7 @@ extern "C" void *CudaDiv(int is_forward_func,
       int grid_size = dims_prod;
       int block_size = 32;
       size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size>>>(device_w, aux_tensor, aux_size, tgt_dim_size);
+      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, stream>>>(device_w, aux_tensor, aux_size, tgt_dim_size);
 
       if (!first_iter)
       {
@@ -10415,7 +10463,7 @@ extern "C" void *CudaDiv(int is_forward_func,
       int grid_size = dims_prod;
       int block_size = 32;
       size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size>>>(device_x, aux_tensor, aux_size, tgt_dim_size);
+      repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, stream>>>(device_x, aux_tensor, aux_size, tgt_dim_size);
 
       if (!first_iter)
       {
@@ -10443,7 +10491,7 @@ extern "C" void *CudaDiv(int is_forward_func,
   int grid_size = dims_prod;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  tensor_div<<<grid_size, block_size, shared_mem_size>>>(device_w, device_x, device_y, dims_prod);
+  tensor_div<<<grid_size, block_size, shared_mem_size, stream>>>(device_w, device_x, device_y, dims_prod);
 
   Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
   new_tensor->AttrNodes(tensor_x, tensor_w, div_op);
@@ -10479,7 +10527,7 @@ __global__ void onehot_kernel(const float *tensor,
 }
 
 
-extern "C" void *onehot(Tensor *tensor, float num_classes)
+extern "C" void *onehot(int thread_id, Tensor *tensor, float num_classes)
 {
   //std::cout << "ONEHOT OF " << tensor.name << "\n";
 
@@ -10503,7 +10551,9 @@ extern "C" void *onehot(Tensor *tensor, float num_classes)
   tensor->Sync();
 
   float *probs = get_from_pool(B*C, "onehot probs");
-  set_to_zero_kernel<<<grid_size, block_size>>>(probs, B*C);
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(probs, B*C);
 
   onehot_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, probs, B, C);
   //grid_size = ceil_div(B*C, block_size);
@@ -10516,7 +10566,7 @@ extern "C" void *onehot(Tensor *tensor, float num_classes)
 }
 
 
-extern "C" float shape(Tensor tensor)
+extern "C" float shape(int thread_id, Tensor tensor)
 {
   std::cout << "\nTensor \033[95m" << tensor.name<<"/"<<tensor.scopeless_name << "\033[0m:\n   ";
   PrintDims(tensor.dims);
@@ -10527,7 +10577,7 @@ extern "C" float shape(Tensor tensor)
 
 
 
-extern "C" void *repeat_interleave(Tensor tensor, float repeats, float dim)
+extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, float dim)
 {
   //std::cout << "REPEAT_interleave OF " << tensor.name << " with " << repeats << " repeats.\n";
 
@@ -10552,8 +10602,10 @@ extern "C" void *repeat_interleave(Tensor tensor, float repeats, float dim)
   int grid_size = B;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  cudaStream_t stream = ThreadsStream[thread_id];
   if (dim==(dims.size()-1))
-    repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, probs, B, C);
+    repeat_interleave_kernel_last_dim<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, probs, B, C);
   //grid_size = ceil_div(B*C, block_size);
   //onehot_kernel<<<grid_size, block_size>>>(tensor, probs, B, C);
 
@@ -10563,7 +10615,7 @@ extern "C" void *repeat_interleave(Tensor tensor, float repeats, float dim)
 }
 
 //TODO: mean over axis
-extern "C" void *mean(Tensor *tensor, float first_dim, ...)
+extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
 {
   //std::cout << "SUM OF " << tensor.name << "\n";
 
@@ -10572,6 +10624,7 @@ extern "C" void *mean(Tensor *tensor, float first_dim, ...)
   std::vector<float> dims = tensor->dims;
   float *summed;
 
+  cudaStream_t stream = ThreadsStream[thread_id];
 
   va_list args;
   va_start(args, first_dim);
@@ -10583,7 +10636,7 @@ extern "C" void *mean(Tensor *tensor, float first_dim, ...)
     int dims_prod = DimsProd(dims);
 
     summed = new float[dims_prod];
-    cudaCheck(cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost));
+    cudaCheck(cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream));
 
     cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
   
@@ -10596,7 +10649,7 @@ extern "C" void *mean(Tensor *tensor, float first_dim, ...)
   
     float *aux = new float[1];
     aux[0] = tensor_sum;
-    cudaCheck(cudaMemcpy(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice));
+    cudaCheck(cudaMemcpyAsync(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice, stream));
     delete[] aux;
   
     std::vector<float> new_dims;
@@ -10750,7 +10803,7 @@ __global__ void sum_over_semilast_dim_kernel(const float *tensor,
 
 
 
-extern "C" void *sum(Tensor tensor, float first_dim, ...)
+extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...)
 {
   //std::cout << "SUM OF " << tensor.name << "\n";
 
@@ -10759,6 +10812,7 @@ extern "C" void *sum(Tensor tensor, float first_dim, ...)
   std::vector<float> dims = tensor.dims;
   float *summed;
 
+  cudaStream_t stream = ThreadsStream[thread_id];
 
   va_list args;
   va_start(args, first_dim);
@@ -10770,7 +10824,7 @@ extern "C" void *sum(Tensor tensor, float first_dim, ...)
     int dims_prod = DimsProd(dims);
 
     summed = new float[dims_prod];
-    cudaCheck(cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost));
+    cudaCheck(cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream));
 
     cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
   
@@ -10849,13 +10903,13 @@ extern "C" void *sum(Tensor tensor, float first_dim, ...)
   
   if (dims.size()==1)
   {
-    sum_single_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod);
+    sum_single_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod);
     new_dims = {1.0f};
   }
   else if (sum_dims[0]==(dims.size()-1))
-    sum_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, summed_dim);
+    sum_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, summed_dim);
   if (sum_dims[0]==(dims.size()-2))
-    sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+    sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
   Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
@@ -10939,7 +10993,7 @@ __global__ void prod_over_semilast_dim_kernel(const float *tensor,
     }
 }
 
-extern "C" void *prod(Tensor tensor, float first_dim, ...)
+extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
 {
   std::cout << "PROD OF " << tensor.name << "\n";
 
@@ -10948,6 +11002,7 @@ extern "C" void *prod(Tensor tensor, float first_dim, ...)
   std::vector<float> dims = tensor.dims;
   float *summed;
 
+  cudaStream_t stream = ThreadsStream[thread_id];
 
   va_list args;
   va_start(args, first_dim);
@@ -10958,7 +11013,7 @@ extern "C" void *prod(Tensor tensor, float first_dim, ...)
     int dims_prod = DimsProd(dims);
 
     cudaMalloc(&summed, dims_prod*sizeof(float));
-    cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream);
     
     float tensor_sum=0;
     for(int i=0; i<dims_prod; i++)
@@ -11016,7 +11071,7 @@ extern "C" void *prod(Tensor tensor, float first_dim, ...)
   float *init_prod = new float[new_dims_prod];
   init_prod = make_ones_float(new_dims_prod);
   cudaMalloc(&summed, new_dims_prod*sizeof(float));
-  cudaMemcpy(summed, init_prod, new_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpyAsync(summed, init_prod, new_dims_prod * sizeof(float), cudaMemcpyHostToDevice, stream);
   delete[] init_prod;
 
   PrintTensorF(summed, new_dims_prod,1);
@@ -11031,16 +11086,16 @@ extern "C" void *prod(Tensor tensor, float first_dim, ...)
   
   if (dims.size()==1)
   {
-    prod_single_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod);
+    prod_single_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod);
     new_dims = {1.0f};
   }
   else if (sum_dims[0]==(dims.size()-1))
   {
-    prod_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, summed_dim);
+    prod_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, summed_dim);
     std::cout << "prod_over_last_dim_kernel" << "\n";
   }
   if (sum_dims[0]==(dims.size()-2))
-    prod_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+    prod_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
   Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
@@ -11107,7 +11162,7 @@ __global__ void max_over_semilast_dim_kernel(const float *tensor,
 }
 
 
-extern "C" void *tmax(Tensor tensor, float first_dim, ...) 
+extern "C" void *tmax(int thread_id, Tensor tensor, float first_dim, ...) 
 { //TODO: automatic type detection for max and min (float vs tensor)
   
   //std::cout << "MAX OF " << tensor.name << "\n";
@@ -11116,6 +11171,8 @@ extern "C" void *tmax(Tensor tensor, float first_dim, ...)
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
   float *summed;
+
+  cudaStream_t stream = ThreadsStream[thread_id];
 
 
   va_list args;
@@ -11127,7 +11184,7 @@ extern "C" void *tmax(Tensor tensor, float first_dim, ...)
     int dims_prod = DimsProd(dims);
 
     cudaMalloc(&summed, dims_prod*sizeof(float));
-    cudaMemcpy(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream);
     
     float tensor_sum=0;
     for(int i=0; i<dims_prod; i++)
@@ -11194,13 +11251,13 @@ extern "C" void *tmax(Tensor tensor, float first_dim, ...)
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
   // AtomicMax does not handle negative numbers, so gambiarra. :D (1 hour for this)
-  vec_add<<<grid_size, block_size, shared_mem_size>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
+  vec_add<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
   if (sum_dims[0]==(dims.size()-1))
-    max_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, summed_dim);
+    max_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, summed_dim);
   if (sum_dims[0]==(dims.size()-2))
-    max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
-  vec_sub<<<grid_size, block_size, shared_mem_size>>>(50000, summed, summed, new_dims_prod);
-  vec_sub<<<grid_size, block_size, shared_mem_size>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
+    max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+  vec_sub<<<grid_size, block_size, shared_mem_size, stream>>>(50000, summed, summed, new_dims_prod);
+  vec_sub<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
 
 
   Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
@@ -11246,7 +11303,7 @@ __global__ void argmax_over_last_dim_kernel(const float *tensor,
       }
 }
 
-extern "C" void *argmax(Tensor *tensor, float first_dim, ...) 
+extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...) 
 {
   //std::cout << "ARGMAX OF " << tensor.name << "\n";
   cudaCheck(cudaGetLastError());
@@ -11318,8 +11375,10 @@ extern "C" void *argmax(Tensor *tensor, float first_dim, ...)
   tensor->Sync();
   maxed = get_from_pool(new_dims_prod, "argmax maxed");
   argmaxed = get_from_pool(new_dims_prod, "argmax");
-  set_to_zero_kernel<<<grid_size, block_size>>>(maxed, new_dims_prod);
-  set_to_zero_kernel<<<grid_size, block_size>>>(argmaxed, new_dims_prod);
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(maxed, new_dims_prod);
+  set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(argmaxed, new_dims_prod);
 
 
   //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nMaxed dim size: " << summed_dim << "\n\n";
@@ -11331,12 +11390,12 @@ extern "C" void *argmax(Tensor *tensor, float first_dim, ...)
   shared_mem_size = grid_block_mem_sizes[2];
 
   
-  vec_add<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
+  vec_add<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
   if (sum_dims[0]==(dims.size()-1))
-    argmax_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_ptr, maxed, argmaxed, dims_prod, maxed_dim);
+    argmax_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, maxed, argmaxed, dims_prod, maxed_dim);
   //if (sum_dims[0]==(dims.size()-2))
   //  max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, maxed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
-  vec_sub<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
+  vec_sub<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
 
   
   move_to_pool(new_dims_prod, maxed, "argmax maxed");
@@ -11411,7 +11470,7 @@ __global__ void topk_erase_argmax_aux_kernel(float *tensor,
       }
 }
 
-extern "C" void *topk(Tensor tensor, float k) 
+extern "C" void *topk(int thread_id, Tensor tensor, float k) 
 {
   std::cout << "TOPK OF " << tensor.name << "\n";
 
@@ -11429,6 +11488,7 @@ extern "C" void *topk(Tensor tensor, float k)
 
   float maxed_dim = dims[dims.size()-1];
 
+  cudaStream_t stream = ThreadsStream[thread_id];
   
   cudaMalloc(&maxed, new_dims_prod*sizeof(float));
   cudaMalloc(&argmaxed, new_dims_prod*sizeof(float));
@@ -11437,7 +11497,7 @@ extern "C" void *topk(Tensor tensor, float k)
   cudaMemset(maxed, 0, new_dims_prod*sizeof(float));
   cudaMemset(argmaxed, 0, new_dims_prod*sizeof(float));
   cudaMemset(topk, 0, topk_dims_prod * sizeof(float));
-  cudaMemcpy(tensor_copy, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);
+  cudaMemcpyAsync(tensor_copy, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice, stream);
 
 
   //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nMaxed dim size: " << summed_dim << "\n\n";
@@ -11448,17 +11508,17 @@ extern "C" void *topk(Tensor tensor, float k)
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
   
-  vec_add<<<grid_size, block_size, shared_mem_size>>>(50000, tensor_copy, tensor_copy, dims_prod);
+  vec_add<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_copy, tensor_copy, dims_prod);
   
   for (int i=0; i<k; i++)
   {
     //std::cout << "Top k at iter:" << i << "\n";
-    topk_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_copy, topk, maxed, argmaxed, dims_prod, maxed_dim, i, k);
+    topk_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_copy, topk, maxed, argmaxed, dims_prod, maxed_dim, i, k);
     //PrintTensorF(maxed, 3, 1);
     //PrintTensorF(argmaxed, 3, 1);
     //std::cout << "Topk" << "\n";
     //PrintTensorF(topk, 3, k);
-    topk_erase_argmax_aux_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_copy, argmaxed, dims_prod, maxed_dim);
+    topk_erase_argmax_aux_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_copy, argmaxed, dims_prod, maxed_dim);
     cudaMemset(maxed, 0, new_dims_prod*sizeof(float));
     //std::cout << "\n\n\n\n";
   }
@@ -11475,7 +11535,7 @@ extern "C" void *topk(Tensor tensor, float k)
 
 
 
-extern "C" void *clip(Tensor tensor, float _min, float _max)
+extern "C" void *clip(int thread_id, Tensor tensor, float _min, float _max)
 {
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
@@ -11488,7 +11548,8 @@ extern "C" void *clip(Tensor tensor, float _min, float _max)
   int grid_size = B;
   int block_size = 32;
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  tensor_clip<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, device_y, _min, _max, B);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  tensor_clip<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, device_y, _min, _max, B);
 
   
   Tensor *new_tensor = createTensor(device_y, dims, tensor.dims_prod, false, "");
@@ -11531,10 +11592,12 @@ void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* 
   
 }
 
-extern "C" void *gelu(Tensor *tensor)
+extern "C" void *gelu(int thread_id, Tensor *tensor)
 {
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
+
+  std::cout << "GELU AT THREAD " << thread_id << "\n";
   
 
   float dims_prod = DimsProd(dims);
@@ -11550,7 +11613,8 @@ extern "C" void *gelu(Tensor *tensor)
   float *y = get_from_pool(dims_prod,"gelu");
 
   tensor->Sync();
-  gelu_forward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  gelu_forward_kernel1<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
   
 
   
@@ -11592,7 +11656,7 @@ void sigmoid_backward(const float* out, float dims_prod, float* dinp, const floa
   
 }
 
-extern "C" void *sigmoid(Tensor *tensor)
+extern "C" void *sigmoid(int thread_id, Tensor *tensor)
 {
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
@@ -11611,7 +11675,8 @@ extern "C" void *sigmoid(Tensor *tensor)
   float *y = get_from_pool(dims_prod, "sigmoid");  
   
   tensor->Sync();
-  sigmoid_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  sigmoid_forward_kernel<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
   
 
   
@@ -11855,7 +11920,7 @@ void tanh_backward(const float* out, float dims_prod, float* dinp, const float* 
   
 }
 
-extern "C" void *_tanh(Tensor *tensor)
+extern "C" void *_tanh(int thread_id, Tensor *tensor)
 {
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
@@ -11874,7 +11939,8 @@ extern "C" void *_tanh(Tensor *tensor)
   float *y = get_from_pool(dims_prod, "tanh");
 
   tensor->Sync();
-  tanh_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  tanh_forward_kernel<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
     
   int is_forward_func=1;
 
@@ -11894,8 +11960,9 @@ __global__ void relu_forward(float* Z, float* A,
     }
 }
 
-extern "C" void *relu(Tensor *tensor)
+extern "C" void *relu(int thread_id, Tensor *tensor)
 {
+  //std::cout << "RELU THREAD IS: " << thread_id << "\n";
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
@@ -11910,7 +11977,8 @@ extern "C" void *relu(Tensor *tensor)
   float *y = get_from_pool(dims_prod, "relu");
 
   tensor->Sync();
-  relu_forward<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, y, dims_prod);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  relu_forward<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
 
 
 
@@ -11987,7 +12055,7 @@ __global__ void softmax_forward_kernel4(const float* inp, float* out, int N, int
     float* maxvals = shared;
     float* sumvals = &shared[warpsPerBlock];
 
-    // one row of inp, i.e. inp[idx, :] of shape (C,)
+    // one row of inp, i.e. inp[idx, :] e (C,)
     const float* x = inp + idx * C;
 
     // first, thread coarsening by directly accessing global memory in series
@@ -12124,7 +12192,7 @@ __global__ void online_softmax(const float* inp, float* out, int N, int C) {
 
 
 
-extern "C" void *softmax(Tensor *tensor)
+extern "C" void *softmax(int thread_id, Tensor *tensor)
 {
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
@@ -12143,7 +12211,8 @@ extern "C" void *softmax(Tensor *tensor)
 
   tensor->Sync();
   float *probs = get_from_pool(B*C, "softmax");
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(probs, B*C);
 
 
   
@@ -12152,7 +12221,7 @@ extern "C" void *softmax(Tensor *tensor)
   block_size = grid_block_mem_sizes[1];
 
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_ptr, probs, B, C);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, probs, B, C);
   
   /*
   grid_block_mem_sizes = CalculateGridAndBlockSizes(B*32*C);
@@ -12430,7 +12499,7 @@ class LSTM
   void SetDescriptors(int, int);
   void SetBackwardDescriptors();
   void FirstBackward();
-  float *Forward(Tensor *, Tensor *, Tensor *, int, int);
+  float *Forward(Tensor *, Tensor *, Tensor *, int, int, int);
   void Backward(float *, float *, float *);
 
 };
@@ -12444,7 +12513,6 @@ static std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
 static std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
 static std::map<std::string, std::unique_ptr<LSTM>> NamedLSTM;
 static std::map<std::string, std::unique_ptr<Embedding>> NamedEmbedding;
-
 
 
 
@@ -12623,7 +12691,7 @@ void LSTM::SetDescriptors(int B, int T)
 }
 
 
-float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int B, int T)
+float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int B, int T, int thread_id)
 {
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
@@ -12636,9 +12704,12 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
   if (B!=this->B || T!=this->T)
     SetDescriptors(B,T);
   
+  cudaStream_t stream = ThreadsStream[thread_id];
+  //cudaStream_t stream = main_stream->stream;
+
   
 
-  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(tensor_x->tensor_ptr, U, x_out, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
+  mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_x->tensor_ptr, U, x_out, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
 
 
   //move_to_pool(tensor_ht->dims_prod, tensor_ht->tensor_ptr, "input ht");
@@ -12666,14 +12737,14 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
     //std::cout << "Forward t: " << t << "\n";
 
 
-    lstm_single_step_kernel<<<grid_size_lstm, block_size, shared_mem_size, main_stream->stream>>>(fused_out, x_out, W, all_ht, b,
+    lstm_single_step_kernel<<<grid_size_lstm, block_size, shared_mem_size, stream>>>(fused_out, x_out, W, all_ht, b,
                                                                                       t, T, TILE_SIZE, TILE_SIZE_SQ, B, OC, 4*OC, 3*OC);
 
     //std::cout << "\nFused out"  << "\n";
     //PrintTensorF(fused_out, B, 4*OC);
     //std::cout << "\n";
 
-    lstm_elementwise_ops_kernel<<<grid_size_elementwises, block_size, 0, main_stream->stream>>>(fused_out,
+    lstm_elementwise_ops_kernel<<<grid_size_elementwises, block_size, 0, stream>>>(fused_out,
                                                                                       all_ht, all_ct,
                                                                                       TILE_SIZE, TILE_SIZE_SQ,
                                                                                       t, T,
@@ -13148,7 +13219,7 @@ void embedding_backward(float *x, float *dx, float *dy, std::string name)
 
 
 
-extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -13191,7 +13262,7 @@ extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Te
   tensor_ht->Sync();
   tensor_ct->Sync();
 
-  output = lstm->Forward(tensor_x, tensor_ht, tensor_ct, (int) B, (int)T);
+  output = lstm->Forward(tensor_x, tensor_ht, tensor_ct, (int) B, (int)T, thread_id);
 
 
   
@@ -14915,7 +14986,7 @@ __global__ void random_padding_cropping_kernel(
 }
 
 
-extern "C" void *RandomCrop(Tensor *tensor, float padding)
+extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
 {
   float *tensor_ptr, *cropped;
   tensor_ptr = tensor->tensor_ptr;
@@ -14997,7 +15068,7 @@ __global__ void random_horizontal_flip_kernel(const float *input_tensor, float *
 
 
 
-extern "C" void *RandomHorizontalFlip(Tensor *tensor)
+extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
 {
   float *tensor_ptr, *flipped;
   tensor_ptr = tensor->tensor_ptr;
@@ -15059,7 +15130,7 @@ __global__ void normalize_img_kernel(float *output_tensor, const float *input_te
 }
 
 
-extern "C" void *NormalizeImg(Tensor *tensor, Tensor *mean, Tensor *std)
+extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tensor *std)
 {
   float *tensor_ptr, *normalized;
   tensor_ptr = tensor->tensor_ptr;
@@ -15179,9 +15250,9 @@ __global__ void dropout_mask_kernel(float *y, float *m, const float *x, float ra
     }
 }
 
-extern "C" void *dropout(Tensor *tensor, float rate)
+extern "C" void *dropout(int thread_id, Tensor *tensor, float rate)
 {
-  if (nn_mode==training_mode)
+  if (nn_mode==training_mode&&thread_id==0)
   {
     float dims_prod = tensor->dims_prod;
 
@@ -15423,7 +15494,7 @@ void CleanScopeTensors(std::string scope)
   forward_tensors_sent_to_pool.erase(scope);
 }
 
-extern "C" float clean_forward(char *scope, char *previous_scope)
+extern "C" float clean_forward(char *scope, char *previous_scope, int thread_id)
 {//TODO: break? clears threaded tensors
   for(std::string _scope : scopes)
     CleanScopeTensors(_scope);
@@ -16160,7 +16231,7 @@ extern "C" float train()
 
 
 
-Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -16175,13 +16246,13 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   
     seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
     
 
     if (!LHS->GetIsVec())
     {
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
@@ -16190,14 +16261,14 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
       Builder->CreateCall(TheModule->getFunction("AttrTensor"),
-                          {LtensorName, RtensorPtr, scope_str});
+                          {LtensorName, RtensorPtr, scope_str, thread_id});
       //std::cout << "Post attr call\n\n";
     } else
     {
       std::cout << "1 1 INDEXED attr\n";
 
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
 
@@ -16206,7 +16277,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(LtensorName);
         for (int i=0; i<LHSE->Idx.size(); i++)
-          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                               idx_calc_args);
 
@@ -16215,7 +16286,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
                             idx_at});
       } else {
         VariableExprAST *idx = static_cast<VariableExprAST *>(LHSE->Idx[0].get());
-        Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
         
         Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdxTensor"), {LtensorName, idx_tensor_name, RtensorPtr});
 
@@ -16239,8 +16310,8 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope);
-  Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
 
 
 
@@ -16269,28 +16340,28 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   case '@':
     return Builder->CreateCall(TheModule->getFunction("CudaMult"),
                                     {is_forward_func,
-                                     LtensorPtr, RtensorPtr});
+                                     LtensorPtr, RtensorPtr, thread_id});
   case '/':
   {
     return Builder->CreateCall(TheModule->getFunction("CudaDiv"),
                                     {is_forward_func,
-                                     LtensorPtr, RtensorPtr});
+                                     LtensorPtr, RtensorPtr, thread_id});
   }
   case '+':
     return Builder->CreateCall(TheModule->getFunction("CudaAdd"),
                                     {is_forward_func,
-                                     LtensorPtr, RtensorPtr});
+                                     LtensorPtr, RtensorPtr, thread_id});
   case '*':
     return Builder->CreateCall(TheModule->getFunction("CudaHadamard"),
                                     {is_forward_func,
-                                     LtensorPtr, RtensorPtr});
+                                     LtensorPtr, RtensorPtr, thread_id});
   case '-':
     return Builder->CreateCall(TheModule->getFunction("CudaSub"),
                                     {is_forward_func,
-                                     LtensorPtr, RtensorPtr});
+                                     LtensorPtr, RtensorPtr, thread_id});
   case tok_equal:
     return Builder->CreateCall(TheModule->getFunction("CudaEqual"),
-                               {is_forward_func, LtensorPtr, RtensorPtr}, "cudaequal");
+                               {is_forward_func, LtensorPtr, RtensorPtr, thread_id}, "cudaequal");
   case ':':
     return LtensorPtr;
   default:
@@ -16311,7 +16382,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   std::cout << "Binary Tensor Pinned codegen" << "\n";
 
   if (not ShallCodegen)
@@ -16329,13 +16400,13 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
   
     seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope);
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
     
 
     if (!LHS->GetIsVec())
     {
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
@@ -16351,7 +16422,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::cout << "1 2 INDEXED attr\n";
 
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
 
@@ -16359,7 +16430,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(LtensorName);
       for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                             idx_calc_args);
 
@@ -16379,7 +16450,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -16403,19 +16474,19 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
       
       if (RHS->GetIsVec())
       {
         std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
         VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
                                                         {LName, RName});
       } else {
         VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
                                                         {LName, RName});
@@ -16427,7 +16498,7 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
 
       std::cout << "ok" << "\n";
@@ -16436,14 +16507,14 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       {
         std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
         VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
                                                         {LName, RName});
       } else {
         std::cout << "3 3 VEC FROM VAR" << "\n";
         VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
                                                         {LName, RName});
@@ -16464,7 +16535,7 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
 
 
-Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
@@ -16478,7 +16549,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     // default.  If you build LLVM with RTTI this can be changed to a
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope);
+    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
 
     NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
@@ -16490,7 +16561,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       return LogErrorV("'=' destiny must be a variable.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
 
     if (!Val)
     {
@@ -16540,7 +16611,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
           Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
                                                   {Lvar_name,
-                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope),
+                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id),
                                                    Val});
 
         } else
@@ -16579,8 +16650,8 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   
 
-  Value *L = LHS->codegen(first_arg, scope_str, previous_scope);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope);
+  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
   
   if (!L || !R)
     return nullptr;
@@ -16634,10 +16705,10 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *OperandV = Operand->codegen(first_arg, scope_str, previous_scope);
+  Value *OperandV = Operand->codegen(first_arg, scope_str, previous_scope, thread_id);
   if (!OperandV)
     return nullptr;
   
@@ -16674,7 +16745,7 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
 
       return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                                {tensorPtr, R}, "cudascalarmult");
+                                {tensorPtr, R, thread_id}, "cudascalarmult");
     }
     return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
                               OperandV, "multmp");
@@ -16694,12 +16765,12 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 }
 
 
-Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
 
-  Value *CondV = Cond->codegen(first_arg, scope_str, previous_scope);
+  Value *CondV = Cond->codegen(first_arg, scope_str, previous_scope, thread_id);
   if (!CondV)
     return nullptr;
 
@@ -16723,7 +16794,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_sc
   
   Value *ThenV;
   for (auto &then_body : Then)
-    ThenV = then_body->codegen(first_arg, scope_str, previous_scope);
+    ThenV = then_body->codegen(first_arg, scope_str, previous_scope, thread_id);
   
 
   if (!ThenV)
@@ -16741,7 +16812,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_sc
 
   Value *ElseV;
   for (auto &else_body : Else)
-    ElseV = else_body->codegen(first_arg, scope_str, previous_scope);
+    ElseV = else_body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
   if (!ElseV)
     return nullptr;
@@ -16783,7 +16854,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_sc
 //   br endcond, loop, endloop
 // outloop:
 
-Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -16792,7 +16863,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
   AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
 
   // Emit the start code first, without 'variable' in scope.
-  Value *StartVal = Start->codegen(first_arg, scope_str, previous_scope);
+  Value *StartVal = Start->codegen(first_arg, scope_str, previous_scope, thread_id);
   if (!StartVal)
     return nullptr;
 
@@ -16840,14 +16911,14 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
   // Emit the step value.
   Value *StepVal = nullptr;
   if (Step) {
-    StepVal = Step->codegen(first_arg, scope_str, previous_scope);
+    StepVal = Step->codegen(first_arg, scope_str, previous_scope, thread_id);
     if (!StepVal)
       return nullptr;
   } 
 
 
   // Compute the end condition.
-  Value *EndCond = End->codegen(first_arg, scope_str, previous_scope);
+  Value *EndCond = End->codegen(first_arg, scope_str, previous_scope, thread_id);
   if (!EndCond)
     return nullptr;
 
@@ -16870,7 +16941,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
   int j=0;
   for (auto &body : Body)
-    body->codegen(first_arg, scope_str, previous_scope);
+    body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
@@ -16903,7 +16974,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
 
 
-Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   
@@ -16921,7 +16992,7 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   Builder->SetInsertPoint(CondBB);
 
   // Generate the condition code
-  Value* condVal = Cond->codegen(first_arg, scope_str, previous_scope);
+  Value* condVal = Cond->codegen(first_arg, scope_str, previous_scope, thread_id);
   if (!condVal)
     return nullptr;
 
@@ -16936,7 +17007,7 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
   // Generate the loop body code
   for (auto &body : Body)
-    body->codegen(first_arg, scope_str, previous_scope);
+    body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
   // After the loop body, go back to the condition check
   Builder->CreateBr(CondBB);
@@ -16949,14 +17020,17 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg, Value *scope_str, Value *previous_scope) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   
 
-  // find unique function name (_async 0, _async1, _async2 etc)
+  // find existing unique function name (_async_1, _async_2, _async_3 etc)
   int fnIndex = 1;
   while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
     fnIndex++;
   
+  CudaStreams *thread_stream = AllocateStream();
+  ThreadsStream[fnIndex] = thread_stream->stream;
+
   // Create function for this async function
   llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
 
@@ -16984,7 +17058,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   Value *V;
 
   for (auto &body : asyncBody)
-    V = body->codegen(first_arg, scope_str, previous_scope);
+    V = body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
 
 
@@ -17043,7 +17117,7 @@ extern "C" void pthread_join_aux(pthread_t thread)
 std::vector<Value *> thread_pointers;
 
 
-Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17058,7 +17132,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
 
-  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str, previous_scope);
+  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str, previous_scope, thread_id);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -17095,7 +17169,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
 
 
-Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17112,7 +17186,7 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   
 
   for (int i=0; i < Bodies.size(); i++)
-    Bodies[i]->codegen(first_arg, scope_str, previous_scope);
+    Bodies[i]->codegen(first_arg, scope_str, previous_scope, thread_id);
   
 
   
@@ -17141,18 +17215,18 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope){
+Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id){
   
   Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
 
   Value *V;
   for (auto &body : Bodies)
-    V = body->codegen(first_arg, scope_str, previous_scope);
+    V = body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
   return V;
 }
 
-Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope){
+Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id){
   Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
@@ -17160,7 +17234,7 @@ Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
 
   for (int i=0; i<Destiny.size(); i++)
   {
@@ -17183,11 +17257,12 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       {
         VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
                                             {_name, scope_str,
-                                             _name, previous_scope});
+                                             _name, previous_scope,
+                                             thread_id});
       }
     } else {
       l_name   = Vars[i]->GetName();
@@ -17200,18 +17275,19 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       {
         VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
         
         VariableExprAST *var = static_cast<VariableExprAST *>(Vars[i].get());
         var->NameSolver->SetSolverIncludeScope(false);
-        Value *_l_name = var->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        Value *_l_name = var->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
 
         if (l_type=="tensor"||type=="tensor")
         {
           Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
                                               {_l_name, scope_str,
-                                               _name,   previous_scope});
+                                               _name,   previous_scope,
+                                               thread_id});
         }
       } else {
 
@@ -17219,14 +17295,14 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         if (!destiny)
           return LogErrorV("Could not deal with return expression");
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
         
 
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {previous_scope, _name}));
         for (int i=0; i<destiny->Idx.size(); i++)
-          idx_calc_args.push_back(destiny->Idx[i]->codegen(first_arg, scope_str, previous_scope));
+          idx_calc_args.push_back(destiny->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                               idx_calc_args);
 
@@ -17235,7 +17311,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
                                               {_l_name, scope_str,
                                                _name, previous_scope,
-                                               idx_at});
+                                               idx_at, thread_id});
       }
     }
   }
@@ -17247,7 +17323,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 // Create Float Var
-Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<Value *> OldBindings;
@@ -17266,7 +17342,7 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -17297,7 +17373,7 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
 
 
-Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17317,7 +17393,7 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -17365,7 +17441,7 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 }
 
 
-Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17385,7 +17461,7 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -17444,14 +17520,14 @@ extern "C" float is_null(char *name)
   return 0;
 }
 
-Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
   std::vector<Value *> values;
 
   for (int i=0; i<Values.size(); i++)
-    values.push_back(Values[i]->codegen(first_arg, scope_str, previous_scope));
+    values.push_back(Values[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
 
 
 
@@ -17459,7 +17535,7 @@ Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17468,7 +17544,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   Value *init;
   if (Init)
-    init = Init->codegen(first_arg, scope_str, previous_scope);
+    init = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
 
   // Register all variables and emit their initializer.
 
@@ -17521,7 +17597,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-extern "C" void *rand_like(Tensor tensor)
+extern "C" void *rand_like(int thread_id, Tensor tensor)
 {
   float dims_prod = tensor.dims_prod;
 
@@ -17529,8 +17605,9 @@ extern "C" void *rand_like(Tensor tensor)
 
   tensor_cpu = make_random_float_uniform(dims_prod);
 
+  cudaStream_t stream = ThreadsStream[thread_id];
   cudaMalloc(&tensor_ptr, dims_prod*sizeof(float));
-  cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice, stream);
   delete[] tensor_cpu;
 
   Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
@@ -17580,9 +17657,9 @@ extern "C" float print_randoms(float N, float std) {
 
 
 
-extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight)
+extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight, int thread_id)
 {
-  //std::cout << "CREATING TENSOR " << tensor_name << "\n";
+  //std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
 
   Tensor *tensor;
 
@@ -17660,7 +17737,7 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
 }
 
 
-Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17693,14 +17770,14 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     Value *aux;
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
+      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope, thread_id);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {var_name, aux});
     }
 
     Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
                                               {var_name, scopeless_name, init,
-                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight)});
+                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight, thread_id)});
   }
 
 
@@ -17743,7 +17820,7 @@ extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
   
 }
 
-Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17762,7 +17839,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -17786,7 +17863,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
     Value *aux;
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope);
+      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope, thread_id);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {var_name, aux});
     }
@@ -17805,7 +17882,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
 
 
 
-Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17840,15 +17917,15 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope), OC->codegen(first_arg, scope_str, previous_scope), Ks->codegen(first_arg, scope_str, previous_scope), Stride->codegen(first_arg, scope_str, previous_scope),
-                                               Padding->codegen(first_arg, scope_str, previous_scope)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id), OC->codegen(first_arg, scope_str, previous_scope, thread_id), Ks->codegen(first_arg, scope_str, previous_scope, thread_id), Stride->codegen(first_arg, scope_str, previous_scope, thread_id),
+                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17881,16 +17958,16 @@ Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     Builder->CreateCall(TheModule->getFunction("CreateMaxPool2dOnDemand"),
                                               {var_name, type,
-                                               Ks->codegen(first_arg, scope_str, previous_scope),
-                                               Stride->codegen(first_arg, scope_str, previous_scope),
-                                               Padding->codegen(first_arg, scope_str, previous_scope)});
+                                               Ks->codegen(first_arg, scope_str, previous_scope, thread_id),
+                                               Stride->codegen(first_arg, scope_str, previous_scope, thread_id),
+                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17922,7 +17999,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
     Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
                                               {var_name, 
-                                               C->codegen(first_arg, scope_str, previous_scope)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -17930,7 +18007,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
 
 
-Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17961,13 +18038,13 @@ Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     std::cout << "Parsing Conv2d var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateBN2dReluOnDemand"),
-                                              {var_name, C->codegen(first_arg, scope_str, previous_scope)});
+                                              {var_name, C->codegen(first_arg, scope_str, previous_scope, thread_id)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
-Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18002,14 +18079,14 @@ Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     Builder->CreateCall(TheModule->getFunction("CreateLSTMOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope), OC->codegen(first_arg, scope_str, previous_scope)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id), OC->codegen(first_arg, scope_str, previous_scope, thread_id)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18044,13 +18121,13 @@ Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     Builder->CreateCall(TheModule->getFunction("CreateEmbeddingOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope), OC->codegen(first_arg, scope_str, previous_scope)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id), OC->codegen(first_arg, scope_str, previous_scope, thread_id)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
-Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18087,7 +18164,7 @@ Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 }
 
 
-Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope) {
+Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look up the name in the global module table.
@@ -18131,6 +18208,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     size_t pos = copy.find(prefix);
     copy.erase(pos, prefix.length());
     thread = std::stoi(copy);
+    thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
   }
   
   std::cout << "\n\n\nFunction name: " << functionName << "\n";
@@ -18145,6 +18223,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
   Value *_pre_dot_str = Builder->CreateGlobalString(_pre_dot);
   Value *first_arg_copy;
+
 
 
 
@@ -18167,10 +18246,21 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   
   
 
-
-
   int target_args_size = Args.size();
   std::vector<Value *> ArgsV;
+
+
+  if (in_str(Callee, threaded_tensor_functions))
+  {
+    std::cout << "\n\n\n\n\nCALLEE " << Callee <<" IS IN A THREAD" << "\n\n\n\n\n";
+
+    ArgsV.push_back(thread_id);
+
+    target_args_size+=1;
+  }
+  
+
+
 
   bool is_self_of_nested_function = (nested_function==1 && isSelf);
   
@@ -18213,7 +18303,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     changed_first_arg = not_coding_language_method;
     
 
-    //name = NameSolver->codegen(first_arg, scope_str, previous_scope);
+    //name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
     
     if (CalleeOverride!="none"||in_str(Callee, native_methods))
     { // e.g: x.view()
@@ -18240,7 +18330,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
       if (in_str(Callee, return_tensor_methods))
       {
-        ArgsV[0] = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {ArgsV[0]});
+        ArgsV[1] = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {ArgsV[1]});
         must_free_arg0 = false;
       }
 
@@ -18252,21 +18342,22 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   }
 
 
-  if (!(CalleeOverride!="none" || in_str(Callee, native_fn)))
+  if (!(CalleeOverride!="none" || in_str(Callee, native_fn))) // user defined functions
   {
     has_scope = true;
-    //if (starts_with(functionName.c_str(), "__async_"))
-    //  scope_name = Builder->CreateGlobalString("threaded_");
-    //else 
+    
     scope_str = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
     
     
     ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
     ArgsV.push_back(previous_scope);
-    target_args_size+=2;
+    ArgsV.push_back(thread_id);
+    
+    target_args_size+=3;
   }
   
 
+  
 
   
   
@@ -18298,10 +18389,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
 
 
-
-
-
-
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     //std::cout << "\nCall codegen for argument n°: " << i << ".\n";
@@ -18321,12 +18408,12 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       //if (starts_with(functionName.c_str(), "__async_"))
       //  Builder->CreateStore(Builder->CreateGlobalString("threaded_"), _scope);
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
-      arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope);
+      arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope, thread_id);
 
       arg = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {arg});
     }
     else
-      arg = Args[i]->codegen(fa, _scope, previous_scope);
+      arg = Args[i]->codegen(fa, _scope, previous_scope, thread_id);
 
   
     ArgsV.push_back(arg);
@@ -18338,6 +18425,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
 
 
+  
 
   
   Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -18346,8 +18434,11 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
   else
   {
+    if(in_str(CalleeOverride, threaded_tensor_functions))
+      ArgsV.push_back(thread_id);
+    
     //std::cout << "Override: " << CalleeOverride << "\n";
-    if (CalleeOverride=="ConvForward2d"||CalleeOverride=="MaxPoolForward2d"||CalleeOverride=="BatchNormForward2d"||CalleeOverride=="BN2dReluForward"||CalleeOverride=="ReluForward"||CalleeOverride=="LSTMForward"||CalleeOverride=="EmbeddingForward")
+    if (in_str(CalleeOverride, native_modules))
     {
       CalleeF = getFunction(CalleeOverride);
       Value *conv_name = Builder->CreateGlobalString(tgt_function);
@@ -18414,6 +18505,8 @@ Function *PrototypeAST::codegen() {
   {
     if (type=="s"||type=="t"||type=="c")
       types.push_back(int8PtrTy);
+    else if(type=="i")
+      types.push_back(Type::getInt32Ty(*TheContext));
     else
       types.push_back(Type::getFloatTy(*TheContext));
   }
@@ -18700,7 +18793,7 @@ Function *FunctionAST::codegen() {
   
   // Record the function arguments in the NamedValues map.
 
-  Value *first_arg, *scope_str, *previous_scope;
+  Value *first_arg, *scope_str, *previous_scope, *thread_id;
   /*
   first_arg = Builder->CreateAlloca(int8PtrTy);
   scope_str = Builder->CreateAlloca(int8PtrTy);
@@ -18715,6 +18808,7 @@ Function *FunctionAST::codegen() {
     first_arg = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     previous_scope = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
   }
   
 
@@ -18754,6 +18848,12 @@ Function *FunctionAST::codegen() {
     else if (arg_name == "previous_scope")
     {
       previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
+      
+      has_previous_scope = true;
+    }
+    else if (arg_name == "thread_id")
+    {
+      thread_id = &Arg;
       
       has_previous_scope = true;
     } else if (in_str(arg_name, floatVars))
@@ -18806,7 +18906,7 @@ Function *FunctionAST::codegen() {
 
   Value *RetVal;
   for (auto &body : Body)
-    RetVal = body->codegen(first_arg, scope_str, previous_scope);
+    RetVal = body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
 
 
@@ -18943,7 +19043,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarMultTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("CudaScalarMult", CudaScalarMultTy);
@@ -18952,7 +19052,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarDivTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarDiv", CudaScalarDivTy);
@@ -18961,7 +19061,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaReverseScalarDivTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaReverseScalarDiv", CudaReverseScalarDivTy);
@@ -18970,7 +19070,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarAddTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarAdd", CudaScalarAddTy);
@@ -18979,7 +19079,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarSubTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarSub", CudaScalarSubTy);
@@ -18988,7 +19088,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarEqualTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarEqual", CudaScalarEqualTy);
@@ -18997,7 +19097,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarDiffTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarDiff", CudaScalarDiffTy);
@@ -19006,7 +19106,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarMinorTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarMinor", CudaScalarMinorTy);
@@ -19015,7 +19115,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarHigherTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarHigher", CudaScalarHigherTy);
@@ -19024,7 +19124,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarHigherEqTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarHigherEq", CudaScalarHigherEqTy);
@@ -19033,7 +19133,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarMinorEqTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaScalarMinorEq", CudaScalarMinorEqTy);
@@ -19049,7 +19149,8 @@ static void InitializeModule() {
       int8PtrTy,
       {Type::getInt32Ty(*TheContext),
        int8PtrTy,
-       int8PtrTy}, 
+       int8PtrTy,
+       Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaMult", CudaMultTy);
@@ -19060,7 +19161,7 @@ static void InitializeModule() {
       int8PtrTy,
       {Type::getInt32Ty(*TheContext),
        int8PtrTy,
-       int8PtrTy}, 
+       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaAdd", CudaAddTy);
@@ -19071,7 +19172,7 @@ static void InitializeModule() {
       int8PtrTy,
       {Type::getInt32Ty(*TheContext),
        int8PtrTy,
-       int8PtrTy}, 
+       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaSub", CudaSubTy);
@@ -19082,7 +19183,7 @@ static void InitializeModule() {
       int8PtrTy,
       {Type::getInt32Ty(*TheContext),
        int8PtrTy,
-       int8PtrTy}, 
+       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaEqual", CudaEqualTy);
@@ -19093,7 +19194,7 @@ static void InitializeModule() {
       int8PtrTy,
       {Type::getInt32Ty(*TheContext),
        int8PtrTy,
-       int8PtrTy}, 
+       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("CudaHadamard", CudaHadamardTy);
@@ -19104,7 +19205,7 @@ static void InitializeModule() {
       int8PtrTy,
       {Type::getInt32Ty(*TheContext),
        int8PtrTy,
-       int8PtrTy}, 
+       int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("CudaDiv", CudaDivTy);
@@ -19178,7 +19279,7 @@ static void InitializeModule() {
   //
   FunctionType *clipTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy,
+      {Type::getInt32Ty(*TheContext), int8PtrTy,
        Type::getInt32Ty(*TheContext),
        Type::getInt32Ty(*TheContext)}, 
       false
@@ -19202,7 +19303,7 @@ static void InitializeModule() {
   //
   FunctionType *clean_forwardTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("clean_forward", clean_forwardTy);
@@ -19264,7 +19365,7 @@ static void InitializeModule() {
   //
   FunctionType *CudaLogTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("logE", CudaLogTy);
@@ -19273,7 +19374,7 @@ static void InitializeModule() {
   // 
   FunctionType *log2Ty = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("logE2", log2Ty);
@@ -19282,7 +19383,7 @@ static void InitializeModule() {
   // 
   FunctionType *softmaxTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("softmax", softmaxTy);
@@ -19291,7 +19392,7 @@ static void InitializeModule() {
   //
   FunctionType *reluTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("relu", reluTy);
@@ -19300,7 +19401,7 @@ static void InitializeModule() {
   //
   FunctionType *geluTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("gelu", geluTy);
@@ -19309,7 +19410,7 @@ static void InitializeModule() {
   //
   FunctionType *sigmoidTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("sigmoid", sigmoidTy);
@@ -19327,7 +19428,7 @@ static void InitializeModule() {
   //
   FunctionType *tanhTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("_tanh", tanhTy);
@@ -19345,7 +19446,7 @@ static void InitializeModule() {
   //
   FunctionType *LSTMForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("LSTMForward", LSTMForwardTy);
@@ -19399,7 +19500,7 @@ static void InitializeModule() {
   //
   FunctionType *cropTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("RandomCrop", cropTy);
@@ -19408,7 +19509,7 @@ static void InitializeModule() {
   //
   FunctionType *RandomHorizontalFlipTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("RandomHorizontalFlip", RandomHorizontalFlipTy);
@@ -19417,7 +19518,7 @@ static void InitializeModule() {
   //
   FunctionType *NormalizeImgTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("NormalizeImg", NormalizeImgTy);
@@ -19426,7 +19527,7 @@ static void InitializeModule() {
   //
   FunctionType *dropoutTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("dropout", dropoutTy);
@@ -19435,7 +19536,7 @@ static void InitializeModule() {
   //
   FunctionType *onehotTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("onehot", onehotTy);
@@ -19444,7 +19545,7 @@ static void InitializeModule() {
   //
   FunctionType *shapeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("shape", shapeTy);
@@ -19471,7 +19572,7 @@ static void InitializeModule() {
   //
   FunctionType *repeat_interleaveTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("repeat_interleave", repeat_interleaveTy);
@@ -19480,7 +19581,7 @@ static void InitializeModule() {
   // 
   FunctionType *sumTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("sum", sumTy);
@@ -19489,7 +19590,7 @@ static void InitializeModule() {
   // 
   FunctionType *prodTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("prod", prodTy);
@@ -19498,7 +19599,7 @@ static void InitializeModule() {
   // 
   FunctionType *meanTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("mean", meanTy);
@@ -19507,7 +19608,7 @@ static void InitializeModule() {
   // 
   FunctionType *maxTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("tmax", maxTy);
@@ -19516,7 +19617,7 @@ static void InitializeModule() {
   //
   FunctionType *argmaxTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("argmax", argmaxTy);
@@ -19525,7 +19626,7 @@ static void InitializeModule() {
   //
   FunctionType *topkTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("topk", topkTy);
@@ -19534,7 +19635,7 @@ static void InitializeModule() {
   //
   FunctionType *viewTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy,int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext),int8PtrTy,int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("view", viewTy);
@@ -19627,7 +19728,7 @@ static void InitializeModule() {
   //
   FunctionType *save_imgTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("save_img", save_imgTy);
@@ -19645,7 +19746,7 @@ static void InitializeModule() {
   //
   FunctionType *gpuTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("gpu", gpuTy);
@@ -19654,7 +19755,7 @@ static void InitializeModule() {
   //  
   FunctionType *gpuwTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("gpuw", gpuwTy);
@@ -20352,7 +20453,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("CreateTensorOnDemand", CreateTensorOnDemandTy);
@@ -20459,7 +20560,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *RemoveTensorScopeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("RemoveTensorScope", RemoveTensorScopeTy);
@@ -20472,7 +20573,7 @@ FunctionType *unbugTy = FunctionType::get(
        int8PtrTy,
        int8PtrTy,
        int8PtrTy,
-       Type::getFloatTy(*TheContext)}, 
+       Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("RemoveTensorScopeAttrOnIndex", RemoveTensorScopeAttrOnIndexTy);
@@ -20481,7 +20582,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *AttrTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("AttrTensor", AttrTensorTy);
@@ -20517,7 +20618,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *cpuTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("cpu", cpuTy);
@@ -20545,7 +20646,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *rand_likeTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("rand_like", rand_likeTy);
@@ -20766,6 +20867,7 @@ int main() {
   main_stream = AllocateStream();
   cublasSetStream(cublas_handle, main_stream->stream);
   cudnnSetStream(cudnn, main_stream->stream);
+  ThreadsStream[0] = main_stream->stream;
 
 
 
@@ -20849,6 +20951,9 @@ int main() {
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
                             "save_img", "gpu", "gpuw"};
+  
+  
+
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
 
   return_pinned_methods = {"gpu", "gpuw"};
@@ -20875,6 +20980,13 @@ int main() {
                       "wtokenize_pad_left_idx"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
+
+  native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward", "ReluForward", "LSTMForward", "EmbeddingForward"};
+
+  threaded_tensor_functions = {"LSTMForward", "log2"};
+  threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_functions);
+  threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_methods);
+
 
 
   tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal"};
