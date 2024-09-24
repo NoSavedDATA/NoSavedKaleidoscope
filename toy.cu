@@ -2762,6 +2762,20 @@ void WaitForAllEvents()
 }
 
 
+void StreamAwaitStreamB(cudaStream_t A, cudaStream_t B)
+{
+  // Create an event
+  cudaEvent_t event;
+  cudaEventCreate(&event);
+
+  // Record the event when the kernel finishes execution on 'stream'
+  cudaEventRecord(event, B);
+
+  cudaStreamWaitEvent(A, event, 0);
+  cudaEventDestroy(event);
+}
+
+
 int ASYNC_LOADER_THREADS = 6;
 
 void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaStream_t stream) {
@@ -6247,7 +6261,7 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 }
 
 
-float *get_from_pool(float dims_prod, std::string from);
+float *get_from_pool(int, float, std::string);
 
 extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
 {
@@ -6265,7 +6279,7 @@ extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
   if (tensor->dims_prod==dims_prod)
     tensor_ptr = tensor->tensor_ptr;
   else
-    tensor_ptr = get_from_pool(dims_prod, "gpuw");
+    tensor_ptr = get_from_pool(thread_id, dims_prod, "gpuw");
 
 
   Loader *loader=nullptr;
@@ -6323,7 +6337,7 @@ extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, floa
   if (tensor->dims_prod==batchless_dims_prod)
     tensor_ptr = tensor->tensor_ptr;
   else
-    tensor_ptr = get_from_pool(batchless_dims_prod, "gpuw");
+    tensor_ptr = get_from_pool(thread_id, batchless_dims_prod, "gpuw");
   
   //tensor_ptr = get_from_pool(batchless_dims_prod, "gpuw");
 
@@ -6546,7 +6560,7 @@ extern "C" char * shuffle_str(char *string_list)
 
 std::map<float, std::vector<float *>> TensorPool;
 
-void move_to_pool(float dims_prod, float *tensor_ptr, std::string from)
+void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string from)
 {
   //if (dims_prod==50*256)
   //  std::cout << "push B*OC of " << from << "\n";
@@ -6573,7 +6587,7 @@ void move_to_pool(float dims_prod, float *tensor_ptr, std::string from)
   }  
 }
 
-float *get_from_pool(float dims_prod, std::string from)
+float *get_from_pool(int thread_id, float dims_prod, std::string from)
 {
   //if (dims_prod==50*256)
   //  std::cout << "get B*OC of " << from << "\n";
@@ -7167,7 +7181,7 @@ extern "C" void *view(int thread_id, Tensor *tensor, float first_dim, ...)
 
 
 
-extern "C" void *NewVecToTensor(float first_dim, ...)
+extern "C" void *NewVecToTensor(int thread_id, float first_dim, ...)
 {
   std::vector<float> values;
 
@@ -7201,7 +7215,7 @@ extern "C" void *NewVecToTensor(float first_dim, ...)
   float *tensor_ptr, *tensor_cpu;
   tensor_cpu = values.data();
 
-  tensor_ptr = get_from_pool(dims_prod, "tensor from brackets");
+  tensor_ptr = get_from_pool(thread_id, dims_prod, "tensor from brackets");
   cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
   
 
@@ -7370,7 +7384,7 @@ extern "C" void *CudaScalarMult(Tensor *tensor, float R, int thread_id) {
   int kDataLen = tensor->dims_prod;
 
   
-  float* device_y = get_from_pool(kDataLen, "scalar mult");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar mult");
   
 
   int grid_size, block_size;
@@ -7395,7 +7409,7 @@ extern "C" void *CudaScalarDiv(Tensor tensor, float R, int thread_id) {
 
 
   
-  float* device_y = get_from_pool(kDataLen, "scalar div");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar div");
 
 
   int grid_size, block_size;
@@ -7418,7 +7432,7 @@ extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R, int thread_id) {
 
 
   
-  float* device_y = get_from_pool(kDataLen, "reverse scalar div");
+  float* device_y = get_from_pool(thread_id, kDataLen, "reverse scalar div");
 
 
   int grid_size, block_size;
@@ -7439,7 +7453,7 @@ extern "C" void *CudaScalarAdd(Tensor *tensor, float R, int thread_id) {
   int dims_prod = tensor->dims_prod;
 
 
-  float* device_y = get_from_pool(dims_prod, "scalar add");
+  float* device_y = get_from_pool(thread_id, dims_prod, "scalar add");
   
   
   int grid_size, block_size;
@@ -7461,7 +7475,7 @@ extern "C" void *CudaScalarSub(Tensor *tensor, float R, int thread_id) {
   int kDataLen = tensor->dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7483,7 +7497,7 @@ extern "C" void *CudaScalarEqual(Tensor tensor, float R, int thread_id) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7503,7 +7517,7 @@ extern "C" void *CudaScalarDiff(Tensor tensor, float R, int thread_id) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7523,7 +7537,7 @@ extern "C" void *CudaScalarMinor(Tensor tensor, float R, int thread_id) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7543,7 +7557,7 @@ extern "C" void *CudaScalarMinorEq(Tensor tensor, float R, int thread_id) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7563,7 +7577,7 @@ extern "C" void *CudaScalarHigher(Tensor tensor, float R, int thread_id) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7583,7 +7597,7 @@ extern "C" void *CudaScalarHigherEq(Tensor tensor, float R, int thread_id) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7609,7 +7623,7 @@ extern "C" void *logE(int thread_id, Tensor tensor) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7633,7 +7647,7 @@ extern "C" void *logE2(int thread_id, Tensor tensor) {
   int kDataLen = tensor.dims_prod;
 
 
-  float* device_y = get_from_pool(kDataLen, "scalar sub");
+  float* device_y = get_from_pool(thread_id, kDataLen, "scalar sub");
 
 
   int grid_size, block_size;
@@ -7831,7 +7845,7 @@ void move_to_char_pool(size_t length, char *char_ptr, std::string from)
   return;
   if (length==0)
     return;
-  //std::cout << "\nmove_to_pool from: " << from << "\n";
+  //std::cout << "\nmove_to_char_pool from: " << from << "\n";
   
 
   pthread_mutex_lock(&char_pool_mutex);
@@ -8666,7 +8680,7 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope, int thr
 
 
 
-  new_tensor = get_from_pool(new_dims_prod, "idx tensor");
+  new_tensor = get_from_pool(thread_id, new_dims_prod, "idx tensor");
   int grid_size, block_size;
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(new_dims_prod);
   grid_size = grid_block_mem_sizes[0];
@@ -8781,7 +8795,7 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name, i
 std::vector<std::string> seen_functions_for_pool_allocation;
 
 
-extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope)
+extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope, int thread_id)
 {
   std::string tensor_name = tensor->name;
   //std::cout << "\n\n\nCOPY ARG TENSOR OF " << previous_scope << tensor_name << " into " << scope<<new_tensor_name <<"\n";
@@ -8799,7 +8813,7 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
 
   std::string _name = "arg tensor of ";
   _name = _name + tensor_name;
-  arg_tensor = get_from_pool(dims_prod, _name);
+  arg_tensor = get_from_pool(thread_id, dims_prod, _name);
   
   //if (dims_prod!=0)//
   //  cudaMemcpy(arg_tensor, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice);//
@@ -8812,7 +8826,20 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
     block_size = grid_block_mem_sizes[1];
 
     tensor->Sync();
-    copy_tensor_kernel<<<grid_size,block_size,0,main_stream->stream>>>(arg_tensor, tensor_ptr, dims_prod);
+    if (tensor->thread_id!=thread_id)
+    {
+      cudaStream_t prev_stream = ThreadsStream[tensor->thread_id];
+      cudaStream_t stream = ThreadsStream[thread_id];
+
+      cudaStreamSynchronize(prev_stream);
+
+      copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(arg_tensor, tensor_ptr, dims_prod);
+
+      StreamAwaitStreamB(prev_stream, stream);
+    } else {
+      cudaStream_t stream = ThreadsStream[thread_id];
+      copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(arg_tensor, tensor_ptr, dims_prod);
+    }
   }
   
 
@@ -8859,7 +8886,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   std::string _name = "remove tensor scope of ";
   _name = _name + tensor_name;
-  move_to_pool(tensor->dims_prod, tensor->tensor_ptr, _name);
+  move_to_pool(tensor->thread_id, tensor->dims_prod, tensor->tensor_ptr, _name);
   tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod, scope_tensor->cuda_stream, scope_tensor->loader);
   tensor->from_grad_or_load = scope_tensor->from_grad_or_load;
   
@@ -8982,8 +9009,8 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
     {
       if(tgt_tensor->dims != tensor->dims)
       {
-        move_to_pool(tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "z=x");
-        tgt_tensor->tensor_ptr = get_from_pool(tensor->dims_prod, "z=x");
+        move_to_pool(tgt_tensor->thread_id, tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "z=x");
+        tgt_tensor->tensor_ptr = get_from_pool(thread_id, tensor->dims_prod, "z=x");
 
         tgt_tensor->dims = tensor->dims;
         tgt_tensor->dims_prod = tensor->dims_prod;
@@ -8996,7 +9023,21 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
 
       tgt_tensor->Sync();
       tensor->Sync();
-      copy_tensor_kernel<<<grid_size,block_size,0,main_stream->stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
+
+      if (tgt_tensor->thread_id!=thread_id)
+      {
+        cudaStream_t prev_stream = ThreadsStream[tgt_tensor->thread_id];
+        cudaStream_t stream = ThreadsStream[thread_id];
+
+        cudaStreamSynchronize(prev_stream);
+        copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
+
+        StreamAwaitStreamB(prev_stream, stream);
+
+      } else {
+        cudaStream_t stream = ThreadsStream[thread_id];
+        copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
+      }
 
       if(nn_mode==training_mode&&thread_id==0)
       {
@@ -9038,7 +9079,7 @@ extern "C" float print_scope(char *scope, char *previous_scope, int thread_id)
 
 
 // Copies a pinned_tensor's reserved memory into a tensor.
-extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor)
+extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor, int thread_id)
 {
   //std::cout << "\nAttrTensorNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
   
@@ -9048,12 +9089,12 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor)
   
 
   Tensor *tgt_tensor = NamedTensorsT[tensor_name];
-  move_to_pool(tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "pinned");
+  move_to_pool(tgt_tensor->thread_id, tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "pinned");
   
 
   //float *new_tensor;
   //cudaMalloc(&new_tensor, dims_prod*sizeof(float));
-  float *new_tensor = get_from_pool(dims_prod, "pinned");
+  float *new_tensor = get_from_pool(thread_id, dims_prod, "pinned");
 
   int grid_size, block_size, shared_mem_size; 
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
@@ -10152,7 +10193,7 @@ extern "C" Tensor *CudaMult(int is_forward_func,
 
 
 
-  float* device_y = get_from_pool(resultingDimsProd, "cuda mult");
+  float* device_y = get_from_pool(thread_id, resultingDimsProd, "cuda mult");
   
   
 
@@ -10237,7 +10278,7 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
   float dims_prod = tensor_x->dims_prod;
 
 
-  float* device_y = get_from_pool(dims_prod,"add");
+  float* device_y = get_from_pool(thread_id, dims_prod,"add");
 
 
   tensor_x->Sync();
@@ -10276,7 +10317,7 @@ extern "C" Tensor *CudaSub(int is_forward_func,
 
 
 
-  float* device_y = get_from_pool(dims_prod,"sub");
+  float* device_y = get_from_pool(thread_id, dims_prod,"sub");
 
 
 
@@ -10311,7 +10352,7 @@ extern "C" Tensor *CudaEqual(int is_forward_func,
   float dims_prod = tensor_x->dims_prod;
 
 
-  float* device_y = get_from_pool(dims_prod, "eq");
+  float* device_y = get_from_pool(thread_id, dims_prod, "eq");
 
 
   int grid_size, block_size; 
@@ -10408,7 +10449,7 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
   }
 
 
-  float *device_y = get_from_pool(dims_prod, "hadamard");
+  float *device_y = get_from_pool(thread_id, dims_prod, "hadamard");
 
 
   int grid_size, block_size;
@@ -10504,7 +10545,7 @@ extern "C" void *CudaDiv(int is_forward_func,
   //  LogErrorS("Tensors division has tensors of different dimensions.");
 
 
-  float* device_y = get_from_pool(dims_prod,"div");
+  float* device_y = get_from_pool(thread_id, dims_prod,"div");
   
 
 
@@ -10570,7 +10611,7 @@ extern "C" void *onehot(int thread_id, Tensor *tensor, float num_classes)
 
   tensor->Sync();
 
-  float *probs = get_from_pool(B*C, "onehot probs");
+  float *probs = get_from_pool(thread_id, B*C, "onehot probs");
 
   cudaStream_t stream = ThreadsStream[thread_id];
   set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(probs, B*C);
@@ -11393,8 +11434,8 @@ extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...)
   
 
   tensor->Sync();
-  maxed = get_from_pool(new_dims_prod, "argmax maxed");
-  argmaxed = get_from_pool(new_dims_prod, "argmax");
+  maxed = get_from_pool(thread_id, new_dims_prod, "argmax maxed");
+  argmaxed = get_from_pool(thread_id, new_dims_prod, "argmax");
 
   cudaStream_t stream = ThreadsStream[thread_id];
   set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(maxed, new_dims_prod);
@@ -11418,7 +11459,7 @@ extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...)
   vec_sub<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
 
   
-  move_to_pool(new_dims_prod, maxed, "argmax maxed");
+  move_to_pool(thread_id, new_dims_prod, maxed, "argmax maxed");
 
   Tensor *new_tensor = createTensor(argmaxed, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor, argmax_op);
@@ -11562,7 +11603,7 @@ extern "C" void *clip(int thread_id, Tensor tensor, float _min, float _max)
   
   int B = DimsProd(dims);
 
-  float* device_y = get_from_pool(B,"clip");
+  float* device_y = get_from_pool(thread_id, B,"clip");
 
 
   int grid_size = B;
@@ -11630,7 +11671,7 @@ extern "C" void *gelu(int thread_id, Tensor *tensor)
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
-  float *y = get_from_pool(dims_prod,"gelu");
+  float *y = get_from_pool(thread_id, dims_prod,"gelu");
 
   tensor->Sync();
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -11692,7 +11733,7 @@ extern "C" void *sigmoid(int thread_id, Tensor *tensor)
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
-  float *y = get_from_pool(dims_prod, "sigmoid");  
+  float *y = get_from_pool(thread_id, dims_prod, "sigmoid");  
   
   tensor->Sync();
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -11773,7 +11814,7 @@ __global__ void sigmoid_add2weights_kernel(const float *xl, const float *wl, con
 
 
 
-extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tensor *tensor_xr, Tensor *tensor_wr)
+extern "C" void *sigmoid_add2weights(int thread_id, Tensor *tensor_xl, Tensor *tensor_wl, Tensor *tensor_xr, Tensor *tensor_wr)
 {
   std::vector<float> Ldims, Rdims;
   Ldims = tensor_xl->dims;
@@ -11801,7 +11842,7 @@ extern "C" void *sigmoid_add2weights(Tensor *tensor_xl, Tensor *tensor_wl, Tenso
   std::cout << "wr" << tensor_wr->name << "\n";
   */
 
-  float *out = get_from_pool(new_dims_prod, "sigmoid_add2weights");
+  float *out = get_from_pool(thread_id, new_dims_prod, "sigmoid_add2weights");
 
   int tile_size = 16;
   dim3 grid_size(std::ceil(B/(float)tile_size), std::ceil(OC/(float)tile_size));
@@ -11956,7 +11997,7 @@ extern "C" void *_tanh(int thread_id, Tensor *tensor)
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
-  float *y = get_from_pool(dims_prod, "tanh");
+  float *y = get_from_pool(thread_id, dims_prod, "tanh");
 
   tensor->Sync();
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -11994,7 +12035,7 @@ extern "C" void *relu(int thread_id, Tensor *tensor)
   block_size = grid_block_mem_sizes[1];
   
 
-  float *y = get_from_pool(dims_prod, "relu");
+  float *y = get_from_pool(thread_id, dims_prod, "relu");
 
   tensor->Sync();
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -12230,7 +12271,7 @@ extern "C" void *softmax(int thread_id, Tensor *tensor)
 
 
   tensor->Sync();
-  float *probs = get_from_pool(B*C, "softmax");
+  float *probs = get_from_pool(thread_id, B*C, "softmax");
   cudaStream_t stream = ThreadsStream[thread_id];
   set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(probs, B*C);
 
@@ -12286,7 +12327,7 @@ class BatchNorm2d
   
   void SetDescriptors(int, int, int, Tensor *);
   void InitMovingAverages();
-  float *Forward(Tensor *, int, int, int, int);
+  float *Forward(Tensor *, int, int, int, int, int);
   void Backward(float *, float *, float *, float *, float *);
 
 };
@@ -12328,7 +12369,7 @@ class Conv2d
 
   void SetDescriptors(int, int, int, Tensor *tensor);
   void InitFilters();
-  float *Forward(Tensor *, int, int, int);
+  float *Forward(Tensor *, int, int, int, int);
   void Backward(float *, float *, float *, float *);
 
 };
@@ -12363,7 +12404,7 @@ class BN2dRelu
   
   void SetDescriptors(int, int, int, Tensor *);
   void InitMovingAverages();
-  float *Forward(Tensor *, int, int, int, int);
+  float *Forward(Tensor *, int, int, int, int, int);
   void Backward(float *, float *, float *, float *, float *, float *, float *, float *);
 
 };
@@ -12414,7 +12455,7 @@ class MaxPool2d
 
 
   void SetDescriptors(int, int, int, int, Tensor *);
-  float *Forward(Tensor *, int, int, int, int);
+  float *Forward(Tensor *, int, int, int, int, int);
   void Backward(float *, float *, float *, float *);
 
 };
@@ -12449,7 +12490,7 @@ class Embedding
       
 
 
-      dW = get_from_pool(OC*C, "embedding dW");
+      dW = get_from_pool(0, OC*C, "embedding dW");
       set_to_zero_kernel<<<std::ceil(OC*C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
 
       NamedTensorsT[Name] = tensor_W;
@@ -12458,7 +12499,7 @@ class Embedding
       delete[] w_cpu;
     }
   
-  float *Forward(Tensor *, int);
+  float *Forward(Tensor *, int, int);
   void Backward(float *, float *, float *);
 };
 
@@ -12516,7 +12557,7 @@ class LSTM
     }
 
   
-  void SetDescriptors(int, int);
+  void SetDescriptors(int, int, int);
   void SetBackwardDescriptors();
   void FirstBackward();
   float *Forward(Tensor *, Tensor *, Tensor *, int, int, int);
@@ -12678,7 +12719,7 @@ __global__ void lstm_elementwise_ops_kernel(const float *fused_out,
 
 
 
-void LSTM::SetDescriptors(int B, int T)
+void LSTM::SetDescriptors(int B, int T, int thread_id)
 {
 
   if (x_out!=nullptr)
@@ -12689,11 +12730,11 @@ void LSTM::SetDescriptors(int B, int T)
     cudaFree(all_ct);
   }
 
-  x_out = get_from_pool(B*T*4*OC, "lstm x@U out");
-  fused_out = get_from_pool(T*B*4*OC, "lstm ht@W");
+  x_out = get_from_pool(thread_id, B*T*4*OC, "lstm x@U out");
+  fused_out = get_from_pool(thread_id, T*B*4*OC, "lstm ht@W");
 
-  all_ht = get_from_pool(T*B*OC, "lstm all ht");
-  all_ct = get_from_pool(T*B*OC, "lstm all ct");
+  all_ht = get_from_pool(thread_id, T*B*OC, "lstm all ht");
+  all_ct = get_from_pool(thread_id, T*B*OC, "lstm all ct");
 
 
   int grid_size, block_size; 
@@ -12722,7 +12763,7 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
   
   
   if (B!=this->B || T!=this->T)
-    SetDescriptors(B,T);
+    SetDescriptors(B,T,thread_id);
   
   cudaStream_t stream = ThreadsStream[thread_id];
   //cudaStream_t stream = main_stream->stream;
@@ -13074,9 +13115,9 @@ void LSTM::SetBackwardDescriptors()
   std::cout << "Changed LSTM descriptors." << "\n";
 
 
-  d_ht = get_from_pool(B*OC, "d_ht");
-  d_ct = get_from_pool(B*OC, "d_ct");
-  d_ifoc = get_from_pool(T*B*4*OC, "d_ct");
+  d_ht   = get_from_pool(0, B*OC, "d_ht");
+  d_ct   = get_from_pool(0, B*OC, "d_ct");
+  d_ifoc = get_from_pool(0, T*B*4*OC, "d_ct");
 
   changed_descriptors=false;
 }
@@ -13085,9 +13126,9 @@ void LSTM::FirstBackward()
 {
   std::cout << "First LSTM backward." << "\n";
 
-  dW = get_from_pool(4*OC*OC, "lstm dW");
-  dU = get_from_pool(4*OC* C, "lstm dU");
-  dB = get_from_pool(4*OC,    "lstm dB");
+  dW = get_from_pool(0, 4*OC*OC, "lstm dW");
+  dU = get_from_pool(0, 4*OC* C, "lstm dU");
+  dB = get_from_pool(0, 4*OC,    "lstm dB");
 
   set_to_zero_kernel<<<std::ceil(4*OC*OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 4*OC*OC);
   set_to_zero_kernel<<<std::ceil(4*OC* C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
@@ -13350,16 +13391,17 @@ __global__ void embedding_forward_kernel(const float *x, const float *w,
 
 
 
-float *Embedding::Forward(Tensor *tensor, int B)
+float *Embedding::Forward(Tensor *tensor, int B, int thread_id)
 {
-  float *out = get_from_pool(B*OC, "embedding out");
+  float *out = get_from_pool(thread_id, B*OC, "embedding out");
 
   this->B = B;
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
   
-  embedding_forward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(tensor->tensor_ptr, W, out, TILE_SIZE, B, C, OC);
+  cudaStream_t stream = ThreadsStream[thread_id];
+  embedding_forward_kernel<<<grid_size, block_size, 0, stream>>>(tensor->tensor_ptr, W, out, TILE_SIZE, B, C, OC);
 
   return out;
 }
@@ -13408,7 +13450,7 @@ void Embedding::Backward(float *x, float *dx, float *dy)
 
 
 
-extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, char *conv_namec, int is_obj_attr_or_self, int thread_id)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -13432,7 +13474,7 @@ extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, char *conv_namec
 
   tensor_x->Sync();
 
-  output = embedding->Forward(tensor_x, tensor_x->dims_prod);
+  output = embedding->Forward(tensor_x, tensor_x->dims_prod, thread_id);
   
 
   int is_forward_func = 1;
@@ -13544,7 +13586,7 @@ void BatchNorm2d::InitMovingAverages()
   delete[] aux;
 }
 
-float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C)
+float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
 
   if (H != this->H || W != this->W || B != this->B)
@@ -13563,7 +13605,7 @@ float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C)
   
   
 
-  float *output = get_from_pool(B * H * W * C, "batchnorm2d");
+  float *output = get_from_pool(thread_id, B * H * W * C, "batchnorm2d");
   //set_to_one_kernel<<<grid_size, block_size>>>(output, B * H * W * C);
   
   
@@ -13621,7 +13663,7 @@ float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C)
 }
 
 
-extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   //std::cout << "\nBatchNormForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
@@ -13659,7 +13701,7 @@ extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec
 
 
   tensor->Sync();
-  output = conv->Forward(tensor, H, W, B, C);
+  output = conv->Forward(tensor, H, W, B, C, thread_id);
 
   float resultingDimsProd = B * (float)C * (float)H * (float)W;
 
@@ -13827,7 +13869,7 @@ void BN2dRelu::InitMovingAverages()
   delete[] aux;
 }
 
-float *BN2dRelu::Forward(Tensor *tensor, int H, int W, int B, int C)
+float *BN2dRelu::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
   std::cout << "BN2dRelu::Forward" << "\n";
 
@@ -13845,8 +13887,8 @@ float *BN2dRelu::Forward(Tensor *tensor, int H, int W, int B, int C)
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  float *intermediate = get_from_pool(B * H * W * C, "bn2drelu");
-  float *output = get_from_pool(B * H * W * C, "bn2drelu");
+  float *intermediate = get_from_pool(thread_id, B * H * W * C, "bn2drelu");
+  float *output = get_from_pool(thread_id, B * H * W * C, "bn2drelu");
   //set_to_one_kernel<<<grid_size, block_size>>>(output, B * H * W * C);
   
   
@@ -13914,11 +13956,11 @@ float *BN2dRelu::Forward(Tensor *tensor, int H, int W, int B, int C)
 }
 
 
-extern "C" void *BN2dReluForward(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *BN2dReluForward(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
 {
   std::cout << "BN2dReluForward" << "\n";
   //TODO: remove self arg and concatenate it instead during the function call
-  //std::cout << "\nBatchNormForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
+  //std::cout << "\nBN2dReluForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
   
   std::string _self = self;
   std::string conv_name = conv_namec;
@@ -13956,7 +13998,7 @@ extern "C" void *BN2dReluForward(char *self, Tensor *tensor, char *conv_namec, i
   std::cout << "BN2dReluForward sync" << "\n";
 
   tensor->Sync();
-  output = conv->Forward(tensor, H, W, B, C);
+  output = conv->Forward(tensor, H, W, B, C, thread_id);
 
   float resultingDimsProd = B * (float)C * (float)H * (float)W;
 
@@ -14111,7 +14153,7 @@ float *Relu::Forward(Tensor *tensor, int H, int W, int B, int C)
 
 
 
-  float *output = get_from_pool(B * H * W * C, "Relu");
+  float *output = get_from_pool(0, B * H * W * C, "Relu");
   //set_to_one_kernel<<<grid_size, block_size>>>(output, B * H * W * C);
   
   
@@ -14140,7 +14182,7 @@ extern "C" void *ReluForward(char *self, Tensor *tensor, char *conv_namec, int i
 {
   
   //TODO: remove self arg and concatenate it instead during the function call
-  //std::cout << "\nBatchNormForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
+  //std::cout << "\nReluForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
   
   std::string _self = self;
   std::string conv_name = conv_namec;
@@ -14455,7 +14497,7 @@ void Conv2d::InitFilters()
 
 
 
-float *Conv2d::Forward(Tensor *tensor, int H, int W, int B)
+float *Conv2d::Forward(Tensor *tensor, int H, int W, int B, int thread_id)
 {
   // Initialize descriptors.
   //std::cout << "\nConv2d Forward with H: " << H << " W: " << W << "\n";
@@ -14470,7 +14512,7 @@ float *Conv2d::Forward(Tensor *tensor, int H, int W, int B)
 
   
   // Forward
-  float *d_output = get_from_pool(B * out_H * out_W * OC, "conv2d");
+  float *d_output = get_from_pool(thread_id, B * out_H * out_W * OC, "conv2d");
 
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
@@ -14574,7 +14616,7 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   //std::cout << "Conv forward of " << conv_namec << " and tensor " << tensor.name << "\n";
@@ -14615,7 +14657,7 @@ extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int
 
   tensor->Sync();
 
-  output = conv->Forward(tensor, H, W, B);
+  output = conv->Forward(tensor, H, W, B, thread_id);
 
   int ks_H = conv->ks;
   int ks_W = conv->ks;
@@ -14792,7 +14834,7 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
 
 
 
-float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C)
+float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
   // Initialize descriptors.
   //std::cout << "\nPool2d Forward with H: " << H << " W: " << W << "\n";
@@ -14805,7 +14847,7 @@ float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C)
 
   
   // Forward
-  float *d_output = get_from_pool(B * out_H * out_W * C, "maxpool2d");
+  float *d_output = get_from_pool(thread_id, B * out_H * out_W * C, "maxpool2d");
   
 
   constexpr float one = 1.0f;
@@ -14827,7 +14869,7 @@ float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C)
 }
 
 
-extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
 {
   //std::cout << "MaxPoolForward2d of " << conv_namec << " and tensor " << tensor.name << "\n";
   
@@ -14854,7 +14896,7 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, char *conv_namec, 
   std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
 
   tensor->Sync();
-  output = conv->Forward(tensor, H, W, B, C);
+  output = conv->Forward(tensor, H, W, B, C, thread_id);
 
 
   
@@ -15021,7 +15063,7 @@ extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
   H = dims[dims.size()-2];
   W = dims[dims.size()-1];
 
-  cropped = get_from_pool(dims_prod, "cropping");
+  cropped = get_from_pool(thread_id, dims_prod, "cropping");
 
 
   int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
@@ -15103,7 +15145,7 @@ extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
   H = dims[dims.size()-2];
   W = dims[dims.size()-1];
 
-  flipped = get_from_pool(dims_prod, "horizontal_flipping");
+  flipped = get_from_pool(thread_id, dims_prod, "horizontal_flipping");
 
 
   int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
@@ -15172,7 +15214,7 @@ extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tenso
     return nullptr;
   }
 
-  normalized = get_from_pool(dims_prod, "normalize img");
+  normalized = get_from_pool(thread_id, dims_prod, "normalize img");
 
 
 
@@ -15281,8 +15323,8 @@ extern "C" void *dropout(int thread_id, Tensor *tensor, float rate)
     grid_size = grid_block_mem_sizes[0];
     block_size = grid_block_mem_sizes[1];
 
-    float *dropout_ptr = get_from_pool(dims_prod, "dropout forward");
-    float *device_y = get_from_pool(dims_prod, "dropout forward output");
+    float *dropout_ptr = get_from_pool(thread_id, dims_prod, "dropout forward");
+    float *device_y = get_from_pool(thread_id, dims_prod, "dropout forward output");
 
     float scale = 1 / (1-rate);
 
@@ -15362,7 +15404,7 @@ void CrossEntropyBackward(float *y_hat,
   */
   
 
-  float *probs = get_from_pool(B*C,"ce probs");
+  float *probs = get_from_pool(0, B*C,"ce probs");
 
   //int grid_size, block_size;
   //size_t shared_mem_size;
@@ -15405,7 +15447,7 @@ void CrossEntropyBackward(float *y_hat,
 
   
   crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C, scale);
-  move_to_pool(B*C, probs,"ce probs");
+  move_to_pool(0, B*C, probs,"ce probs");
 
   
 }
@@ -15499,7 +15541,7 @@ void CleanScopeTensors(std::string scope)
   for(std::tuple<float, float *, std::string> pair : forward_tensors_to_pool[scope])
   {
     //if(!in_float_ptr_vec(std::get<1>(pair), scope_tensors_ptrs))
-      move_to_pool(std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
+      move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
 
     //move_to_pool(pair.first, pair.second);
     //cudaCheck(cudaFree(std::get<1>(pair)));
@@ -15676,7 +15718,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op && !from_custom)
         {
           //std::cout << "ulululu of op " << std::to_string(op) << "\n";
-          device_dw = get_from_pool(w_size, "dw");
+          device_dw = get_from_pool(0, w_size, "dw");
           set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
         }
       }
@@ -15694,7 +15736,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       grid_size = grid_block_mem_sizes[0];
       block_size = grid_block_mem_sizes[1];
 
-      device_dx = get_from_pool(x_size, from);
+      device_dx = get_from_pool(0, x_size, from);
       set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dx, x_size);
     }
     
@@ -15884,8 +15926,8 @@ extern "C" float backprop()
 
   for(std::tuple<float, float *, std::string> pair : backprop_tensors_to_pool)
   {
-    move_to_pool(std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
-    //move_to_pool(pair.first, pair.second);
+    move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
+    //move_to_pool(0, pair.first, pair.second);
   }
 
   backprop_tensors_to_free.clear();
@@ -16435,7 +16477,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       
 
       Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-                          {LtensorName, RtensorPtr});
+                          {LtensorName, RtensorPtr, thread_id});
       std::cout << "Post attr call\n";
     } else
     {
@@ -17546,12 +17588,13 @@ Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   std::vector<Value *> values;
 
+  values.push_back(thread_id);
   for (int i=0; i<Values.size(); i++)
     values.push_back(Values[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
 
 
 
-  return Builder->CreateCall(TheModule->getFunction("NewVecToTensor"), {values});
+  return Builder->CreateCall(TheModule->getFunction("NewVecToTensor"), values);
 }
 
 
@@ -17720,7 +17763,7 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
     cudaCheck(cudaGetLastError());
     std::string _name = "create tensor ";
     _name = _name + tensor_name;
-    tensor_ptr = get_from_pool(product, _name);
+    tensor_ptr = get_from_pool(thread_id, product, _name);
     //std::cout << "cpy of: " << tensor_name << "\n";
     cudaCheck(cudaMemcpy(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
     delete[] tensor_cpu;
@@ -17836,8 +17879,8 @@ extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
   std::vector<float> pool_dims = dims;
   pool_dims.erase(pool_dims.begin());
   float pool_product = DimsProd(pool_dims);
-  pool_tensor = get_from_pool(pool_product, "create pinned");
-  move_to_pool(pool_product, pool_tensor, "create pinned");
+  pool_tensor = get_from_pool(0, pool_product, "create pinned");
+  move_to_pool(0, pool_product, pool_tensor, "create pinned");
   
 }
 
@@ -18939,7 +18982,8 @@ Function *FunctionAST::codegen() {
                            Builder->CreateGlobalString(arg_name),
                            previous_scope,
                            scope_str,
-                           Builder->CreateGlobalString(function_name)});
+                           Builder->CreateGlobalString(function_name),
+                           thread_id});
       }
     }
   }
@@ -19479,7 +19523,7 @@ static void InitializeModule() {
   //
   FunctionType *conv2dForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("ConvForward2d", conv2dForwardTy);
@@ -19497,7 +19541,7 @@ static void InitializeModule() {
   //
   FunctionType *EmbeddingForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("EmbeddingForward", EmbeddingForwardTy);
@@ -19506,7 +19550,7 @@ static void InitializeModule() {
   //
   FunctionType *MaxPoolForward2dTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("MaxPoolForward2d", MaxPoolForward2dTy);
@@ -19515,7 +19559,7 @@ static void InitializeModule() {
   //
   FunctionType *BatchNormForward2dTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("BatchNormForward2d", BatchNormForward2dTy);
@@ -19524,7 +19568,7 @@ static void InitializeModule() {
   //
   FunctionType *BN2dReluForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("BN2dReluForward", BN2dReluForwardTy);
@@ -19695,7 +19739,7 @@ static void InitializeModule() {
   //
   FunctionType *NewVecToTensorTy = FunctionType::get(
       int8PtrTy,
-      {Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("NewVecToTensor", NewVecToTensorTy);
@@ -20602,7 +20646,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *CopyArgTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);
@@ -20640,7 +20684,7 @@ FunctionType *unbugTy = FunctionType::get(
 
   FunctionType *AttrTensorNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, floatPtrTy, int8PtrTy}, 
+      {int8PtrTy, floatPtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
@@ -21034,7 +21078,8 @@ int main() {
 
   native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward", "ReluForward", "LSTMForward", "EmbeddingForward"};
 
-  threaded_tensor_functions = {"LSTMForward", "log2"};
+  threaded_tensor_functions = {"log2"};
+  threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, native_modules);
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_functions);
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_methods);
 
