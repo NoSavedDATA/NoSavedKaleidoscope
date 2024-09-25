@@ -3033,7 +3033,7 @@ void to_pool(float dims_prod, float *tensor_ptr, std::string from)
 std::map<std::string, std::vector<std::tuple<float, float*,std::string>>> forward_tensors_to_pool;
 std::map<std::string, std::vector<float*>> forward_tensors_sent_to_pool;
 std::map<std::string, std::vector<Tensor*>> forward_Tensors_to_free;
-std::map<std::string, std::map<std::string, float*>> scope_tensors; // records last version of a tensor
+std::map<std::string, std::map<std::string, float*>> scope_tensors; // records last version of a tensor //todo: is this one actually used?
 
 void to_free_tensor_forward(Tensor *tensor_ptr, std::string scope)
 {
@@ -3046,6 +3046,27 @@ void to_pool_forward(float dims_prod, float *tensor_ptr, std::string scope, std:
   {
     forward_tensors_to_pool[scope].push_back(std::make_tuple(dims_prod, tensor_ptr, from));
     forward_tensors_sent_to_pool[scope].push_back(tensor_ptr);
+  }
+}
+
+
+
+std::map<int, std::map<std::string, std::vector<std::tuple<float, float*,std::string>>>> threaded_tensors_to_pool;
+std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_sent_to_pool;
+std::map<int, std::map<std::string, std::vector<Tensor*>>> threaded_Tensors_to_free;
+std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_to_save;
+
+void to_free_tensor_threaded(Tensor *tensor_ptr, std::string scope, int thread_id)
+{
+  if(!in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_free[thread_id][scope]))
+    threaded_Tensors_to_free[thread_id][scope].push_back(tensor_ptr);
+}
+void to_pool_threaded(float dims_prod, float *tensor_ptr, std::string scope, int thread_id, std::string from)
+{
+  if (!in_float_ptr_vec(tensor_ptr, threaded_tensors_sent_to_pool[thread_id][scope]) && !in_float_ptr_vec(tensor_ptr, threaded_tensors_to_save[thread_id][scope]))
+  {
+    threaded_tensors_to_pool[thread_id][scope].push_back(std::make_tuple(dims_prod, tensor_ptr, from));
+    threaded_tensors_sent_to_pool[thread_id][scope].push_back(tensor_ptr);
   }
 }
 
@@ -6081,6 +6102,7 @@ static std::map<std::string, std::string> NamedObjects;
 
 static std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
 static std::map<std::string, char *> ScopeNamesToClean;
+static std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;
 
 
 // Aux to not lose pointers
@@ -8108,7 +8130,9 @@ extern "C" void AddToScopeCleanList(char *scope, char *name)
   
   delete[] name;
 }
-extern "C" void CleanScopeVars(char *scope)
+void CleanThreadTensors(std::string, int);
+void ThreadedCleanupToPool(Tensor *, std::string, int);
+extern "C" void CleanScopeVars(char *scope, int thread_id)
 {
   
   pthread_mutex_lock(&clean_scope_mutex);
@@ -8144,6 +8168,25 @@ extern "C" void CleanScopeVars(char *scope)
     
     _it = ScopeVarsToClean[scope].erase(_it);
   }
+
+  if(thread_id!=0)
+  {
+    /*
+    while(ThreadedScopeTensorsToClean[thread_id][scope].size()>0)
+    {
+      std::string tensor_name = ThreadedScopeTensorsToClean[thread_id][scope].back();
+      ThreadedScopeTensorsToClean[thread_id][scope].pop_back();
+
+      ThreadedCleanupToPool(NamedTensorsT[tensor_name], scope, thread_id);      
+
+      //ThreadedCleanupToPool(NamedTensorsT[_it], scope, thread_id);
+      //ThreadedScopeTensorsToClean[thread_id][scope].erase(_it);
+    }
+    CleanThreadTensors(scope, thread_id);
+    ThreadedScopeTensorsToClean[thread_id].erase(scope);
+    */
+  }
+
   
   //ScopeVarsToClean[scope].clear(); // clear does not actually clears it
   auto it = ScopeVarsToClean.find(scope);
@@ -8859,6 +8902,10 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
   new_tensor->scopeless_name = tensor->scopeless_name;
   new_tensor->from_grad_or_load = tensor->from_grad_or_load;//
   NamedTensorsT[arg_tensor_name] = new_tensor;
+
+  if (thread_id!=0)
+    ThreadedScopeTensorsToClean[thread_id][scope].push_back(arg_tensor_name);
+
   return 0;
 }
 
@@ -8904,8 +8951,12 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   
   
 
-
-  if(nn_mode==eval_mode||thread_id!=0)//
+  if(thread_id!=0)
+  {
+    ThreadedScopeTensorsToClean[thread_id][scope].erase(std::remove(ThreadedScopeTensorsToClean[thread_id][scope].begin(), ThreadedScopeTensorsToClean[thread_id][scope].end(), scope_tensor_name), ThreadedScopeTensorsToClean[thread_id][scope].end());
+    threaded_tensors_to_save[thread_id][scope].push_back(scope_tensor->tensor_ptr);
+  }
+  else if(nn_mode==eval_mode)//
     to_free_tensor_forward(scope_tensor, scope);//
   else
     to_free_tensor(scope_tensor);
@@ -9076,6 +9127,9 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
 
   tgt_tensor->thread_id = thread_id;
   NamedTensorsT[tensor_name] = tgt_tensor;
+  
+  if (thread_id!=0)
+    ThreadedScopeTensorsToClean[thread_id][scope].push_back(tensor_name);
   
   return 0;
 }
@@ -15524,6 +15578,46 @@ int DoesTreeContainWeight(Tensor *back_node)
   return DoesTreeContainWeight(back_node->L_Node) + DoesTreeContainWeight(back_node->R_Node);
 }
 
+void ThreadedCleanupToPool(Tensor *back_node, std::string scope, int thread_id)
+{
+  if(back_node==nullptr||back_node->weight)
+    return;
+  
+
+  
+  if (!in_str(scope, scopes));
+    scopes.push_back(scope);
+
+  ThreadedCleanupToPool(back_node->L_Node, scope, thread_id);
+  ThreadedCleanupToPool(back_node->R_Node, scope, thread_id);
+
+  
+  to_pool_threaded(back_node->dims_prod, back_node->tensor_ptr, scope, thread_id, "");
+  to_free_tensor_threaded(back_node, scope, thread_id);
+}
+
+void CleanThreadTensors(std::string scope, int thread_id)
+{
+  for(Tensor *tensor : threaded_Tensors_to_free[thread_id][scope])
+    delete tensor;
+
+  std::vector<float*> scope_tensors_ptrs;
+  
+
+  for(std::tuple<float, float *, std::string> pair : threaded_tensors_to_pool[thread_id][scope])
+      
+    move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
+
+
+  threaded_Tensors_to_free[thread_id][scope].clear();
+  threaded_tensors_to_pool[thread_id][scope].clear();
+  threaded_tensors_sent_to_pool[thread_id][scope].clear();
+
+  threaded_Tensors_to_free[thread_id].erase(scope);
+  threaded_tensors_to_pool[thread_id].erase(scope);
+  threaded_tensors_sent_to_pool[thread_id].erase(scope);
+}
+
 void ForwardCleanupToPool(Tensor *back_node, std::string scope)
 {
   if(back_node==nullptr||back_node->weight)
@@ -17735,7 +17829,7 @@ extern "C" float print_randoms(float N, float std) {
 
 
 
-extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight, int thread_id)
+extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight, int thread_id, char *scope)
 {
   //std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
 
@@ -17807,6 +17901,10 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
 
   
   NamedTensorsT[tensor_name] = tensor;
+
+  if(thread_id!=0)
+    ThreadedScopeTensorsToClean[thread_id][scope].push_back(tensor_name);
+  
   delete[] tensor_name;
   delete[] scopeless_name;
 
@@ -17855,7 +17953,8 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
                                               {var_name, scopeless_name, init,
-                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight, thread_id)});
+                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight, thread_id),
+                                               scope_str});
   }
 
 
@@ -19027,7 +19126,7 @@ Function *FunctionAST::codegen() {
 
   if(has_scope)
   {
-    Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str});
+    Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str, thread_id});
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str}); 
   }
 
@@ -20485,7 +20584,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *CleanScopeVarsTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("CleanScopeVars", CleanScopeVarsTy);
@@ -20566,7 +20665,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("CreateTensorOnDemand", CreateTensorOnDemandTy);
