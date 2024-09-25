@@ -6558,7 +6558,10 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
-std::map<float, std::vector<float *>> TensorPool;
+
+
+//std::map<float, std::vector<float *>> TensorPool;
+std::map<int, std::map<float, std::vector<float *>>> TensorPool;
 
 void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string from)
 {
@@ -6570,7 +6573,7 @@ void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string
   //std::cout << "move_to_pool from: " << from << "\n";
   
 
-  std::vector<float *> tensors_in_pool = TensorPool[dims_prod];
+  std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
   if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
   {
     //if(!(tensors_in_pool.size()<30&&dims_prod==1))
@@ -6583,7 +6586,7 @@ void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string
       cudaCheck(cudaFree(tensor_ptr));
     }
     */
-    TensorPool[dims_prod].push_back(tensor_ptr);
+    TensorPool[thread_id][dims_prod].push_back(tensor_ptr);
   }  
 }
 
@@ -6598,25 +6601,28 @@ float *get_from_pool(int thread_id, float dims_prod, std::string from)
 
   float *tensor_ptr;
 
-  if(TensorPool.count(dims_prod)>0)
+  if(TensorPool[thread_id].count(dims_prod)>0)
   {
-    std::vector<float *> tensors_in_pool = TensorPool[dims_prod];
+    std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
     if (tensors_in_pool.size()>0)
     {
       //std::cout << "GETTING FROM POOL: " << dims_prod << "\n";
       tensor_ptr = tensors_in_pool.back();
-      TensorPool[dims_prod].pop_back();
+      TensorPool[thread_id][dims_prod].pop_back();
       return tensor_ptr;
     }
   }
 
   
 
-  std::cout << "Malloc new space from " << from << " of size: " << dims_prod << "\n";
+  std::cout << "Malloc new space from " << from << " of size: " << dims_prod << ", at thread: " << thread_id << "\n";
 
   cudaCheck(cudaMalloc(&tensor_ptr, dims_prod*sizeof(float)));
   return tensor_ptr;
 }
+
+
+
 
 
 
@@ -8798,7 +8804,9 @@ std::vector<std::string> seen_functions_for_pool_allocation;
 extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope, int thread_id)
 {
   std::string tensor_name = tensor->name;
-  //std::cout << "\n\n\nCOPY ARG TENSOR OF " << previous_scope << tensor_name << " into " << scope<<new_tensor_name <<"\n";
+  //std::cout << "\n\n\nCOPY ARG TENSOR OF " << previous_scope << tensor_name << " into " << scope<<new_tensor_name  << " at thread: " << thread_id << "\n";
+
+  
   
   std::string arg_tensor_name = scope;
   arg_tensor_name = arg_tensor_name + new_tensor_name;
@@ -8826,6 +8834,7 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
     block_size = grid_block_mem_sizes[1];
 
     tensor->Sync();
+    /*
     if (tensor->thread_id!=thread_id)
     {
       cudaStream_t prev_stream = ThreadsStream[tensor->thread_id];
@@ -8840,6 +8849,9 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
       cudaStream_t stream = ThreadsStream[thread_id];
       copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(arg_tensor, tensor_ptr, dims_prod);
     }
+    */
+    cudaStream_t stream = ThreadsStream[thread_id];
+    copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(arg_tensor, tensor_ptr, dims_prod);
   }
   
 
@@ -9024,6 +9036,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
       tgt_tensor->Sync();
       tensor->Sync();
 
+      /*
       if (tgt_tensor->thread_id!=thread_id)
       {
         cudaStream_t prev_stream = ThreadsStream[tgt_tensor->thread_id];
@@ -9037,7 +9050,9 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
       } else {
         cudaStream_t stream = ThreadsStream[thread_id];
         copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
-      }
+      }*/
+      cudaStream_t stream = ThreadsStream[thread_id];
+      copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
 
       if(nn_mode==training_mode&&thread_id==0)
       {
@@ -13397,6 +13412,7 @@ float *Embedding::Forward(Tensor *tensor, int B, int thread_id)
 
   this->B = B;
 
+
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
   
@@ -13450,7 +13466,7 @@ void Embedding::Backward(float *x, float *dx, float *dy)
 
 
 
-extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, char *conv_namec, int is_obj_attr_or_self, int thread_id)
+extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -13474,6 +13490,7 @@ extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, char *conv_namec
 
   tensor_x->Sync();
 
+  
   output = embedding->Forward(tensor_x, tensor_x->dims_prod, thread_id);
   
 
@@ -13663,7 +13680,7 @@ float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thre
 }
 
 
-extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
+extern "C" void *BatchNormForward2d(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   //std::cout << "\nBatchNormForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
@@ -13956,9 +13973,8 @@ float *BN2dRelu::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_
 }
 
 
-extern "C" void *BN2dReluForward(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
+extern "C" void *BN2dReluForward(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
-  std::cout << "BN2dReluForward" << "\n";
   //TODO: remove self arg and concatenate it instead during the function call
   //std::cout << "\nBN2dReluForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
   
@@ -13982,7 +13998,6 @@ extern "C" void *BN2dReluForward(char *self, Tensor *tensor, char *conv_namec, i
 
 
 
-  std::cout << "BN2dReluForward move" << "\n";
 
   std::unique_ptr<BN2dRelu> conv = std::move(NamedBN2dRelu[conv_name]);
 
@@ -13995,7 +14010,6 @@ extern "C" void *BN2dReluForward(char *self, Tensor *tensor, char *conv_namec, i
     return nullptr;
   }
 
-  std::cout << "BN2dReluForward sync" << "\n";
 
   tensor->Sync();
   output = conv->Forward(tensor, H, W, B, C, thread_id);
@@ -14616,7 +14630,7 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-extern "C" void *ConvForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
+extern "C" void *ConvForward2d(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   //std::cout << "Conv forward of " << conv_namec << " and tensor " << tensor.name << "\n";
@@ -14869,7 +14883,7 @@ float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thread
 }
 
 
-extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self, int thread_id)
+extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //std::cout << "MaxPoolForward2d of " << conv_namec << " and tensor " << tensor.name << "\n";
   
@@ -18888,12 +18902,12 @@ Function *FunctionAST::codegen() {
   
 
 
+  thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
   if (function_name=="__anon_expr")
   {
     first_arg = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     previous_scope = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-    thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
   }
   
 
@@ -18911,7 +18925,7 @@ Function *FunctionAST::codegen() {
   int i = 0;
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
-    // TODO: solve bugged shifted arguments when using tensors
+    
     
     std::string arg_name = Arg.getName().str();
     //std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
@@ -18924,24 +18938,29 @@ Function *FunctionAST::codegen() {
       
       has_self = true;
     }
-    else if (arg_name == "scope_str")
+    if (arg_name == "scope_str")
     {
       scope_str = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
       
       has_scope = true;
     }
-    else if (arg_name == "previous_scope")
+    if (arg_name == "previous_scope")
     {
       previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
       
       has_previous_scope = true;
     }
-    else if (arg_name == "thread_id")
+    if (arg_name == "thread_id")
     {
       thread_id = &Arg;
       
       has_previous_scope = true;
-    } else if (in_str(arg_name, floatVars))
+    }
+  }
+
+  for (auto &Arg : TheFunction->args()) {
+    std::string arg_name = Arg.getName().str();
+    if (in_str(arg_name, floatVars))
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -18982,7 +19001,6 @@ Function *FunctionAST::codegen() {
                            Builder->CreateGlobalString(arg_name),
                            previous_scope,
                            scope_str,
-                           Builder->CreateGlobalString(function_name),
                            thread_id});
       }
     }
@@ -19523,7 +19541,7 @@ static void InitializeModule() {
   //
   FunctionType *conv2dForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("ConvForward2d", conv2dForwardTy);
@@ -19541,7 +19559,7 @@ static void InitializeModule() {
   //
   FunctionType *EmbeddingForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("EmbeddingForward", EmbeddingForwardTy);
@@ -19550,7 +19568,7 @@ static void InitializeModule() {
   //
   FunctionType *MaxPoolForward2dTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("MaxPoolForward2d", MaxPoolForward2dTy);
@@ -19559,7 +19577,7 @@ static void InitializeModule() {
   //
   FunctionType *BatchNormForward2dTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("BatchNormForward2d", BatchNormForward2dTy);
@@ -19568,7 +19586,7 @@ static void InitializeModule() {
   //
   FunctionType *BN2dReluForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("BN2dReluForward", BN2dReluForwardTy);
@@ -20646,7 +20664,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *CopyArgTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);
