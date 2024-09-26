@@ -3055,10 +3055,11 @@ std::map<int, std::map<std::string, std::vector<std::tuple<float, float*,std::st
 std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_sent_to_pool;
 std::map<int, std::map<std::string, std::vector<Tensor*>>> threaded_Tensors_to_free;
 std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_to_save;
+std::map<int, std::map<std::string, std::vector<Tensor*>>> threaded_Tensors_to_save;
 
 void to_free_tensor_threaded(Tensor *tensor_ptr, std::string scope, int thread_id)
 {
-  if(!in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_free[thread_id][scope]))
+  if(!in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_free[thread_id][scope]) && !in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_save[thread_id][scope]))
     threaded_Tensors_to_free[thread_id][scope].push_back(tensor_ptr);
 }
 void to_pool_threaded(float dims_prod, float *tensor_ptr, std::string scope, int thread_id, std::string from)
@@ -8130,8 +8131,12 @@ extern "C" void AddToScopeCleanList(char *scope, char *name)
   
   delete[] name;
 }
+
+
+
 void CleanThreadTensors(std::string, int);
 void ThreadedCleanupToPool(Tensor *, std::string, int);
+
 extern "C" void CleanScopeVars(char *scope, int thread_id)
 {
   
@@ -8171,20 +8176,17 @@ extern "C" void CleanScopeVars(char *scope, int thread_id)
 
   if(thread_id!=0)
   {
-    /*
+    
     while(ThreadedScopeTensorsToClean[thread_id][scope].size()>0)
     {
       std::string tensor_name = ThreadedScopeTensorsToClean[thread_id][scope].back();
       ThreadedScopeTensorsToClean[thread_id][scope].pop_back();
 
       ThreadedCleanupToPool(NamedTensorsT[tensor_name], scope, thread_id);      
-
-      //ThreadedCleanupToPool(NamedTensorsT[_it], scope, thread_id);
-      //ThreadedScopeTensorsToClean[thread_id][scope].erase(_it);
     }
     CleanThreadTensors(scope, thread_id);
     ThreadedScopeTensorsToClean[thread_id].erase(scope);
-    */
+    
   }
 
   
@@ -8903,8 +8905,14 @@ extern "C" float CopyArgTensor(Tensor *tensor, char *new_tensor_name, char *prev
   new_tensor->from_grad_or_load = tensor->from_grad_or_load;//
   NamedTensorsT[arg_tensor_name] = new_tensor;
 
-  if (thread_id!=0)
-    ThreadedScopeTensorsToClean[thread_id][scope].push_back(arg_tensor_name);
+  //if (thread_id!=0)
+  //  ThreadedScopeTensorsToClean[thread_id][scope].push_back(arg_tensor_name);
+  if (tensor->thread_id!=0)
+  {
+    //ThreadedScopeTensorsToClean[tensor->thread_id][previous_scope].erase(std::remove(ThreadedScopeTensorsToClean[tensor->thread_id][previous_scope].begin(), ThreadedScopeTensorsToClean[tensor->thread_id][previous_scope].end(), tensor_name), ThreadedScopeTensorsToClean[tensor->thread_id][previous_scope].end());
+    threaded_Tensors_to_save[tensor->thread_id][previous_scope].push_back(tensor);
+    threaded_tensors_to_save[tensor->thread_id][previous_scope].push_back(tensor->tensor_ptr);
+  }
 
   return 0;
 }
@@ -8945,7 +8953,10 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   std::string _name = "remove tensor scope of ";
   _name = _name + tensor_name;
-  move_to_pool(tensor->thread_id, tensor->dims_prod, tensor->tensor_ptr, _name);
+  if(tensor->thread_id==0)
+    move_to_pool(tensor->thread_id, tensor->dims_prod, tensor->tensor_ptr, _name);
+  else
+    ThreadedScopeTensorsToClean[tensor->thread_id][previous_scope].push_back(tensor->name);
   tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod, scope_tensor->cuda_stream, scope_tensor->loader);
   tensor->from_grad_or_load = scope_tensor->from_grad_or_load;
   
@@ -8953,7 +8964,8 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   if(thread_id!=0)
   {
-    ThreadedScopeTensorsToClean[thread_id][scope].erase(std::remove(ThreadedScopeTensorsToClean[thread_id][scope].begin(), ThreadedScopeTensorsToClean[thread_id][scope].end(), scope_tensor_name), ThreadedScopeTensorsToClean[thread_id][scope].end());
+    //ThreadedScopeTensorsToClean[thread_id][scope].erase(std::remove(ThreadedScopeTensorsToClean[thread_id][scope].begin(), ThreadedScopeTensorsToClean[thread_id][scope].end(), scope_tensor_name), ThreadedScopeTensorsToClean[thread_id][scope].end());
+    threaded_Tensors_to_save[thread_id][scope].push_back(scope_tensor);
     threaded_tensors_to_save[thread_id][scope].push_back(scope_tensor->tensor_ptr);
   }
   else if(nn_mode==eval_mode)//
@@ -9072,7 +9084,11 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
     {
       if(tgt_tensor->dims != tensor->dims)
       {
-        move_to_pool(tgt_tensor->thread_id, tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "z=x");
+        if(tgt_tensor->thread_id==0)
+          move_to_pool(tgt_tensor->thread_id, tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "z=x");
+        else
+          ThreadedScopeTensorsToClean[tgt_tensor->thread_id][scope].push_back(tgt_tensor->name);
+
         tgt_tensor->tensor_ptr = get_from_pool(thread_id, tensor->dims_prod, "z=x");
 
         tgt_tensor->dims = tensor->dims;
@@ -9113,7 +9129,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
 
         std::string scopeless_name = tgt_tensor->scopeless_name;
         tgt_tensor = createTensor(tgt_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, tgt_tensor->cuda_stream, tgt_tensor->loader);
-        //tgt_tensor = createTensor(tgt_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, cuda_stream);
+        
         tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
         tgt_tensor->scopeless_name = scopeless_name;
       } //else
@@ -9128,8 +9144,6 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
   tgt_tensor->thread_id = thread_id;
   NamedTensorsT[tensor_name] = tgt_tensor;
   
-  if (thread_id!=0)
-    ThreadedScopeTensorsToClean[thread_id][scope].push_back(tensor_name);
   
   return 0;
 }
@@ -9187,7 +9201,7 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor, int thread_
 
 
 
-extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at)
+extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at, int thread_id)
 { 
   //std::cout << "AttrTensorOnIdx of" << tensor_name << " at idx " << idx_at << "\n";
 
@@ -9230,7 +9244,9 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at
   float *base_address = tgt_tensor->tensor_ptr;
   float *device_x = base_address + static_cast<int>(idx_at);
 
-  cudaCheck(cudaMemcpy(device_x, tensor->tensor_ptr, R_dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
+  cudaStream_t stream = ThreadsStream[thread_id];
+  //TODO*: turn into kernel
+  cudaCheck(cudaMemcpyAsync(device_x, tensor->tensor_ptr, R_dims_prod*sizeof(float), cudaMemcpyDeviceToDevice, stream));
     
   return 0;
 }
@@ -11125,7 +11141,7 @@ __global__ void prod_over_semilast_dim_kernel(const float *tensor,
 
 extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
 {
-  std::cout << "PROD OF " << tensor.name << "\n";
+  //std::cout << "PROD OF " << tensor.name << "\n";
 
 
   float *tensor_ptr = tensor.tensor_ptr;
@@ -11204,7 +11220,7 @@ extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
   cudaMemcpyAsync(summed, init_prod, new_dims_prod * sizeof(float), cudaMemcpyHostToDevice, stream);
   delete[] init_prod;
 
-  PrintTensorF(summed, new_dims_prod,1);
+  //PrintTensorF(summed, new_dims_prod,1);
 
   //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
 
@@ -11222,7 +11238,7 @@ extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
   else if (sum_dims[0]==(dims.size()-1))
   {
     prod_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, summed_dim);
-    std::cout << "prod_over_last_dim_kernel" << "\n";
+    //std::cout << "prod_over_last_dim_kernel" << "\n";
   }
   if (sum_dims[0]==(dims.size()-2))
     prod_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
@@ -11527,8 +11543,11 @@ extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...)
   //  max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, maxed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
   vec_sub<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
 
+  if(thread_id==0)  
+    move_to_pool(thread_id, new_dims_prod, maxed, "argmax maxed");
+  else
+    cudaFree(maxed);
   
-  move_to_pool(thread_id, new_dims_prod, maxed, "argmax maxed");
 
   Tensor *new_tensor = createTensor(argmaxed, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor, argmax_op);
@@ -15582,6 +15601,7 @@ void ThreadedCleanupToPool(Tensor *back_node, std::string scope, int thread_id)
 {
   if(back_node==nullptr||back_node->weight)
     return;
+  //std::cout << "-----Clean threaeded " << back_node->name << "\n";
   
 
   
@@ -15605,8 +15625,7 @@ void CleanThreadTensors(std::string scope, int thread_id)
   
 
   for(std::tuple<float, float *, std::string> pair : threaded_tensors_to_pool[thread_id][scope])
-      
-    move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
+    move_to_pool(thread_id, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
 
 
   threaded_Tensors_to_free[thread_id][scope].clear();
@@ -16453,7 +16472,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
         Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
                             {LtensorName, RtensorPtr,
-                            idx_at});
+                             idx_at, thread_id});
       } else {
         VariableExprAST *idx = static_cast<VariableExprAST *>(LHSE->Idx[0].get());
         Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
@@ -16607,7 +16626,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       
       Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
                           {LtensorName, RtensorPtr,
-                           idx_at});
+                           idx_at, thread_id});
       
     }
     seen_var_attr=false;
@@ -17902,8 +17921,6 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
   
   NamedTensorsT[tensor_name] = tensor;
 
-  if(thread_id!=0)
-    ThreadedScopeTensorsToClean[thread_id][scope].push_back(tensor_name);
   
   delete[] tensor_name;
   delete[] scopeless_name;
@@ -17953,7 +17970,7 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
                                               {var_name, scopeless_name, init,
-                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight, thread_id),
+                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight), thread_id,
                                                scope_str});
   }
 
@@ -20812,7 +20829,8 @@ FunctionType *unbugTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
        int8PtrTy,
-       Type::getFloatTy(*TheContext)}, 
+       Type::getFloatTy(*TheContext),
+       Type::getInt32Ty(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("AttrTensorOnIdx", AttrTensorOnIdxTy);
