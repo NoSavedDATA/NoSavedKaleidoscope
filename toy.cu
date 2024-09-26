@@ -275,6 +275,8 @@ bool in_str(std::string str, std::vector<std::string> list);
 //MT19937 mt(generate_custom_seed());
 LCG rng(generate_custom_seed());
 
+//std::random_device rd; // it is already defined at cu_common.h
+std::mt19937 MAIN_PRNG(rd()^get_millisecond_time());
 
 std::vector<std::string> rds;
 
@@ -3375,6 +3377,63 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
 
 
 
+extern "C" float wload_bin(Tensor *tensor, char *bin_name, float worker_idx, float batch_idx)
+{
+  std::cout << "LOADING BINARY FOR: " << tensor->name <<  "\n";
+  std::cout << "Binary: " << bin_name <<  "\n";
+
+
+  int width, height, channels;
+
+  std::ifstream file(bin_name, std::ios::binary);
+
+  file.seekg(0, std::ios::end);
+  std::size_t file_size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+
+  float *file_data = new float[file_size / sizeof(float)];
+
+  // Read the binary file into the tensor_data pointer
+  file.read(reinterpret_cast<char*>(file_data), file_size);
+  file.close();
+
+  size_t num_elements = file_size / sizeof(float);
+
+
+
+
+
+  std::vector<float> dims = tensor->dims;
+
+  std::vector<float> workerless_dims = BatchLessDims(dims);
+  int workerless_dims_prod = DimsProd(workerless_dims);
+
+  std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+  int batchless_dims_prod = DimsProd(batchless_dims);
+
+
+  float *image_data_float = tensor->cpu_tensor_ptr;
+  int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+
+
+
+
+  for (size_t i = 0; i < num_elements; ++i)
+  {
+    //std::cout << ", " << file_data[i];
+    image_data_float[idx_offset + i] = file_data[i];
+  }
+  
+  delete[] file_data;
+
+  return 0;
+}
+
+
+
+
+
 unsigned char *interpolate_img(unsigned char *src, int height, int width, int dst_height, int dst_width)
 {
     unsigned char *new_img = new unsigned char[dst_height*dst_width*3];
@@ -5443,23 +5502,23 @@ static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
   }
 
 
-
+  
   if (lockVars.count(Name) == 0)
   {
     pthread_mutex_t* _mutex = new pthread_mutex_t;
-    if (pthread_mutex_init(&mutex, NULL) != 0) {
+    if (pthread_mutex_init(_mutex, NULL) != 0) {
       printf("Mutex initialization failed\n");
       return nullptr;
     }
     
-    lockVars[IdentifierStr] = _mutex;
-    
+    lockVars[IdentifierStr] = _mutex;  
   }
+  
   
   std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
 
 
-  Body.push_back(std::make_unique<UnlockExprAST>(Name));
+  //Body.push_back(std::make_unique<UnlockExprAST>(Name));
 
   return std::make_unique<LockExprAST>(std::move(Body), Name);
 }
@@ -9639,6 +9698,18 @@ extern "C" float roundE(float v) {
 }
 extern "C" float floorE(float v) {
   return floor(v);
+}
+
+extern "C" float randint(float b, float f)
+{
+
+  std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+  float rand_float = dist(MAIN_PRNG);
+
+  int rand_int = static_cast<int>(rand_float * (f - b + 1)) + b;
+
+  return (float) rand_int;
 }
 
 
@@ -17412,7 +17483,9 @@ Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   for (auto &body : Bodies)
     V = body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
-  return V;
+  Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
+
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
 
 Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id){
@@ -19937,6 +20010,15 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *wload_binTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("wload_bin", wload_binTy);
+
+
+  //
   FunctionType *wload_img_resizeTy = FunctionType::get(
       floatPtrTy,
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -20695,6 +20777,15 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
+  
+
+  // 
+  FunctionType *randintTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("randint", randintTy);
 
 
   //
@@ -21207,7 +21298,7 @@ int main() {
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
-                      "wtokenize_pad_left_idx", "print_scope"};
+                      "wtokenize_pad_left_idx", "print_scope", "wload_bin", "randint"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_fn = concat_str_vec(native_methods, native_functions);
 
