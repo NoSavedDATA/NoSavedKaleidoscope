@@ -62,7 +62,7 @@
 #include "include/cu_commons.h"
 
 
-pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex;
+pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex, aux_mutex;
 
 float TERMINATE_VARARG = -40370000000.0f;
 int UNK_TOK = 1.0f;
@@ -473,7 +473,7 @@ char *get_from_char_pool(size_t, std::string);
 // Tensor related
 std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn, native_modules,
 return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,
-threaded_tensor_functions;
+return_string_fn, threaded_tensor_functions;
 
 
 
@@ -566,7 +566,8 @@ enum Types {
   type_float = 0,
   type_tensor = 1,
   type_pinned_tensor = 2,
-  type_object = 3
+  type_object = 3,
+  type_string = 4,
 };
 
 enum NameSolverTypes {
@@ -1619,6 +1620,20 @@ public:
 };
 
 
+class ConcatStringsExprAST : public ExprAST {
+  char Op;
+  std::unique_ptr<ExprAST> LHS, RHS;
+
+public:
+  ConcatStringsExprAST(char Op, std::unique_ptr<ExprAST> LHS,
+                std::unique_ptr<ExprAST> RHS)
+      : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+};
+
+
+
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST {
   std::string Callee;
@@ -2182,6 +2197,8 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     aux->SetType("tensor");
   if (in_str(IdName, return_pinned_methods))
     aux->SetType("pinned_tensor");
+  if (in_str(IdName, return_string_fn))
+    aux->SetType("str");
 
   return aux;
 }
@@ -3377,15 +3394,70 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
 
 
 
+extern "C" float load_bin(Tensor *tensor, char *bin_name)
+{
+
+  //std::ifstream file(bin_name, std::ios::binary);
+  std::ifstream file(bin_name, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    std::string _error = bin_name;
+    _error = "Failed to open file: " + _error;
+    LogErrorS(_error);
+    return 0;
+  }
+
+  file.seekg(0, std::ios::end);
+  std::size_t file_size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+
+  float *file_data = new float[file_size / sizeof(float)];
+
+  file.read(reinterpret_cast<char*>(file_data), file_size);
+  file.close();
+
+  std::cout << bin_name << " has a file size of " << file_size << "\n";
+  size_t num_elements = file_size / sizeof(float);
+
+
+  if (num_elements>tensor->dims_prod)
+  {
+    std::string _error = "Tried to load binary data of size " + std::to_string(num_elements) + " into tensor " + tensor->name + " of size " + std::to_string(tensor->dims_prod);
+    LogErrorS(_error);
+    return 0;
+  }
+
+
+  float *image_data_float = tensor->cpu_tensor_ptr;
+
+
+  for (size_t i = 0; i < num_elements; ++i)
+  {
+    //std::cout << "" << file_data[i] << "\n";
+    image_data_float[i] = file_data[i];
+  }
+  
+  
+  delete[] file_data;
+
+  return 0;
+}
+
+
+
+
 extern "C" float wload_bin(Tensor *tensor, char *bin_name, float worker_idx, float batch_idx)
 {
-  std::cout << "LOADING BINARY FOR: " << tensor->name <<  "\n";
-  std::cout << "Binary: " << bin_name <<  "\n";
+  //std::cout << "LOADING BINARY FOR: " << tensor->name <<  "\n";
+  //std::cout << "Binary: " << bin_name <<  "\n";
 
-
-  int width, height, channels;
-
-  std::ifstream file(bin_name, std::ios::binary);
+  std::ifstream file(bin_name, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    std::string _error = bin_name;
+    _error = "Failed to open file: " + _error;
+    LogErrorS(_error);
+    return 0;
+  }
 
   file.seekg(0, std::ios::end);
   std::size_t file_size = file.tellg();
@@ -3416,6 +3488,8 @@ extern "C" float wload_bin(Tensor *tensor, char *bin_name, float worker_idx, flo
   float *image_data_float = tensor->cpu_tensor_ptr;
   int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
 
+
+  //todo: add out of bounds error here
 
 
 
@@ -4250,7 +4324,7 @@ extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
 }
 
 
-extern "C" float * split_str_to_float(char *in_string, int gather_position)
+extern "C" float *split_str_to_float(char *in_string, int gather_position)
 {
   std::vector<std::string> splitted = split_str(in_string, '/');
 
@@ -4265,6 +4339,23 @@ extern "C" float * split_str_to_float(char *in_string, int gather_position)
 }
 
 
+extern "C" void *to_string(float v)
+{
+  //todo: allow float instead of int only
+  return str_to_char(std::to_string((int)v));
+}
+
+
+extern "C" void *cat_str_float(char *c, float v)
+{
+
+  std::string s = c;
+  std::string tmp = std::to_string((int)v);
+
+  s = s + c;
+
+  return str_to_char(s);
+}
 
 
 
@@ -4522,16 +4613,13 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
                                         object_class, pre_dot, is_var_forward, callee_override);
 
   if (in_str(IdName, return_tensor_fn) || return_tensor)
-  {
     aux->SetType("tensor");
-  }
-  if (return_string)
+  
+  if (return_string||in_str(IdName, return_string_fn))
     aux->SetType("str");
 
-  
   if (CurTok==tok_space)
     getNextToken();
-
 
   if (is_self)
     aux->SetSelf(true);    
@@ -5720,6 +5808,8 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     L_cuda = type_tensor;
   if (LHS->GetType()=="pinned_tensor")
     L_cuda = type_pinned_tensor;
+  if (LHS->GetType()=="str")
+    L_cuda = type_string;
 
   while (true)
   {
@@ -5799,7 +5889,8 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       R_cuda=type_pinned_tensor;
     if (RHS->GetType()=="object"||RHS->GetType()=="object_vec")
       R_cuda=type_object;
-    
+    if (RHS->GetType()=="str")
+      R_cuda = type_string;
     
     
     
@@ -5828,7 +5919,13 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     //std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n";
     //std::cout << "L type: " << L_cuda << " R type: " << R_cuda << "\n\n";
 
-    if (R_cuda==type_object)
+
+    if (L_cuda==type_string||R_cuda==type_string)
+    {
+      LHS = std::make_unique<ConcatStringsExprAST>(BinOp, std::move(LHS), std::move(RHS));
+      LHS->SetType("str");
+    }
+    else if (R_cuda==type_object)
     {
       LHS = std::make_unique<BinaryObjExprAST>(BinOp, std::move(LHS), std::move(RHS));
       LHS->SetType("object");
@@ -6347,33 +6444,37 @@ float *get_from_pool(int, float, std::string);
 
 extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
 {
-  //std::cout << "\nGpu transfer for: " << tensor.name << "\n";
+  //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
   
   float *tensor_ptr, *tensor_cpu;
 
+  
   tensor_cpu = pinned_tensor->cpu_tensor_ptr;
-  std::vector<float> dims;
-  dims = pinned_tensor->dims;
+  std::vector<float> dims = pinned_tensor->dims;
   float dims_prod = pinned_tensor->dims_prod;
   
+
+
 
   
   if (tensor->dims_prod==dims_prod)
     tensor_ptr = tensor->tensor_ptr;
   else
-    tensor_ptr = get_from_pool(thread_id, dims_prod, "gpuw");
+    tensor_ptr = get_from_pool(thread_id, dims_prod, "gpu");
+  
+  //tensor_ptr = get_from_pool(dims_prod, "gpu");
 
 
+  
   Loader *loader=nullptr;
   CudaStreams *cuda_stream=nullptr;
-  if (dims_prod<2000){
-    cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
-  }
-  else
-  {
-    cuda_stream = AllocateStream();
-    cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
-  }
+  
+  
+  cuda_stream = AllocateStream();
+  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+  //cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+  pinned_tensor->cuda_stream = cuda_stream;
+  
 
 
 
@@ -6404,7 +6505,7 @@ extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, floa
   float *tensor_ptr, *tensor_cpu;
 
   
-  tensor_cpu = pinned_tensor->cpu_tensor_ptr;
+  
   std::vector<float> dims, batchless_dims;
   dims = pinned_tensor->dims;
   
@@ -6752,7 +6853,7 @@ extern "C" float PrintTensor(char* tensorName){
   std::vector<float> dims = tensor->dims;
   
   
-  
+  tensor->Sync();
   cudaDeviceSynchronize();
   cudaCheck(cudaMemcpy(tensor_cpu, tensor->tensor_ptr, arr_size*sizeof(float), cudaMemcpyDeviceToHost));
 
@@ -6837,12 +6938,12 @@ extern "C" float PrintTensor(char* tensorName){
 
 
 extern "C" float print_tensor(Tensor tensor){
-    char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
-    std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
+  char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
+  std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
 
-    PrintTensor(tensorName);
+  PrintTensor(tensorName);
 
-    delete[] tensorName;
+  delete[] tensorName;
   return 0;
 }
 
@@ -8296,6 +8397,7 @@ extern "C" float StoreStrOnDemand(char *name, char *value){
   
   pthread_mutex_lock(&clean_scope_mutex);
   NamedStrs[name] = value;
+  //std::cout << "Store " << value << " at " << name << "\n";
   pthread_mutex_unlock(&clean_scope_mutex);
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
@@ -10788,6 +10890,18 @@ extern "C" float shape(int thread_id, Tensor tensor)
   std::cout << "\nTensor \033[95m" << tensor.name<<"/"<<tensor.scopeless_name << "\033[0m:\n   ";
   PrintDims(tensor.dims);
 
+  return 0;
+}
+
+
+extern "C" float printtt(int thread_id, Tensor tensor)
+{
+  char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
+  std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
+
+  PrintTensor(tensorName);
+
+  delete[] tensorName;
   return 0;
 }
 
@@ -16792,6 +16906,154 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
 
 
+Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // Special case '=' because we don't want to emit the LHS as an expression.
+
+  
+
+  if (Op == '=') {
+
+    //std::cout << "\n0 0 ATTRIBUTION" << "\n\n\n";
+
+    seen_var_attr=true;
+    // Assignment requires the LHS to be an identifier.
+    // This assume we're building without RTTI because LLVM builds that way by
+    // default.  If you build LLVM with RTTI this can be changed to a
+    // dynamic_cast for automatic error checking.
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+
+
+    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+    std::string Lname = std::get<0>(name_solver->Names[0]);
+    std::string LType = LHS->GetType();
+
+
+    if (!LHSE)
+      return LogErrorV("'=' destiny must be a variable.");
+    // Codegen the RHS.
+    
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+
+    if (!Val)
+    {
+      seen_var_attr=false;
+      return nullptr;
+    }
+
+    // Look up the name.
+    if (LType=="float") {
+      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+                                                  {Lvar_name,
+                                                   Val});
+
+    } else if (LType=="str") {
+
+
+      Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
+                                                  {Lvar_name,
+                                                   Val});
+                                                   
+
+    } else if (LType=="str_vec") {
+
+      //std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
+      Value *Variable = NamedStrVecs[Lname];
+      
+      if(LHS->GetSelf())
+        Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
+                                                  {Lvar_name,
+                                                   Val});
+      else
+        Builder->CreateStore(Val, Variable);
+
+    } else if (LType=="float_vec") {
+
+      //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
+
+      Value *Variable = NamedFloatVecs[Lname];
+      
+
+      if(LHS->GetSelf())
+      {
+        if(LHS->GetIsVec())
+        {
+          VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+          
+
+          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
+                                                  {Lvar_name,
+                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id),
+                                                   Val});
+
+        } else
+          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
+                                                  {Lvar_name,
+                                                   Val});
+      }
+      else
+      {
+        if(LHS->GetIsVec())
+        {
+          // TODO: Implement non-object-attr float vector index attribution.
+        } else
+          Builder->CreateStore(Val, Variable);
+      }
+        
+
+    } else {
+      
+      seen_var_attr=false;
+      
+      
+      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+                                                  {Lvar_name,
+                                                   Val});
+      
+
+      //std::string _error = "Could not find variable " + Lname + ".";
+      //return LogErrorV(_error);
+    }
+
+    seen_var_attr=false;
+    return Val;
+  }
+
+
+  
+
+  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  
+  if (!L || !R)
+    return nullptr;
+
+
+    switch (Op) {
+    case '+':
+      return Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {L, R});
+    default:
+      LogErrorS("The only string operations supported are '+' and '='.");
+      break;
+    }
+  
+
+  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
+  // a call to it.
+  Function *F = getFunction(std::string("binary") + Op);
+  assert(F && "Operator not found.");
+
+  Value *Ops[] = {L, R};
+  return Builder->CreateCall(F, Ops, "binop");
+}
+
+
+
+
+
 
 
 
@@ -16963,6 +17225,11 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   Value *Ops[] = {L, R};
   return Builder->CreateCall(F, Ops, "binop");
 }
+
+
+
+
+
 
 
 Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
@@ -18478,8 +18745,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
   }
   
-  std::cout << "\n\n\nFunction name: " << functionName << "\n";
-  std::cout << "THREAD IS: " << thread << "\n\n\n\n";
+  //std::cout << "\n\n\nFunction name: " << functionName << "\n";
+  //std::cout << "THREAD IS: " << thread << "\n\n\n\n";
 
 
 
@@ -18695,10 +18962,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
 
   
-
-  
-  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  Value *ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   //std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
+
   if (CalleeOverride=="none")
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
   else
@@ -18738,12 +19004,12 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
   
   
+  
   Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   
   if (changed_first_arg)
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
   
-
   if (has_first_arg_copy)
     Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg_copy});
 
@@ -19845,6 +20111,15 @@ static void InitializeModule() {
   
 
   //
+  FunctionType *printttTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("printtt", printttTy);
+  
+
+  //
   FunctionType *evalTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {},
@@ -20010,6 +20285,15 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *load_binTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("load_bin", load_binTy);
+
+
+  //
   FunctionType *wload_binTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -20167,6 +20451,24 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("zeros_vec", zeros_vecTy);
+
+
+  //
+  FunctionType *to_stringTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("to_string", to_stringTy);
+
+
+  //
+  FunctionType *cat_str_floatTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("cat_str_float", cat_str_floatTy);
 
 
   //
@@ -21209,6 +21511,8 @@ int main() {
     return 1;
   }
   pthread_mutex_init(&random_seed_mutex, NULL);
+  pthread_mutex_init(&aux_mutex, NULL);
+  
   
 
 
@@ -21267,9 +21571,9 @@ int main() {
 
 
 
-  return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like", "print_tensor",
+  return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights"};
-  return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu",
+  return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
                             "save_img", "gpu", "gpuw"};
   
@@ -21291,6 +21595,8 @@ int main() {
   native_methods = concat_str_vec(native_methods, return_tensor_methods);
   //native_methods = concat_str_vec(native_methods, return_pinned_methods);
 
+  return_string_fn = {"to_string", "cat_str_float"};
+
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
                       "LenStrVec", "zeros_vec", "ones_vec", "start_timer", "end_timer",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
@@ -21298,9 +21604,12 @@ int main() {
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
-                      "wtokenize_pad_left_idx", "print_scope", "wload_bin", "randint"};
+                      "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",
+                      "print_tensor"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
+  native_functions = concat_str_vec(native_functions, return_string_fn);
   native_fn = concat_str_vec(native_methods, native_functions);
+
 
   native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward", "ReluForward", "LSTMForward", "EmbeddingForward"};
 
