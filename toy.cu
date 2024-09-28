@@ -43,6 +43,7 @@
 #include <float.h>
 #include <fstream>
 #include <sstream>
+#include <filesystem>
 
 
 
@@ -2919,6 +2920,7 @@ struct Tensor {
     cuda_stream = _cuda_stream;
     loader = _loader;
     is_pinned=false;
+    cpu_tensor_ptr = nullptr;
     thread_id = 0;
   }
 
@@ -2934,6 +2936,7 @@ struct Tensor {
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load||new_R_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
     is_pinned=false;
+    cpu_tensor_ptr = nullptr;
     thread_id = 0;
   }
 
@@ -2948,6 +2951,7 @@ struct Tensor {
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
     is_pinned=false;
+    cpu_tensor_ptr = nullptr;
     thread_id = 0;
   }
 
@@ -2963,6 +2967,7 @@ struct Tensor {
     dy=nullptr;
     weight=false;
     is_pinned=false;
+    cpu_tensor_ptr = nullptr;
     thread_id = 0;
   }
   void SetIsWeight()
@@ -3504,6 +3509,60 @@ extern "C" float wload_bin(Tensor *tensor, char *bin_name, float worker_idx, flo
   return 0;
 }
 
+
+extern "C" float save_as_bin(int thread_id, Tensor *tensor, char *bin_name)
+{
+  std::ofstream file(bin_name, std::ios::binary);
+
+  if (!file.is_open()) {
+    std::cerr << "Failed to open file: " << bin_name << "\n";
+    return -1;
+  }
+
+
+  if (tensor->cpu_tensor_ptr==nullptr)
+    cudaMallocHost(&tensor->cpu_tensor_ptr, tensor->dims_prod*sizeof(float));
+  
+  cudaMemcpy(tensor->cpu_tensor_ptr, tensor->tensor_ptr, tensor->dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+
+  
+  file.write(reinterpret_cast<const char*>(tensor->cpu_tensor_ptr), tensor->dims_prod * sizeof(float));
+  file.close();
+
+
+  return 0;
+}
+
+
+
+extern "C" float save_as_int(int thread_id, Tensor *tensor, char *bin_name)
+{
+  // Open the binary file for writing
+  std::ofstream file(bin_name, std::ios::binary);
+
+  if (!file.is_open()) {
+    std::cerr << "Failed to open file: " << bin_name << "\n";
+    return -1;
+  }
+
+
+  if (tensor->cpu_tensor_ptr==nullptr)
+    cudaMallocHost(&tensor->cpu_tensor_ptr, tensor->dims_prod*sizeof(float));
+  
+  cudaMemcpy(tensor->cpu_tensor_ptr, tensor->tensor_ptr, tensor->dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+
+  int *int_data = new int[tensor->dims_prod];
+
+  for (int i=0; i < tensor->dims_prod; ++i)
+    int_data[i] = (int)tensor->cpu_tensor_ptr[i];
+
+  
+  file.write(reinterpret_cast<const char*>(int_data), tensor->dims_prod * sizeof(float));
+  file.close();
+
+
+  return 0;
+}
 
 
 
@@ -9801,6 +9860,29 @@ extern "C" float roundE(float v) {
 extern "C" float floorE(float v) {
   return floor(v);
 }
+extern "C" float logical_not(float v)
+{
+  if (v==0.0f)
+    return 1;
+  return 0;
+}
+
+extern "C" float dir_exists(char *path)
+{
+    if (std::filesystem::exists(path) && std::filesystem::is_directory(path))
+    return 1;
+
+  return 0;
+}
+
+extern "C" float path_exists(char *path)
+{
+  if (std::filesystem::exists(path))
+    return 1;
+
+  return 0;
+}
+
 
 extern "C" float randint(float b, float f)
 {
@@ -17231,7 +17313,6 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-
 Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -17280,6 +17361,11 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
   //std::cout << "Opcode: " << Opcode << "\n";
 
+
+  if (Opcode='!')
+  {
+    return Builder->CreateCall(TheModule->getFunction("logical_not"), {OperandV});
+  }
   if (Opcode=';')
     return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
   
@@ -19587,6 +19673,33 @@ static void InitializeModule() {
 
 
   // 
+  FunctionType *logical_notTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("logical_not", logical_notTy);
+
+
+  // 
+  FunctionType *dir_existsTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("dir_exists", dir_existsTy);
+
+
+  // 
+  FunctionType *path_existsTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("path_exists", path_existsTy);
+
+
+  // 
   FunctionType *floorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {Type::getFloatTy(*TheContext)},
@@ -20300,6 +20413,24 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("wload_bin", wload_binTy);
+
+
+  //
+  FunctionType *save_as_binTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("save_as_bin", save_as_binTy);
+
+
+  //
+  FunctionType *save_as_intTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("save_as_int", save_as_intTy);
 
 
   //
@@ -21543,6 +21674,7 @@ int main() {
   BinopPrecedence[tok_space] = 1;
   BinopPrecedence['='] = 4;
   BinopPrecedence[':'] = 9;
+  BinopPrecedence['!'] = 9;
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
   BinopPrecedence[tok_equal] = 10;
@@ -21575,7 +21707,7 @@ int main() {
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
-                            "save_img", "gpu", "gpuw"};
+                            "save_img", "gpu", "gpuw", "save_as_int", "save_as_bin"};
   
   
 
@@ -21605,7 +21737,7 @@ int main() {
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
                       "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",
-                      "print_tensor"};
+                      "print_tensor", "path_exists", "dir_exists"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_functions = concat_str_vec(native_functions, return_string_fn);
   native_fn = concat_str_vec(native_methods, native_functions);
