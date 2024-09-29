@@ -13,15 +13,12 @@ All the code is open sourced.
 
 Features: 
 - 100% jitted interpreter (no function nor loop recompiling);
-- Dense and Conv2d Neural Networks training;
+- Trains ResNets and LSTMs;
 - Automatic differentiation;
 - Parallel coding with finish async expressions.
 
 Limitations:
-- Whereas there is already some liberty for building neural networks, the dataset is hardcoded. Only MNIST and Cifar like datasets are supported;
-- No support to backward mode of residuals nor additions or multiple multiplications at a single line (requires a computational graph);
-- The error debugging is still precarious;
-- Finish/async expressions currently do not work inside function calls, they are only supported at the main.
+- It lacks modern network architectures support/testing, like GANs and Diffusion Models.
 
 ## Install
 
