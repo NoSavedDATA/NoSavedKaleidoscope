@@ -1594,6 +1594,17 @@ public:
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
+class BinaryPinnedAndTensorExprAST : public ExprAST {
+  char Op;
+  std::unique_ptr<ExprAST> LHS, RHS;
+
+public:
+  BinaryPinnedAndTensorExprAST(char Op, std::unique_ptr<ExprAST> LHS,
+                std::unique_ptr<ExprAST> RHS)
+      : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+};
 
 class BinaryTensorPinnedExprAST : public ExprAST {
   char Op;
@@ -2161,6 +2172,9 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="") {
     }
   }
 
+  // varargs
+  if (in_str(IdName, vararg_methods))
+    Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
   
   
 
@@ -3180,6 +3194,8 @@ std::vector<float> RemoveLastDim(std::vector<float> dims)
 std::vector<float> RemoveFirstDim(std::vector<float> dims)
 {
   // Removes first dim (batch dim).
+  if (dims.size()<=1)
+    return {1.0f};
 
   std::vector<float> new_dims;
 
@@ -3421,7 +3437,7 @@ extern "C" float load_bin(Tensor *tensor, char *bin_name)
   file.read(reinterpret_cast<char*>(file_data), file_size);
   file.close();
 
-  std::cout << bin_name << " has a file size of " << file_size << "\n";
+  //std::cout << bin_name << " has a file size of " << file_size << "\n";
   size_t num_elements = file_size / sizeof(float);
 
 
@@ -3441,6 +3457,98 @@ extern "C" float load_bin(Tensor *tensor, char *bin_name)
     //std::cout << "" << file_data[i] << "\n";
     image_data_float[i] = file_data[i];
   }
+  
+  
+  delete[] file_data;
+
+  return 0;
+}
+
+
+
+extern "C" float load_bin_idx(Tensor *tensor, char *bin_name, float first_idx, ...)
+{
+  std::vector<float> idxs;
+
+  va_list args;
+  va_start(args, first_idx);
+
+  idxs.push_back(first_idx);
+
+  for (int i=0; i<10; i++)
+  {
+    float dim = va_arg(args, float);
+    if (dim==TERMINATE_VARARG)
+      break;
+    idxs.push_back(dim);
+  }
+  va_end(args);
+  
+
+
+
+  std::vector<float> dims, aux_dims;
+  dims = tensor->dims;
+  std::vector<float> new_dims;
+
+  float offset=0;
+
+
+  if (dims.size()==1)
+    new_dims = {1.0f};
+  else
+  {
+    aux_dims = dims;
+    for (int i = 0; i < idxs.size(); i++)
+    {
+      aux_dims = RemoveFirstDim(aux_dims);
+      offset += idxs[i]*DimsProd(aux_dims);
+    }
+    new_dims = aux_dims;
+  }
+
+  int new_dims_prod = DimsProd(new_dims);
+
+
+
+
+  //std::ifstream file(bin_name, std::ios::binary);
+  std::ifstream file(bin_name, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    std::string _error = bin_name;
+    _error = "Failed to open file: " + _error;
+    LogErrorS(_error);
+    return 0;
+  }
+
+  file.seekg(0, std::ios::end);
+  std::size_t file_size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+
+  float *file_data = new float[file_size / sizeof(float)];
+
+  file.read(reinterpret_cast<char*>(file_data), file_size);
+  file.close();
+
+  //std::cout << bin_name << " has a file size of " << file_size << "\n";
+  size_t num_elements = file_size / sizeof(float);
+
+
+  if (num_elements>tensor->dims_prod)
+  {
+    std::string _error = "Tried to load binary data of size " + std::to_string(num_elements) + " into tensor " + tensor->name + " of size " + std::to_string(tensor->dims_prod);
+    LogErrorS(_error);
+    return 0;
+  }
+
+
+  float *image_data_float = tensor->cpu_tensor_ptr + (int) offset;
+
+
+  for (size_t i = 0; i < num_elements; ++i)
+    image_data_float[i] = file_data[i];
+  
   
   
   delete[] file_data;
@@ -4622,9 +4730,11 @@ static std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name="") {
     }
   }
 
+  
   // varargs
   if (in_str(IdName, vararg_methods))
     Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+  
   
 
   // Eat the ')'.
@@ -5999,6 +6109,12 @@ static std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     else if (L_cuda==type_pinned_tensor && R_cuda==type_float)
     {
       LHS = std::make_unique<BinaryPinnedScalarExprAST>(BinOp,
+                                                      std::move(LHS), std::move(RHS));
+      LHS->SetType("pinned_tensor");
+    }
+    else if (L_cuda==type_pinned_tensor && R_cuda==type_tensor)
+    {
+      LHS = std::make_unique<BinaryPinnedAndTensorExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
       LHS->SetType("pinned_tensor");
     }
@@ -8014,6 +8130,115 @@ extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
 }
 
 
+
+
+
+
+
+extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, Tensor *Rtensor, int thread_id, float first_idx, ...)
+{
+  
+  //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
+
+  std::vector<float> idxs;
+
+  va_list args;
+  va_start(args, first_idx);
+
+  idxs.push_back(first_idx);
+
+  for (int i=0; i<10; i++)
+  {
+    float dim = va_arg(args, float);
+    if (dim==TERMINATE_VARARG)
+      break;
+    idxs.push_back(dim);
+  }
+  va_end(args);  
+
+  PrintDims(idxs);
+
+  float offset = 0;
+  std::vector<float> dims, aux_dims, Rdims;
+  
+  
+  Tensor *tensor = NamedTensorsT[tensor_name];
+  Rdims = Rtensor->dims;
+  float R_dims_prod = Rtensor->dims_prod;
+
+  float *new_tensor;
+
+  dims = tensor->dims;
+  std::vector<float> new_dims;
+
+  if(idxs.size()>dims.size())
+  {
+    LogErrorS("The index used contain more dimensions than the indexed tensor.");
+    return 0;
+  }
+
+  if (dims.size()==1)
+    new_dims = {1.0f};
+  else
+  {
+    aux_dims = dims;
+    for (int i = 0; i < idxs.size(); i++)
+    {
+      aux_dims = RemoveFirstDim(aux_dims);
+      offset += idxs[i]*DimsProd(aux_dims);
+      std::cout << "ATTR INDEX DIMS_PROD IS " << DimsProd(aux_dims) << "\n";
+    }
+    new_dims = aux_dims;
+  }
+
+
+  int dims_prod = DimsProd(dims);
+  if (offset>(dims_prod-1))
+  {
+    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)offset);
+    _error = _error + "\033[0m on tensor \033[95m"+std::string(tensor_name);
+    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
+
+    LogErrorS(_error);
+    std::cout << "Dimensions:" << "\n";
+    PrintDims(dims);
+    std::cout << "\n";
+
+    return 0;
+  }
+  //std::cout << "IDX AT: " << offset << "\n";
+
+
+  float *base_address = tensor->cpu_tensor_ptr;
+  float *device_x = base_address + static_cast<int>(offset);
+
+
+
+  for (int i=0; i<R_dims_prod; i++)
+    device_x[i] = Rtensor->cpu_tensor_ptr[i];
+
+  /*
+  new_tensor = get_from_pool(thread_id, R_dims_prod, "idx tensor");
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(R_dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  tensor->Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  copy_tensor_kernel<<<grid_size, block_size, 0, stream>>>(device_x, Rtensor->cpu_tensor_ptr, R_dims_prod);
+  
+
+
+  Tensor *indexed = createTensor(new_tensor, new_dims, R_dims_prod, true, "");
+  indexed->from_grad_or_load = tensor->from_grad_or_load;
+  */
+  return 0;
+}
+
+
+
+
 extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class, char *method, int nested_function, int isSelf, int isAttribute)
 {
 
@@ -8811,6 +9036,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     if (Idx[0]->GetType()!="tensor")
     {
+      /*
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(var_name);
       for (int i=0; i<Idx.size(); i++)
@@ -8819,6 +9045,15 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                           idx_calc_args);
 
       return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at, scope_str, thread_id});
+      */
+      std::vector<Value *> idx_calc_args;
+      idx_calc_args.push_back(var_name);
+      idx_calc_args.push_back(scope_str);
+      idx_calc_args.push_back(thread_id);
+      for (int i=0; i<Idx.size(); i++)
+        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+
+      return Builder->CreateCall(TheModule->getFunction("IdxTensor"), idx_calc_args);
     } else {
       VariableExprAST *idx = static_cast<VariableExprAST *>(Idx[0].get());
       Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
@@ -8908,10 +9143,30 @@ __global__ void repeat_interleave_kernel_last_dim(const float *tensor,
 
 
 
-extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope, int thread_id)
+extern "C" void *IdxTensor(char *tensor_name, char *scope, int thread_id, float first_idx, ...)
 {
   
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
+
+  std::vector<float> idxs;
+
+  va_list args;
+  va_start(args, first_idx);
+
+  idxs.push_back(first_idx);
+
+  for (int i=0; i<10; i++)
+  {
+    float dim = va_arg(args, float);
+    if (dim==TERMINATE_VARARG)
+      break;
+    idxs.push_back(dim);
+  }
+  va_end(args);  
+
+  PrintDims(idxs);
+
+  float offset = 0;
   
   
   Tensor *tensor = NamedTensorsT[tensor_name];
@@ -8919,20 +9174,36 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope, int thr
 
   float *new_tensor;
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<float> dims, aux_dims;
+  dims = tensor->dims;
   std::vector<float> new_dims;
+
+  if(idxs.size()>dims.size())
+  {
+    LogErrorS("The index used contain more dimensions than the indexed tensor.");
+    return nullptr;
+  }
 
   if (dims.size()==1)
     new_dims = {1.0f};
   else
-    for (int i = 0; i < dims.size()-1; i++)
-      new_dims.push_back(dims[i+1]);
+  {
+    aux_dims = dims;
+    for (int i = 0; i < idxs.size(); i++)
+    {
+      aux_dims = RemoveFirstDim(aux_dims);
+      offset += idxs[i]*DimsProd(aux_dims);
+      std::cout << "INDEX DIMS_PROD IS " << DimsProd(aux_dims) << "\n";
+    }
+    new_dims = aux_dims;
+  }
+
   int new_dims_prod = DimsProd(new_dims);
 
   int dims_prod = DimsProd(dims);
-  if (idx_at>(dims_prod-1))
+  if (offset>(dims_prod-1))
   {
-    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)idx_at);
+    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)offset);
     _error = _error + "\033[0m on tensor \033[95m"+std::string(tensor_name);
     _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
 
@@ -8943,11 +9214,11 @@ extern "C" void *IdxTensor(char *tensor_name, float idx_at, char *scope, int thr
 
     return nullptr;
   }
-  //std::cout << "IDX AT: " << idx_at << "\n";
+  //std::cout << "IDX AT: " << offset << "\n";
 
 
   float *base_address = tensor->tensor_ptr;
-  float *device_x = base_address + static_cast<int>(idx_at);
+  float *device_x = base_address + static_cast<int>(offset);
 
 
 
@@ -9837,6 +10108,140 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
   Value *Ops[] = {LtensorPtr, R};
   return Builder->CreateCall(F, Ops, "binop");
 }
+
+
+
+
+
+
+
+Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  Value *tensor_name;
+
+
+
+  
+
+  if (Op == '=') {
+    seen_var_attr=true;
+
+    
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    if (!RtensorPtr)
+      return nullptr;
+    
+    std::cout << "2 0 attr\n";
+    std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
+
+
+    
+
+
+    VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+
+    if (!LHSE)
+      return LogErrorV("'=' destiny must be a variable.");
+
+    
+
+    std::vector<Value *> idx_calc_args;
+
+    idx_calc_args.push_back(tensor_name);
+    idx_calc_args.push_back(RtensorPtr);
+    idx_calc_args.push_back(thread_id);
+
+    for (int i=0; i<LHSE->Idx.size(); i++)
+      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+
+
+    Builder->CreateCall(TheModule->getFunction("AttrPinnedFromTensorOnIdx"),
+                         idx_calc_args);
+
+
+    /*
+    if (LHS->GetIsVec())
+    {
+      VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' destiny must be a variable.");
+      std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
+
+      Builder->CreateCall(TheModule->getFunction("AttrPinnedFromTensorOnIdx"),
+                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope, thread_id), Val});
+    }
+      
+    else
+    {
+      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' destiny must be a variable.");
+    }
+    */
+
+      
+    
+    seen_var_attr=false;
+    return RtensorPtr;
+  }
+
+
+  
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  
+
+
+
+  
+  
+  if (!LtensorPtr || !R)
+    return nullptr;
+
+
+
+
+  switch (Op)
+  {
+  case '*':
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
+                               {LtensorPtr, R, thread_id}, "cudascalarmult");
+  case '/':
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
+                               {LtensorPtr, R, thread_id}, "cudascalardiv");
+  case 77:
+    return Builder->CreateCall(TheModule->getFunction("CudaReverseScalarDiv"),
+                               {LtensorPtr, R, thread_id}, "cudareversescalardiv");
+  case '+':
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
+                               {LtensorPtr, R, thread_id}, "cudascalaradd");
+  case '-':
+    return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
+                               {LtensorPtr, R, thread_id}, "cudascalarsub");
+  case ':':
+    return LtensorPtr;
+  case tok_space:
+    return R;
+  default:
+    break;
+  }
+  
+
+  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
+  // a call to it.
+  Function *F = getFunction(std::string("binary") + Op);
+  assert(F && "Operator not found.");
+
+  Value *Ops[] = {LtensorPtr, R};
+  return Builder->CreateCall(F, Ops, "binop");
+}
+
+
+
+
 
 
 extern "C" float min(float l, float r)
@@ -19895,10 +20300,19 @@ static void InitializeModule() {
   //
   FunctionType *IdxTensorTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)}, 
-      false
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)}, 
+      true // vararg
   );
   TheModule->getOrInsertFunction("IdxTensor", IdxTensorTy);
+
+
+  //
+  FunctionType *AttrPinnedFromTensorOnIdxTy = FunctionType::get(
+      floatPtrTy,
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)}, 
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("AttrPinnedFromTensorOnIdx", AttrPinnedFromTensorOnIdxTy);
 
 
   //
@@ -20413,6 +20827,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("wload_bin", wload_binTy);
+
+
+  //
+  FunctionType *load_bin_idxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      true
+  );
+  TheModule->getOrInsertFunction("load_bin_idx", load_bin_idxTy);
 
 
   //
@@ -21536,7 +21959,6 @@ static void MainLoop() {
         getNextToken();
         break;
       case tok_tab:
-        //LogError("Tab inesperado encontrado\n");
         getNextToken();
         break;
       case tok_def:
@@ -21717,7 +22139,7 @@ int main() {
 
 
   // Universal
-  vararg_methods = {"view", "sum", "mean", "prod", "tmax", "argmax"};
+  vararg_methods = {"view", "sum", "mean", "prod", "tmax", "argmax", "load_bin_idx"};
   string_methods = {"split", "split_idx"};
 
 
@@ -21737,7 +22159,7 @@ int main() {
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
                       "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",
-                      "print_tensor", "path_exists", "dir_exists"};
+                      "print_tensor", "path_exists", "dir_exists", "load_bin_idx"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_functions = concat_str_vec(native_functions, return_string_fn);
   native_fn = concat_str_vec(native_methods, native_functions);
