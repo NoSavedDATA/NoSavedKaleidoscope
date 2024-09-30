@@ -474,7 +474,7 @@ char *get_from_char_pool(size_t, std::string);
 // Tensor related
 std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn, native_modules,
 return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,
-return_string_fn, threaded_tensor_functions;
+return_string_fn, threaded_tensor_functions, require_scope_functions;
 
 
 
@@ -7706,6 +7706,12 @@ __global__ void copy_tensor_kernel(float *y, const float *x, int dims_prod) {
     if (i < dims_prod)
         y[i] = x[i];
 }
+__global__ void ema_tensor_kernel(float *y, const float *x, const float factor, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = factor*y[i] + (1-factor)*x[i];
+}
 
 __global__ void vec_mult(const float a, float* x, float* y, int dims_prod) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -9683,6 +9689,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
   }
   else if (tensor->name==""||!tensor->leaf) // Free current and point to operation result
   {
+    
     if(nn_mode==eval_mode||thread_id!=0)
     {
       if(tensor->from_grad_or_load) //if(DoesTreeContainWeight(tensor)>0)
@@ -9705,7 +9712,8 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
     
   } else { // Copy incoming tensor to preserve it
   
-    if(tensor->op==tensor_leaf||nn_mode==eval_mode||thread_id!=0)
+  
+    if(tensor->op==tensor_leaf||tensor->op==create_tensor_op||nn_mode==eval_mode||thread_id!=0)
     {
       if(tgt_tensor->dims != tensor->dims)
       {
@@ -9743,6 +9751,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
         cudaStream_t stream = ThreadsStream[thread_id];
         copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
       }*/
+      
       cudaStream_t stream = ThreadsStream[thread_id];
       copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(tgt_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
 
@@ -11440,6 +11449,79 @@ extern "C" void *CudaDiv(int is_forward_func,
 }
 
 
+
+
+extern "C" float network_ema(int thread_id, char *scope, char *_ema_network, char *_network, float factor)
+{
+
+  std::string ema_network, network;
+  ema_network = NamedObjects[_ema_network];
+  network = NamedObjects[_network];
+
+  Tensor *ema_tensor, *net_tensor;
+  cudaStream_t stream = ThreadsStream[thread_id];
+
+
+  std::cout << "\nNETWORK EMA OF " << ema_network << " and " << network << "\n\n";
+
+  //std::cout << "\n\n\n\n\n\n\n\n\n\nNETWORK EMA OF " << ema_network << " and " << network << "\n";
+
+
+
+  std::vector<std::string> ema_params, net_params;
+  for (const auto &pair : NamedTensorsT)
+  {
+    std::string param_name = pair.first;
+    if (starts_with(param_name.c_str(), ema_network.c_str()))
+      ema_params.push_back(param_name);
+    
+    if (starts_with(param_name.c_str(), network.c_str()))
+      net_params.push_back(param_name);
+    
+  }
+
+
+  for (const auto &ema_param : ema_params)
+  {
+    for (const auto &net_param : net_params)
+    {
+      if (contains_str(net_param, remove_substring(ema_param, ema_network)))
+      {
+        //std::cout << "MATCHED PARAMETER: " << ema_param  << " and " << net_param << "\n";
+
+        ema_tensor = NamedTensorsT[ema_param];
+        net_tensor = NamedTensorsT[net_param];
+
+        if (ema_tensor->dims_prod!=net_tensor->dims_prod)
+        {
+          std::string _error = "network_ema failed because " + ema_tensor->name + " and " + net_tensor->name + " parameter sizes do not match.";
+          LogErrorS(_error);
+        } else {
+
+          int grid_size, block_size;
+          std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(ema_tensor->dims_prod);
+          grid_size = grid_block_mem_sizes[0];
+          block_size = grid_block_mem_sizes[1];
+
+          net_tensor->Sync();
+          ema_tensor->Sync();
+
+          
+          ema_tensor_kernel<<<grid_size, block_size, 0, stream>>>(ema_tensor->tensor_ptr, net_tensor->tensor_ptr, factor, ema_tensor->dims_prod);
+
+        }
+      }
+    }
+  }
+
+  cudaStreamSynchronize(stream);
+
+  //starts_with
+
+  //std::cout  << "\n\n\n\n\n\n\n\n\n\n";
+
+  return 0;
+}
 
 
 
@@ -19525,7 +19607,12 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     
     target_args_size+=4;
   }
-  
+
+  if(in_str(tgt_function, require_scope_functions))
+  {
+    ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
+    target_args_size+=1;
+  }
 
   
 
@@ -20022,6 +20109,8 @@ Function *FunctionAST::codegen() {
 
     std::string __print = "FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " ";
 
+
+    // Default args
     if (arg_name == "self")
     {
       first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
@@ -20044,10 +20133,9 @@ Function *FunctionAST::codegen() {
       thread_id = &Arg;
     if (arg_name == "has_grad")
       has_grad = &Arg;
-  }
+    
 
-  for (auto &Arg : TheFunction->args()) {
-    std::string arg_name = Arg.getName().str();
+    // Coder args
     if (in_str(arg_name, floatVars))
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
@@ -20513,6 +20601,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("clip", clipTy);
+
+
+  //
+  FunctionType *network_emaTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("network_ema", network_emaTy);
 
 
   //===----------------------------------------------------------------------===//
@@ -22311,6 +22408,8 @@ int main() {
 
   return_string_fn = {"to_string", "cat_str_float"};
 
+  require_scope_functions = {"network_ema"};
+
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "sleep",
                       "LenStrVec", "zeros_vec", "ones_vec", "start_timer", "end_timer",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
@@ -22319,7 +22418,8 @@ int main() {
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
                       "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",
-                      "print_tensor", "path_exists", "dir_exists", "load_bin_idx"};
+                      "print_tensor", "path_exists", "dir_exists", "load_bin_idx",
+                      "network_ema"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_functions = concat_str_vec(native_functions, return_string_fn);
   native_fn = concat_str_vec(native_methods, native_functions);
@@ -22327,7 +22427,7 @@ int main() {
 
   native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward", "ReluForward", "LSTMForward", "EmbeddingForward"};
 
-  threaded_tensor_functions = {"log2"};
+  threaded_tensor_functions = {"log2", "network_ema"};
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, native_modules);
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_functions);
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_methods);
