@@ -635,6 +635,7 @@ enum BackwardTypes {
   sigmoid_add2weights_op = 39,
   lstm_op = 40,
   embedding_op = 41,
+  detach_op=42,
 };
 
 int nn_mode=training_mode;
@@ -1130,7 +1131,7 @@ public:
   Value *TensorPtr;
 
 
-  virtual Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) = 0;
+  virtual Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) = 0;
   virtual void SetType(std::string Type) {
     this->Type=Type;
     this->ReturnType=Type;
@@ -1223,7 +1224,7 @@ class NameSolverAST : public ExprAST {
                     : Names(std::move(Names)) {} 
   
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1236,7 +1237,7 @@ class NumberExprAST : public ExprAST {
       this->SetType("float");
     } 
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1249,7 +1250,7 @@ class StringExprAST : public ExprAST {
       this->SetType("str");
     } 
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1266,7 +1267,7 @@ class VariableExprAST : public ExprAST {
       this->NameSolver->SetType(Type);
     }
 
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override {
     return Name;
@@ -1288,7 +1289,7 @@ class VecIdxExprAST : public ExprAST {
       this->NameSolver->SetType(Type);
     }
 
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
     const std::string &getName() const { return Name; }
     std::string GetName() override { return Name; }
 };
@@ -1306,7 +1307,7 @@ class ObjectVecIdxExprAST : public ExprAST {
       this->isVarLoad = true;
     }
 
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 /// VarExprAST - Expression class for var/in
@@ -1321,7 +1322,7 @@ class VarExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 class StrExprAST : public ExprAST {
@@ -1334,7 +1335,7 @@ class StrExprAST : public ExprAST {
           this->SetType("str");
         }
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1349,7 +1350,7 @@ class StrVecExprAST : public ExprAST {
         std::string Type)
         : VarNames(std::move(VarNames)), Type(Type) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1367,7 +1368,7 @@ class NewVecExprAST : public ExprAST {
           this->SetType(Type);
         }
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1382,7 +1383,7 @@ public:
       std::unique_ptr<ExprAST> Init)
       : VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1401,7 +1402,7 @@ class TensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit), IsWeight(IsWeight) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1418,7 +1419,7 @@ class PinnedTensorExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1439,7 +1440,7 @@ class Conv2dExprAST : public VarExprAST {
                    Stride(std::move(Stride)), Padding(std::move(Padding)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1457,7 +1458,7 @@ class MaxPool2dExprAST : public VarExprAST {
                    Ks(std::move(Ks)),
                    Stride(std::move(Stride)), Padding(std::move(Padding)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1472,7 +1473,7 @@ class BatchNorm2dExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1487,7 +1488,7 @@ class BN2dReluExprAST : public VarExprAST {
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    C(std::move(C)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1506,7 +1507,7 @@ class LSTMExprAST : public VarExprAST {
                    C(std::move(C)), OC(std::move(OC)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1524,7 +1525,7 @@ class EmbeddingExprAST : public VarExprAST {
                    C(std::move(C)), OC(std::move(OC)),
                    TensorInit(TensorInit) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1536,7 +1537,7 @@ class ReluExprAST : public VarExprAST {
       std::string Type)
       : VarExprAST(std::move(VarNames), std::move(Type)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1549,7 +1550,7 @@ public:
   UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
       : Opcode(Opcode), Operand(std::move(Operand)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1563,7 +1564,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1576,7 +1577,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1589,7 +1590,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1602,7 +1603,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 class BinaryPinnedAndTensorExprAST : public ExprAST {
   char Op;
@@ -1613,7 +1614,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 class BinaryTensorPinnedExprAST : public ExprAST {
@@ -1625,7 +1626,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1638,7 +1639,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1651,7 +1652,7 @@ public:
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1677,7 +1678,7 @@ class CallExprAST : public ExprAST {
         : NameSolver(std::move(NameSolver)), Callee(Callee), Args(std::move(Args)), Class(Class),
           PreDot(PreDot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 class ReturnExprAST : public ExprAST {
@@ -1691,7 +1692,7 @@ class ReturnExprAST : public ExprAST {
                   std::vector<std::unique_ptr<ExprAST>> Destiny)
         : Vars(std::move(Vars)), IsAs(std::move(IsAs)), Destiny(std::move(Destiny)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1706,7 +1707,7 @@ class IfExprAST : public ExprAST {
               std::vector<std::unique_ptr<ExprAST>> Else)
         : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 /// ForExprAST - Expression class for for.
@@ -1722,7 +1723,7 @@ class ForExprAST : public ExprAST {
         : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
           Step(std::move(Step)), Body(std::move(Body)) {}
 
-  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 /// WhileExprAST - Expression class for while.
@@ -1734,7 +1735,7 @@ class WhileExprAST : public ExprAST {
     WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
       : Cond(std::move(Cond)), Body(std::move(Body)) {}
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1746,7 +1747,7 @@ class AsyncExprAST : public ExprAST {
     AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
       : Body(std::move(Body)) {}
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1761,7 +1762,7 @@ class FinishExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), IsAsync(std::move(IsAsync)) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -1776,7 +1777,7 @@ class LockExprAST : public ExprAST {
             : Bodies(std::move(Bodies)), Name(Name) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 /// NoGradExprAST
 class NoGradExprAST : public ExprAST {
@@ -1787,7 +1788,7 @@ class NoGradExprAST : public ExprAST {
             : Bodies(std::move(Bodies)) {}
 
 
-	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
+	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
 
 
@@ -6318,6 +6319,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
   ArgNames.push_back("previous_scope");
   Types.push_back("i");
   ArgNames.push_back("thread_id");
+  Types.push_back("i");
+  ArgNames.push_back("has_grad");
 
   while (CurTok != ')')
   {
@@ -7304,7 +7307,7 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 
 
 
-Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -7359,7 +7362,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (type==type_vec)
       {
-        Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
+        Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, name});
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
@@ -7389,7 +7392,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                                       {var_name, name});
     if (Type=="object_vec")
     {
-      Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
+      Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
                                                         {var_name, _idx});
     }
@@ -7399,14 +7402,14 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *NumberExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   
   return ConstantFP::get(*TheContext, APFloat(Val));
 }
 
-Value *StringExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *StringExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
@@ -8922,7 +8925,7 @@ extern "C" void *LoadFloatVecOnDemand(char *object_var_name) {
 
 
 bool seen_var_attr = false;
-Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -8960,7 +8963,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
   
 
-  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
   std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
@@ -9087,7 +9090,7 @@ extern "C" char * AuxFn(char * arg1)
 
 
 
-Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -9103,11 +9106,11 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   Value *V, *idx;
 
   if (Type!="object_vec")
-    idx = Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
+    idx = Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
   Value *var_name, *object_name, *object_var_name;
-  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+  var_name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
   std::string Name = std::get<0>(name_solver->Names[0]);
@@ -9170,7 +9173,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(var_name);
       for (int i=0; i<Idx.size(); i++)
-        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                           idx_calc_args);
 
@@ -9181,12 +9184,12 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       idx_calc_args.push_back(scope_str);
       idx_calc_args.push_back(thread_id);
       for (int i=0; i<Idx.size(); i++)
-        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+        idx_calc_args.push_back(Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
 
       return Builder->CreateCall(TheModule->getFunction("IdxTensor"), idx_calc_args);
     } else {
       VariableExprAST *idx = static_cast<VariableExprAST *>(Idx[0].get());
-      Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+      Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       
       return Builder->CreateCall(TheModule->getFunction("IdxTensorWithTensor"), {var_name, idx_tensor_name, thread_id});
       
@@ -9202,7 +9205,7 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
@@ -9212,7 +9215,7 @@ Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
   std::cout << "vec name " << vec->GetName() << "\n";
   std::cout << "ObjectVecIdxExprAST is vec: " << GetIsVec() << "\n";
 
-  Value *idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *idx = vec->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
   Value *var_name, *object_name, *object_var_name, *post_dot_str;
@@ -9664,7 +9667,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 
 
-extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int thread_id)
+extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int thread_id, int has_grad)
 {
   //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
 
@@ -9691,6 +9694,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
     }
     else {
       Tensor *attr_tensor;
+      
       attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
       todo_backward_tensors.push_back(attr_tensor);
     } 
@@ -9745,6 +9749,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
       if(nn_mode==training_mode&&thread_id==0)
       {
         Tensor *attr_tensor;
+        
         attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
         todo_backward_tensors.push_back(attr_tensor);
 
@@ -9961,7 +9966,7 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
 
 
 
-Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -10001,7 +10006,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
       return LogErrorV("Destino do '=' deve ser uma variável.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
     if (!Val)
       return nullptr;
 
@@ -10022,8 +10027,8 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
 
 
@@ -10098,7 +10103,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -10112,7 +10117,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
     seen_var_attr=true;
 
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
     if (!Val)
       return nullptr;
     
@@ -10124,7 +10129,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
     VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
     if (!LHSE)
       return LogErrorV("'=' destiny must be a variable.");
@@ -10137,7 +10142,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
     for (int i=0; i<LHSE->Idx.size(); i++)
     {
-      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
     }
 
     Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
@@ -10156,7 +10161,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
 
       Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
-                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope, thread_id), Val});
+                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), Val});
     }
       
     else
@@ -10181,8 +10186,8 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   
 
 
@@ -10245,7 +10250,7 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -10259,7 +10264,7 @@ Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str,
     seen_var_attr=true;
 
     
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
     if (!RtensorPtr)
       return nullptr;
     
@@ -10271,7 +10276,7 @@ Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str,
 
 
     VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+    tensor_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
     if (!LHSE)
       return LogErrorV("'=' destiny must be a variable.");
@@ -10285,7 +10290,7 @@ Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str,
     idx_calc_args.push_back(thread_id);
 
     for (int i=0; i<LHSE->Idx.size(); i++)
-      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+      idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
 
 
     Builder->CreateCall(TheModule->getFunction("AttrPinnedFromTensorOnIdx"),
@@ -10301,7 +10306,7 @@ Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str,
       std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
 
       Builder->CreateCall(TheModule->getFunction("AttrPinnedFromTensorOnIdx"),
-                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope, thread_id), Val});
+                          {tensor_name, LHSE->Idx->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), Val});
     }
       
     else
@@ -10320,8 +10325,8 @@ Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str,
 
 
   
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   
 
 
@@ -16485,7 +16490,7 @@ void CleanScopeTensors(std::string scope)
   forward_tensors_sent_to_pool.erase(scope);
 }
 
-extern "C" float clean_forward(char *scope, char *previous_scope, int thread_id)
+extern "C" float clean_forward(char *scope, char *previous_scope, int thread_id, int has_grad)
 {//TODO: break? clears threaded tensors
   for(std::string _scope : scopes)
     CleanScopeTensors(_scope);
@@ -17222,7 +17227,7 @@ extern "C" float train()
 
 
 
-Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17237,13 +17242,13 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   
     seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
     
 
     if (!LHS->GetIsVec())
     {
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
@@ -17252,14 +17257,14 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
       Builder->CreateCall(TheModule->getFunction("AttrTensor"),
-                          {LtensorName, RtensorPtr, scope_str, thread_id});
+                          {LtensorName, RtensorPtr, scope_str, thread_id, has_grad});
       //std::cout << "Post attr call\n\n";
     } else
     {
       std::cout << "1 1 INDEXED attr\n";
 
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
 
@@ -17268,7 +17273,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(LtensorName);
         for (int i=0; i<LHSE->Idx.size(); i++)
-          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                               idx_calc_args);
 
@@ -17277,7 +17282,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
                              idx_at, thread_id});
       } else {
         VariableExprAST *idx = static_cast<VariableExprAST *>(LHSE->Idx[0].get());
-        Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
         
         Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdxTensor"), {LtensorName, idx_tensor_name, RtensorPtr, thread_id});
 
@@ -17301,8 +17306,8 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
   
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
-  Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
 
@@ -17373,7 +17378,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   std::cout << "Binary Tensor Pinned codegen" << "\n";
 
   if (not ShallCodegen)
@@ -17391,13 +17396,13 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
   
     seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
     
 
     if (!LHS->GetIsVec())
     {
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
@@ -17413,7 +17418,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::cout << "1 2 INDEXED attr\n";
 
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
 
@@ -17421,7 +17426,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(LtensorName);
       for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                             idx_calc_args);
 
@@ -17441,7 +17446,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -17465,19 +17470,19 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       
       if (RHS->GetIsVec())
       {
         std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
         VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
                                                         {LName, RName});
       } else {
         VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
                                                         {LName, RName});
@@ -17489,7 +17494,7 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
       std::cout << "ok" << "\n";
@@ -17498,14 +17503,14 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       {
         std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
         VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
                                                         {LName, RName});
       } else {
         std::cout << "3 3 VEC FROM VAR" << "\n";
         VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
                                                         {LName, RName});
@@ -17523,7 +17528,7 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
 
 
-Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
@@ -17540,7 +17545,7 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
     // default.  If you build LLVM with RTTI this can be changed to a
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
     NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
@@ -17552,7 +17557,7 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
       return LogErrorV("'=' destiny must be a variable.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
     if (!Val)
     {
@@ -17602,7 +17607,7 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
           Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
                                                   {Lvar_name,
-                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id),
+                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
                                                    Val});
 
         } else
@@ -17641,8 +17646,8 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
   
 
-  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   
   if (!L || !R)
     return nullptr;
@@ -17674,7 +17679,7 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
 
 
-Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
@@ -17688,7 +17693,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     // default.  If you build LLVM with RTTI this can be changed to a
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
     NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
@@ -17700,7 +17705,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       return LogErrorV("'=' destiny must be a variable.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
     if (!Val)
     {
@@ -17750,7 +17755,7 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
           Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
                                                   {Lvar_name,
-                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id),
+                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
                                                    Val});
 
         } else
@@ -17789,8 +17794,8 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   
 
-  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   
   if (!L || !R)
     return nullptr;
@@ -17848,10 +17853,10 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *OperandV = Operand->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *OperandV = Operand->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   if (!OperandV)
     return nullptr;
   
@@ -17913,12 +17918,12 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 }
 
 
-Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
 
-  Value *CondV = Cond->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *CondV = Cond->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   if (!CondV)
     return nullptr;
 
@@ -17942,7 +17947,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_sc
   
   Value *ThenV;
   for (auto &then_body : Then)
-    ThenV = then_body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    ThenV = then_body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   
 
   if (!ThenV)
@@ -17960,7 +17965,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_sc
 
   Value *ElseV;
   for (auto &else_body : Else)
-    ElseV = else_body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    ElseV = else_body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
   if (!ElseV)
     return nullptr;
@@ -18002,7 +18007,7 @@ Value *IfExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_sc
 //   br endcond, loop, endloop
 // outloop:
 
-Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -18011,7 +18016,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
   AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
 
   // Emit the start code first, without 'variable' in scope.
-  Value *StartVal = Start->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *StartVal = Start->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   if (!StartVal)
     return nullptr;
 
@@ -18059,14 +18064,14 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
   // Emit the step value.
   Value *StepVal = nullptr;
   if (Step) {
-    StepVal = Step->codegen(first_arg, scope_str, previous_scope, thread_id);
+    StepVal = Step->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
     if (!StepVal)
       return nullptr;
   } 
 
 
   // Compute the end condition.
-  Value *EndCond = End->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value *EndCond = End->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   if (!EndCond)
     return nullptr;
 
@@ -18089,7 +18094,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
   int j=0;
   for (auto &body : Body)
-    body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
@@ -18122,7 +18127,7 @@ Value *ForExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
 
 
-Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   
@@ -18140,7 +18145,7 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   Builder->SetInsertPoint(CondBB);
 
   // Generate the condition code
-  Value* condVal = Cond->codegen(first_arg, scope_str, previous_scope, thread_id);
+  Value* condVal = Cond->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   if (!condVal)
     return nullptr;
 
@@ -18155,7 +18160,7 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
   // Generate the loop body code
   for (auto &body : Body)
-    body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
   // After the loop body, go back to the condition check
   Builder->CreateBr(CondBB);
@@ -18168,7 +18173,7 @@ Value *WhileExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   
 
   // find existing unique function name (_async_1, _async_2, _async_3 etc)
@@ -18206,7 +18211,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   Value *V;
 
   for (auto &body : asyncBody)
-    V = body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    V = body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
 
@@ -18265,7 +18270,7 @@ extern "C" void pthread_join_aux(pthread_t thread)
 std::vector<Value *> thread_pointers;
 
 
-Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18280,7 +18285,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
 
-  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str, previous_scope, thread_id);
+  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -18317,7 +18322,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
 
 
-Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18334,7 +18339,7 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   
 
   for (int i=0; i < Bodies.size(); i++)
-    Bodies[i]->codegen(first_arg, scope_str, previous_scope, thread_id);
+    Bodies[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
   
 
   
@@ -18363,12 +18368,12 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id){
+Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad){
   
   Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
 
   for (auto &body : Bodies)
-    body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
   Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
 
@@ -18376,10 +18381,11 @@ Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 }
 
 
-Value *NoGradExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id){
+Value *NoGradExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad){
   
+  has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
   for (auto &body : Bodies)
-    body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
   
   return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -18389,7 +18395,7 @@ Value *NoGradExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
 
   for (int i=0; i<Destiny.size(); i++)
   {
@@ -18412,7 +18418,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       {
         VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
                                             {_name, scope_str,
@@ -18430,12 +18436,12 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       {
         VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
         
         VariableExprAST *var = static_cast<VariableExprAST *>(Vars[i].get());
         var->NameSolver->SetSolverIncludeScope(false);
-        Value *_l_name = var->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        Value *_l_name = var->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
         if (l_type=="tensor"||type=="tensor")
         {
@@ -18450,14 +18456,14 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         if (!destiny)
           return LogErrorV("Could not deal with return expression");
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
         
 
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                                       {previous_scope, _name}));
         for (int i=0; i<destiny->Idx.size(); i++)
-          idx_calc_args.push_back(destiny->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+          idx_calc_args.push_back(destiny->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                               idx_calc_args);
 
@@ -18478,7 +18484,7 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 // Create Float Var
-Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   std::vector<Value *> OldBindings;
@@ -18497,7 +18503,7 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -18528,7 +18534,7 @@ Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
 
 
-Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18548,7 +18554,7 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -18596,7 +18602,7 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 }
 
 
-Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18616,7 +18622,7 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -18675,7 +18681,7 @@ extern "C" float is_null(char *name)
   return 0;
 }
 
-Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18683,7 +18689,7 @@ Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   values.push_back(thread_id);
   for (int i=0; i<Values.size(); i++)
-    values.push_back(Values[i]->codegen(first_arg, scope_str, previous_scope, thread_id));
+    values.push_back(Values[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
 
 
 
@@ -18691,7 +18697,7 @@ Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18700,7 +18706,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   Value *init;
   if (Init)
-    init = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
+    init = Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
   // Register all variables and emit their initializer.
 
@@ -18896,7 +18902,7 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
 }
 
 
-Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18929,7 +18935,7 @@ Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     Value *aux;
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope, thread_id);
+      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {var_name, aux});
     }
@@ -18980,7 +18986,7 @@ extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init)
   
 }
 
-Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -18999,7 +19005,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
     //  var a = 1 in
     Value *InitVal;
     if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id);
+      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       if (!InitVal)
         return nullptr;
     } else { // If not specified, use 0.0.
@@ -19023,7 +19029,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
     Value *aux;
     for (int j=0; j<V_Dims.size(); j++)
     {
-      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope, thread_id);
+      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
       Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
                                                   {var_name, aux});
     }
@@ -19042,7 +19048,7 @@ Value *PinnedTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
 
 
 
-Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -19077,15 +19083,15 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id), OC->codegen(first_arg, scope_str, previous_scope, thread_id), Ks->codegen(first_arg, scope_str, previous_scope, thread_id), Stride->codegen(first_arg, scope_str, previous_scope, thread_id),
-                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), Ks->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), Stride->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -19118,16 +19124,16 @@ Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     Builder->CreateCall(TheModule->getFunction("CreateMaxPool2dOnDemand"),
                                               {var_name, type,
-                                               Ks->codegen(first_arg, scope_str, previous_scope, thread_id),
-                                               Stride->codegen(first_arg, scope_str, previous_scope, thread_id),
-                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id)});
+                                               Ks->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               Stride->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -19159,7 +19165,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
     Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
                                               {var_name, 
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -19167,7 +19173,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
 
 
-Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -19198,13 +19204,13 @@ Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     std::cout << "Parsing Conv2d var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateBN2dReluOnDemand"),
-                                              {var_name, C->codegen(first_arg, scope_str, previous_scope, thread_id)});
+                                              {var_name, C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
-Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -19239,14 +19245,14 @@ Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     Builder->CreateCall(TheModule->getFunction("CreateLSTMOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id), OC->codegen(first_arg, scope_str, previous_scope, thread_id)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -19281,13 +19287,13 @@ Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     Builder->CreateCall(TheModule->getFunction("CreateEmbeddingOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id), OC->codegen(first_arg, scope_str, previous_scope, thread_id)});
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
-Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -19324,7 +19330,7 @@ Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 }
 
 
-Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) {
+Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look up the name in the global module table.
@@ -19369,6 +19375,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     copy.erase(pos, prefix.length());
     thread = std::stoi(copy);
     thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
+    has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
   }
   
   //std::cout << "\n\n\nFunction name: " << functionName << "\n";
@@ -19463,7 +19470,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     changed_first_arg = not_coding_language_method;
     
 
-    //name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id);
+    //name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
     
     if (CalleeOverride!="none"||in_str(Callee, native_methods))
     { // e.g: x.view()
@@ -19514,8 +19521,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
     ArgsV.push_back(previous_scope);
     ArgsV.push_back(thread_id);
+    ArgsV.push_back(has_grad);
     
-    target_args_size+=3;
+    target_args_size+=4;
   }
   
 
@@ -19570,12 +19578,12 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       //if (starts_with(functionName.c_str(), "__async_"))
       //  Builder->CreateStore(Builder->CreateGlobalString("threaded_"), _scope);
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
-      arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope, thread_id);
+      arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope, thread_id, has_grad);
 
       arg = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {arg});
     }
     else
-      arg = Args[i]->codegen(fa, _scope, previous_scope, thread_id);
+      arg = Args[i]->codegen(fa, _scope, previous_scope, thread_id, has_grad);
 
   
     ArgsV.push_back(arg);
@@ -19973,7 +19981,7 @@ Function *FunctionAST::codegen() {
   
   // Record the function arguments in the NamedValues map.
 
-  Value *first_arg, *scope_str, *previous_scope, *thread_id;
+  Value *first_arg, *scope_str, *previous_scope, *thread_id, *has_grad;
   /*
   first_arg = Builder->CreateAlloca(int8PtrTy);
   scope_str = Builder->CreateAlloca(int8PtrTy);
@@ -19984,6 +19992,7 @@ Function *FunctionAST::codegen() {
 
 
   thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
+  has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
   if (function_name=="__anon_expr")
   {
     first_arg = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
@@ -20032,11 +20041,9 @@ Function *FunctionAST::codegen() {
       has_previous_scope = true;
     }
     if (arg_name == "thread_id")
-    {
       thread_id = &Arg;
-      
-      has_previous_scope = true;
-    }
+    if (arg_name == "has_grad")
+      has_grad = &Arg;
   }
 
   for (auto &Arg : TheFunction->args()) {
@@ -20091,7 +20098,7 @@ Function *FunctionAST::codegen() {
 
   Value *RetVal;
   for (auto &body : Body)
-    RetVal = body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    RetVal = body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
 
 
 
@@ -20524,7 +20531,7 @@ static void InitializeModule() {
   //
   FunctionType *clean_forwardTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("clean_forward", clean_forwardTy);
@@ -21918,7 +21925,7 @@ FunctionType *unbugTy = FunctionType::get(
 
   FunctionType *AttrTensorNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, floatPtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, floatPtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
@@ -22240,7 +22247,7 @@ int main() {
   tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
   preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op};
   gradless_ops = {randu_like_op, onehot_op, max_op, argmax_op, equal_op,
-                  create_tensor_from_brackets_op};
+                  create_tensor_from_brackets_op, detach_op};
   gradless_ops = concat_int_vec(gradless_ops, preprocessing_ops);
 
 
