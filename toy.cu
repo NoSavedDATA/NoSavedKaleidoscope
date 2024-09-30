@@ -559,6 +559,9 @@ enum Token {
   tok_post_class_attr_attr = -38,
   tok_post_class_attr_identifier = -39,
 
+  tok_global = -49,
+  tok_no_grad = -50,
+
 
 };
 
@@ -695,6 +698,9 @@ std::map<int, std::string> token_to_string = {
   { tok_batchnorm2d, "BatchNorm2d"},
   { tok_bn2drelu, "BN2dRelu"},
   { tok_relu, "Relu"},
+
+  { tok_global, "global"},
+  { tok_no_grad, "no_grad"},
 
   
 
@@ -962,6 +968,10 @@ static int get_token() {
       return tok_async;
     if (IdentifierStr == "finish")
       return tok_async_finish;
+    if (IdentifierStr == "global")
+      return tok_global;
+    if (IdentifierStr == "no_grad")
+      return tok_no_grad;
     if (IdentifierStr == "lock")
       return tok_lock;
     if (IdentifierStr == "unlock")
@@ -1768,16 +1778,18 @@ class LockExprAST : public ExprAST {
 
 	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
-
-class UnlockExprAST : public ExprAST {
-  std::string Name;
+/// NoGradExprAST
+class NoGradExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
 
   public:
-    UnlockExprAST(std::string Name) : Name(Name) {}
+    NoGradExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
+            : Bodies(std::move(Bodies)) {}
 
 
 	Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id) override;
 };
+
 
 
 
@@ -1984,6 +1996,7 @@ std::vector<std::string> pinnedTensorVars;
 std::vector<std::string> floatVars;
 std::vector<std::string> strVars;
 std::vector<std::string> objectVars;
+std::vector<std::string> globalVars;
 std::map<std::string, std::string> functionVars;
 std::map<std::string, std::string> floatFunctions;
 std::map<std::string, std::string> stringMethods;
@@ -5775,10 +5788,20 @@ static std::unique_ptr<ExprAST> ParseLockExpr(std::string class_name="") {
   std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
 
 
-  //Body.push_back(std::make_unique<UnlockExprAST>(Name));
-
   return std::make_unique<LockExprAST>(std::move(Body), Name);
 }
+
+
+
+static std::unique_ptr<ExprAST> ParseNoGradExpr(std::string class_name="") {
+  int cur_level_tabs = SeenTabs;
+  getNextToken(); // eat no_grad
+  
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(cur_level_tabs, class_name);
+
+  return std::make_unique<NoGradExprAST>(std::move(Body));
+}
+
 
 
 static std::unique_ptr<ExprAST> ParseMustBeVar(std::string class_name="", std::string expr_name="") {
@@ -5798,6 +5821,40 @@ static std::unique_ptr<ExprAST> ParseMustBeVar(std::string class_name="", std::s
   return std::move(expr);
 }
 
+
+
+static std::unique_ptr<ExprAST> ParseGlobalExpr(std::string class_name="") {
+  getNextToken(); // eat global
+  std::cout << "Parsing global expr\n";
+
+
+  // At least one variable name is required.
+  if (CurTok != tok_identifier)
+    return LogError("Expected identifier after global.");
+
+  while (true) {
+
+
+    if (CurTok!=tok_identifier)
+      return LogError("Global expression must contain identifiers only.");
+
+    ParseIdentifierExpr(class_name);
+    globalVars.push_back(IdentifierStr);
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    
+  }
+
+  if (CurTok==tok_space)
+    getNextToken();
+
+
+  return std::make_unique<NumberExprAST>(0.0f);
+}
 
 
 static std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="") {
@@ -5897,6 +5954,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseAsyncExpr(class_name);
   case tok_lock:
     return ParseLockExpr(class_name);
+  case tok_no_grad:
+    return ParseNoGradExpr(class_name);
   case tok_return:
     return ParseReturnExpr(class_name);
   case tok_var:
@@ -5909,6 +5968,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParsePinnedTensorExpr();
   case tok_conv2d:
     return ParseConv2dExpr();
+  case tok_global:
+    return ParseGlobalExpr();
   case tok_lstm:
     return ParseLSTMExpr();
   case tok_embedding:
@@ -6675,7 +6736,7 @@ extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
 
 extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, float idx)
 {
-  //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
+  //std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
   
   float *tensor_ptr, *tensor_cpu;
 
@@ -6985,9 +7046,10 @@ float *get_from_pool(int thread_id, float dims_prod, std::string from)
 
 
 extern "C" void *LoadTensor(char *tensor_name){
-  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n\n\n";
+  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   Tensor *ret = NamedTensorsT[tensor_name];
   move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
+  //std::cout << "return load." << "\n";
   //delete[] tensor_name;
   return ret;
 }
@@ -7277,7 +7339,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         else
         {
           if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name||Type=="str")&&include_scope)
-            var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
+            var_name = Builder->CreateCall(TheModule->getFunction("ConcatScopeStr"),
                                                           {var_name, scope_str});
         }
       }
@@ -7312,7 +7374,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
   {
     if(Names.size()==1)// Concat scope only
       if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str")&&include_scope)
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatScopeStr"),
                                                           {var_name, scope_str});
 
 
@@ -8543,6 +8605,71 @@ extern "C" char * ConcatNumToStrFree(char *lc, float r)
   return result_cstr;
 }
 
+extern "C" char * ConcatScopeStr(char *lc, char *rc)
+{
+  std::string lstr = lc;
+
+
+  if (in_str(lstr, globalVars))
+  {
+
+    size_t length_lc = strlen(lc) + 1;
+    //char* result_cstr = new char[length_lc+length_rc];
+    char *result_cstr = get_from_char_pool(length_lc, "concat free left");
+    memcpy(result_cstr, lc, length_lc);
+    move_to_char_pool(length_lc+1, lc, "concat free left");
+    return result_cstr;
+  }
+  
+
+  size_t length_lc = strlen(lc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  //char* result_cstr = new char[length_lc+length_rc];
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat free left");
+  
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
+
+
+  move_to_char_pool(length_lc+1, lc, "concat free left");
+  //delete[] lc;
+
+  //std::cout << "ConcatScopeStr " << result_cstr << "\n";
+  
+  return result_cstr;
+}
+
+extern "C" char * ConcatScopeAtCallExpr(char *lc, char *rc)
+{
+  //std::cout << "ConcatScopeAtCallExpr of " << lc << " and " << rc << "\n";
+  std::string rstr = rc;
+
+  //for (auto &a : globalVars)
+  //  std::cout << "" << a << "\n";
+
+  
+  if (in_str(rstr, globalVars))
+  {
+    //std::cout << "it's a global" << "\n";
+    size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+    char *result_cstr = get_from_char_pool(length_rc, "ConcatScopeAtCallExpr");
+    memcpy(result_cstr, rc, length_rc);
+    return result_cstr;
+  }
+  
+
+  size_t length_lc = strlen(lc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  //char* result_cstr = new char[length_lc+length_rc];
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "ConcatScopeAtCallExpr");
+  
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
+
+  
+  return result_cstr;
+}
+
 extern "C" void AddFloatToScopeCleanList(char *scope, char *name)
 {
   std::string _name, _scope;
@@ -8928,7 +9055,10 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
 
     if (!seen_var_attr)
+    {
       Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+      return ConstantFP::get(*TheContext, APFloat(0.0f));
+    }
     
     return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   }
@@ -18237,19 +18367,24 @@ Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   
   Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
 
-  Value *V;
   for (auto &body : Bodies)
-    V = body->codegen(first_arg, scope_str, previous_scope, thread_id);
+    body->codegen(first_arg, scope_str, previous_scope, thread_id);
 
   Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
 
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
 
-Value *UnlockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id){
-  Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
+
+Value *NoGradExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id){
+  
+  for (auto &body : Bodies)
+    body->codegen(first_arg, scope_str, previous_scope, thread_id);
+
+  
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
+
 
 
 
@@ -19301,8 +19436,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     if (!is_self_of_nested_function && not_coding_language_method)
     {
-      
-      _pre_dot_str = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+
+      _pre_dot_str = Builder->CreateCall(TheModule->getFunction("ConcatScopeAtCallExpr"),
                 {scope_str, _pre_dot_str});
 
       first_arg = Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
@@ -21516,6 +21651,24 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("ConcatNumToStrFree", ConcatNumToStrFreeTy);
+  
+
+  //
+  FunctionType * ConcatScopeStrTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("ConcatScopeStr", ConcatScopeStrTy);
+  
+
+  //
+  FunctionType * ConcatScopeAtCallExprTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("ConcatScopeAtCallExpr", ConcatScopeAtCallExprTy);
 
   
   //
