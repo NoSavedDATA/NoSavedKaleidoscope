@@ -607,6 +607,7 @@ enum BackwardTypes {
   sigmoid_op = 9,
   tanh_op = 10,
   cross_entropy_op = 11,
+  mse_op = 44,
   add_op = 12,
   sub_op = 25,
   hadamard_op = 13,
@@ -635,7 +636,8 @@ enum BackwardTypes {
   sigmoid_add2weights_op = 39,
   lstm_op = 40,
   embedding_op = 41,
-  detach_op=42,
+  detach_op = 42,
+  gather_last_dim_op = 43,
 };
 
 int nn_mode=training_mode;
@@ -9701,7 +9703,8 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
     }
     else {
       Tensor *attr_tensor;
-      
+      if (has_grad==0)
+        tensor->op = detach_op;
       attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
       todo_backward_tensors.push_back(attr_tensor);
     } 
@@ -9759,6 +9762,9 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
       {
         Tensor *attr_tensor;
         
+        if (has_grad==0)
+          tensor->op = detach_op;
+
         attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
         todo_backward_tensors.push_back(attr_tensor);
 
@@ -12990,11 +12996,11 @@ extern "C" void *_tanh(int thread_id, Tensor *tensor)
 }
 
 __global__ void relu_forward(float* Z, float* A,
-                                      float N) {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
+                             const float dims_prod) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (index < N) {
-        A[index] = fmaxf(Z[index], 0);
+    if (idx < dims_prod) {
+        A[idx] = fmaxf(Z[idx], 0);
     }
 }
 
@@ -13276,6 +13282,108 @@ extern "C" void *softmax(int thread_id, Tensor *tensor)
 
 
 
+__global__ void gather_last_dim_kernel(float* y, const float* tensor, const float *tensor_idx,
+                                      const int leading_dim, float dims_prod) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < dims_prod) {
+      int t_idx = (int)tensor_idx[idx];
+      y[idx] = tensor[idx*leading_dim + t_idx];
+    }
+}
+
+
+
+extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float dim)
+{
+  //std::cout << "Gather THREAD IS: " << thread_id << "\n";
+
+
+  if(dim<0)
+    dim = tensor->dims.size()+dim;
+
+  if(dim == tensor->dims.size()-1)
+  {
+    //std::cout << "Gather over last dim"  << "\n";
+
+    float *tensor_ptr = tensor->tensor_ptr;
+    std::vector<float> dims, new_dims;
+    dims = tensor->dims;
+    new_dims = RemoveLastDim(dims);
+    float leading_dim = dims[dim];
+
+    //PrintDims(dims);
+    //PrintDims(new_dims);
+
+    
+    float dims_prod = tensor->dims_prod;
+    float new_dims_prod = DimsProd(new_dims);
+
+    int grid_size, block_size, shared_mem_size; 
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(new_dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+    
+
+    float *y = get_from_pool(thread_id, DimsProd(new_dims), "gather");
+
+    tensor->Sync();
+    cudaStream_t stream = ThreadsStream[thread_id];
+    gather_last_dim_kernel<<<grid_size, block_size, 0, stream>>>(y, tensor->tensor_ptr, idx_tensor->tensor_ptr, leading_dim, new_dims_prod);
+
+
+
+    Tensor *new_tensor = createTensor(y, new_dims, new_dims_prod, false, "");
+    idx_tensor->op = detach_op;
+    new_tensor->AttrNodes(tensor, idx_tensor, gather_last_dim_op);
+    return new_tensor;
+  }
+}
+
+__global__ void gather_last_dim_backward_kernel(float* dx, const float* dy, const float *tensor_idx,
+                                      const int leading_dim, float dims_prod) {
+    // Handles idx repetition
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < dims_prod) {
+      int t_idx = (int)tensor_idx[idx];
+
+      float *indexed_dx = dx + idx*leading_dim + t_idx;
+
+      atomicAdd(indexed_dx, dy[idx]);
+      //dx[idx*leading_dim + t_idx] = dy[idx];
+    }
+}
+
+void gather_last_dim_backward(float *dx, float *dy, Tensor *node)
+{
+  // consider dx was set to zero already
+  
+
+  float *idx = node->R_Node->tensor_ptr;
+
+  std::vector<float> dims = node->L_Node->dims;
+  int leading_dim = dims[dims.size()-1];
+
+  float dims_prod = node->dims_prod;
+
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+
+  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, idx, leading_dim, dims_prod);
+
+  //PrintTensorF(idx, 1, node->R_Node->dims_prod);
+  //PrintTensorF(dx, dims[0], dims[1]);
+
+}
+
+
+
+
 
 
 __global__ void rl_discounted_return_kernel(float *G, const float *rewards, const float *terminated,
@@ -13296,7 +13404,7 @@ __global__ void rl_discounted_return_kernel(float *G, const float *rewards, cons
 
 extern "C" void *rl_discounted_return(int thread_id, Tensor *reward, Tensor *terminated, float gamma)
 {
-  std::cout << "rl_discounted_return THREAD IS: " << thread_id << "\n";
+  //std::cout << "rl_discounted_return THREAD IS: " << thread_id << "\n";
 
   std::vector<float> dims = reward->dims;
 
@@ -13394,6 +13502,7 @@ class Conv2d
     Conv2d(int C, int OC, int ks, int stride, int padding, std::string Init, std::string Name) 
         : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Name(Name) {
       NamedTensorsT[Name] = new Tensor();
+      d_filter=nullptr;
     }
 
   
@@ -15650,14 +15759,13 @@ void conv2d_backward(float *inp,  float *weight,
 extern "C" void *ConvForward2d(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
-  //std::cout << "Conv forward of " << conv_namec << " and tensor " << tensor.name << "\n";
   
   std::string _self = self;
   std::string conv_name = conv_namec;
   if (is_obj_attr_or_self)
     conv_name = _self + conv_name;
 
-
+  //std::cout << "Conv forward of " << conv_name << " and tensor " << tensor->name << "\n";
   //std::cout << "Conv forward for  conv: " << conv_name <<"\n";
   
 
@@ -15674,6 +15782,8 @@ extern "C" void *ConvForward2d(char *self, Tensor *tensor, int thread_id, char *
 
 
   std::unique_ptr<Conv2d> conv = std::move(NamedConv2d[conv_name]);
+
+
 
   if ((int)C!=(int)conv->C)
   {
@@ -15715,7 +15825,6 @@ extern "C" void *ConvForward2d(char *self, Tensor *tensor, int thread_id, char *
   conv_tensor->NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
   conv_tensor->SetIsWeight();
   
-
 
   NamedConv2d[conv_name] = std::move(conv);
 
@@ -16504,6 +16613,53 @@ extern "C" float cross_entropy(Tensor *y_hat, Tensor *y, float scale)
 
 
 
+
+
+__global__ void mse_kernel(float *dy, const float* y_hat, const float* y,
+                            const float scale, const float dims_prod) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < dims_prod) {
+        dy[idx] = 2 * (y_hat[idx] - y[idx]) * scale;
+    }
+}
+
+
+void MSEBackward(float *y_hat, float *y,
+                 int dims_prod, 
+                 float *dloss,
+                 float scale)
+{
+  //std::cout << "MSE Backward" << "\n";
+
+  int grid_size, block_size, shared_mem_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size  = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  mse_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, y_hat, y, scale, dims_prod);
+
+  //PrintTensorF(dloss, 1, dims_prod);
+}
+
+
+
+extern "C" float mse(Tensor *y_hat, Tensor *y, float scale)
+{  
+  Tensor *loss_tensor = new Tensor();
+
+
+  loss_tensor->AttrNodes(y_hat, y, mse_op);
+  loss_tensor->scalar = scale;
+
+
+  todo_backward_tensors.push_back(loss_tensor);
+
+
+  return 0;
+}
+
+
 //
 
 
@@ -16786,9 +16942,17 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         }
       } else {
       
-        if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op && !from_custom)
+        if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op && !from_custom && back_node->R_Node->op != detach_op)
         {
-          //std::cout << "ulululu of op " << std::to_string(op) << "\n";
+          /*
+          if (w_size==4)
+          {
+            std::cout << "ulululu of op " << std::to_string(op) << "\n";
+            std::cout << "" << param_name<< "\n";
+            std::cout << "" << tensor_name<< "\n";
+          }
+          */
+            
           device_dw = get_from_pool(0, w_size, "dw");
           set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
         }
@@ -16808,6 +16972,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       block_size = grid_block_mem_sizes[1];
 
       device_dx = get_from_pool(0, x_size, from);
+
+      //TODO: remove this set to zero to improve performance (then, adjust gather op dx to be set to zero)
       set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dx, x_size);
     }
     
@@ -16879,6 +17045,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         dropout_backward(device_dx, w, device_dy, x_size);
         device_dw = device_dy;
         break;
+      case gather_last_dim_op:
+        gather_last_dim_backward(device_dx, device_dy, back_node);
+        device_dw = device_dy;
+        break;
       
       // Custom Ops
       case sigmoid_add2weights_op:
@@ -16896,6 +17066,9 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       // Loss Ops
       case cross_entropy_op:
         CrossEntropyBackward(inp, w, B, C, device_dx, back_node->scalar);
+        break;
+      case mse_op:
+        MSEBackward(inp, w, back_node->L_Node->dims_prod, device_dx, back_node->scalar);
         break;
 
       default:
@@ -16938,8 +17111,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
   if(device_dy!=nullptr)
     to_pool(dims_prod, device_dy, _op);
 
-
-  to_free_tensor(back_node);
+  if (!back_node->weight)
+    to_free_tensor(back_node);
 }
 
 
@@ -20779,6 +20952,15 @@ static void InitializeModule() {
   
 
   //
+  FunctionType *gatherTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("gather", gatherTy);
+  
+
+  //
   FunctionType *rl_discounted_returnTy = FunctionType::get(
       int8PtrTy,
       {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -21068,6 +21250,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("cross_entropy", cross_entropyTy);
+
+
+  //
+  FunctionType *mseTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("mse", mseTy);
   
 
   //===----------------------------------------------------------------------===//
@@ -22401,7 +22592,7 @@ int main() {
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
-  loss_ops = {cross_entropy_op};
+  loss_ops = {cross_entropy_op, mse_op};
 
   custom_ops = {sigmoid_add2weights_op};
 
@@ -22451,7 +22642,7 @@ int main() {
                              "rl_discounted_return"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
-                            "save_img", "gpu", "gpuw", "save_as_int", "save_as_bin"};
+                            "save_img", "gpu", "gpuw", "save_as_int", "save_as_bin", "gather"};
   
   
 
@@ -22484,7 +22675,7 @@ int main() {
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
                       "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",
                       "print_tensor", "path_exists", "dir_exists", "load_bin_idx",
-                      "network_ema"};
+                      "network_ema", "mse"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_functions = concat_str_vec(native_functions, return_string_fn);
   native_fn = concat_str_vec(native_methods, native_functions);
