@@ -35,6 +35,7 @@ Limitations:
 - Install OpenCV, cBLAS and LLVM dependencies:
   
 ```bash
+wget https://apt.llvm.org/llvm.sh
 chmod +x *.sh
 sudo ./llvm.sh 19 all
 
