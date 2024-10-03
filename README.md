@@ -63,9 +63,7 @@ CUDA:
 ```bash
 clang++ -g -O3 -rdynamic toy.cu `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` --cuda-path="/usr/local/cuda-12.1" --cuda-gpu-arch=sm_89 -L"/usr/local/cuda-12.1/lib64" -I"/usr/local/cuda-12.1/include" -I/usr/include/eigen3 -lcudart_static -lcublas -lcublasLt -ldl -lrt -pthread -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -lcudnn -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -w -o bin/nsk
 ```
-
- > `dl.lib` e `rt.lib` (isso é uma tentativa de adicionar as bibliotecas `dl.lib` ou `rt.lib` ao linker com `-ldl` e `-lrt`)
-
+- Install and use clang++-19 if you get an opm.h error;
 
 - Test it by typing `nsk` at the terminal. Then, type `1+1;`, it should return `2.00`;
 
