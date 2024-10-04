@@ -6665,6 +6665,17 @@ extern "C" float end_timer(float id)
 
 
 
+std::vector<float> format_BatchFirst_Dims(std::vector<float> dims)
+{
+  std::vector<float> new_dims;
+  new_dims.push_back(dims[0]);
+  int aux=1;
+  for (int i = 0; i < dims.size()-1; i++)
+    aux *= dims[i+1];
+  new_dims.push_back(aux);
+  return new_dims;
+}
+
 
 std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 {
@@ -6676,7 +6687,6 @@ std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
   new_dims.push_back(dims[dims.size()-1]);
   return new_dims;
 }
-
 
 
 
@@ -7694,6 +7704,28 @@ std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1
   //shared_mem_size = std::min(2 * block_size * sizeof(float), deviceProp.sharedMemPerBlock);
 
   std::vector<int> ret = {grid_size, block_size, shared_mem_size};
+  return ret;
+}
+
+
+std::vector<int> CalculateSimpleWarpGridAndBlockSizes(int B)
+{
+  // Usually warp kernels deal with the C dim already, so
+  // you should inform B as the first dim only in these cases.
+
+  int grid_size, block_size;
+
+  block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+  
+  while (B < block_size/32 && block_size>32)
+     block_size = block_size / 2;
+
+  if (block_size<32)
+    block_size = 32;
+
+  grid_size = ceil_div(B, block_size/32);
+
+  std::vector<int> ret = {grid_size, block_size};
   return ret;
 }
 
@@ -13287,10 +13319,9 @@ extern "C" void *softmax(int thread_id, Tensor *tensor)
   */
  
  
-  block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
-  while (B < block_size/32 && block_size>2)
-     block_size = block_size / 2;
-  grid_size = ceil_div(B, block_size/32);
+  grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
 
   online_softmax<<<grid_size, block_size, 0, stream>>>(tensor_ptr, probs, B, C);
 
@@ -13328,11 +13359,9 @@ extern "C" void *self_attn(int thread_id, Tensor *tensor)
 
 
 
-
-  block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
-  while (B < block_size/32 && block_size>2)
-     block_size = block_size / 2;
-  grid_size = ceil_div(B, block_size/32);
+  grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
 
 
   online_softmax<<<grid_size, block_size, 0, stream>>>(tensor_ptr, probs, B, C);
@@ -16726,7 +16755,6 @@ __global__ void mse_kernel(float *dy, const float* y_hat, const float* y,
     }
 }
 
-
 void MSEBackward(float *y_hat, float *y,
                  int dims_prod, 
                  float *dloss,
@@ -16744,8 +16772,6 @@ void MSEBackward(float *y_hat, float *y,
   //PrintTensorF(dloss, 1, dims_prod);
 }
 
-
-
 extern "C" float mse(Tensor *y_hat, Tensor *y, float scale)
 {  
   Tensor *loss_tensor = new Tensor();
@@ -16760,6 +16786,99 @@ extern "C" float mse(Tensor *y_hat, Tensor *y, float scale)
 
   return 0;
 }
+
+
+
+__global__ void online_mse(float *out, const float *y_hat, const float *y_true, int N, int C) {
+  
+    const int warpsPerBlock = blockDim.x / warpSize;
+    int tid = threadIdx.x;
+
+    
+
+    int warpId = tid / warpSize;
+    int laneId = tid % warpSize;
+    // one warp one row
+    int row = blockIdx.x * warpsPerBlock + warpId;
+    
+    if (laneId >= C)
+        return;
+
+    if (row >= N)
+        return;
+
+    
+    const float *x = y_hat  + row * C;
+    const float *y = y_true + row * C;
+    
+
+    // merge calculating maxval and sumval in one loop
+    // which is an arithmetic improvment from online softmax over normal softmax
+    float sumval = 0.0f;
+
+#pragma unroll
+    for (int i = laneId; i < C; i += warpSize) {
+        // when updating the maxval, dynamically updates the previous sumval by
+        // multiplying e^{previous_maxval - current_maxval}
+
+        sumval += powf(x[i]-y[i], 2);
+    }
+
+    // use warp functions instead of cooperative groups for better readibility
+    // calculate the warp wised maxval and sumval
+    float offsetSumval;
+
+#pragma unroll
+    for (int offset = warpSize / 2; offset > 0; offset >>= 1) {
+        __syncwarp();
+        offsetSumval = __shfl_down_sync(0xFFFFFFFF, sumval, offset);
+        
+        sumval += offsetSumval;
+    }
+
+
+    sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+
+    out[row] = sumval/C;
+    
+}
+
+
+extern "C" void *mse_with_priorities(int thread_id, Tensor *y_hat, Tensor *y, float scale)
+{  
+  Tensor *loss_tensor = new Tensor();
+
+
+  loss_tensor->AttrNodes(y_hat, y, mse_op);
+  loss_tensor->scalar = scale;
+
+
+  todo_backward_tensors.push_back(loss_tensor);
+
+
+  std::vector<float> dims = format_BatchFirst_Dims(y_hat->dims);
+  float B = dims[0];
+  float C = dims[1];
+
+
+  float *msed = get_from_pool(0, B, "mse with priorities");
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+
+  std::cout << "online mse with grid size " << grid_size << " and block size " << block_size << "\n";
+  online_mse<<<grid_size, block_size, 0, main_stream->stream>>>(msed, y_hat->tensor_ptr, y->tensor_ptr, B, C);
+  std::cout << "return from online mse" << "\n";
+
+  Tensor *new_tensor = createTensor(msed, {B}, B, false, "");
+  new_tensor->AttrLNode(y_hat, detach_op);
+  return new_tensor;
+}
+
 
 
 //
@@ -21379,6 +21498,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("mse", mseTy);
+
+
+  //
+  FunctionType *mse_with_prioritiesTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("mse_with_priorities", mse_with_prioritiesTy);
   
 
   //===----------------------------------------------------------------------===//
@@ -22764,7 +22892,7 @@ int main() {
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights",
-                             "rl_discounted_return", "self_attn", "Jitter"};
+                             "rl_discounted_return", "self_attn", "Jitter", "mse_with_priorities"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
                             "save_img", "gpu", "gpuw", "save_as_int", "save_as_bin", "gather"};
