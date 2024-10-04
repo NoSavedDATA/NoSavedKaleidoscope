@@ -75,7 +75,7 @@ int PAD_TOK = 0.0f;
 #define WMMA_N 16
 #define WMMA_K 16
 
-#define WARP_SIZE 32
+int WARP_SIZE;
 
 // Files
 #define STB_IMAGE_IMPLEMENTATION
@@ -278,6 +278,13 @@ LCG rng(generate_custom_seed());
 
 //std::random_device rd; // it is already defined at cu_common.h
 std::mt19937 MAIN_PRNG(rd()^get_millisecond_time());
+
+
+unsigned long long get_int_seed()
+{
+  std::uniform_int_distribution<unsigned long long> dist(0, ULLONG_MAX);
+  return dist(MAIN_PRNG);
+}
 
 std::vector<std::string> rds;
 
@@ -627,6 +634,7 @@ enum BackwardTypes {
   crop_op = 28,
   random_horizontal_flip_op = 29,
   normalize_img_op = 30,
+  jitter_op = 46,
   randu_like_op = 31,
   scalar_add_op = 34,
   scalar_sub_op = 35,
@@ -638,10 +646,11 @@ enum BackwardTypes {
   embedding_op = 41,
   detach_op = 42,
   gather_last_dim_op = 43,
+  self_attn_op = 45,
 };
 
 int nn_mode=training_mode;
-std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops;
+std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops, weightless_ops;
 
 
 std::map<int, std::string> token_to_string = {
@@ -7689,6 +7698,10 @@ std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1
 }
 
 
+__inline__ __device__ float cuda_clip(float val, float min_val, float max_val) {
+    return fmaxf(min_val, fminf(val, max_val));
+}
+
 
 __global__ void set_to_zero_kernel(float *y, int dims_prod) {
 
@@ -13180,18 +13193,18 @@ __global__ void online_softmax(const float* inp, float* out, int N, int C) {
     const int warpsPerBlock = blockDim.x / warpSize;
     int tid = threadIdx.x;
 
-    if (tid >= C) {
-        return;
-    }
+    
 
     int warpId = tid / warpSize;
     int laneId = tid % warpSize;
     // one warp one row
     int row = blockIdx.x * warpsPerBlock + warpId;
-
-    if (row >= N) {
+    
+    if (laneId >= C)
         return;
-    }
+
+    if (row >= N)
+        return;
 
     const float* x = inp + row * C;
     float* const y = out + row * C;
@@ -13199,6 +13212,8 @@ __global__ void online_softmax(const float* inp, float* out, int N, int C) {
     // merge calculating maxval and sumval in one loop
     // which is an arithmetic improvment from online softmax over normal softmax
     float maxval = -INFINITY, sumval = 0.0f, bigger;
+
+#pragma unroll
     for (int i = laneId; i < C; i += warpSize) {
         // when updating the maxval, dynamically updates the previous sumval by
         // multiplying e^{previous_maxval - current_maxval}
@@ -13210,6 +13225,8 @@ __global__ void online_softmax(const float* inp, float* out, int N, int C) {
     // use warp functions instead of cooperative groups for better readibility
     // calculate the warp wised maxval and sumval
     float offsetMaxval, offsetSumval;
+
+#pragma unroll
     for (int offset = warpSize / 2; offset > 0; offset >>= 1) {
         __syncwarp();
         offsetMaxval = __shfl_down_sync(0xFFFFFFFF, maxval, offset);
@@ -13228,9 +13245,9 @@ __global__ void online_softmax(const float* inp, float* out, int N, int C) {
     maxval = __shfl_sync(0xFFFFFFFF, maxval, 0);
     sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
 
-    for (int i = laneId; i < C; i += warpSize) {
+#pragma unroll
+    for (int i = laneId; i < C; i += warpSize)
         y[i] = expf(x[i] - maxval) / sumval;
-    }
 }
 
 
@@ -13260,24 +13277,71 @@ extern "C" void *softmax(int thread_id, Tensor *tensor)
 
 
   
+  /*
   grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
   grid_size  = B;
   block_size = grid_block_mem_sizes[1];
 
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
   softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, probs, B, C);
-  
-  /*
-  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*32*C);
-  grid_size  = B*32;
-  block_size = grid_block_mem_sizes[1];
-
-  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(tensor_ptr, probs, B, C);
   */
-  
+ 
+ 
+  block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+  while (B < block_size/32 && block_size>2)
+     block_size = block_size / 2;
+  grid_size = ceil_div(B, block_size/32);
+
+  online_softmax<<<grid_size, block_size, 0, stream>>>(tensor_ptr, probs, B, C);
+
+
+
   Tensor *new_tensor = createTensor(probs, dims, tensor->dims_prod, false, "");
   new_tensor->op=softmax_op;
   return new_tensor;
+}
+
+
+
+
+extern "C" void *self_attn(int thread_id, Tensor *tensor)
+{
+  float *tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  
+  dims =  format_LinearLayer_Dims(dims);
+
+  int B = dims[0];
+  int C = dims[1];
+
+
+  int grid_size, block_size, shared_mem_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+
+  tensor->Sync();
+  float *probs = get_from_pool(thread_id, B*C, "self_attn");
+  cudaStream_t stream = ThreadsStream[thread_id];
+  set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(probs, B*C);
+
+
+
+
+  block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+  while (B < block_size/32 && block_size>2)
+     block_size = block_size / 2;
+  grid_size = ceil_div(B, block_size/32);
+
+
+  online_softmax<<<grid_size, block_size, 0, stream>>>(tensor_ptr, probs, B, C);
+  
+  
+  Tensor *new_tensor = createTensor(probs, dims, tensor->dims_prod, false, "");
+  new_tensor->op=self_attn_op;
+  return new_tensor;
+
 }
 
 
@@ -16195,7 +16259,7 @@ extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
   std::vector<float> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
-  unsigned long long seed = time_seed();
+  unsigned long long seed = get_int_seed();
 
   float B, C, H, W;
   B = dims[0];
@@ -16277,7 +16341,7 @@ extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
   std::vector<float> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
-  unsigned long long seed = time_seed();
+  unsigned long long seed = get_int_seed();
 
   float B, C, H, W;
   B = dims[0];
@@ -16339,8 +16403,6 @@ extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tenso
   std::vector<float> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
-  unsigned long long seed = time_seed();
-
 
   float B, C, H, W;
   B = dims[0];
@@ -16382,6 +16444,45 @@ extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tenso
   return new_tensor;
 }
 
+__global__ void jitter_kernel(float *y, const float *x, const float factor, const int dims_prod,
+                               unsigned long long seed)
+{
+
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (idx>dims_prod)
+    return;
+
+
+  curandState state;
+  curand_init(seed, idx, 0, &state);
+
+  float r = curand_normal(&state);
+  r = cuda_clip(r, -2.0, 2.0);
+
+  y[idx] = x[idx] * (1+factor*r);
+}
+
+extern "C" void *Jitter(int thread_id, Tensor *tensor, float factor)
+{
+
+
+  int grid_size, block_size;
+  float dims_prod = tensor->dims_prod;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+
+  float *jittered = get_from_pool(thread_id, dims_prod, "jitter img");
+  unsigned long long seed = get_int_seed();
+  jitter_kernel<<<grid_size, block_size, 0, tensor->cuda_stream>>>(jittered, tensor->tensor_ptr, factor, dims_prod, seed);
+
+
+  Tensor *new_tensor = createTensor(jittered, tensor->dims, dims_prod, false, "", tensor->cuda_stream);
+  new_tensor->AttrLNode(tensor, jitter_op);
+  return new_tensor;
+}
 
 
 
@@ -16467,8 +16568,9 @@ extern "C" void *dropout(int thread_id, Tensor *tensor, float rate)
     float *device_y = get_from_pool(thread_id, dims_prod, "dropout forward output");
 
     float scale = 1 / (1-rate);
+    
+    unsigned long long seed = get_int_seed();
 
-    unsigned long long seed = time_seed();
     dropout_mask_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, dropout_ptr, tensor->tensor_ptr, rate, scale, dims_prod, seed);
     
     Tensor *dropout_tensor = createTensor(dropout_ptr, tensor->dims, dims_prod, true, "");
@@ -16942,7 +17044,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         }
       } else {
       
-        if(op!=add_op && !in_int(op, tensor_scalar_ops) && op!=dropout_op && !from_custom && back_node->R_Node->op != detach_op)
+        if(!in_int(op, weightless_ops) && !from_custom && back_node->R_Node->op != detach_op)
         {
           /*
           if (w_size==4)
@@ -20940,6 +21042,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("softmax", softmaxTy);
+
+
+  // 
+  FunctionType *self_attnTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("self_attn", self_attnTy);
   
 
   //
@@ -21093,6 +21204,15 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("NormalizeImg", NormalizeImgTy);
+
+
+  //
+  FunctionType *JitterTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("Jitter", JitterTy);
 
 
   //
@@ -22520,6 +22640,8 @@ int main() {
   printf("Device %d: %s\n", deviceIdx, deviceProp.name);
 
 
+    
+  cudaDeviceGetAttribute(&WARP_SIZE, cudaDevAttrWarpSize, 0); 
   cublasCheck(cublasCreate(&cublas_handle));
   cublasCheck(cublasLtCreate(&cublaslt_handle));
 
@@ -22597,7 +22719,10 @@ int main() {
   custom_ops = {sigmoid_add2weights_op};
 
   tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
-  preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op};
+  weightless_ops = {add_op, dropout_op};
+  weightless_ops = concat_int_vec(weightless_ops, tensor_scalar_ops);
+
+  preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op, jitter_op};
   gradless_ops = {randu_like_op, onehot_op, max_op, argmax_op, equal_op,
                   create_tensor_from_brackets_op, detach_op};
   gradless_ops = concat_int_vec(gradless_ops, preprocessing_ops);
@@ -22639,7 +22764,7 @@ int main() {
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights",
-                             "rl_discounted_return"};
+                             "rl_discounted_return", "self_attn", "Jitter"};
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
                             "save_img", "gpu", "gpuw", "save_as_int", "save_as_bin", "gather"};
