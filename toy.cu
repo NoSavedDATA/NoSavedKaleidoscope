@@ -647,6 +647,11 @@ enum BackwardTypes {
   detach_op = 42,
   gather_last_dim_op = 43,
   self_attn_op = 45,
+  mse_is_w_op = 47,
+  no_op = 48,
+  lgrad_op = 49,
+  broadcast_lastdim_add_op = 50,
+  idx_with_tensor_op = 51,
 };
 
 int nn_mode=training_mode;
@@ -2914,6 +2919,26 @@ struct Tensor {
   Tensor *R_Node, *L_Node;
   bool visited;
 
+  void NewNullTensor()
+  {
+    tensor_ptr = nullptr;
+    dims = {0};
+    dims_prod = 0;
+    cpu_tensor_ptr = nullptr;
+    L_Node=nullptr;
+    R_Node=nullptr;
+    dy=nullptr;
+    visited=false;
+    weight=false;
+    from_grad_or_load=false;
+    cuda_stream = nullptr;
+    loader = nullptr;
+    from_cudnn = "";
+    is_pinned=false;
+    thread_id = 0;
+    scalar=1;
+  }
+
   void NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
                  bool new_is_leaf, std::string new_name, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr){
     tensor_ptr = new_tensor_ptr;
@@ -2935,6 +2960,7 @@ struct Tensor {
     from_cudnn = "";
     is_pinned=false;
     thread_id = 0;
+    scalar=1;
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -3057,6 +3083,22 @@ Tensor *createBackward(std::string name, Tensor *tensor) {
     Tensor *new_tensor = new Tensor();
     new_tensor->AttributionBackwardNode(name, tensor);
     return new_tensor;
+}
+Tensor *wrapTensorWithDetached(Tensor* tensor) {
+    /*
+    Tensor *new_tensor = new Tensor();
+
+    new_tensor->NewNullTensor();
+    new_tensor->AttrLNode(tensor, detach_op);
+    new_tensor->tensor_ptr = tensor->tensor_ptr;
+    new_tensor->dims_prod = tensor->dims_prod;
+    new_tensor->dims = tensor->dims;
+    
+    return new_tensor;
+    */
+    
+    tensor->op = detach_op;
+    return tensor;
 }
 
 
@@ -3206,7 +3248,10 @@ std::vector<float> RemoveLastDim(std::vector<float> dims)
 {
   // Removes first dim (batch dim).
   if (dims.size()<=1)
-    LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+  {
+    return {1.0f};
+    //LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+  }
 
   std::vector<float> new_dims;
 
@@ -7035,7 +7080,7 @@ void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string
 
 float *get_from_pool(int thread_id, float dims_prod, std::string from)
 {
-  //if (dims_prod==50*256)
+  //if (dims_prod==32)
   //  std::cout << "get B*OC of " << from << "\n";
 
   if (dims_prod==0)
@@ -7135,6 +7180,11 @@ extern "C" float PrintTensor(char* tensorName){
 
   int line = 1;
   bool line_changed = true;
+
+  
+  if (arr_size>2000)
+    arr_size = 2000;
+
   for (int i = 0; i < arr_size; i++) {
 
     int to_prints = 0;
@@ -9462,7 +9512,7 @@ __global__ void idx_last_dim_kernel(float *tgt,
 
 extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name, int thread_id)
 {
-  std::cout << "Idx tensor " << tensor_name << " with tensor " << idx_tensor_name << "\n";
+  //std::cout << "INDEXATE TENSOR " << tensor_name << " WITH TENSOR " << idx_tensor_name << "\n";
 
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
   
@@ -9498,23 +9548,31 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name, i
     new_dims_prod = idx_tensor->dims_prod;
     new_dims = idx_tensor->dims;
 
-    std::cout << "INDEX OVER LAST DIM" << "\n";
+    //std::cout << "INDEX OVER LAST DIM" << "\n";
 
-    cudaMalloc(&new_tensor, new_dims_prod*sizeof(float));
-    cudaMemset(new_tensor, 0, new_dims_prod*sizeof(float));
+    //cudaMalloc(&new_tensor, new_dims_prod*sizeof(float));
+    //cudaMemset(new_tensor, 0, new_dims_prod*sizeof(float));
+
+    new_tensor = get_from_pool(thread_id, new_dims_prod, "idx tensor with tensor");
     
-    int grid_size = tensor->dims_prod;
-    int block_size = 32;
-    size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+    //int grid_size = tensor->dims_prod;
+    //int block_size = 32;
+
+    int grid_size, block_size;
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+    
     cudaStream_t stream = ThreadsStream[thread_id];
-    idx_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(new_tensor, tensor_ptr, idx_tensor_ptr, tensor->dims_prod, tensor->dims_prod/idx_tensor->dims_prod);
+    idx_last_dim_kernel<<<grid_size, block_size, 0, stream>>>(new_tensor, tensor_ptr, idx_tensor_ptr, tensor->dims_prod, tensor->dims_prod/idx_tensor->dims_prod);
   }
 
   
   //cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyHostToHost));
 
 
-  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, true, "");
+  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, false, "");
+  indexed->AttrNodes(tensor, idx_tensor, idx_with_tensor_op);
   return indexed;
 }
 
@@ -9749,7 +9807,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
     else {
       Tensor *attr_tensor;
       if (has_grad==0)
-        tensor->op = detach_op;
+          tensor->op = detach_op;
       attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
       todo_backward_tensors.push_back(attr_tensor);
     } 
@@ -9807,9 +9865,11 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
       {
         Tensor *attr_tensor;
         
-        if (has_grad==0)
-          tensor->op = detach_op;
+        //if (has_grad==0)
+        //  tensor = wrapTensorWithDetached(tensor);
 
+        if (has_grad==0)
+          tensor->op = detach_op;  
         attr_tensor = createBackward(tgt_tensor->scopeless_name, tensor);
         todo_backward_tensors.push_back(attr_tensor);
 
@@ -9938,7 +9998,7 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at
 }
 
 
-__global__ void idx_attr_last_dim_kernel(float *tgt,
+__global__ void idx_attr_semi_last_dim_kernel(float *tgt,
                            const float *tensor, const float *idx_tensor, 
                            int dims_prod, int last_dim_size) {
 
@@ -9961,9 +10021,20 @@ __global__ void idx_attr_last_dim_kernel(float *tgt,
     }
 }
 
+
+__global__ void idx_attr_simple_single_dim_kernel(float *tensor, const float *idx, const float *x, const int dims_prod)
+{
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (tid>=dims_prod)
+    return; 
+
+  tensor[(int)idx[tid]] = x[tid];
+}
+
 extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name, Tensor *R_tensor, int thread_id)
 { 
-  std::cout << "ATTR Idx tensor " << tensor_name << " at index tensor " << idx_tensor_name << " with tensor " << R_tensor->name << "\n";
+  //std::cout << "ATTR Idx tensor " << tensor_name << " at index tensor " << idx_tensor_name << " with tensor " << R_tensor->name << "\n";
 
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
   
@@ -9973,7 +10044,7 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
 
 
   float *tensor_ptr, *idx_tensor_ptr, *r_tensor_ptr;
-  float new_dims_prod;
+  float dims_prod, new_dims_prod;
   std::vector<float> dims, idx_dims, new_dims;
 
   tensor_ptr = tensor->tensor_ptr;
@@ -9982,6 +10053,8 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
 
   dims = tensor->dims;
   idx_dims = idx_tensor->dims;
+  dims_prod = tensor->dims_prod;
+  
 
 
   //TODO: gather with smaller dimensions
@@ -9993,31 +10066,63 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
       new_dims.push_back(dims[i+1]);
   */
 
-  if (dims.size()<=idx_dims.size())
+  if (dims.size()<idx_dims.size())
   {
     LogErrorS("Index tensor must have less dimensions than the indexed tensor.");
+    std::cout << "Tensor dims:" << "\n";
+    PrintDims(dims);
+    std::cout << "Idx tensor dims:" << "\n";
+    PrintDims(idx_dims);
     return 0;
   }
 
   
 
-  std::cout << "dim size diff: " << dims.size()-idx_dims.size()  << "\n";
+  //std::cout << "dim size diff: " << dims.size()-idx_dims.size()  << "\n";
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  std::vector<int> grid_block_mem_sizes;
+  int grid_size, block_size;
+
+  
+  //if((dims.size()-idx_dims.size())==0)
+  if(dims.size()==1 && idx_dims.size()==1)
+  {
+    //std::cout << "INDEX ATTR OVER SIMPLE 1 DIM" << "\n";
+
+    float idx_dims_prod = DimsProd(idx_dims);
+
+    grid_block_mem_sizes = CalculateGridAndBlockSizes(idx_dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+
+    //std::cout << "grid size: " << grid_size << " and block size: " << block_size << "\n";
+
+    idx_attr_simple_single_dim_kernel<<<grid_size, block_size, 0, stream>>>(tensor_ptr, idx_tensor_ptr, r_tensor_ptr, idx_dims_prod);
+
+  }
   if((dims.size()-idx_dims.size())==1)
   {
-    new_dims_prod = idx_tensor->dims_prod;
-    new_dims = idx_tensor->dims;
+    //new_dims_prod = idx_tensor->dims_prod;
+    //new_dims = idx_tensor->dims;
 
-    std::cout << "INDEX ATTR OVER LAST DIM" << "\n";
+    std::cout << "INDEX ATTR OVER SEMI-LAST DIM" << "\n";
 
-    
-    int grid_size = tensor->dims_prod;
-    int block_size = 32;
-    size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
+    grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];  
 
-    cudaStream_t stream = ThreadsStream[thread_id];
-    idx_attr_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, r_tensor_ptr, idx_tensor_ptr, tensor->dims_prod, tensor->dims_prod/idx_tensor->dims_prod);
+    idx_attr_semi_last_dim_kernel<<<grid_size, block_size, 0, stream>>>(tensor_ptr, r_tensor_ptr, idx_tensor_ptr, dims_prod, dims_prod/idx_tensor->dims_prod);
   }
 
+
+  if(thread_id==0)
+  {
+    idx_tensor->op = detach_op;
+    R_tensor->op = detach_op;
+    todo_backward_tensors.push_back(idx_tensor);
+    todo_backward_tensors.push_back(R_tensor);
+  }
 
   return 0;
 }
@@ -10063,7 +10168,7 @@ Value *BinaryTensorScalarExprAST::codegen(Value *first_arg, Value *scope_str, Va
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
     if (!LHSE)
-      return LogErrorV("Destino do '=' deve ser uma variável.");
+      return LogErrorV("'=' destiny must be a var.");
     // Codegen the RHS.
     
     Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
@@ -11192,6 +11297,21 @@ __global__ void equal_forward(float *y, const float *x,
         y[i] = (x[i]==w[i]) ? 1.0f : 0.0f;
 }
 
+
+__global__ void broadcast_lastdim_add(float *y, const float *x,
+                            const float *w, int dims_prod, int C) {
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int w_id = tid / C;
+
+    if (tid >= dims_prod)
+      return;
+
+
+
+    y[tid] = x[tid] + w[w_id];
+}
+
 extern "C" Tensor *CudaAdd(int is_forward_func,
                           Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
 
@@ -11204,6 +11324,56 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
   float *device_w = tensor_w->tensor_ptr;
 
 
+
+
+  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
+  float dims_prod = tensor_x->dims_prod;
+
+
+  float* device_y = get_from_pool(thread_id, dims_prod, "add");
+
+
+  tensor_x->Sync();
+  tensor_w->Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+
+
+
+  if (Ldims==Rdims)
+  {
+
+    int grid_size, block_size;
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+    
+    add_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
+    
+
+    Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
+    new_tensor->AttrNodes(tensor_x, tensor_w, add_op);
+    return new_tensor;
+  }
+
+  
+
+  
+  if(RemoveLastDim(Ldims)==Rdims||(RemoveLastDim(Ldims)==RemoveLastDim(Rdims)&&Rdims[Rdims.size()-1]==1))
+  {
+    int grid_size, block_size;
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+    
+    broadcast_lastdim_add<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod, tensor_x->dims[tensor_x->dims.size()-1]);
+    
+
+    Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
+    new_tensor->AttrNodes(tensor_x, tensor_w, broadcast_lastdim_add_op);
+    return new_tensor;
+  }
+
+
   if (Ldims!=Rdims)
   {
     LogErrorS("Tried to add tensors of different dimenstions.");
@@ -11212,30 +11382,8 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
     std::cout << "\n   Right tensor dims " << "\n   ";
     PrintDims(Rdims);
     std::cout << "\n\n";
+    return nullptr;
   }
-
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
-  float dims_prod = tensor_x->dims_prod;
-
-
-  float* device_y = get_from_pool(thread_id, dims_prod,"add");
-
-
-  tensor_x->Sync();
-  tensor_w->Sync();
-
-  int grid_size, block_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-  
-  cudaStream_t stream = ThreadsStream[thread_id];
-  add_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
-  
-
-  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
-  new_tensor->AttrNodes(tensor_x, tensor_w, add_op);
-  return new_tensor;
 }
 
 
@@ -11499,7 +11647,42 @@ extern "C" void *CudaDiv(int is_forward_func,
   return new_tensor;
 }
 
+__global__ void sum_over_last_dim_kernel(const float *tensor,
+                           float *summed,
+                           int dims_prod, int summed_dim_size) {
 
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    int C = summed_dim_size;
+    
+    if (i < dims_prod) {
+        int b = i / (C); // b updates only when v reaches it's maximum value
+        
+
+        float *summed_b = summed + b;
+
+        float ix = tensor[i];
+
+        atomicAdd(summed_b, ix);        
+    }
+}
+
+
+
+void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size)
+{
+
+  int leading_dim = y_size/x_size;
+
+
+  int grid_size, block_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(y_size);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+
+  sum_over_last_dim_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dy, dx, y_size, leading_dim);
+}
 
 
 extern "C" float network_ema(int thread_id, char *scope, char *_ema_network, char *_network, float factor)
@@ -11680,7 +11863,7 @@ extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, 
 
   float *probs;
 
-  cudaMalloc(&probs, B*C*sizeof(float));
+  probs = get_from_pool(thread_id, B*C, "repeat_interleave");
   cudaMemset(probs, 0, B*C*sizeof(float));
   
 
@@ -11700,10 +11883,361 @@ extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, 
   return new_tensor;
 }
 
+
+
+__global__ void warped_to_probs_single_dim(float *y, const float *x, int C) {
+  
+    const int warpsPerBlock = blockDim.x / warpSize;
+    int tid = threadIdx.x;
+
+    
+
+    int warpId = tid / warpSize;
+    int laneId = tid % warpSize;
+    // one warp one row
+    //int row = blockIdx.x * warpsPerBlock + warpId;
+    
+    if (laneId >= C)
+        return;
+
+
+    
+    float sumval = 0.0f;
+
+#pragma unroll
+    for (int i = laneId; i < C; i += warpSize)
+        sumval += x[i];
+    
+
+    float offsetSumval;
+
+#pragma unroll
+    for (int offset = warpSize / 2; offset > 0; offset >>= 1) {
+        __syncwarp();
+        offsetSumval = __shfl_down_sync(0xFFFFFFFF, sumval, offset);
+        
+        sumval += offsetSumval;
+    }
+
+
+    sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+
+#pragma unroll
+    for (int i = laneId; i < C; i += warpSize)
+        y[i] = x[i] / sumval;
+}
+
+
+__global__ void sample_val_from_probs(float *tensor, float *sampled_value, int n, unsigned long long seed) {
+    // Get the thread ID
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+
+    // Only one thread needs to sample a value
+    if (idx == 0) {
+        // Setup random generator
+        curandState state;
+        curand_init(seed, idx, 0, &state);
+
+        // Generate a random float in the range [0, 1)
+        float rand_value = curand_uniform(&state);
+
+        // Perform sampling
+        float cumulative_sum = 0.0f;
+        for (int i = 0; i < n; ++i) {
+            cumulative_sum += tensor[i];
+            if (rand_value < cumulative_sum) {
+                sampled_value[0] = tensor[i];  // Sampled value
+                return;
+            }
+        }
+    }
+}
+
+__global__ void sample_from_probs(float *tensor, float *sampled_value, int n, unsigned long long seed) {
+    // Get the thread ID
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    
+
+    // Only one thread needs to sample a value
+    if (idx == 0) {
+
+        // Setup random generator
+        curandState state;
+        curand_init(seed, idx, 0, &state);
+
+        // Generate a random float in the range [0, 1)
+        float rand_value = curand_uniform(&state);
+
+        // Perform sampling
+        float cumulative_sum = 0.0f;
+        for (int i = 0; i < n; ++i) {
+            cumulative_sum += tensor[i];
+            if (rand_value < cumulative_sum) {
+                sampled_value[0] = i;  // Sampled value
+                return;
+            }
+        }
+    }
+}
+
+
+extern "C" float priority_sample(int thread_id, Tensor *tensor, float max_idx, float seed)
+{
+  
+  float *probs, *sampled, *probs_cpu;
+  float ret;
+  probs = get_from_pool(thread_id, max_idx, "priority sample");
+  sampled = get_from_pool(thread_id, 1, "priority sample");
+  probs_cpu = new float[1];
+
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(max_idx, 32);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  //TODO: optimize to use shared memory and suprass 32 threads.
+  cudaStream_t stream = ThreadsStream[thread_id];
+  warped_to_probs_single_dim<<<grid_size, block_size, 0, stream>>>(probs, tensor->tensor_ptr, max_idx);
+
+
+  //unsigned long long seed = get_int_seed();
+
+
+  sample_from_probs<<<1, 1, 0, stream>>>(probs, sampled, max_idx, seed);
+
+
+  cudaStreamSynchronize(stream);
+  cudaMemcpy(probs_cpu, sampled, 1*sizeof(float), cudaMemcpyDeviceToHost);
+  ret = probs_cpu[0];
+  delete[] probs_cpu;
+
+
+
+  move_to_pool(thread_id, max_idx, probs, "priority sample");
+  move_to_pool(thread_id, 1, sampled, "priority sample");
+
+
+  return ret;
+}
+
+extern "C" float priority_sample_val(int thread_id, Tensor *tensor, float max_idx, float seed)
+{  
+  float *probs, *sampled, *probs_cpu;
+  float ret;
+  probs = get_from_pool(thread_id, max_idx, "priority sample");
+  sampled = get_from_pool(thread_id, 1, "priority sample");
+  probs_cpu = new float[1];
+
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(max_idx, 32);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  //TODO: optimize to use shared memory and suprass 32 threads.
+  cudaStream_t stream = ThreadsStream[thread_id];
+  warped_to_probs_single_dim<<<grid_size, block_size, 0, stream>>>(probs, tensor->tensor_ptr, max_idx);
+
+
+  //unsigned long long seed = get_int_seed();
+
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(max_idx);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  sample_val_from_probs<<<1, 1, 0, stream>>>(probs, sampled, max_idx, seed);
+
+
+  cudaStreamSynchronize(stream);
+  cudaMemcpy(probs_cpu, sampled, 1*sizeof(float), cudaMemcpyDeviceToHost);
+  ret = probs_cpu[0];
+  delete[] probs_cpu;
+
+  move_to_pool(thread_id, max_idx, probs, "priority sample");
+  move_to_pool(thread_id, 1, sampled, "priority sample");
+
+
+  return ret;
+}
+
+
+__global__ void warped_to_probs_single_dim_pow(float *y, const float *x, float alpha, int C) {
+  
+    const int warpsPerBlock = blockDim.x / warpSize;
+    int tid = threadIdx.x;
+
+    
+    
+    int warpId = tid / warpSize;
+    int laneId = tid % warpSize;
+    // one warp one row
+    //int row = blockIdx.x * warpsPerBlock + warpId;
+    
+    if (laneId >= C)
+        return;
+
+
+    
+    float sumval = 0.0f;
+
+#pragma unroll
+    for (int i = laneId; i < C; i += warpSize)
+        sumval += pow(x[i], alpha);
+    
+
+    float offsetSumval;
+
+#pragma unroll
+    for (int offset = warpSize / 2; offset > 0; offset >>= 1) {
+        __syncwarp();
+        offsetSumval = __shfl_down_sync(0xFFFFFFFF, sumval, offset);
+        
+        sumval += offsetSumval;
+    }
+
+
+    sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+
+#pragma unroll
+    for (int i = laneId; i < C; i += warpSize)
+        y[i] = x[i] / sumval;
+    
+}
+
+
+
+
+extern "C" float importance_sample_idx(int thread_id, Tensor *tensor, float max_idx, float alpha, float beta, float seed)
+{  
+  
+  float *probs, *sampled, *probs_cpu;
+  float ret;
+  probs = get_from_pool(thread_id, tensor->dims_prod, "priority sample probs");
+  sampled = get_from_pool(thread_id, 1, "priority sample sampled");
+  probs_cpu = new float[1];
+
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(max_idx, 32);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  //TODO: optimize to use shared memory and suprass 32 threads.
+  cudaStream_t stream = ThreadsStream[thread_id];
+  
+  warped_to_probs_single_dim_pow<<<grid_size, block_size, 0, stream>>>(probs, tensor->tensor_ptr, alpha, max_idx);
+
+
+  sample_from_probs<<<1, 1, 0, stream>>>(probs, sampled, max_idx, seed);
+  
+
+  cudaStreamSynchronize(stream);
+  cudaMemcpy(probs_cpu, sampled, 1*sizeof(float), cudaMemcpyDeviceToHost);
+  ret = probs_cpu[0];
+  
+  delete[] probs_cpu;
+
+
+  move_to_pool(thread_id, tensor->dims_prod, probs, "priority sample");
+  move_to_pool(thread_id, 1, sampled, "priority sample");
+
+
+  return ret;
+}
+
+
+__global__ void is_w_kernel(float *is_w_ptr, const float *probs, const float *idx, float beta, float max_idx)
+{
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int lid = tid % warpSize;
+
+  if (lid>=max_idx)
+    return;
+
+  float eps = 1e-6;
+
+  float is_w = pow(1/(probs[(int)idx[0]]*max_idx + eps), beta);
+  float iter_is_w;
+
+
+
+  float max_is_w = -INFINITY;
+
+#pragma unroll
+  for (int i=lid; i<max_idx; i+=warpSize)
+  {
+
+    iter_is_w = pow(1/(probs[i]*max_idx + eps), beta);
+    max_is_w = fmaxf(iter_is_w, max_is_w);
+  }
+
+  
+  float warp_is_w;
+#pragma unroll
+  for (int other_warp=warpSize/2; other_warp > 0; other_warp>>=1)
+  {
+    __syncwarp();
+
+    warp_is_w = __shfl_down_sync(0xFFFFFFFF, max_is_w, other_warp);
+    max_is_w = fmaxf(max_is_w, warp_is_w);
+  }
+  max_is_w = __shfl_down_sync(0xFFFFFFFF, max_is_w, 0);
+
+
+  is_w_ptr[0] = is_w / max_is_w;
+}
+
+
+
+extern "C" float importance_sample_weight(int thread_id, Tensor *tensor, float max_idx, float alpha, float beta, float seed)
+{  
+  float *probs, *sampled, *is_w_cpu, *is_w;
+  float ret;
+  probs = get_from_pool(thread_id, tensor->dims_prod, "importance_sample_weight probs");
+  sampled = get_from_pool(thread_id, 1, "importance_sample_weight sampled");
+  is_w = get_from_pool(thread_id, 1, "importance_sample_weight is_w");
+  is_w_cpu = new float[1];
+
+
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(max_idx, 32);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  //TODO: optimize to use shared memory and suprass 32 threads.
+  cudaStream_t stream = ThreadsStream[thread_id];
+  warped_to_probs_single_dim_pow<<<grid_size, block_size, 0, stream>>>(probs, tensor->tensor_ptr, alpha, max_idx);
+
+
+  sample_from_probs<<<1, 1, 0, stream>>>(probs, sampled, max_idx, seed);
+
+  
+  is_w_kernel<<<grid_size, block_size, 0, stream>>>(is_w, probs, sampled, beta, max_idx);
+
+  cudaStreamSynchronize(stream);
+  cudaMemcpy(is_w_cpu, is_w, 1*sizeof(float), cudaMemcpyDeviceToHost);
+  ret = is_w_cpu[0];
+  delete[] is_w_cpu;
+
+  
+
+  move_to_pool(thread_id, tensor->dims_prod, probs, "importance_sample_weight");
+  move_to_pool(thread_id, 1, sampled, "importance_sample_weight");
+  move_to_pool(thread_id, 1, is_w, "importance_sample_weight");
+
+
+  return ret;
+}
+
+
 //TODO: mean over axis
 extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
 {
-  //std::cout << "SUM OF " << tensor.name << "\n";
+  std::cout << "MEAN OF " << tensor->name << "\n";
 
 
   float *tensor_ptr = tensor->tensor_ptr;
@@ -11790,7 +12324,7 @@ extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
   int new_dims_prod = DimsProd(new_dims);
 
   
-  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  summed = get_from_pool(thread_id, new_dims_prod, "mean");
   cudaMemset(summed, 0, new_dims_prod * sizeof(float));
 
   //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
@@ -11842,26 +12376,6 @@ __global__ void sum_single_dim_kernel(const float *tensor,
     }
 }
 
-__global__ void sum_over_last_dim_kernel(const float *tensor,
-                           float *summed,
-                           int dims_prod, int summed_dim_size) {
-
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    int C = summed_dim_size;
-    
-    if (i < dims_prod) {
-        int b = i / (C); // b updates only when v reaches it's maximum value
-        int v = i % C;
-        // i = b*C + v
-
-        float *summed_b = summed + b;
-
-        float ix = tensor[i];
-
-        atomicAdd(summed_b, ix);        
-    }
-}
 
 __global__ void sum_over_semilast_dim_kernel(const float *tensor,
                            float *summed,
@@ -11976,7 +12490,7 @@ extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...)
   int new_dims_prod = DimsProd(new_dims);
 
   
-  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  summed = get_from_pool(thread_id, new_dims_prod, "summed");
   cudaMemset(summed, 0, new_dims_prod * sizeof(float));
 
   //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
@@ -12098,7 +12612,7 @@ extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
     va_end(args);
     int dims_prod = DimsProd(dims);
 
-    cudaMalloc(&summed, dims_prod*sizeof(float));
+    summed = get_from_pool(thread_id, dims_prod, "prod all dims");
     cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream);
     
     float tensor_sum=0;
@@ -12156,7 +12670,8 @@ extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
   
   float *init_prod = new float[new_dims_prod];
   init_prod = make_ones_float(new_dims_prod);
-  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  
+  summed = get_from_pool(thread_id, new_dims_prod, "prod");
   cudaMemcpyAsync(summed, init_prod, new_dims_prod * sizeof(float), cudaMemcpyHostToDevice, stream);
   delete[] init_prod;
 
@@ -12248,18 +12763,18 @@ __global__ void max_over_semilast_dim_kernel(const float *tensor,
 }
 
 
-extern "C" void *tmax(int thread_id, Tensor tensor, float first_dim, ...) 
+extern "C" void *tmax(int thread_id, Tensor *tensor, float first_dim, ...) 
 { //TODO: automatic type detection for max and min (float vs tensor)
   
   //std::cout << "MAX OF " << tensor.name << "\n";
   
 
-  float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  float *tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
   float *summed;
 
   cudaStream_t stream = ThreadsStream[thread_id];
-
+  tensor->Sync();
 
   va_list args;
   va_start(args, first_dim);
@@ -12269,7 +12784,7 @@ extern "C" void *tmax(int thread_id, Tensor tensor, float first_dim, ...)
     va_end(args);
     int dims_prod = DimsProd(dims);
 
-    cudaMalloc(&summed, dims_prod*sizeof(float));
+    summed = get_from_pool(thread_id, dims_prod, "tmax all dims");
     cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream);
     
     float tensor_sum=0;
@@ -12325,7 +12840,7 @@ extern "C" void *tmax(int thread_id, Tensor tensor, float first_dim, ...)
   int new_dims_prod = DimsProd(new_dims);
 
   
-  cudaMalloc(&summed, new_dims_prod*sizeof(float));
+  summed = get_from_pool(thread_id, new_dims_prod, "tmax");
   cudaMemset(summed, 0, new_dims_prod * sizeof(float));
 
 
@@ -12347,7 +12862,7 @@ extern "C" void *tmax(int thread_id, Tensor tensor, float first_dim, ...)
 
 
   Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->op=max_op;
+  new_tensor->AttrLNode(tensor, max_op);
   return new_tensor;
 }
 
@@ -12483,8 +12998,11 @@ extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...)
   //  max_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor, maxed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
   vec_sub<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
 
-  if(thread_id==0)  
+  if(thread_id==0)
+  {
+    //std::cout << "maxed is " << new_dims_prod << "\n";
     move_to_pool(thread_id, new_dims_prod, maxed, "argmax maxed");
+  }
   else
     cudaFree(maxed);
   
@@ -12922,10 +13440,7 @@ void sigmoid_add2weights_backward(Tensor *root, float *dy)
 
   
   float *aux1, *aux2, *aux3, *aux4;
-  cudaMalloc(&aux1, xl->dims_prod*sizeof(float));
-  //cudaMalloc(&aux2, wl->dims_prod*sizeof(float));
-  cudaMalloc(&aux3, xr->dims_prod*sizeof(float));
-  //cudaMalloc(&aux4, wr->dims_prod*sizeof(float));
+  
   
   cudaMemset(aux1, 0, xl->dims_prod*sizeof(float));
   //cudaMemset(aux2, 0, wl->dims_prod*sizeof(float));
@@ -13418,7 +13933,9 @@ extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float
     block_size = grid_block_mem_sizes[1];
     
 
-    float *y = get_from_pool(thread_id, DimsProd(new_dims), "gather");
+    float *y = get_from_pool(thread_id, new_dims_prod, "gather");
+    //float *y;
+    
 
     tensor->Sync();
     cudaStream_t stream = ThreadsStream[thread_id];
@@ -13426,9 +13943,13 @@ extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float
 
 
 
+    
+
     Tensor *new_tensor = createTensor(y, new_dims, new_dims_prod, false, "");
-    idx_tensor->op = detach_op;
-    new_tensor->AttrNodes(tensor, idx_tensor, gather_last_dim_op);
+    //idx_tensor->op = detach_op;
+    new_tensor->AttrNodes(tensor, wrapTensorWithDetached(idx_tensor), gather_last_dim_op);
+    //new_tensor->AttrLNode(idx_tensor, gather_last_dim_op);
+    todo_backward_tensors.push_back(new_tensor);
     return new_tensor;
   }
 }
@@ -13717,7 +14238,8 @@ class Embedding
       //w_cpu = make_uniform(OC*C);
 
 
-      cudaMalloc(&W, OC*C*sizeof(float));
+      
+      W = get_from_pool(0, OC*C, "Embedding W");
       cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
 
       Tensor *tensor_W = createTensor(W, {(float)OC,(float)C}, OC*C, true, Name);
@@ -15676,8 +16198,10 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
         &workspace_size_w_back
   ));
 
-  void* d_workspace_w_back = nullptr;
-  cudaCheck(cudaMalloc(&d_workspace_w_back, workspace_size_w_back));
+  void *d_workspace_w_back = nullptr;
+
+  d_workspace_w_back = get_from_pool(0, workspace_size_w_back, "conv d_workspace_w_back");
+  //cudaCheck(cudaMalloc(&d_workspace_w_back, workspace_size_w_back));
   this->workspace_size_w_back = workspace_size_w_back;
   this->d_workspace_w_back = d_workspace_w_back;
 }
@@ -15721,6 +16245,7 @@ void Conv2d::InitFilters()
   float* d_filter = nullptr;
   const std::size_t filter_size = h_filter.size();
   cudaCheck(cudaMalloc(&d_filter, filter_size * sizeof(float)));
+
   cudaCheck(cudaMemcpy(d_filter, h_filter.data(), filter_size * sizeof(float), cudaMemcpyDefault));
   this->d_filter = d_filter;
   
@@ -16845,13 +17370,25 @@ __global__ void online_mse(float *out, const float *y_hat, const float *y_true, 
 }
 
 
-extern "C" void *mse_with_priorities(int thread_id, Tensor *y_hat, Tensor *y, float scale)
+extern "C" void *mse_with_priorities(int thread_id, Tensor *y_hat, Tensor *y, float scale, Tensor *is_w)
 {  
-  Tensor *loss_tensor = new Tensor();
+  Tensor *mse_tensor, *loss_tensor;
+  mse_tensor = new Tensor();
+  loss_tensor = new Tensor();
 
 
-  loss_tensor->AttrNodes(y_hat, y, mse_op);
-  loss_tensor->scalar = scale;
+
+  
+  mse_tensor->AttrNodes(y_hat, y, lgrad_op);
+  mse_tensor->scalar = scale;
+  mse_tensor->dims = y_hat->dims;
+  mse_tensor->dims_prod = y_hat->dims_prod;
+
+  loss_tensor->AttrNodes(mse_tensor, is_w, mse_is_w_op);
+  
+
+  //loss_tensor->AttrNodes(y_hat, y, mse_op);
+
 
 
   todo_backward_tensors.push_back(loss_tensor);
@@ -16870,15 +17407,47 @@ extern "C" void *mse_with_priorities(int thread_id, Tensor *y_hat, Tensor *y, fl
   block_size = grid_block_mem_sizes[1];
   
 
-  std::cout << "online mse with grid size " << grid_size << " and block size " << block_size << "\n";
   online_mse<<<grid_size, block_size, 0, main_stream->stream>>>(msed, y_hat->tensor_ptr, y->tensor_ptr, B, C);
-  std::cout << "return from online mse" << "\n";
 
   Tensor *new_tensor = createTensor(msed, {B}, B, false, "");
   new_tensor->AttrLNode(y_hat, detach_op);
   return new_tensor;
 }
 
+__global__ void mse_with_priorities_kernel(float *dy, const float* y_hat, const float* y, const float *is_w,
+                            const float scale, const float dims_prod) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (tid < dims_prod) {
+        dy[tid] = 2 * (y_hat[tid] - y[tid]) * scale * is_w[tid];
+    }
+}
+
+
+void MSEWithPrioritiesBackward(Tensor *loss_tensor,
+                 float *dloss)
+{
+  //std::cout << "MSEWithPriorities Backward" << "\n";
+
+  
+  Tensor *y_hat_tensor, *y_tensor, *is_w_tensor;
+  y_hat_tensor = loss_tensor->L_Node->L_Node;
+  y_tensor = loss_tensor->L_Node->R_Node;
+  is_w_tensor = loss_tensor->R_Node;
+  float scale = loss_tensor->L_Node->scalar;
+
+  int dims_prod = y_hat_tensor->dims_prod;
+
+  int grid_size, block_size, shared_mem_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size  = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+  //std::cout << "grid_size: " << grid_size << ", block_size: " << block_size << "\n";
+  mse_with_priorities_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, y_hat_tensor->tensor_ptr, y_tensor->tensor_ptr, is_w_tensor->tensor_ptr, scale, dims_prod);
+
+  //PrintTensorF(dloss, 1, dims_prod);
+}
 
 
 //
@@ -17138,7 +17707,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
           //std::cout << "weight of size " << w_size << "\n";
           if (NamedParamGrads[param_name]==nullptr)
           {
-            cudaCheck(cudaMalloc(&new_grad_ptr, w_size*sizeof(float)));
+            
+            new_grad_ptr = get_from_pool(0, w_size, "weight grad pointer");
             set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, w_size);
             NamedParamGrads[param_name] = new_grad_ptr;
           }
@@ -17155,7 +17725,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
             std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(w_size);
             grid_size_b = grid_block_mem_sizes[0];
             block_size_b = grid_block_mem_sizes[1];
-            cudaCheck(cudaMalloc(&new_grad_ptr, b_size*sizeof(float)));
+            
+            new_grad_ptr = get_from_pool(0, w_size, "bias grad pointer");
             set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, b_size);
             NamedParamGrads[bias_name] = new_grad_ptr;
           }
@@ -17173,8 +17744,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
             std::cout << "" << tensor_name<< "\n";
           }
           */
-            
-          device_dw = get_from_pool(0, w_size, "dw");
+          std::string from = "dw of " + std::to_string(op);
+          device_dw = get_from_pool(0, w_size, from);
           set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
         }
       }
@@ -17186,7 +17757,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
     std::string from = "dx of "+ std::to_string(op);
     
 
-    if(op!=add_op && op!=scalar_add_op && !from_custom) {
+    if(op!=add_op && op!=scalar_add_op && !from_custom && op!=lgrad_op && op!=broadcast_lastdim_add_op) {
       int grid_size, block_size; 
       std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(x_size);
       grid_size = grid_block_mem_sizes[0];
@@ -17270,6 +17841,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         gather_last_dim_backward(device_dx, device_dy, back_node);
         device_dw = device_dy;
         break;
+      case broadcast_lastdim_add_op:
+        device_dx = device_dy;
+        broadcast_lastdim_add_backward(device_dw, device_dy, w_size, x_size);
+        break;
       
       // Custom Ops
       case sigmoid_add2weights_op:
@@ -17291,6 +17866,13 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       case mse_op:
         MSEBackward(inp, w, back_node->L_Node->dims_prod, device_dx, back_node->scalar);
         break;
+      case mse_is_w_op:
+        MSEWithPrioritiesBackward(back_node, device_dx);
+        break;
+
+      case lgrad_op:
+        device_dx = device_dy;
+        break;
 
       default:
         std::string _error = "The operation "+std::to_string(op)+" does not yet have a backward implementation";
@@ -17308,7 +17890,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
   }
 
   
-  if (in_int(op, loss_ops))
+  if (in_int(op, loss_ops)||op==lgrad_op)
   {
     to_pool(back_node->R_Node->dims_prod, back_node->R_Node->tensor_ptr, "in loss_ops");
     delete back_node->R_Node;
@@ -21164,6 +21746,42 @@ static void InitializeModule() {
 
 
   // 
+  FunctionType *priority_sampleTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("priority_sample", priority_sampleTy);
+
+
+  // 
+  FunctionType *priority_sample_valTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("priority_sample_val", priority_sample_valTy);
+
+
+  // 
+  FunctionType *importance_sample_idxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("importance_sample_idx", importance_sample_idxTy);
+
+
+  // 
+  FunctionType *importance_sample_weightTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("importance_sample_weight", importance_sample_weightTy);
+
+
+  // 
   FunctionType *self_attnTy = FunctionType::get(
       int8PtrTy,
       {Type::getInt32Ty(*TheContext), int8PtrTy},
@@ -21503,7 +22121,7 @@ static void InitializeModule() {
   //
   FunctionType *mse_with_prioritiesTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
   TheModule->getOrInsertFunction("mse_with_priorities", mse_with_prioritiesTy);
@@ -22842,12 +23460,13 @@ int main() {
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
-  loss_ops = {cross_entropy_op, mse_op};
+  loss_ops = {cross_entropy_op, mse_op, mse_is_w_op};
 
   custom_ops = {sigmoid_add2weights_op};
 
   tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
-  weightless_ops = {add_op, dropout_op};
+
+  weightless_ops = {add_op, lgrad_op, dropout_op};
   weightless_ops = concat_int_vec(weightless_ops, tensor_scalar_ops);
 
   preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op, jitter_op};
@@ -22928,7 +23547,8 @@ int main() {
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
                       "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",
                       "print_tensor", "path_exists", "dir_exists", "load_bin_idx",
-                      "network_ema", "mse"};
+                      "network_ema", "mse", "priority_sample", "priority_sample_val",
+                      "importance_sample_idx", "importance_sample_weight"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_functions = concat_str_vec(native_functions, return_string_fn);
   native_fn = concat_str_vec(native_methods, native_functions);
@@ -22936,7 +23556,7 @@ int main() {
 
   native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward", "ReluForward", "LSTMForward", "EmbeddingForward"};
 
-  threaded_tensor_functions = {"log2", "network_ema"};
+  threaded_tensor_functions = {"log2", "network_ema", "priority_sample", "priority_sample_val", "importance_sample_idx", "importance_sample_weight"};
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, native_modules);
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_functions);
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_methods);
