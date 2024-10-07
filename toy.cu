@@ -7112,6 +7112,61 @@ float *get_from_pool(int thread_id, float dims_prod, std::string from)
 
 
 
+void move_to_pool_pow2(int thread_id, float dims_prod, float *tensor_ptr, std::string from)
+{
+  
+  if (dims_prod==0)
+    return;
+
+  float nearest_ceil_pow2 = 1;
+  while(nearest_ceil_pow2<dims_prod)
+    nearest_ceil_pow2*=2;
+  dims_prod = nearest_ceil_pow2;
+
+  std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
+
+  if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
+    TensorPool[thread_id][dims_prod].push_back(tensor_ptr);
+  
+}
+
+float *get_from_pool_pow2(int thread_id, float dims_prod, std::string from)
+{
+  if (dims_prod==0)
+    return nullptr;
+
+  float nearest_ceil_pow2 = 1;
+  while(nearest_ceil_pow2<dims_prod)
+    nearest_ceil_pow2*=2;
+  dims_prod = nearest_ceil_pow2;
+
+  float *tensor_ptr;
+
+  if(TensorPool[thread_id].count(dims_prod)>0)
+  {
+    std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
+    if (tensors_in_pool.size()>0)
+    {
+      tensor_ptr = tensors_in_pool.back();
+      TensorPool[thread_id][dims_prod].pop_back();
+      return tensor_ptr;
+    }
+  }
+
+
+  std::cout << "Malloc new space from " << from << " of size: " << dims_prod << ", at thread: " << thread_id << " with the nearest pow of 2\n";
+
+  cudaCheck(cudaMalloc(&tensor_ptr, dims_prod*sizeof(float)));
+  return tensor_ptr;
+}
+
+
+
+
+
+
+
+
 
 
 extern "C" void *LoadTensor(char *tensor_name){
@@ -7146,8 +7201,8 @@ extern "C" float print(char* str, float x){
 }
 
 
-extern "C" float PrintTensor(char* tensorName){
-  std::cout << "Printing Tensor " << tensorName << "\n";
+extern "C" float PrintTensor(int thread_id, char* tensorName){
+  std::cout << "Printing Tensor " << tensorName << " at stream " << thread_id << "\n";
 
 
 
@@ -7159,7 +7214,9 @@ extern "C" float PrintTensor(char* tensorName){
   std::vector<float> dims = tensor->dims;
   
   
+  cudaStream_t stream = ThreadsStream[thread_id];
   tensor->Sync();
+  cudaStreamSynchronize(stream);
   cudaDeviceSynchronize();
   cudaCheck(cudaMemcpy(tensor_cpu, tensor->tensor_ptr, arr_size*sizeof(float), cudaMemcpyDeviceToHost));
 
@@ -7216,7 +7273,7 @@ extern "C" float PrintTensor(char* tensorName){
 
     for (int e = 0; e < ends.size(); e++)
       if (fmod((i+1),(int)ends[e]) == 0.0f)
-        std::cout << "]";
+        std::cout << "],";
     
 
     if (i!=(arr_size-1))
@@ -7228,7 +7285,7 @@ extern "C" float PrintTensor(char* tensorName){
         std::cout << "\n";
       }
       else
-        std::cout << "  ";
+        std::cout << ",  ";
     }
 
     if(fmod(i+1, ends[1]) == 0.0f)
@@ -7252,7 +7309,7 @@ extern "C" float print_tensor(Tensor tensor){
   char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
   std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
 
-  PrintTensor(tensorName);
+  PrintTensor(0, tensorName);
 
   delete[] tensorName;
   return 0;
@@ -9150,10 +9207,10 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   
 
     if (!seen_var_attr)
-      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {thread_id, var_name});
     
     
-    //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+    //Builder->CreateCall(TheModule->getFunction("PrintTensor"), {thread_id, var_name});
 
     return Builder->CreateCall(TheModule->getFunction("LoadTensor"), {var_name});
   } else if (type=="tensor") {
@@ -9162,7 +9219,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
     if (!seen_var_attr)
     {
-      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {var_name});
+      Builder->CreateCall(TheModule->getFunction("PrintTensor"), {thread_id, var_name});
       return ConstantFP::get(*TheContext, APFloat(0.0f));
     }
     
@@ -9816,7 +9873,7 @@ extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int 
     tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
     tgt_tensor->scopeless_name = scopeless_name;
     
-  } else { // Copy incoming tensor to preserve it
+  } else { // Copy incoming tensor
   
   
     if(tensor->op==tensor_leaf||tensor->op==create_tensor_op||nn_mode==eval_mode||thread_id!=0)
@@ -10603,128 +10660,6 @@ extern "C" float randint(float b, float f)
 
 
 
-__global__ void mult_kernel2(const float *x, const float *w,
-                      float *out, const int tile_offset, const int B, const int C, const int OC) {
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-
-  int tid = ty*blockDim.x + tx;
-  int warpId = tid / 32; // warp index within a block //starred
-  int laneId = tid % 32; // thread index within a warp
-
-  
-  const int tile_size = 27;
-
-  int row = y_block*tile_size + ty;
-  int col = x_block*tile_size + tx;
-
-  int warpsPerBlock = (tile_size*tile_size) / 32;
-
-  int offset = tile_offset;
-
-  float y = 0.0f;
-
-
-  extern __shared__ float smem[];
-
-
-  float x_ij, w_ij;
-  
-  //Type 1
-/*
-#pragma unroll
-  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
-  {
-    // each tile has a subset of columns to work with
-    // tile_tid tells which exact column to use from the subset
-    // assume w is transposed already
-
-    int _col  = i * tile_size + tx;
-    int _col2 = i * tile_size + ty;
-    
-    if(row<B && _col<C)
-      x_ij = x[row*C + _col];
-    else
-      x_ij = 0;
-    
-    if (col<OC && _col2<C)
-      w_ij = w[col*C + _col2];
-    else
-      w_ij = 0;
-    
-    __syncthreads();
-
-#pragma unroll
-    for(int j=0; j<tile_size; ++j)
-    {
-      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
-    }
-    
-    __syncthreads();
-    
-  }
-
-  if(row<B && col<OC)
-    out[row*OC+col] = y;
-*/
-
-
-
-  float tmp=0.0f;
-  float all_res=0.0f;
-  float res, ret;
-  // consider row as C and col as OC
-    
-  for (int i=0; i<ceilf(C/(float)(tile_size*tile_size)); ++i)
-  {
-    if (((i*warpsPerBlock+warpId)*32+laneId)<C)
-    {
-      x_ij = w[row*C + (i*warpsPerBlock+warpId)*32+laneId]; 
-      w_ij = w[col*C + (i*warpsPerBlock+warpId)*32+laneId];
-    } else {
-      x_ij=0;
-      w_ij=0;
-    }
-    res = x_ij*w_ij;
-    //ret = warpReduceMultSum(res); ///
-    if (laneId==0)
-      tmp+=ret;
-    
-    __syncthreads();
-  }
-    
-  //if(laneId==0)
-  if(row<B && col<OC &&laneId==0)
-    out[row*OC+col] = tmp;
-
-
-
-
-  // Type 3
-  /*
-  float tmp=0.0f;
-  // consider row as C and col as OC
-  if (row<B&&col<OC)
-  {
-    
-    for (int i=0; i<C; ++i)
-    {
-      tmp += x[row*C + i] * w[col*C + i];
-    }
-    out[row * OC + col] = tmp;
-  }
-  */
-  
-  
-
-}
-
-
-
-
-
 
 
 
@@ -10936,87 +10871,7 @@ __global__ void mult_backwarddw(const float *x,
 
   if(col<C && row<OC)
     dw[row*C + col] = tmp;
-
-  
-
-  
-  // backward type 2
-  
-  /*
-  // consider row as C and col as OC
-  if(col<OC && row<C)
-  {
-#pragma unroll
-    for (int i=0; i<B; ++i)
-      tmp += dy[i * OC + col] * x[i * C + row];
-    dw[col * C + row] += tmp;
-  }
-  */
 }
-
-
-
-
-__global__ void mult_kernel(const float *x, const float *w,
-                      float *out, const int tile_size, const int tile_offset, const int B, const int C, const int OC) {
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-
-  
-
-  int row = y_block*tile_size + ty;
-  int col = x_block*tile_size + tx;
-
-
-
-  int offset = tile_offset;
-
-  float y = 0.0f;
-
-
-  extern __shared__ float smem[];
-
-  //wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, half> C_frag;
-
-  
-#pragma unroll
-  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
-  {
-    // each tile has a subset of columns to work with
-    // tile_tid tells which exact column to use from the subset
-    // assume w is transposed already
-
-    int _col  = i * tile_size + tx;
-    int _col2 = i * tile_size + ty;
-    
-    if(row<B && _col<C)
-      smem[tx* tile_size +ty] = x[row*C + _col];
-    else
-      smem[tx* tile_size +ty] = 0;
-    
-    if (col<OC && _col2<C)
-      smem[offset+ty* tile_size +tx] = w[col*C + _col2];
-    else
-      smem[offset+ty* tile_size +tx] = 0;
-    
-    __syncthreads();
-
-#pragma unroll
-    for(int j=0; j<tile_size; ++j)
-      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
-    
-    __syncthreads();
-    
-  }
-
-  if(row<B && col<OC)
-    out[row*OC+col] = y;
-}
-
-
-
 
 
 
@@ -11027,12 +10882,6 @@ void matmul_backward(float *inp,  float *weight,
                      float *dinp, float *dw,
                      float *dout)
 {
-  //std::cout << "\nmatmul_backward. B: " << B << " C: " << C << " OC: " << OC << "\n";
-
-
-
-  
-  
   
   // backward to input
   float one = 1.0f, zero = 0.0f;
@@ -11049,10 +10898,6 @@ void matmul_backward(float *inp,  float *weight,
                              dw, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
   
   
-  
-
-
-
   
   
   /*
@@ -11134,34 +10979,91 @@ void matmul_backward(float *inp,  float *weight,
   gemm_operator_dw(main_stream->stream);
   gemm_operator_dw(args_dw);
   */
-  
-  
-  
-
-
-  //PrintTensorF(dw,7,7);
-
 }
 
 
-void matmul_forward2(float* out,
+__global__ void mult_kernel(const float *x, const float *w,
+                      float *out, const int tile_size, const int tile_offset, const int B, const int C, const int OC) {
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  
+
+  int row = y_block*tile_size + ty; // B
+  int col = x_block*tile_size + tx; // OC
+
+
+
+  int offset = tile_offset;
+
+  float y = 0.0f;
+
+
+  extern __shared__ float smem[];
+
+
+  
+#pragma unroll
+  for (int i=0; i < ceilf(C/(float)tile_size); ++i)
+  {
+    // each tile has a subset of columns to work with
+    // tile_tid tells which exact column to use from the subset
+    // assume w is transposed already
+
+    int _col  = i * tile_size + tx;
+    int _col2 = i * tile_size + ty;
+    
+    if(row<B && _col<C)
+      smem[tx* tile_size +ty] = x[row*C + _col];
+    else
+      smem[tx* tile_size +ty] = 0;
+    
+    if (col<OC && _col2<C)
+      smem[offset+ty* tile_size +tx] = w[col*C + _col2];
+    else
+      smem[offset+ty* tile_size +tx] = 0;
+    
+    __syncthreads();
+
+#pragma unroll
+    for(int j=0; j<tile_size; ++j)
+      y += smem[j* tile_size +ty] * smem[offset+j* tile_size +tx];
+    
+    __syncthreads();
+    
+  }
+
+  if(row<B && col<OC)
+    out[row*OC+col] = y;
+}
+
+
+
+
+void matmul_forward(float* out,
                      float* inp, float* weight,
                      int B, int C, int OC, int thread_id) {
-    
-    
-    
+        
   const float alpha = 1.0f;
   const float beta = 0.0f;
   
 
-
-  //std::cout << "matmul_forward. B: " << B << " C: " << C << " OC: " << OC << "\n";
-  
+  //std::cout << "matmul forward. B: " << B << " C: " << C << " OC: " << OC << "\n";
 
 
   if (thread_id==0)
   {
-    cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp, C, &beta, out, OC));
+    //cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp, C, &beta, out, OC));
+    
+    cudaStream_t stream = ThreadsStream[thread_id];
+
+    dim3 block_size(TILE_SIZE, TILE_SIZE);
+    dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
+    int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+
+    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, weight, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
   }
   else
   {
@@ -11176,11 +11078,6 @@ void matmul_forward2(float* out,
   
   
   
-  
-  
-  
-  
-
 
   /*
   using ColumnMajor = cutlass::layout::ColumnMajor;
@@ -11192,7 +11089,6 @@ void matmul_forward2(float* out,
                                                   ColumnMajor,
                                                   float,
                                                   RowMajor>;
-
   CutlassGemm gemm_operator;
 
   CutlassGemm::Arguments args({B, OC, C},
@@ -11205,8 +11101,6 @@ void matmul_forward2(float* out,
   gemm_operator(main_stream->stream);
   gemm_operator(args);
   */
-  
-
     
   /* //bias
   if (bias != NULL) {
@@ -11218,11 +11112,13 @@ void matmul_forward2(float* out,
 }
 
 
+
+
+
+
 extern "C" Tensor *CudaMult(int is_forward_func,
                           Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
 
-
-  
   std::vector<float> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
@@ -11232,7 +11128,7 @@ extern "C" Tensor *CudaMult(int is_forward_func,
 
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
   int input_dims_prod = DimsProd(linear_layer_dims);
-  //int resultingDimsProd = (int)linear_layer_dims[0]*Rdims[0];
+  
   int resultingDimsProd = resultingDimsProdOnMult(linear_layer_dims, Rdims);
 
 
@@ -11250,7 +11146,7 @@ extern "C" Tensor *CudaMult(int is_forward_func,
   tensor_x->Sync();
   tensor_w->Sync();
 
-  matmul_forward2(device_y, device_x, device_w,
+  matmul_forward(device_y, device_x, device_w,
                   linear_layer_dims[0], linear_layer_dims[1],
                   Rdims[0], thread_id);
 
@@ -11262,6 +11158,227 @@ extern "C" Tensor *CudaMult(int is_forward_func,
   new_tensor->AttrNodes(tensor_x, tensor_w, mult_op);
   return new_tensor;
 }
+
+
+
+
+__global__ void btc_mult_kernel(float *out, const float *x, const float *w, const int B, const int Tx, const int Tw, const int C, const int tile_size, const int tile_offset)
+{
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // [B, T]
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // [T]
+
+
+  //int b = row / Tx;
+  //int t = row % Tx;
+  int t = row;
+
+
+  extern __shared__ float smem_x[];
+  float *smem_w = smem_x + tile_offset;
+
+
+
+  for (int b=0; b<B; ++b)
+  {
+    float y=0;
+
+    for (int i=0; i < ceilf(C/(float)tile_size); ++i)
+    {
+      int _col1 = i*tile_size + tx;
+      int _col2 = i*tile_size + ty;
+
+      if (b<B && t<Tx && _col1<C)
+        smem_x[tx*tile_size + ty] = x[(b*Tx + t)*C + _col1];
+      else
+        smem_x[tx*tile_size + ty] = 0;
+
+
+      if (b<B && col<Tw && _col2<C)
+        smem_w[ty*tile_size + tx] = w[(b*Tx + col)*C + _col2];
+      else
+        smem_w[ty*tile_size + tx] = 0;
+
+      __syncthreads();
+
+      for(int j=0; j<tile_size; ++j)
+        y += smem_x[j* tile_size + ty] * smem_w[j* tile_size + tx];
+      
+      __syncthreads();
+    }
+
+
+    // [B, T, T]
+    if(b<B && t<Tx && col<Tw)
+      out[(b*Tx + t)*Tw + col] = y;
+  }
+}
+
+
+
+extern "C" Tensor *btc_mult(int thread_id, Tensor *x, Tensor*w)
+{
+
+  std::vector<float> Ldims, Rdims, new_dims;
+  Ldims = x->dims;
+  Rdims = w->dims;
+  float *device_x = x->tensor_ptr;
+  float *device_w = w->tensor_ptr;
+
+  
+
+  int B, Tx, C, Tw;
+
+  B  = Ldims[0];
+  Tx = Ldims[1];
+  C  = Ldims[2];
+
+  Tw = Rdims[1];
+
+
+  new_dims = {(float)B, (float)Tx, (float)Tw};
+  int new_dims_prod = DimsProd(new_dims);
+
+
+  float* device_y = get_from_pool(thread_id, new_dims_prod, "btc mult");
+
+  x->Sync();
+  w->Sync();
+
+
+
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(std::ceil(Tw/(float)TILE_SIZE), std::ceil((Tx)/(float)TILE_SIZE));
+  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+
+
+  
+  btc_mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(device_y, device_x, device_w, B, Tx, Tw, C, TILE_SIZE, TILE_SIZE_SQ);
+  //mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(device_x, device_w, device_y, TILE_SIZE, TILE_SIZE*TILE_SIZE, Tw, Tx, C);
+  
+
+  Tensor *new_tensor = createTensor(device_y, new_dims, new_dims_prod, false, "");
+  new_tensor->AttrNodes(x, w, mult_op);
+  return new_tensor;
+}
+
+
+
+
+
+
+__global__ void btc_mult_kernelT(float *out, const float *x, const float *w, const int B, const int Tx, const int Tw, const int C, const int tile_size, const int tile_offset)
+{
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // [Tx]
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // [C]
+
+
+
+  //int b = row / Tx;
+  //int t = row % Tx;
+
+
+  extern __shared__ float smem_x[];
+  float *smem_w = smem_x + tile_offset;
+
+
+
+
+  
+  // [B, Tx, Tw], consider T as Tw, row as Tx
+
+  for (int b=0; b<B; ++b)
+  {
+    float y=0;
+    __syncthreads();
+
+    for (int i=0; i < ceilf(Tw/(float)tile_size); ++i)
+    {
+      int _col1 = i*tile_size + tx;
+      int _col2 = i*tile_size + ty;
+
+      if (b<B && row<Tx && _col1<Tw)
+        smem_x[tx*tile_size + ty] = x[b*Tx*Tw + row*Tw + _col1];
+      else
+        smem_x[tx*tile_size + ty] = 0;
+
+
+      if (b<B && _col2<Tw && col<C)
+        smem_w[ty*tile_size + tx] = w[b*Tw*C + _col2*C + col];
+      else
+        smem_w[ty*tile_size + tx] = 0;
+
+      __syncthreads();
+
+      for(int j=0; j<tile_size; ++j)
+        y += smem_x[j*tile_size + ty] * smem_w[j*tile_size + tx];
+      
+      __syncthreads();
+    }
+
+
+    // [B, Tx, C]
+    if (b<B && row<Tx && col<C)
+      out[b*Tx*C + row*C + col] = y;
+      
+  }
+}
+
+
+
+extern "C" Tensor *btc_multT(int thread_id, Tensor *x, Tensor*w)
+{
+
+
+  std::vector<float> Ldims, Rdims, new_dims;
+  Ldims = x->dims;
+  Rdims = w->dims;
+  float *device_x = x->tensor_ptr;
+  float *device_w = w->tensor_ptr;
+
+  
+
+  int B, Tx, Tw, C;
+
+  B  = Ldims[0];
+  Tx = Ldims[1];
+  Tw = Ldims[2];
+
+  C  = Rdims[2];
+
+
+  new_dims = {(float)B, (float)Tx, (float)C};
+  int new_dims_prod = DimsProd(new_dims);
+
+
+  float* device_y = get_from_pool(thread_id, new_dims_prod, "cuda mult");
+
+
+
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(std::ceil(C/(float)TILE_SIZE), std::ceil(Tx/(float)TILE_SIZE));
+  int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  
+  btc_mult_kernelT<<<grid_size, block_size, shared_mem_size, stream>>>(device_y, device_x, device_w, B, Tx, Tw, C, TILE_SIZE, TILE_SIZE_SQ);
+
+
+  Tensor *new_tensor = createTensor(device_y, new_dims, new_dims_prod, false, "");
+  new_tensor->AttrNodes(x, w, mult_op);
+  return new_tensor;
+}
+
+
 
 
 
@@ -11837,7 +11954,7 @@ extern "C" float printtt(int thread_id, Tensor tensor)
   char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
   std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
 
-  PrintTensor(tensorName);
+  PrintTensor(thread_id, tensorName);
 
   delete[] tensorName;
   return 0;
@@ -12178,13 +12295,14 @@ __global__ void is_w_kernel(float *is_w_ptr, const float *probs, const float *id
   
   float warp_is_w;
 #pragma unroll
-  for (int other_warp=warpSize/2; other_warp > 0; other_warp>>=1)
+  for (int mask=warpSize/2; mask > 0; mask>>=1)
   {
     __syncwarp();
 
-    warp_is_w = __shfl_down_sync(0xFFFFFFFF, max_is_w, other_warp);
+    warp_is_w = __shfl_down_sync(0xFFFFFFFF, max_is_w, mask);
     max_is_w = fmaxf(max_is_w, warp_is_w);
   }
+  __syncwarp();
   max_is_w = __shfl_down_sync(0xFFFFFFFF, max_is_w, 0);
 
 
@@ -13842,7 +13960,7 @@ extern "C" void *softmax(int thread_id, Tensor *tensor)
 
 
 
-  Tensor *new_tensor = createTensor(probs, dims, tensor->dims_prod, false, "");
+  Tensor *new_tensor = createTensor(probs, tensor->dims, tensor->dims_prod, false, "");
   new_tensor->op=softmax_op;
   return new_tensor;
 }
@@ -14102,7 +14220,7 @@ class Conv2d
     cudnnConvolutionBwdDataAlgo_t y_bwd_algo;
 
     std::size_t workspace_size, workspace_size_w_back, workspace_size_y_back;
-    void *d_workspace, *d_workspace_w_back, *d_workspace_y_back;
+    float *d_workspace, *d_workspace_w_back, *d_workspace_y_back;
 
 
     float* d_filter=nullptr;
@@ -14117,6 +14235,12 @@ class Conv2d
         : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Name(Name) {
       NamedTensorsT[Name] = new Tensor();
       d_filter=nullptr;
+      d_workspace=nullptr;
+      d_workspace_w_back=nullptr;
+      d_workspace_y_back=nullptr;
+      workspace_size=0;
+      workspace_size_w_back=0;
+      workspace_size_y_back=0;
     }
 
   
@@ -16117,7 +16241,9 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
   this->fwd_algo = perf_results.front().algo;
 
 
-  std::size_t workspace_size = 0;
+  
+  if (d_workspace!=nullptr)
+    move_to_pool_pow2(0, workspace_size, d_workspace, "d workspace");
   checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(
         cudnn,
         input_desc,
@@ -16127,11 +16253,9 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
         fwd_algo,
         &workspace_size
   ));
-
-  void* d_workspace = nullptr;
-  cudaCheck(cudaMalloc(&d_workspace, workspace_size));
-  this->workspace_size = workspace_size;
-  this->d_workspace = d_workspace;
+  d_workspace = get_from_pool_pow2(0, workspace_size, "d workspace");
+  
+  
 
 
 
@@ -16152,7 +16276,9 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
 
   y_bwd_algo = perf_results_back_y.front().algo;
 
-  std::size_t workspace_size_y_back = 0;
+  
+  if(d_workspace_y_back!=nullptr)
+    move_to_pool_pow2(0, workspace_size_y_back, d_workspace_y_back, "d workspace y back");
   checkCUDNN(cudnnGetConvolutionBackwardDataWorkspaceSize(
         cudnn,
         filter_desc,
@@ -16163,10 +16289,8 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
         &workspace_size_y_back
   ));
 
-  void* d_workspace_y_back = nullptr;
-  cudaCheck(cudaMalloc(&d_workspace_y_back, workspace_size_y_back));
-  this->workspace_size_y_back = workspace_size_y_back;
-  this->d_workspace_y_back = d_workspace_y_back;
+  d_workspace_y_back = get_from_pool_pow2(0, workspace_size_y_back, "d workspace y back");
+  
 
 
 
@@ -16187,7 +16311,10 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
 
   w_bwd_algo = perf_results_back_w.front().algo;
 
-  std::size_t workspace_size_w_back = 0;
+  
+  
+  if (d_workspace_w_back!=nullptr)
+    move_to_pool_pow2(0, workspace_size_w_back, d_workspace_w_back, "conv d workspace w back");
   checkCUDNN(cudnnGetConvolutionBackwardFilterWorkspaceSize(
         cudnn,
         input_desc,
@@ -16197,13 +16324,9 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
         w_bwd_algo,
         &workspace_size_w_back
   ));
-
-  void *d_workspace_w_back = nullptr;
-
-  d_workspace_w_back = get_from_pool(0, workspace_size_w_back, "conv d_workspace_w_back");
-  //cudaCheck(cudaMalloc(&d_workspace_w_back, workspace_size_w_back));
-  this->workspace_size_w_back = workspace_size_w_back;
-  this->d_workspace_w_back = d_workspace_w_back;
+  d_workspace_w_back = get_from_pool_pow2(0, workspace_size_w_back, "conv d workspace w back");
+  
+  
 }
 
 
@@ -19977,7 +20100,10 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
     _name = _name + tensor_name;
     tensor_ptr = get_from_pool(thread_id, product, _name);
     //std::cout << "cpy of: " << tensor_name << "\n";
-    cudaCheck(cudaMemcpy(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice));
+
+    cudaStream_t stream = ThreadsStream[thread_id];
+    cudaCheck(cudaMemcpyAsync(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice, stream));
+    //cudaStreamSynchronize(stream);
     delete[] tensor_cpu;
   }
 
@@ -21737,6 +21863,24 @@ static void InitializeModule() {
 
 
   // 
+  FunctionType *btc_multTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("btc_mult", btc_multTy);
+
+
+  // 
+  FunctionType *btc_multTTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("btc_multT", btc_multTTy);
+
+
+  // 
   FunctionType *softmaxTy = FunctionType::get(
       int8PtrTy,
       {Type::getInt32Ty(*TheContext), int8PtrTy},
@@ -23192,7 +23336,7 @@ FunctionType *unbugTy = FunctionType::get(
   //
   FunctionType *printTTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy},
+      {Type::getInt32Ty(*TheContext), int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("PrintTensor", printTTy);
@@ -23511,7 +23655,9 @@ int main() {
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights",
-                             "rl_discounted_return", "self_attn", "Jitter", "mse_with_priorities"};
+                             "rl_discounted_return", "self_attn", "Jitter", "mse_with_priorities",
+                             "btc_mult", "btc_multT"};
+
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
                             "save_img", "gpu", "gpuw", "save_as_int", "save_as_bin", "gather"};
