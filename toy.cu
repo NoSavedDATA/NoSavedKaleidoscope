@@ -560,6 +560,7 @@ enum Token {
   tok_batchnorm2d = -43,
   tok_lstm = -47,
   tok_embedding = -48,
+  tok_mhsa = -51,
   tok_bn2drelu = -45,
   tok_relu = -46,
   tok_vec = -37,
@@ -652,6 +653,7 @@ enum BackwardTypes {
   lgrad_op = 49,
   broadcast_lastdim_add_op = 50,
   idx_with_tensor_op = 51,
+  mhsa_op = 52,
 };
 
 int nn_mode=training_mode;
@@ -719,6 +721,7 @@ std::map<int, std::string> token_to_string = {
   { tok_global, "global"},
   { tok_no_grad, "no_grad"},
 
+  { tok_mhsa, "MHSA"},
   
 
   { 10, "tok space"},
@@ -925,6 +928,11 @@ static int get_token() {
       {
         LastChar = getchar();
         return tok_lstm;
+      }
+      if (IdentifierStr == "MHSA")
+      {
+        LastChar = getchar();
+        return tok_mhsa;
       }
       if (IdentifierStr == "Embedding")
       {
@@ -1543,6 +1551,26 @@ class EmbeddingExprAST : public VarExprAST {
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
 };
+
+
+
+class MHSAExprAST : public VarExprAST {
+  public:
+    std::unique_ptr<ExprAST> nh, C, T;
+    std::string TensorInit;
+
+    MHSAExprAST(
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::unique_ptr<ExprAST> nh, std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> T,
+      const std::string &TensorInit)
+      : VarExprAST(std::move(VarNames), std::move(Type)),
+                   nh(std::move(nh)), C(std::move(C)), T(std::move(T)),
+                   TensorInit(TensorInit) {}
+
+  Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+};
+
 
 
 class ReluExprAST : public VarExprAST {
@@ -5412,6 +5440,120 @@ static std::unique_ptr<ExprAST> ParseEmbeddingExpr() {
 
 
 
+
+
+static std::unique_ptr<ExprAST> ParseMHSAExpr() {
+  
+  getNextToken(); // eat the MHSA.
+  
+  if (CurTok != '[')
+    return LogError("MHSA declaration expected [");
+    getNextToken();
+
+  std::vector<std::unique_ptr<ExprAST>> dims;
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::string init = "init_gpt";
+  //std::make_unique<NumberExprAST>(NumVal)
+  
+  while (true) {
+    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      return LogError("Expected tensor dimension number.");
+    
+    if (CurTok==tok_number)
+    {
+      if (std::fmod(NumVal, 1.0) != 0)
+        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
+    
+      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      getNextToken();
+    } else if (CurTok==tok_identifier)
+      if (in_str(IdentifierStr, tensor_inits))
+      {
+        init = IdentifierStr;
+        getNextToken();
+      } else
+        dims.push_back(std::move(ParseIdentifierExpr()));
+    else {
+      dims.push_back(std::move(ParseSelfExpr()));
+    }
+
+    
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+  }
+
+  
+
+  if (CurTok != ']')
+    return LogError("Expected ].");
+    getNextToken();
+
+  if (dims.size()!=3)
+    return LogError("MHSA requires input vocabulary size and output hiddens count.");
+
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true;
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected MHSA identifier name.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+    functionVars[Name] = "MHSAForward";
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Expected one or more identifiers after MHSA.");
+  }
+
+
+
+  auto aux = std::make_unique<MHSAExprAST>(std::move(VarNames), "mhsa",
+                                             std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
+                                             init);
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
+
+
+
+
+
+
 //
 static std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
   std::string type;
@@ -6031,6 +6173,8 @@ static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name="") {
     return ParseLSTMExpr();
   case tok_embedding:
     return ParseEmbeddingExpr();
+  case tok_mhsa:
+    return ParseMHSAExpr();
   case tok_maxpool2d:
     return ParseMaxPool2dExpr();
   case tok_avgpool2d:
@@ -7842,6 +7986,8 @@ __inline__ __device__ float cuda_clip(float val, float min_val, float max_val) {
 }
 
 
+
+
 __global__ void set_to_zero_kernel(float *y, int dims_prod) {
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -7854,6 +8000,14 @@ __global__ void set_to_one_kernel(float *y, int dims_prod) {
     if (i < dims_prod)
         y[i] = 0;
 }
+
+__global__ void set_to_minus_inf_kernel(float *y, int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < dims_prod)
+        y[i] = -INFINITY;
+}
+
 __global__ void copy_tensor_kernel(float *y, const float *x, int dims_prod) {
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -11008,18 +11162,17 @@ __global__ void mult_kernel(const float *x, const float *w,
 #pragma unroll
   for (int i=0; i < ceilf(C/(float)tile_size); ++i)
   {
-    // each tile has a subset of columns to work with
-    // tile_tid tells which exact column to use from the subset
-    // assume w is transposed already
 
     int _col  = i * tile_size + tx;
     int _col2 = i * tile_size + ty;
     
+
     if(row<B && _col<C)
       smem[tx* tile_size +ty] = x[row*C + _col];
     else
       smem[tx* tile_size +ty] = 0;
     
+
     if (col<OC && _col2<C)
       smem[offset+ty* tile_size +tx] = w[col*C + _col2];
     else
@@ -14446,14 +14599,537 @@ class LSTM
 };
 
 
+
+
+class MHSA
+{
+  public:
+    
+    int B, maxT, nh, C, d;
+    std::string Init, Name;
+    float *W, *dW, *l, *m;
+
+    MHSA(int nh, int C, int maxT, std::string Init, std::string Name)
+        : nh(nh), C(C), maxT(maxT), Init(Init), Name(Name) {
+      B = 0;
+
+
+      float *w_cpu;
+
+      l = get_from_pool(0, maxT, "mhsa l");
+      m = get_from_pool(0, maxT, "mhsa m");
+
+      d = C/nh;
+
+      
+      /*
+      w_cpu = make_xavier_uniform_float(OC*C, OC,  C);
+      //w_cpu = make_normal(OC*C);
+      //w_cpu = make_uniform(OC*C);
+
+
+      
+      W = get_from_pool(0, OC*C, "Embedding W");
+      cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
+
+      Tensor *tensor_W = createTensor(W, {(float)OC,(float)C}, OC*C, true, Name);
+      
+
+
+      dW = get_from_pool(0, OC*C, "embedding dW");
+      set_to_zero_kernel<<<std::ceil(OC*C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+
+      NamedTensorsT[Name] = tensor_W;
+      NamedParamGrads[Name] = dW;
+
+      delete[] w_cpu;
+      */
+    }
+  
+  float *Forward(Tensor *, Tensor *, Tensor *, int, int, int);
+  void Backward(float *, float *);
+};
+
+
+
 //global
 static std::map<std::string, std::unique_ptr<BN2dRelu>> NamedBN2dRelu;
 static std::map<std::string, std::unique_ptr<Relu>> NamedRelu;
 static std::map<std::string, std::unique_ptr<MaxPool2d>> NamedMaxPool2d;
 static std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
 static std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
-static std::map<std::string, std::unique_ptr<LSTM>> NamedLSTM;
 static std::map<std::string, std::unique_ptr<Embedding>> NamedEmbedding;
+static std::map<std::string, std::unique_ptr<LSTM>> NamedLSTM;
+static std::map<std::string, std::unique_ptr<MHSA>> NamedMHSA;
+
+
+
+
+
+
+__global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float *l, float *m, const int B, const int nh, const int T, const int d, const int Bc, const int Br,
+                                  const int Tc, const int Tr, const int tile_size, const float warps_per_block)
+{
+  
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  int tid = (ty * blockDim.x + tx);
+  //int tid = (tx * blockDim.y + ty);
+  int warpId = tid / warpSize;
+  int laneId = tid % warpSize;
+
+  int b = blockIdx.y; // batch idx
+  int h = blockIdx.x; // head  idx
+
+
+  if(b>=B||h>=nh)
+    return;
+
+  
+  extern __shared__ float smem[];
+  //float *bh_smem = smem + (b*nh + h)*4*d;
+  float *bh_smem = smem + (b*nh + h)*( (2*(Br+Bc)*d) + Br*Bc + 3*Br);
+
+  float *q_smem        = bh_smem;                               // [Br,  d]
+  float *k_smem        = bh_smem + Br*d;                        // [Bc,  d]
+  float *v_smem        = bh_smem + (Br+Bc)*d;                   // [Bc,  d]
+  float *o_smem        = bh_smem + (Br+2*Bc)*d;                 // [Br,  d]
+  float *Sij_smem      = bh_smem + 2*(Br+Bc)*d;                 // [Br, Bc]
+  float *l_smem        = bh_smem + 2*(Br+Bc)*d + Br*Bc;         // [Br]
+  float *m_smem        = bh_smem + 2*(Br+Bc)*d + Br*Bc + Br;    // [Br]
+  float *last_m_smem   = bh_smem + 2*(Br+Bc)*d + Br*Bc + 2*Br;  // [Br]
+  
+  
+
+
+
+
+  for (int i=0; i<Tr; ++i)
+  {
+
+    // Load Qi and Oi of size [Br, d] each
+    for (int tile=0; tile<ceilf((d*Br)/(float)tile_size); ++tile)
+    {
+      int tiled_idx = ty*tile_size + tx;
+      int tiled_row = tiled_idx / d;
+      int tiled_col = tiled_idx % d;
+
+      if (tiled_row<Br)
+      {
+        l_smem[tiled_row] = 0;
+        m_smem[tiled_row] = -INFINITY;
+        last_m_smem[tiled_row] = -INFINITY;
+
+        if((i*Br+tiled_row)<T)
+          q_smem[tiled_row*d + tiled_col] = q[b*T*d + (i*Br+tiled_row)*d + tiled_col];
+        else
+          q_smem[tiled_row*d + tiled_col] = 0;
+        o_smem[tiled_row*d + tiled_col] = 0;
+        
+      }
+    }
+
+
+      
+    for (int j=0; j<Tc; ++j)
+    {
+
+
+      // Load Kj and Vj of size [Bc, d] each
+      for (int tile=0; tile<ceilf((d*Bc)/(float)(warps_per_block*warpSize)); ++tile)
+      {
+        int tiled_idx = tile*(warps_per_block*warpSize) + tid;
+        int tiled_row = tiled_idx / d;
+        int tiled_col = tiled_idx % d;
+
+        if (tiled_row<Bc && tiled_col<d)
+        {
+          if((j*Bc+tiled_row)<T)
+          {
+            k_smem[tiled_row*d + tiled_col] = k[b*T*d + (j*Bc+tiled_row)*d + tiled_col];
+            v_smem[tiled_row*d + tiled_col] = v[b*T*d + (j*Bc+tiled_row)*d + tiled_col];
+
+            //o[(j*Bc+tiled_row)*d + tiled_col] = k[b*T*d + (j*Bc+tiled_row)*d + tiled_col];
+          } else {
+            k_smem[tiled_row*d + tiled_col] = 0;
+            v_smem[tiled_row*d + tiled_col] = 0;
+          }
+        }
+      }
+
+      __syncthreads();
+
+
+      // compute q @ k.T
+      for (int warp_tile=0; warp_tile < std::ceil((Br*Bc)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile * warps_per_block + warpId;
+        int br = wid / Bc; 
+        int bc = wid % Bc;
+
+
+        // \sum_i q[i] @ k[i].T  for each lane
+        float sij = 0;
+        for (int lane_tile=laneId; lane_tile < d; lane_tile += warpSize)
+        {
+          if (bc<Bc && br<Br)
+            sij += q_smem[br*d + lane_tile]*k_smem[bc*d + lane_tile];
+        }
+
+        __syncthreads();
+
+        // \sum_i q[i] @ k[i].T  across the warp
+        float mask_sij;
+        for (int mask = warpSize/2; mask>0; mask>>=1)
+        {
+          __syncwarp();
+          mask_sij = __shfl_down_sync(0xFFFFFFFF, sij, mask);
+          sij += mask_sij;
+        }
+        sij = __shfl_sync(0xFFFFFFFF, sij, 0);
+
+
+        __syncthreads();
+
+        if (bc<Bc && br<Br)
+        {
+          Sij_smem[br*Bc + bc] = sij; 
+          //if ((j*Bc+bc)<T && (i*Br+br)<T)
+          //  o[b*T*T + (i*Br+br)*T + j*Bc+bc] = Sij_smem[br*Bc + bc];
+
+        }
+        
+        
+      }
+      __syncthreads();
+
+
+      ///---///
+
+
+      
+
+      // get the softmax statistics and Pij
+      for (int warp_tile=0; warp_tile < std::ceil((Br)/warps_per_block); ++warp_tile)
+      {
+        int br = warp_tile * warps_per_block + warpId;
+        
+        if (br<Br)
+        {
+          float maxval = -INFINITY, bigger;
+          
+          for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
+          {
+            //bigger = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
+            maxval = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
+          }
+          
+
+          float mask_sumval, mask_maxval;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_maxval = __shfl_down_sync(0xFFFFFFFF, maxval, mask);
+
+            if (mask_maxval > maxval)
+              maxval = mask_maxval;
+          }
+
+          
+          maxval = __shfl_sync(0xFFFFFFFF, maxval, 0);
+
+
+          __syncthreads();
+          
+          // Pij = exp(Sij - mi)
+          for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
+          {
+            Sij_smem[br*Bc + lane_tile] = expf(Sij_smem[br*Bc + lane_tile] - maxval);
+            if ((j*Bc+lane_tile)<T && (i*Br+br)<T)
+            {
+              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = Sij_smem[br*Bc + lane_tile];//sumval;
+              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = sumval;
+              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = maxval;
+            }
+          }
+
+
+          __syncthreads();          
+
+          float sumval = 0.0f;
+          for (int lane_tile=laneId; lane_tile<Bc&&lane_tile<T; lane_tile+=warpSize) // TODO: remove (lane_tile<T) and check if merging this online softmax is safe
+            sumval += Sij_smem[br*Bc + lane_tile];
+
+          float mask_sij;
+          for (int mask = warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_sij = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+            sumval += mask_sij;
+          }
+          sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+
+          for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
+          {
+            
+            if ((j*Bc+lane_tile)<T && (i*Br+br)<T)
+            {
+              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = Sij_smem[br*Bc + lane_tile]/sumval;
+              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = sumval;
+              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = maxval;
+            }
+          }
+
+          
+          if(laneId==0)
+          {
+            m_smem[br] = fmaxf(maxval, last_m_smem[br]);
+            l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + sumval; // todo: invert?
+          }
+          
+            
+          
+          
+          __syncthreads();
+        }
+      }
+
+      __syncthreads();
+
+
+      for (int warp_tile=0; warp_tile < std::ceil((Br*d)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile * warps_per_block + warpId;
+        int br = wid / d;
+        int _d = wid % d;
+
+
+        if(br<Br)
+        {
+
+          float pv=0;
+          for (int lane_tile=laneId; lane_tile<Bc && lane_tile<T; lane_tile+=warpSize)
+            pv += Sij_smem[br*Bc + lane_tile] * v_smem[lane_tile*d + _d];
+          
+          __syncthreads();
+
+          float mask_p;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_p = __shfl_down_sync(0xFFFFFFFF, pv, mask);
+            pv+=mask_p;
+          }
+          pv = __shfl_sync(0xFFFFFFFF, pv, 0);
+
+          if (j==0)
+            o_smem[br*d + _d] = pv;
+          else
+            o_smem[br*d + _d] = (1 / expf(last_m_smem[br] - m_smem[br]))*o_smem[br*d + _d] + pv;
+          //o_smem[br*d + _d] = pv;
+          //o_smem[br*d + _d] = (1 / expf(m_smem[br]))*o_smem[br*d + _d] + pv;
+        }
+      }
+
+      __syncthreads();
+
+
+
+
+      for (int warp_tile=0; warp_tile < std::ceil((Br)/warps_per_block); ++warp_tile)
+      {
+        int br = warp_tile * warps_per_block + warpId;
+        
+        if (br<Br)
+        {
+          last_m_smem[br] = m_smem[br];
+        }
+      }
+      __syncthreads();
+    }
+    
+
+    // Load Oi into HBM O
+    for (int warp_tile=0; warp_tile < std::ceil((Br)/warps_per_block); ++warp_tile)
+    {
+      int br = warp_tile * warps_per_block + warpId;
+      
+      if (br<Br)
+      {
+        for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+        {
+          o_smem[br*d + lane_tile] = (1/l_smem[br]) * o_smem[br*d + lane_tile];
+          __syncthreads();
+        }
+
+        l_smem[br] = m_smem[br] + logf(l_smem[br]);
+
+
+        if ((i*Br+br)<T)
+        {
+          for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+          {
+            o[b*T*d + (i*Br+br)*d + lane_tile] = o_smem[br*d + lane_tile];
+          }
+
+          l[i*Br+br] = l_smem[br];
+          m[i*Br+br] = m_smem[br];
+        }
+      }
+    }
+
+    
+  }
+}
+
+
+
+
+
+float *MHSA::Forward(Tensor *q, Tensor *k, Tensor *v, int B, int T, int thread_id)
+{
+  std::cout << "MHSA::Forward" << "\n";
+
+  float *out = get_from_pool(thread_id, B*T*C, "mhsa out");
+
+  //set_to_zero_kernel<<<std::ceil((B*T*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(out, B*T*C);
+  //set_to_zero_kernel<<<std::ceil(maxT/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(l, maxT);
+  //set_to_minus_inf_kernel<<<std::ceil(maxT/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(m, maxT);
+
+
+
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(nh, B);
+
+  
+
+  int M = deviceProp.sharedMemPerBlock;
+  int Bc = std::ceil(  M / ((float)(B*nh * 4*d * sizeof(float)))  );
+  int Br = (int)fminf(Bc, d);
+  int Tc = std::ceil(T/(float)Bc);
+  int Tr = std::ceil(T/(float)Br);
+  float warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
+
+
+  std::cout << "\n\nB: " << B << ", maxT: " << maxT << ", nh: " << nh << ", d: " << d << "\n";
+
+  std::cout << "Launching flash attention with Bc: " << Bc << ", Br: " << Br << ", Tc " << Tc << ", Tr: " << Tr << "\n";
+
+  std::cout << "TILE_SIZE " << TILE_SIZE  << "\n";
+
+  int res = ((B-1)*nh + (nh-1))*( (2*(Br+Bc)*d) + Br*Bc +4*Br)+( (2*(Br+Bc)*d) + Br*Bc +4*Br);
+
+
+  std::cout << "last idx: " << res*sizeof(float) << ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
+
+
+  cudaStream_t stream = ThreadsStream[thread_id];  
+  flash_attn_kernel<<<grid_size, block_size, M, stream>>>(out, q->tensor_ptr, k->tensor_ptr, v->tensor_ptr, l, m,
+                                                          B, nh, T, d, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block);
+
+  PrintTensorF(m, 1, T);
+  PrintTensorF(l, 1, T);
+  
+  return out;
+}
+
+void MHSA::Backward(float *dy, float *dx)
+{
+  
+}
+
+
+
+
+
+
+
+extern "C" void *MHSAForward(char *self, Tensor *tensor_q, Tensor *tensor_k, Tensor *tensor_v, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+{
+  //TODO: remove self arg and concatenate it instead during the function call
+  
+  
+  std::string _self = self;
+  std::string conv_name = conv_namec;
+  if (is_obj_attr_or_self)
+    conv_name = _self + conv_name;
+
+  //std::cout << "\nMHSA forward of " << conv_name << " with input " << tensor_q->name  << "\n";
+  //std::cout << "thread id: " << thread_id << "\n\n";
+
+  
+
+  float *tensor_ptr, *output, *d_filter;
+  
+  std::vector<float> dims = tensor_q->dims;
+  
+
+  float B = dims[0];
+  float T = dims[dims.size()-2];
+  float C = dims[dims.size()-1];
+
+  //std::vector<float> new_dims = dims;
+  std::vector<float> new_dims = {B, T, C};
+
+
+
+
+  std::unique_ptr<MHSA> mhsa = std::move(NamedMHSA[conv_name]);
+
+  if ((int)C!=(int)mhsa->C)
+  {
+    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the MHSA are: " + std::to_string(mhsa->C);
+    LogError(error);
+    
+    NamedMHSA[conv_name] = std::move(mhsa);
+    return nullptr;
+  }
+
+
+
+  tensor_q->Sync();
+  tensor_k->Sync();
+  tensor_v->Sync();
+
+  output = mhsa->Forward(tensor_q, tensor_k, tensor_v, (int) B, (int)T, thread_id);
+
+
+  
+
+  int is_forward_func = 1;
+  
+
+
+  
+
+
+
+
+  NamedMHSA[conv_name] = std::move(mhsa);
+
+  std::cout << "Return with dims:" << "\n";
+  PrintDims(new_dims);
+  
+
+  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  new_tensor->AttrLNode(tensor_q, mhsa_op);
+  new_tensor->scopeless_name = conv_name;
+  return new_tensor;
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -16639,6 +17315,23 @@ extern "C" float CreateEmbeddingOnDemand(char *tensor_name, char *init,
   NamedEmbedding[tensor_name] = std::move(embedding);
   return 0;
 }
+
+
+
+
+extern "C" float CreateMHSAOnDemand(char *tensor_name, char *init,
+                                      float nh, float C, float T)
+{
+  std::cout << "\nCreate mhsa on demand:\n   nh: " << nh << " C " << C << " T " << T << "\n";
+  std::cout << "" << tensor_name << " " << init << "\n";
+
+  std::unique_ptr<MHSA> mhsa = std::make_unique<MHSA>((int)nh, (int)C, (int) T, init, tensor_name);
+
+  std::cout << "Adding " << tensor_name << " to NamedMHSA dict\n";
+  NamedMHSA[tensor_name] = std::move(mhsa);
+  return 0;
+}
+
 
 
 extern "C" float CreateReluOnDemand(char *tensor_name)
@@ -20522,11 +21215,56 @@ Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
     
 
 
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+    std::cout << "Parsing Embedding var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateEmbeddingOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
                                                C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
+Value *MHSAExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+
+    Value *var_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {first_arg, var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {scope_str, var_name});
+    
+    
+
+
+    std::cout << "Parsing MHSA var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateMHSAOnDemand"),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
+                                               nh->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               T->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -20858,7 +21596,14 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       Value *is_attr = ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf));
       ArgsV.push_back(conv_name);
       ArgsV.push_back(is_attr);
+      
+      if (CalleeF->arg_size() != ArgsV.size())
+      {
+        std::string _error = "Incorrect parameters used on function " + tgt_function + " call.";
+        return LogErrorV(_error);
+      }
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+
     }
     else if (CalleeOverride=="SplitString")
     {
@@ -22009,10 +22754,19 @@ static void InitializeModule() {
   //
   FunctionType *LSTMForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("LSTMForward", LSTMForwardTy);
+
+
+  //
+  FunctionType *MHSAForwardTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("MHSAForward", MHSAForwardTy);
 
 
   //
@@ -23206,6 +23960,19 @@ FunctionType *unbugTy = FunctionType::get(
 
 
   //
+  FunctionType *CreateMHSAOnDemandTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       int8PtrTy,
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext),
+       Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("CreateMHSAOnDemand", CreateMHSAOnDemandTy);
+
+
+  //
   FunctionType *CreateBatchNorm2dOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy,
@@ -23700,7 +24467,8 @@ int main() {
   native_fn = concat_str_vec(native_methods, native_functions);
 
 
-  native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward", "ReluForward", "LSTMForward", "EmbeddingForward"};
+  native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward",
+                    "ReluForward", "LSTMForward", "EmbeddingForward", "MHSAForward"};
 
   threaded_tensor_functions = {"log2", "network_ema", "priority_sample", "priority_sample_val", "importance_sample_idx", "importance_sample_weight"};
   threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, native_modules);
