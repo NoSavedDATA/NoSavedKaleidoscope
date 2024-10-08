@@ -1,0 +1,36 @@
+
+class Model
+    def __init__(f nh, f T, f C)
+
+        0
+
+        MHSA[nh, T, C] self.attn
+
+        0
+
+    def forward(t x, t y, t z)
+
+        x
+        y
+        z
+        x = self.attn(x,y,z)
+
+        return x as o
+
+
+float B = 1
+float nh = 1
+float T = 16
+float C = 6
+
+
+Model model
+model.__init__(nh, T, C);
+
+
+tensor[B, T, C] x, y, z
+tensor[0] o
+
+model.forward(x, y, z)
+o;
+
