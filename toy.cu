@@ -14713,23 +14713,26 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
     for (int tile=0; tile<ceilf((d*Br)/(float)tile_size); ++tile)
     {
       int tiled_idx = ty*tile_size + tx;
-      int tiled_row = tiled_idx / d;
-      int tiled_col = tiled_idx % d;
+      int br = tiled_idx / d;
+      int _d = tiled_idx % d;
 
-      if (tiled_row<Br)
+      if (br<Br)
       {
-        l_smem[tiled_row] = 0;
-        m_smem[tiled_row] = -INFINITY;
-        last_m_smem[tiled_row] = -INFINITY;
+        l_smem[br] = 0;
+        m_smem[br] = -INFINITY;
+        last_m_smem[br] = -INFINITY;
 
-        if((i*Br+tiled_row)<T)
-          q_smem[tiled_row*d + tiled_col] = q[b*T*d + (i*Br+tiled_row)*d + tiled_col];
+        if((i*Br+br)<T)
+          q_smem[br*d + _d] = q[b*T*d + (i*Br+br)*d + _d];
         else
-          q_smem[tiled_row*d + tiled_col] = 0;
-        o_smem[tiled_row*d + tiled_col] = 0;
+          q_smem[br*d + _d] = 0;
+        o_smem[br*d + _d] = 0;
         
       }
     }
+
+
+    __syncthreads();
 
 
       
@@ -14895,6 +14898,8 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
           
           __syncthreads();
         }
+        
+        __syncthreads();
       }
 
       __syncthreads();
@@ -14931,6 +14936,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
             o_smem[br*d + _d] = (1 / expf(last_m_smem[br] - m_smem[br]))*o_smem[br*d + _d] + pv;
           //o_smem[br*d + _d] = pv;
           //o_smem[br*d + _d] = (1 / expf(m_smem[br]))*o_smem[br*d + _d] + pv;
+          __syncthreads();
         }
       }
 
@@ -14939,7 +14945,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
 
 
-      for (int warp_tile=0; warp_tile < std::ceil((Br)/warps_per_block); ++warp_tile)
+      for (int warp_tile=0; warp_tile < std::ceil(Br/warps_per_block); ++warp_tile)
       {
         int br = warp_tile * warps_per_block + warpId;
         
@@ -14947,40 +14953,46 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         {
           last_m_smem[br] = m_smem[br];
         }
+        __syncthreads();
       }
       __syncthreads();
     }
     
 
+
+
+
+
     // Load Oi into HBM O
-    for (int warp_tile=0; warp_tile < std::ceil((Br)/warps_per_block); ++warp_tile)
+    for (int warp_tile=0; warp_tile < std::ceil(Br/warps_per_block); ++warp_tile)
     {
       int br = warp_tile * warps_per_block + warpId;
       
       if (br<Br)
       {
         for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
-        {
           o_smem[br*d + lane_tile] = (1/l_smem[br]) * o_smem[br*d + lane_tile];
-          __syncthreads();
-        }
-
+        
+        __syncthreads();
         l_smem[br] = m_smem[br] + logf(l_smem[br]);
-
+        __syncthreads();
 
         if ((i*Br+br)<T)
         {
           for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
           {
             o[b*T*d + (i*Br+br)*d + lane_tile] = o_smem[br*d + lane_tile];
+
           }
+          
 
           l[i*Br+br] = l_smem[br];
-          m[i*Br+br] = m_smem[br];
+          //m[i*Br+br] = m_smem[br];
         }
       }
+      __syncthreads();
     }
-
+  __syncthreads();
     
   }
 }
@@ -15029,9 +15041,11 @@ float *MHSA::Forward(Tensor *q, Tensor *k, Tensor *v, int B, int T, int thread_i
   cudaStream_t stream = ThreadsStream[thread_id];  
   flash_attn_kernel<<<grid_size, block_size, M, stream>>>(out, q->tensor_ptr, k->tensor_ptr, v->tensor_ptr, l, m,
                                                           B, nh, T, d, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block);
+  cudaCheck(cudaGetLastError());
 
-  PrintTensorF(m, 1, T);
+  cudaStreamSynchronize(stream);
   PrintTensorF(l, 1, T);
+  
   
   return out;
 }
@@ -17325,7 +17339,7 @@ extern "C" float CreateMHSAOnDemand(char *tensor_name, char *init,
   std::cout << "\nCreate mhsa on demand:\n   nh: " << nh << " C " << C << " T " << T << "\n";
   std::cout << "" << tensor_name << " " << init << "\n";
 
-  std::unique_ptr<MHSA> mhsa = std::make_unique<MHSA>((int)nh, (int)C, (int) T, init, tensor_name);
+  std::unique_ptr<MHSA> mhsa = std::make_unique<MHSA>((int)nh, (int)T, (int) C, init, tensor_name);
 
   std::cout << "Adding " << tensor_name << " to NamedMHSA dict\n";
   NamedMHSA[tensor_name] = std::move(mhsa);
