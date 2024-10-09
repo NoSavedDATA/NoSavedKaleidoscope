@@ -14665,6 +14665,10 @@ static std::map<std::string, std::unique_ptr<MHSA>> NamedMHSA;
 
 
 
+__device__ float _truncf(float value) {
+    float factor = 10000.0f;  // 10^4 for four decimal places
+    return truncf(value * factor) / factor;
+}
 
 
 __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float *l, float *m,
@@ -14706,6 +14710,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
 
 
+
   for (int i=0; i<Tr; ++i)
   {
 
@@ -14736,28 +14741,8 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         
         o_smem[br*d + _d] = 0;
       }
-      
-          
-
-      
-    __syncthreads();
-    }
-
-    /*
-    for (int tile=0; tile<ceilf((d*Br)/(float)(warps_per_block*warpSize)); ++tile)
-    {
-      int tiled_idx = tile*(warps_per_block*warpSize) + tid;
-      int br = tiled_idx / d;
-      int _d = tiled_idx % d;
-
-      if(br<Br)
-      {
-        if((i*Br+br)<T)
-          o[b*T*d + (i*Br+br)*d + _d] = q_smem[br*d + _d];
-      }
       __syncthreads();
     }
-    */
 
 
       
@@ -14871,10 +14856,11 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         if (br<Br)
         {
           
-          for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
+          for (int lane_tile=laneId; lane_tile<Bc && lane_tile<T; lane_tile+=warpSize)
           {
-            //bigger = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
-            maxval = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
+            bigger = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
+            sumval = sumval * expf(maxval - bigger) + expf(Sij_smem[br*Bc + lane_tile] - bigger);
+            maxval = bigger;
           }
           
 
@@ -14883,65 +14869,48 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
           {
             __syncwarp();
             mask_maxval = __shfl_down_sync(0xFFFFFFFF, maxval, mask);
+            mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
 
-            if (mask_maxval > maxval)
-              maxval = mask_maxval;
+            if (mask_maxval > maxval) {
+                sumval *= expf(maxval - mask_maxval);
+                maxval = mask_maxval;
+            } else {
+                mask_sumval *= expf(mask_maxval - maxval);
+            }
+            sumval += mask_sumval;
           }
 
           
           maxval = __shfl_sync(0xFFFFFFFF, maxval, 0);
-
-
-          
-          
-          // Pij = exp(Sij - mi)
-          for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
-          {
-            Sij_smem[br*Bc + lane_tile] = expf(Sij_smem[br*Bc + lane_tile] - maxval);
-            if ((j*Bc+lane_tile)<T && (i*Br+br)<T)
-            {
-              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = Sij_smem[br*Bc + lane_tile];
-              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = maxval;
-            }
-          }
-
-
-          
-
-          
-          for (int lane_tile=laneId; lane_tile<Bc&&lane_tile<T; lane_tile+=warpSize) // TODO: remove (lane_tile<T) and check if merging this online softmax is safe
-            sumval += Sij_smem[br*Bc + lane_tile];
-          
-
-          float mask_sij;
-          for (int mask = warpSize/2; mask>0; mask>>=1)
-          {
-            __syncwarp();
-            mask_sij = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
-            sumval += mask_sij;
-          }
           sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
 
+        }
 
+
+        if(laneId==0 && br<Br)
+        {
+          m_smem[br] = fmaxf(last_m_smem[br], maxval);
+          l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + sumval;
+        }
+        
+
+        __syncthreads();
+
+        // Pij = exp(Sij - mi)
+        if (br<Br)
+        {
           for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
           {
             
+            Sij_smem[br*Bc + lane_tile] = expf(Sij_smem[br*Bc + lane_tile] - m_smem[br]);
             if ((j*Bc+lane_tile)<T && (i*Br+br)<T)
             {
               //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = Sij_smem[br*Bc + lane_tile]/sumval;
-              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = sumval;
               //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = maxval;
             }
           }
-
-          
-          if(laneId==0)
-          {
-            m_smem[br] = fmaxf(maxval, last_m_smem[br]);
-            l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + sumval;
-          }
-          
         }
+
         
         __syncthreads();
       }
@@ -14958,7 +14927,6 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
 
         float pv=0;
-        float mask_p;
 
         if(br<Br)
         {
@@ -14968,6 +14936,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
           
           
 
+          float mask_p;
           for (int mask=warpSize/2; mask>0; mask>>=1)
           {
             __syncwarp();
@@ -14981,7 +14950,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
           if (laneId==0)
           {
             //o[b*T*d + (i*Br+br)*d + _d] = m_smem[br];
-
+            
             if (j==0)
               o_smem[br*d + _d] = pv;
             else
@@ -15083,7 +15052,7 @@ float *MHSA::Forward(Tensor *q, Tensor *k, Tensor *v, int B, int T, int thread_i
   Br = fminf(Br, 32);
 
   /*  
-  while (((2*(Br+Bc)*d) + Br*Bc + 3*Br)*sizeof(float) > M && Br>1)
+  while (((2*(Br+Bc)*d) + Br*Bc + 3*Br)*sizeof(float) > M && Br>1 && Bc>1)
   {
     Br=Br-1;
     Bc=Bc-1;
