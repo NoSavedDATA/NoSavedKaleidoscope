@@ -14667,7 +14667,8 @@ static std::map<std::string, std::unique_ptr<MHSA>> NamedMHSA;
 
 
 
-__global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float *l, float *m, const int B, const int nh, const int T, const int d, const int Bc, const int Br,
+__global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float *l, float *m,
+                                  const int B, const int nh, const int T, const int d, const int Bc, const int Br,
                                   const int Tc, const int Tr, const int tile_size, const float warps_per_block)
 {
   
@@ -14709,10 +14710,10 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
   {
 
     // Load Qi and Oi of size [Br, d] each
-    __syncthreads();
-    for (int tile=0; tile<ceilf((d*Br)/(float)tile_size); ++tile)
+    
+    for (int tile=0; tile<ceilf((d*Br)/(float)(warps_per_block*warpSize)); ++tile)
     {
-      int tiled_idx = ty*tile_size + tx;
+      int tiled_idx = tile*(warps_per_block*warpSize) + tid;
       int br = tiled_idx / d;
       int _d = tiled_idx % d;
 
@@ -14724,20 +14725,39 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
       }
 
-          
 
-      if((i*Br+br)<T)
-        q_smem[br*d + _d] = q[b*T*d + (i*Br+br)*d + _d];
-      else
-        q_smem[br*d + _d] = 0;
-      o_smem[br*d + _d] = 0;
+
+      if(br<Br)
+      {
+        if((i*Br+br)<T)
+          q_smem[br*d + _d] = q[b*T*d + (i*Br+br)*d + _d];
+        else
+          q_smem[br*d + _d] = 0;
+        
+        o_smem[br*d + _d] = 0;
+      }
       
           
 
       
+    __syncthreads();
     }
 
+    /*
+    for (int tile=0; tile<ceilf((d*Br)/(float)(warps_per_block*warpSize)); ++tile)
+    {
+      int tiled_idx = tile*(warps_per_block*warpSize) + tid;
+      int br = tiled_idx / d;
+      int _d = tiled_idx % d;
 
+      if(br<Br)
+      {
+        if((i*Br+br)<T)
+          o[b*T*d + (i*Br+br)*d + _d] = q_smem[br*d + _d];
+      }
+      __syncthreads();
+    }
+    */
 
 
       
@@ -14749,28 +14769,31 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
       for (int tile=0; tile<ceilf((d*Bc)/(float)(warps_per_block*warpSize)); ++tile)
       {
         int tiled_idx = tile*(warps_per_block*warpSize) + tid;
-        int tiled_row = tiled_idx / d;
-        int tiled_col = tiled_idx % d;
+        int bc = tiled_idx / d;
+        int _d = tiled_idx % d;
 
         
           
-        if((j*Bc+tiled_row)<T)
+        if(bc<Bc)
         {
-          k_smem[tiled_row*d + tiled_col] = k[b*T*d + (j*Bc+tiled_row)*d + tiled_col];
-          v_smem[tiled_row*d + tiled_col] = v[b*T*d + (j*Bc+tiled_row)*d + tiled_col];
+          if((j*Bc+bc)<T)
+          {
+            k_smem[bc*d + _d] = k[b*T*d + (j*Bc+bc)*d + _d];
+            v_smem[bc*d + _d] = v[b*T*d + (j*Bc+bc)*d + _d];
 
-          //o[(j*Bc+tiled_row)*d + tiled_col] = v[b*T*d + (j*Bc+tiled_row)*d + tiled_col];
-        } else {
-          k_smem[tiled_row*d + tiled_col] = 0;
-          v_smem[tiled_row*d + tiled_col] = 0;
+            //o[(j*Bc+bc)*d + _d] = v[b*T*d + (j*Bc+bc)*d + _d];
+          } else {
+            k_smem[bc*d + _d] = 0;
+            v_smem[bc*d + _d] = 0;
+          }
         }
         
         
 
+      __syncthreads();
         
       }
 
-      __syncthreads();
 
 
       // compute q @ k.T
@@ -14784,10 +14807,20 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         // \sum_i q[i] @ k[i].T  for each lane
         
         float sij = 0;
-        for (int lane_tile=laneId; lane_tile < d; lane_tile += warpSize)
+        for (int lane_tile = laneId; lane_tile < d; lane_tile += warpSize)
         {
+          
+          
+          //if ((j*Bc+bc)<T)
+          //  o[b*T*d + (j*Bc+bc)*d + lane_tile] = k_smem[bc*d + lane_tile];
+          //if ((i*Br+br)<T)
+          //  o[b*T*d + (i*Br+br)*d + lane_tile] = q_smem[br*d + lane_tile];
+          
+
           if (bc<Bc && br<Br)
+          {
             sij += q_smem[br*d + lane_tile]*k_smem[bc*d + lane_tile];
+          }
         }
 
         
@@ -14805,15 +14838,21 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
     
 
-        if (bc<Bc && br<Br)
+        if (bc<Bc && br<Br && laneId==0)
         {
           Sij_smem[br*Bc + bc] = sij; 
-          //if ((j*Bc+bc)<T && (i*Br+br)<T)
-          //  o[b*T*T + (i*Br+br)*T + j*Bc+bc] = Sij_smem[br*Bc + bc];
 
         }
+        /*
+        __syncthreads();
+        if (bc<Bc && br<Br && laneId==0)
+        {
+          if ((j*Bc+bc)<T && (i*Br+br)<T)
+            o[b*T*T + (i*Br+br)*T + j*Bc+bc] = Sij_smem[br*Bc + bc];
+        }
+        __syncthreads();
         
-        
+        */
       }
       __syncthreads();
 
@@ -14824,13 +14863,13 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
       
 
       // get the softmax statistics and Pij
-      for (int warp_tile=0; warp_tile < std::ceil((Br)/warps_per_block); ++warp_tile)
+      for (int warp_tile=0; warp_tile < std::ceil(Br/warps_per_block); ++warp_tile)
       {
         int br = warp_tile * warps_per_block + warpId;
         
+        float maxval = -INFINITY, sumval=0.0f, bigger;
         if (br<Br)
         {
-          float maxval = -INFINITY, bigger;
           
           for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
           {
@@ -14861,8 +14900,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
             Sij_smem[br*Bc + lane_tile] = expf(Sij_smem[br*Bc + lane_tile] - maxval);
             if ((j*Bc+lane_tile)<T && (i*Br+br)<T)
             {
-              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = Sij_smem[br*Bc + lane_tile];//sumval;
-              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = sumval;
+              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = Sij_smem[br*Bc + lane_tile];
               //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = maxval;
             }
           }
@@ -14870,7 +14908,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
           
 
-          float sumval = 0.0f;
+          
           for (int lane_tile=laneId; lane_tile<Bc&&lane_tile<T; lane_tile+=warpSize) // TODO: remove (lane_tile<T) and check if merging this online softmax is safe
             sumval += Sij_smem[br*Bc + lane_tile];
           
@@ -14908,7 +14946,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         __syncthreads();
       }
 
-      __syncthreads();
+      
 
 
       for (int warp_tile=0; warp_tile < std::ceil((Br*d)/warps_per_block); ++warp_tile)
@@ -14918,17 +14956,18 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         int _d = wid % d;
 
 
+
+        float pv=0;
+        float mask_p;
+
         if(br<Br)
         {
-
-          float pv=0;
           
           for (int lane_tile=laneId; lane_tile<Bc && lane_tile<T; lane_tile+=warpSize)
             pv += Sij_smem[br*Bc + lane_tile] * v_smem[lane_tile*d + _d];
           
           
 
-          float mask_p;
           for (int mask=warpSize/2; mask>0; mask>>=1)
           {
             __syncwarp();
@@ -14964,12 +15003,12 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
       for (int warp_tile=0; warp_tile < std::ceil(Br/warps_per_block); ++warp_tile)
       {
         int br = warp_tile * warps_per_block + warpId;
-        __syncthreads();
+        
         if (br<Br)
         {
           last_m_smem[br] = m_smem[br];
         }
-        __syncthreads();
+        
       }
       __syncthreads();
     }
@@ -14983,35 +15022,35 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
     for (int warp_tile=0; warp_tile < std::ceil(Br/warps_per_block); ++warp_tile)
     {
       int br = warp_tile * warps_per_block + warpId;
+      
+      
+
+      for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+      {
+        if (br<Br)
+          o_smem[br*d + lane_tile] = o_smem[br*d + lane_tile]/l_smem[br];
+      }
+      
       __syncthreads();
+
+      
       if (br<Br)
+        l_smem[br] = m_smem[br] + logf(l_smem[br]);
+      
+
+      if ((i*Br+br)<T && br<Br)
       {
         for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
-          o_smem[br*d + lane_tile] = o_smem[br*d + lane_tile]/l_smem[br];
+          o[b*T*d + (i*Br+br)*d + lane_tile] = o_smem[br*d + lane_tile];
+
         
-        
-        l_smem[br] = m_smem[br] + logf(l_smem[br]);
-        
-
-        if ((i*Br+br)<T)
-        {
-          for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
-          {
-            o[b*T*d + (i*Br+br)*d + lane_tile] = o_smem[br*d + lane_tile];
-
-          }
-          
-
-          
-          l[i*Br+br] = l_smem[br];
-
-
-          //m[i*Br+br] = m_smem[br];
-        }
+        l[i*Br+br] = l_smem[br];
+        //m[i*Br+br] = m_smem[br];
       }
+      
       __syncthreads();
     }
-  __syncthreads();
+  
     
   }
 }
@@ -15040,20 +15079,31 @@ float *MHSA::Forward(Tensor *q, Tensor *k, Tensor *v, int B, int T, int thread_i
   int M = deviceProp.sharedMemPerBlock;
   int Bc = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
   int Br = (int)fminf(Bc, d);
+  Bc = fminf(Bc, 32);
+  Br = fminf(Br, 32);
+
+  /*  
+  while (((2*(Br+Bc)*d) + Br*Bc + 3*Br)*sizeof(float) > M && Br>1)
+  {
+    Br=Br-1;
+    Bc=Bc-1;
+  }
+  */
+  
+  
+
   int Tc = std::ceil(T/(float)Bc);
   int Tr = std::ceil(T/(float)Br);
   float warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
 
 
-  std::cout << "\n\nB: " << B << ", maxT: " << maxT << ", nh: " << nh << ", d: " << d << "\n";
+  std::cout << "\n\nB: " << B << ", T: " << T << ", nh: " << nh << ", d: " << d << "\n";
 
   std::cout << "Launching flash attention with Bc: " << Bc << ", Br: " << Br << ", Tc " << Tc << ", Tr: " << Tr << "\n";
 
   std::cout << "TILE_SIZE " << TILE_SIZE  << "\n";
 
-  int res = ((2*(Br+Bc)*d) + Br*Bc +4*Br);
-
-
+  int res = ((2*(Br+Bc)*d) + Br*Bc + 3*Br);
   std::cout << "last idx: " << res*sizeof(float) << ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
 
 
