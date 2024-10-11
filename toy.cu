@@ -86,9 +86,9 @@ int WARP_SIZE;
 
 cudaDeviceProp deviceProp;
 
-int block_size_aux = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+int THREADS_PER_BLOCK = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
-const int TILE_SIZE = (int)floorf(sqrtf((float)block_size_aux)); 
+const int TILE_SIZE = (int)floorf(sqrtf((float)THREADS_PER_BLOCK)); 
 const int TILE_SIZE_SQ = TILE_SIZE*TILE_SIZE;
 
 
@@ -14548,8 +14548,6 @@ class LSTM
 
     LSTM(int C, int OC, std::string Init, std::string Name)
         : C(C), OC(OC), Init(Init), Name(Name) {
-      changed_descriptors = false;
-      first_backward = true;
       B = 0;
       T = 0;
 
@@ -14587,6 +14585,9 @@ class LSTM
 
       delete[] w_cpu;
       delete[] u_cpu;
+
+      changed_descriptors = false;
+      first_backward = true;
     }
 
   
@@ -14605,49 +14606,52 @@ class MHSA
 {
   public:
     
-    int B, maxT, nh, C, d;
+    int B, maxT, nh, C, d, B_back, T_back;
     std::string Init, Name;
-    float *W, *dW, *l, *m;
+    float *W, *W_proj, *l, *qkv, *out, *qkv_back, *dW, *dW_proj;
+    bool first_backward, changed_descriptors;
 
     MHSA(int nh, int C, int maxT, std::string Init, std::string Name)
         : nh(nh), C(C), maxT(maxT), Init(Init), Name(Name) {
+
       B = 0;
-
-
-      float *w_cpu;
-
-      l = get_from_pool(0, maxT, "mhsa l");
-      m = get_from_pool(0, maxT, "mhsa m");
-
       d = C/nh;
 
-      
-      /*
-      w_cpu = make_xavier_uniform_float(OC*C, OC,  C);
-      //w_cpu = make_normal(OC*C);
-      //w_cpu = make_uniform(OC*C);
+      l = get_from_pool(0, maxT, "mhsa l");
+
+      float *W_cpu, *W_proj_cpu;
+
+      W_cpu = make_gpt_init(3*C * C);
+      W_proj_cpu = make_gpt_init(C * C);
+      //W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
+      //W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
+
+      W = get_from_pool(0, 3*C * C, "MHSA W");
+      W_proj = get_from_pool(0, C * C, "MHSA W_proj");
+
+      cudaMemcpy(W, W_cpu, 3*C * C * sizeof(float), cudaMemcpyHostToDevice);
+      cudaMemcpy(W_proj, W_proj_cpu, C * C * sizeof(float), cudaMemcpyHostToDevice);
+
+      Tensor *tensor_W = createTensor(W, {3*(float)C * (float)C}, 3*C*C, true, Name+"W");
+      Tensor *tensor_W_proj = createTensor(W_proj, {(float)C * (float)C}, C*C, true, Name+"W_proj");
+      tensor_W->SetIsWeight();
+      tensor_W_proj->SetIsWeight();
+
+      NamedTensorsT[Name+"W"] = tensor_W;
+      NamedTensorsT[Name+"W_proj"] = tensor_W_proj;
+
+      delete[] W_cpu;
+      delete[] W_proj_cpu;
 
 
-      
-      W = get_from_pool(0, OC*C, "Embedding W");
-      cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
-
-      Tensor *tensor_W = createTensor(W, {(float)OC,(float)C}, OC*C, true, Name);
-      
-
-
-      dW = get_from_pool(0, OC*C, "embedding dW");
-      set_to_zero_kernel<<<std::ceil(OC*C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
-
-      NamedTensorsT[Name] = tensor_W;
-      NamedParamGrads[Name] = dW;
-
-      delete[] w_cpu;
-      */
+      first_backward = true;
+      changed_descriptors = false;
     }
   
-  float *Forward(Tensor *, Tensor *, Tensor *, int, int, int);
-  void Backward(float *, float *);
+  float *Forward(Tensor *, int, int, int);
+  void Backward(float *, float *, float *);
+  void SetBackwardDescriptors();
+  void FirstBackward();
 };
 
 
@@ -14671,9 +14675,9 @@ __device__ float _truncf(float value) {
 }
 
 
-__global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float *l, float *m,
-                                  const int B, const int nh, const int T, const int d, const int Bc, const int Br,
-                                  const int Tc, const int Tr, const int tile_size, const float warps_per_block)
+__global__ void flash_attn_kernel(float *o, float *qkv, const int qkv_offset, float *l,
+                                  const int B, const int nh, const int T, const int d, const int C, const int Bc, const int Br,
+                                  const int Tc, const int Tr, const int tile_size, const float warps_per_block, const int threads_per_block)
 {
   
 
@@ -14681,7 +14685,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
   int ty = threadIdx.y;
 
   int tid = (ty * blockDim.x + tx);
-  //int tid = (tx * blockDim.y + ty);
+  
   int warpId = tid / warpSize;
   int laneId = tid % warpSize;
 
@@ -14706,6 +14710,9 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
   float *last_m_smem   = smem + 2*(Br+Bc)*d + Br*Bc + 2*Br;  // [Br]
   
   
+  float *q = qkv;
+  float *k = qkv + qkv_offset;
+  float *v = qkv + 2*qkv_offset;
 
 
 
@@ -14716,9 +14723,9 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
     // Load Qi and Oi of size [Br, d] each
     
-    for (int tile=0; tile<ceilf((d*Br)/(float)(warps_per_block*warpSize)); ++tile)
+    for (int tile=0; tile<ceilf((d*Br)/(float)threads_per_block); ++tile)
     {
-      int tiled_idx = tile*(warps_per_block*warpSize) + tid;
+      int tiled_idx = tile*threads_per_block + tid;
       int br = tiled_idx / d;
       int _d = tiled_idx % d;
 
@@ -14735,7 +14742,7 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
       if(br<Br)
       {
         if((i*Br+br)<T)
-          q_smem[br*d + _d] = q[b*T*d + (i*Br+br)*d + _d];
+          q_smem[br*d + _d] = q[b*T*C + (i*Br+br)*C + h*d + _d];
         else
           q_smem[br*d + _d] = 0;
         
@@ -14751,22 +14758,20 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
 
       // Load Kj and Vj of size [Bc, d] each
-      for (int tile=0; tile<ceilf((d*Bc)/(float)(warps_per_block*warpSize)); ++tile)
+      for (int tile=0; tile<ceilf((d*Bc)/(float)threads_per_block); ++tile)
       {
-        int tiled_idx = tile*(warps_per_block*warpSize) + tid;
+        int tiled_idx = tile*threads_per_block + tid;
         int bc = tiled_idx / d;
         int _d = tiled_idx % d;
 
         
-          
+        
         if(bc<Bc)
         {
           if((j*Bc+bc)<T)
           {
-            k_smem[bc*d + _d] = k[b*T*d + (j*Bc+bc)*d + _d];
-            v_smem[bc*d + _d] = v[b*T*d + (j*Bc+bc)*d + _d];
-
-            //o[(j*Bc+bc)*d + _d] = v[b*T*d + (j*Bc+bc)*d + _d];
+            k_smem[bc*d + _d] = k[b*T*C + (j*Bc+bc)*C + h*d + _d];
+            v_smem[bc*d + _d] = v[b*T*C + (j*Bc+bc)*C + h*d + _d];
           } else {
             k_smem[bc*d + _d] = 0;
             v_smem[bc*d + _d] = 0;
@@ -14794,18 +14799,8 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         float sij = 0;
         for (int lane_tile = laneId; lane_tile < d; lane_tile += warpSize)
         {
-          
-          
-          //if ((j*Bc+bc)<T)
-          //  o[b*T*d + (j*Bc+bc)*d + lane_tile] = k_smem[bc*d + lane_tile];
-          //if ((i*Br+br)<T)
-          //  o[b*T*d + (i*Br+br)*d + lane_tile] = q_smem[br*d + lane_tile];
-          
-
           if (bc<Bc && br<Br)
-          {
             sij += q_smem[br*d + lane_tile]*k_smem[bc*d + lane_tile];
-          }
         }
 
         
@@ -14821,23 +14816,8 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         sij = __shfl_sync(0xFFFFFFFF, sij, 0);
 
 
-    
-
         if (bc<Bc && br<Br && laneId==0)
-        {
-          Sij_smem[br*Bc + bc] = sij; 
-
-        }
-        /*
-        __syncthreads();
-        if (bc<Bc && br<Br && laneId==0)
-        {
-          if ((j*Bc+bc)<T && (i*Br+br)<T)
-            o[b*T*T + (i*Br+br)*T + j*Bc+bc] = Sij_smem[br*Bc + bc];
-        }
-        __syncthreads();
-        
-        */
+          Sij_smem[br*Bc + bc] = sij;
       }
       __syncthreads();
 
@@ -14857,11 +14837,8 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         {
           
           for (int lane_tile=laneId; lane_tile<Bc && lane_tile<T; lane_tile+=warpSize)
-          {
-            //bigger = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
-            //sumval = sumval * expf(maxval - bigger) + expf(Sij_smem[br*Bc + lane_tile] - bigger);
             maxval = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
-          }
+          
           
 
           float mask_sumval, mask_maxval;
@@ -14892,21 +14869,13 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
         if (br<Br)
         {
           for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
-          {
-            
             Sij_smem[br*Bc + lane_tile] = expf(Sij_smem[br*Bc + lane_tile] - m_smem[br]);
-            if ((j*Bc+lane_tile)<T && (i*Br+br)<T)
-            {
-              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = Sij_smem[br*Bc + lane_tile]/sumval;
-              //o[b*T*T + (i*Br+br)*T + j*Bc+lane_tile] = maxval;
-            }
-          }
         }
         
         __syncthreads();
 
 
-        if (br<Br) //TODO: Remove the sum from this loop and use an appropriate sized loop
+        if (br<Br)
         {
           
           for (int lane_tile=laneId; lane_tile<Bc && lane_tile<T; lane_tile+=warpSize)
@@ -14964,18 +14933,12 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
           
           if (laneId==0)
-          {
-            //o[b*T*d + (i*Br+br)*d + _d] = m_smem[br];
-            
+          { 
             if (j==0)
               o_smem[br*d + _d] = pv;
             else
               o_smem[br*d + _d] = o_smem[br*d + _d]/expf(last_m_smem[br] - m_smem[br]) + pv;
           }
-          
-          //o_smem[br*d + _d] = pv;
-          //o_smem[br*d + _d] = (1 / expf(m_smem[br]))*o_smem[br*d + _d] + pv;
-          
         }
         
       }
@@ -15026,11 +14989,9 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
       if ((i*Br+br)<T && br<Br)
       {
         for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
-          o[b*T*d + (i*Br+br)*d + lane_tile] = o_smem[br*d + lane_tile];
-
+          o[b*T*C + (i*Br+br)*C + h*d + lane_tile] = o_smem[br*d + lane_tile];
         
         l[i*Br+br] = l_smem[br];
-        //m[i*Br+br] = m_smem[br];
       }
       
       __syncthreads();
@@ -15044,23 +15005,37 @@ __global__ void flash_attn_kernel(float *o, float *q, float *k, float *v, float 
 
 
 
-float *MHSA::Forward(Tensor *q, Tensor *k, Tensor *v, int B, int T, int thread_id)
+float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 {
   std::cout << "MHSA::Forward" << "\n";
 
-  float *out = get_from_pool(thread_id, B*T*C, "mhsa out");
-
-  //set_to_zero_kernel<<<std::ceil((B*T*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(out, B*T*C);
-  //set_to_zero_kernel<<<std::ceil(maxT/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(l, maxT);
-  //set_to_minus_inf_kernel<<<std::ceil(maxT/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(m, maxT);
+  float *qkv = get_from_pool(thread_id, B*T*3*C, "mhsa qkv");
+  out = get_from_pool(thread_id, B*T*C, "mhsa out");
+  float *proj_out = get_from_pool(thread_id, B*T*C, "mhsa out");
 
 
+  cudaStream_t stream = ThreadsStream[thread_id];  
 
+
+
+  if (thread_id==0 && nn_mode==training_mode)
+  {
+    qkv_back = qkv;
+    B_back = B;
+    T_back = T;
+  }
+
+
+  // Get qkv
   dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(nh, B);
+  dim3 grid_size(std::ceil((3*C)/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+
+  mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
 
   
 
+  // Attention
   int M = deviceProp.sharedMemPerBlock;
   int Bc = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
   int Br = (int)fminf(Bc, d);
@@ -15084,40 +15059,80 @@ float *MHSA::Forward(Tensor *q, Tensor *k, Tensor *v, int B, int T, int thread_i
   float warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
 
 
-  std::cout << "\n\nB: " << B << ", T: " << T << ", nh: " << nh << ", d: " << d << "\n";
-
-  std::cout << "Launching flash attention with Bc: " << Bc << ", Br: " << Br << ", Tc " << Tc << ", Tr: " << Tr << "\n";
-
-  std::cout << "TILE_SIZE " << TILE_SIZE  << "\n";
-
-  int res = ((2*(Br+Bc)*d) + Br*Bc + 3*Br);
-  std::cout << "last idx: " << res*sizeof(float) << ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
+  //std::cout << "\n\nB: " << B << ", T: " << T << ", nh: " << nh << ", d: " << d << ", C: " << C << "\n";
+  //std::cout << "Launching flash attention with Bc: " << Bc << ", Br: " << Br << ", Tc " << Tc << ", Tr: " << Tr << "\n";
+  //std::cout << "TILE_SIZE " << TILE_SIZE  << "\n";
+  //int res = ((2*(Br+Bc)*d) + Br*Bc + 3*Br);
+  //std::cout << "last idx: " << res*sizeof(float) << ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
 
 
-  cudaStream_t stream = ThreadsStream[thread_id];  
-  flash_attn_kernel<<<grid_size, block_size, M, stream>>>(out, q->tensor_ptr, k->tensor_ptr, v->tensor_ptr, l, m,
-                                                          B, nh, T, d, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block);
-  cudaCheck(cudaGetLastError());
-
-  cudaStreamSynchronize(stream);
-  PrintTensorF(l, 1, T);
+  dim3 grid_size_mhsa(nh, B);
+  flash_attn_kernel<<<grid_size_mhsa, block_size, M, stream>>>(out, qkv, B*T*C, l,
+                                                          B, nh, T, d, C, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, THREADS_PER_BLOCK);
   
+
+
+  // Out Proj
   
-  return out;
+  dim3 grid_size_proj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+  
+  mult_kernel<<<grid_size_proj, block_size, shared_mem_size, stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
+  
+  if(!(thread_id==0 && nn_mode==training_mode))
+    move_to_pool(thread_id, B*T*C, out, "MHSA pre out-proj");
+  
+  return proj_out;
 }
 
-void MHSA::Backward(float *dy, float *dx)
+
+void MHSA::SetBackwardDescriptors()
 {
+
+}
+
+void MHSA::FirstBackward()
+{
+  dW = get_from_pool(0, 3*C * C, "MHSA dW");
+  dW_proj = get_from_pool(0, C * C, "MHSA dW");
+
+  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW, 3*C*C);
+  set_to_zero_kernel<<<std::ceil((C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW_proj, C*C);
+
+  NamedParamGrads[Name+"W"] = dW;
+  NamedParamGrads[Name+"W_proj"] = dW_proj;
+
+  first_backward=false;
+}
+
+void MHSA::Backward(float *x, float *dx, float *dy)
+{
+
+  if (first_backward)
+    FirstBackward();
+
+  float *d_attn = get_from_pool(0, B_back*T_back*C, "MHSA d_attn");
   
+
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size_dwproj(std::ceil(C/(float)TILE_SIZE), std::ceil(C/(float)TILE_SIZE));
+  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+
+
+  cudaStream_t dw_proj_stream, dw_stream;
+  cudaStreamCreate(&dw_stream);
+  cudaStreamCreate(&dw_proj_stream);
+
+  cudaStreamSynchronize(main_stream->stream);
+
+  mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, dw_proj_stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, C);
+  RegisterEvent(dw_proj_stream);
+
 }
 
 
 
 
-
-
-
-extern "C" void *MHSAForward(char *self, Tensor *tensor_q, Tensor *tensor_k, Tensor *tensor_v, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *MHSAForward(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -15132,9 +15147,9 @@ extern "C" void *MHSAForward(char *self, Tensor *tensor_q, Tensor *tensor_k, Ten
 
   
 
-  float *tensor_ptr, *output, *d_filter;
+  float *output;
   
-  std::vector<float> dims = tensor_q->dims;
+  std::vector<float> dims = tensor->dims;
   
 
   float B = dims[0];
@@ -15160,20 +15175,9 @@ extern "C" void *MHSAForward(char *self, Tensor *tensor_q, Tensor *tensor_k, Ten
 
 
 
-  tensor_q->Sync();
-  tensor_k->Sync();
-  tensor_v->Sync();
+  tensor->Sync();
+  output = mhsa->Forward(tensor, (int) B, (int)T, thread_id);
 
-  output = mhsa->Forward(tensor_q, tensor_k, tensor_v, (int) B, (int)T, thread_id);
-
-
-  
-
-  int is_forward_func = 1;
-  
-
-
-  
 
 
 
@@ -15185,12 +15189,22 @@ extern "C" void *MHSAForward(char *self, Tensor *tensor_q, Tensor *tensor_k, Ten
   
 
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->AttrLNode(tensor_q, mhsa_op);
+  new_tensor->AttrLNode(tensor, mhsa_op);
   new_tensor->scopeless_name = conv_name;
   return new_tensor;
 }
 
 
+
+
+void mhsa_backward(float *x, float *dx, float *dy, std::string name)
+{
+  std::unique_ptr<MHSA> mhsa = std::move(NamedMHSA[name]);
+
+  mhsa->Backward(x, dx, dy);
+
+  NamedMHSA[name] = std::move(mhsa);
+}
 
 
 
@@ -18676,6 +18690,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
     //std::cout << "EXECUTING OP  " << op << "\n";
     switch (op)
     {
+      // Simple Leaf Nodes Ops
       case scalar_add_op:
         device_dx = device_dy;
         break;
@@ -18743,6 +18758,9 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         break;
       case embedding_op:
         embedding_backward(inp, device_dx, device_dy, back_node->scopeless_name);
+        break;
+      case mhsa_op:
+        mhsa_backward(inp, device_dx, device_dy, back_node->scopeless_name);
         break;
 
       // Loss Ops
@@ -22833,7 +22851,7 @@ static void InitializeModule() {
   //
   FunctionType *MHSAForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("MHSAForward", MHSAForwardTy);
