@@ -14606,9 +14606,10 @@ class MHSA
 {
   public:
     
-    int B, maxT, nh, C, d, B_back, T_back;
+    int B, T, maxT, nh, C, d, B_back, T_back;
+    int M, Br, Bc, Tr, Tc;
     std::string Init, Name;
-    float *W, *W_proj, *l, *qkv, *out, *qkv_back, *dW, *dW_proj;
+    float *W, *W_proj, *l, *qkv, *out, *qkv_back, *out_back, *l_back, *dW, *dW_proj;
     bool first_backward, changed_descriptors;
 
     MHSA(int nh, int C, int maxT, std::string Init, std::string Name)
@@ -14616,8 +14617,9 @@ class MHSA
 
       B = 0;
       d = C/nh;
+      M = deviceProp.sharedMemPerBlock;
 
-      l = get_from_pool(0, maxT, "mhsa l");
+      //l = get_from_pool(0, B*maxT, "mhsa l");
 
       float *W_cpu, *W_proj_cpu;
 
@@ -14649,6 +14651,7 @@ class MHSA
     }
   
   float *Forward(Tensor *, int, int, int);
+  void SetDescriptors(int, int);
   void Backward(float *, float *, float *);
   void SetBackwardDescriptors();
   void FirstBackward();
@@ -14675,7 +14678,7 @@ __device__ float _truncf(float value) {
 }
 
 
-__global__ void flash_attn_kernel(float *o, float *qkv, const int qkv_offset, float *l,
+__global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offset, float *l,
                                   const int B, const int nh, const int T, const int d, const int C, const int Bc, const int Br,
                                   const int Tc, const int Tr, const int tile_size, const float warps_per_block, const int threads_per_block)
 {
@@ -14710,9 +14713,9 @@ __global__ void flash_attn_kernel(float *o, float *qkv, const int qkv_offset, fl
   float *last_m_smem   = smem + 2*(Br+Bc)*d + Br*Bc + 2*Br;  // [Br]
   
   
-  float *q = qkv;
-  float *k = qkv + qkv_offset;
-  float *v = qkv + 2*qkv_offset;
+  const float *q = qkv;
+  const float *k = qkv + qkv_offset;
+  const float *v = qkv + 2*qkv_offset;
 
 
 
@@ -14953,9 +14956,8 @@ __global__ void flash_attn_kernel(float *o, float *qkv, const int qkv_offset, fl
         int br = warp_tile * warps_per_block + warpId;
         
         if (br<Br)
-        {
           last_m_smem[br] = m_smem[br];
-        }
+        
         
       }
       __syncthreads();
@@ -14991,7 +14993,7 @@ __global__ void flash_attn_kernel(float *o, float *qkv, const int qkv_offset, fl
         for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
           o[b*T*C + (i*Br+br)*C + h*d + lane_tile] = o_smem[br*d + lane_tile];
         
-        l[i*Br+br] = l_smem[br];
+        l[b*T*nh + (i*Br+br)*nh + h] = l_smem[br];
       }
       
       __syncthreads();
@@ -15003,42 +15005,11 @@ __global__ void flash_attn_kernel(float *o, float *qkv, const int qkv_offset, fl
 
 
 
-
-
-float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
+void MHSA::SetDescriptors(int B, int T)
 {
-  std::cout << "MHSA::Forward" << "\n";
-
-  float *qkv = get_from_pool(thread_id, B*T*3*C, "mhsa qkv");
-  out = get_from_pool(thread_id, B*T*C, "mhsa out");
-  float *proj_out = get_from_pool(thread_id, B*T*C, "mhsa out");
-
-
-  cudaStream_t stream = ThreadsStream[thread_id];  
-
-
-
-  if (thread_id==0 && nn_mode==training_mode)
-  {
-    qkv_back = qkv;
-    B_back = B;
-    T_back = T;
-  }
-
-
-  // Get qkv
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil((3*C)/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
-  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
-
-  mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
-
   
-
-  // Attention
-  int M = deviceProp.sharedMemPerBlock;
-  int Bc = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
-  int Br = (int)fminf(Bc, d);
+  Bc = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
+  Br = (int)fminf(Bc, d);
   Bc = fminf(Bc, 32);
   Br = fminf(Br, 32);
 
@@ -15051,13 +15022,50 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
       Bc=Bc-1;
   }
   
-  
+
+  Tc = std::ceil(T/(float)Bc);
+  Tr = std::ceil(T/(float)Br);
+
   
 
-  int Tc = std::ceil(T/(float)Bc);
-  int Tr = std::ceil(T/(float)Br);
-  float warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
+  this->B=B;
+  this->T=T;
 
+  changed_descriptors = true;
+}
+
+float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
+{
+  std::cout << "MHSA::Forward" << "\n";
+
+  float *qkv = get_from_pool(thread_id, B*T*3*C, "mhsa qkv");
+  out = get_from_pool(thread_id, B*T*C, "mhsa out");
+  float *proj_out = get_from_pool(thread_id, B*T*C, "mhsa out");
+  l = get_from_pool(thread_id, B*T*nh, "mhsa l");
+
+
+  cudaStream_t stream = ThreadsStream[thread_id];  
+
+  if (this->B!=B || this->T!=T)
+    SetDescriptors(B, T);
+
+
+
+
+
+  // Get qkv
+
+  dim3 block_size(TILE_SIZE, TILE_SIZE);
+  dim3 grid_size(std::ceil((3*C)/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+
+
+  mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
+
+  
+  int warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
+
+  // Attention
 
   //std::cout << "\n\nB: " << B << ", T: " << T << ", nh: " << nh << ", d: " << d << ", C: " << C << "\n";
   //std::cout << "Launching flash attention with Bc: " << Bc << ", Br: " << Br << ", Tc " << Tc << ", Tr: " << Tr << "\n";
@@ -15068,7 +15076,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
   dim3 grid_size_mhsa(nh, B);
   flash_attn_kernel<<<grid_size_mhsa, block_size, M, stream>>>(out, qkv, B*T*C, l,
-                                                          B, nh, T, d, C, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, THREADS_PER_BLOCK);
+                                                          B, nh, T, d, C, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, TILE_SIZE_SQ);
   
 
 
@@ -15078,8 +15086,18 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   
   mult_kernel<<<grid_size_proj, block_size, shared_mem_size, stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
   
-  if(!(thread_id==0 && nn_mode==training_mode))
+
+  if (thread_id==0 && nn_mode==training_mode)
+  {
+    qkv_back = qkv;
+    out_back = out;
+    B_back = B;
+    T_back = T;
+    l_back = l;
+  } else {
     move_to_pool(thread_id, B*T*C, out, "MHSA pre out-proj");
+    move_to_pool(thread_id, B*T*nh, l, "MHSA l");
+  }
   
   return proj_out;
 }
@@ -15104,6 +15122,330 @@ void MHSA::FirstBackward()
   first_backward=false;
 }
 
+
+__global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const float*qkv, const float *o, const int qkv_offset, float *l, float *D,
+                                  const int B, const int nh, const int T, const int d, const int C, const int Bc, const int Br,
+                                  const int Tc, const int Tr, const int tile_size, const float warps_per_block, const int threads_per_block)
+{
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  int tid = (ty * blockDim.x + tx);
+  
+  int warpId = tid / warpSize;
+  int laneId = tid % warpSize;
+
+  int b = blockIdx.y; // batch idx
+  int h = blockIdx.x; // head  idx
+
+
+  if(b>=B||h>=nh)
+    return;
+
+  
+  extern __shared__ float smem[];
+  
+
+  float *q_smem        = smem;
+  float *k_smem        = smem + Br*d;
+  float *v_smem        = smem + (Bc + Br)*d;
+  float *o_smem        = smem + (2*Bc + Br)*d;
+  float *d_q_smem      = smem + (2*Bc + 2*Br)*d;
+  float *d_k_smem      = smem + (2*Bc + 3*Br)*d;
+  float *d_v_smem      = smem + (3*Bc + 2*Br)*d;
+  float *d_o_smem      = smem + (4*Bc + 2*Br)*d;
+  float *Sij_smem      = smem + (4*Bc + 3*Br)*d;
+  float *l_smem        = smem + (4*Bc + 3*Br)*d + Br*Bc;
+  float *D_smem        = smem + (4*Bc + 3*Br)*d + Br*Bc + Br;
+  float *d_P_smem      = smem + (4*Bc + 3*Br)*d + Br*Bc + 2*Br;
+  float *d_S_smem      = smem + (4*Bc + 3*Br)*d + 2*Br*Bc + 2*Br;
+  //last_id = (4*Bc + 3*Br)*d + 3*Br*Bc + 2*Br;
+  
+  
+  const float *q = qkv;
+  const float *k = qkv + qkv_offset;
+  const float *v = qkv + 2*qkv_offset;
+
+  float *d_q = d_qkv;
+  float *d_k = d_qkv + qkv_offset;
+  float *d_v = d_qkv + 2*qkv_offset;
+
+
+
+  // init d_q (0)
+  for (int tile=0; tile<ceilf((T*d)/(float)threads_per_block); ++tile)
+  {
+    int tile_idx = tile*threads_per_block + tid;
+    int  t = tile_idx / d;
+    int _d = tile_idx % d;
+
+    if (t<T)
+      d_q[b*T*C + t*C + h*d + _d] = 0.0f;
+  }
+
+
+
+  // D = rowsum(dO * O)
+  for (int warp_tile=0; warp_tile<ceilf(T/(float)warps_per_block); ++warp_tile)
+  {
+    int t = warp_tile*warps_per_block + warpId;
+
+    float sumval=0;
+    for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+    {
+      if (t<T)
+        sumval += d_o[b*T*C + t*C + h*d + lane_tile]*o[b*T*C + t*C + h*d + lane_tile];
+    }
+
+    int mask_sumval;
+    for (int mask=warpSize/2; mask>0; mask>>=1)
+    {
+      mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+      sumval += mask_sumval;
+    }
+    sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+    if (t<T)
+    D[b*T*nh + t*nh + h] = sumval;
+  }
+
+
+
+
+  for (int j=0; j<Tc; ++j)
+  {
+
+    // init dK, dV (0) and load K, V
+    for (int tile=0; tile<ceilf((Bc*d)/(float)threads_per_block); ++tile)
+    {
+      int tile_idx = tile*threads_per_block + tid;
+      int bc = tile_idx / d;
+      int _d = tile_idx % d;
+
+      if (bc<Bc)
+      {
+        d_k_smem[bc*d + _d] = 0.0f;
+        d_v_smem[bc*d + _d] = 0.0f;
+        k_smem[bc*d + _d] = k[b*T*C + (j*Bc+bc)*C + h*d + _d];
+        v_smem[bc*d + _d] = v[b*T*C + (j*Bc+bc)*C + h*d + _d];
+      }
+    }
+
+
+    for (int i=0; i<Tr; ++i)
+    {
+      
+      for (int tile=0; tile<ceilf((Br*d)/(float)threads_per_block); ++tile)
+      {
+        int tile_idx = tile*threads_per_block + tid;
+        int br = tile_idx / d;
+        int _d = tile_idx % d;
+
+
+        if (br<Br)
+        {
+          q_smem[br*d+_d] = q[b*T*C + (i*Br+br)*C + h*d + _d];
+          o_smem[br*d+_d] = o[b*T*C + (i*Br+br)*C + h*d + _d];
+          d_q_smem[br*d+_d] = d_q[b*T*C + (i*Br+br)*C + h*d + _d];
+          d_o_smem[br*d+_d] = d_o[b*T*C + (i*Br+br)*C + h*d + _d];
+
+          if (_d==0 && (i*Br+br)<T)
+          {
+            l_smem[br] = l[b*T*nh + (i*Br+br)*nh + h];
+            D_smem[br] = D[b*T*nh + (i*Br+br)*nh + h];
+          }
+        }
+      }
+
+      __syncthreads();
+
+
+      // Compute probs
+      for (int warp_tile=0; warp_tile<ceilf((Br*Bc)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile*warps_per_block + warpId;
+        int br = wid / Bc;
+        int bc = wid % Bc;
+
+        float sumval=0;
+        for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+        {
+          if(br<Br)
+            sumval += q_smem[br*d + lane_tile] * k_smem[bc*d + lane_tile];
+        }
+
+        float mask_sumval;
+        for (int mask=warpSize/2; mask>0; mask>>=1)
+        {
+          mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+          sumval += mask_sumval;
+        }
+        sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+        if(br<Br)
+          Sij_smem[br*Bc + bc] = expf(sumval - l_smem[br]);
+      }
+
+      
+      __syncthreads();
+
+
+
+
+      // accumulate dV
+      for (int warp_tile=0; warp_tile<ceilf((Bc*d)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile*warps_per_block + warpId;
+        int bc = wid / d;
+        int _d = wid % d;
+
+        float sumval=0;
+        if(bc<Bc)
+        { 
+          for (int lane_tile=laneId; lane_tile<Br; lane_tile+=warpSize)
+            sumval += Sij_smem[lane_tile*Bc + bc]*d_o_smem[lane_tile*d + _d];
+          
+          
+          float mask_sumval;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+            sumval += mask_sumval;
+          }
+          sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+          d_v_smem[bc*d + _d] += sumval;
+        }
+      }
+
+
+
+
+      // calc dP
+      for (int warp_tile=0; warp_tile<ceilf((Br*Bc)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile*warps_per_block + warpId;
+        int br = wid / Bc;
+        int bc = wid % Bc;
+
+        float sumval = 0;
+        for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+        {
+          if(br<Br)
+            sumval += d_o_smem[br*d + lane_tile] * v_smem[bc*d + lane_tile];
+        }
+
+        float mask_sumval;
+        for (int mask=warpSize/2; mask>0; mask>>=1)
+        {
+          mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+          sumval += mask_sumval;
+        }
+        sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+        
+        if(br<Br)
+          d_P_smem[br*Bc + bc] = sumval;
+      }
+
+      __syncthreads();
+
+      // calc dS
+      for (int tile=0; tile<ceilf((Bc*Br)/(float)threads_per_block); ++tile)
+      {
+        int tile_idx = tile*threads_per_block + tid;
+        int br = tile_idx / Bc;
+        int bc = tile_idx % Bc;
+
+        if(br<Br)
+          d_S_smem[br*Bc + bc] = Sij_smem[br*Bc + bc] * (d_P_smem[br*Bc+bc] - D_smem[br]);
+      }
+
+      __syncthreads();
+
+
+
+
+      // calc dQ and write to HBM
+      for (int warp_tile=0; warp_tile<ceilf((Br*d)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile*warps_per_block + warpId;
+        int br = wid / d;
+        int _d = wid % d;
+
+        float sumval=0;
+        if((i*Br+br)<T)
+        {  
+          for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
+            sumval += d_k_smem[lane_tile*d + _d]*d_S_smem[br*Bc + lane_tile];
+          
+
+          
+          float mask_sumval;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+            sumval += mask_sumval;
+          }
+          sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+          d_q_smem[br*d + _d] += sumval;
+          d_q[b*T*C + (i*Br+br)*C + h*d + _d] = d_q_smem[br*d + _d];
+        }
+      }
+
+      // accumulate dK
+      for (int warp_tile=0; warp_tile<ceilf((Bc*d)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile*warps_per_block + warpId;
+        int bc = wid / d;
+        int _d = wid % d;
+
+        float sumval=0;
+        if(bc<Bc)
+        { 
+          for (int lane_tile=laneId; lane_tile<Br; lane_tile+=warpSize)
+            sumval += d_S_smem[lane_tile*Bc + bc]*q_smem[lane_tile*d + _d];
+          
+          
+          float mask_sumval;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+            sumval += mask_sumval;
+          }
+          sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+          d_k_smem[bc*d + _d] += sumval;
+        }
+      }
+      __syncthreads();
+    }
+
+
+
+    // Write dK, dV to HBM
+
+    for (int tile=0; tile<ceilf((Bc*d)/(float)threads_per_block); ++tile)
+    {
+      int tile_idx = tile*threads_per_block + tid;
+      int bc = tile_idx / d;
+      int _d = tile_idx % d;
+
+      if(bc<Bc && (j*Bc+bc)<T)
+      {
+        d_k[b*T*C + (j*Bc+bc)*C + h*d + _d] = d_k_smem[bc*d + _d];
+        d_v[b*T*C + (j*Bc+bc)*C + h*d + _d] = d_v_smem[bc*d + _d];
+      }
+    }
+    __syncthreads();
+  }
+
+
+}
+
+
+
 void MHSA::Backward(float *x, float *dx, float *dy)
 {
 
@@ -15111,25 +15453,73 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     FirstBackward();
 
   float *d_attn = get_from_pool(0, B_back*T_back*C, "MHSA d_attn");
+  float *d_qkv = get_from_pool(0, B_back*T_back*3*C, "MHSA d_attn");
+  float *D = get_from_pool(0, B_back*T_back*nh, "MHSA backward D");
   
+
+  // Set Streams
+  cudaStream_t dw_proj_stream, dw_stream;
+  cudaStreamCreate(&dw_stream);
+  cudaStreamCreate(&dw_proj_stream);
+
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size_dwproj(std::ceil(C/(float)TILE_SIZE), std::ceil(C/(float)TILE_SIZE));
   int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
-
-  cudaStream_t dw_proj_stream, dw_stream;
-  cudaStreamCreate(&dw_stream);
-  cudaStreamCreate(&dw_proj_stream);
-
   cudaStreamSynchronize(main_stream->stream);
 
+  // Backward to W_proj
   mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, dw_proj_stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, C);
   RegisterEvent(dw_proj_stream);
 
+
+  dim3 grid_size_dxproj(std::ceil(C/(float)TILE_SIZE), std::ceil((B_back*T_back)/(float)TILE_SIZE));
+  mult_backwarddx<<<grid_size_dxproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_attn, dy, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, C);
+
+
+
+  // Attention Backward
+  int warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
+
+  dim3 grid_size_mhsa(nh, B);
+  flash_attn_backward_kernel<<<grid_size_mhsa, block_size, M, main_stream->stream>>>(d_qkv, d_attn, qkv_back, out_back, B_back*T_back*C, l, D,
+                                                          B_back, nh, T_back, d, C, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, TILE_SIZE_SQ);
+  
+  
+  // Backward to W
+  dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C*C)/(float)TILE_SIZE));
+  mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, dw_stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, 3*C);
+  RegisterEvent(dw_stream);
+
+
+
+  dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B_back*T_back)/(float)TILE_SIZE));
+  mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, 3*C);
+
+
+  // Wait all Streams
+  StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
+  StreamAwaitStreamB(main_stream->stream, dw_stream);
+
+  cudaStreamDestroy(dw_stream);
+  cudaStreamDestroy(dw_proj_stream);
+
+
+  move_to_pool(0, B_back*T_back*C, d_attn, "MHSA d_attn");
+  move_to_pool(0, B_back*T_back*3*C, d_qkv, "MHSA d_qkv");
+  move_to_pool(0, B_back*T_back*nh, "MHSA backward D");
 }
 
 
+void mhsa_backward(float *x, float *dx, float *dy, std::string name)
+{
+  std::unique_ptr<MHSA> mhsa = std::move(NamedMHSA[name]);
+
+  mhsa->Backward(x, dx, dy);
+
+  NamedMHSA[name] = std::move(mhsa);
+}
 
 
 extern "C" void *MHSAForward(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
@@ -15197,14 +15587,6 @@ extern "C" void *MHSAForward(char *self, Tensor *tensor, int thread_id, char *co
 
 
 
-void mhsa_backward(float *x, float *dx, float *dy, std::string name)
-{
-  std::unique_ptr<MHSA> mhsa = std::move(NamedMHSA[name]);
-
-  mhsa->Backward(x, dx, dy);
-
-  NamedMHSA[name] = std::move(mhsa);
-}
 
 
 
