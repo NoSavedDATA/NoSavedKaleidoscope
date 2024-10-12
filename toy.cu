@@ -654,6 +654,7 @@ enum BackwardTypes {
   broadcast_lastdim_add_op = 50,
   idx_with_tensor_op = 51,
   mhsa_op = 52,
+  mean_over_semilast_dim_op = 53,
 };
 
 int nn_mode=training_mode;
@@ -1919,7 +1920,7 @@ std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
   ShallCodegen = false;
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   if (Str!=" ")
-    std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Error: \033[0m " << Str << "\n\n";
+    std::cout << "\nLine: " << LineCounter << "\n   \033[31m Error: \033[0m " << Str << "\n\n";
   
   
   return nullptr;
@@ -1960,7 +1961,7 @@ std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
 }
 
 void LogWarning(const char *Str) {
-  std::cout << "\nLinha: " << LineCounter << "\n   \033[33m Aviso: \033[0m " << Str << "\n\n";
+  std::cout << "\nLine: " << LineCounter << "\n   \033[33m Aviso: \033[0m " << Str << "\n\n";
 }
 
 // Modified LogError function with token parameter
@@ -1969,7 +1970,7 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
-  std::cout << "\nLinha: " << LineCounter << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
+  std::cout << "\nLine: " << LineCounter << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
   
   while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
     getNextToken();
@@ -2533,7 +2534,7 @@ static std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name="") {
   
 
   if (CurTok!=tok_space)
-    LogError("Finish requer quebra de linha.");
+    LogError("Finish requires line break.");
   getNextToken(); 
 
 
@@ -6572,7 +6573,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name="") {
     return LogErrorP("Número inválido de operandos para o operador");
 
   if (CurTok!=tok_space)
-    LogError("Protótipo requer finalização com quebra de linha.");
+    LogError("Post prototype parsing requires a line break.");
   getNextToken();
 
 
@@ -7815,7 +7816,7 @@ extern "C" void *view(int thread_id, Tensor *tensor, float first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions???");
+      LogErrorS("A tensor with 10 dimensions??? (view)");
       return 0;
     }
 
@@ -8446,7 +8447,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions???");
+      LogErrorS("A tensor with 10 dimensions??? (calc idx)");
       return 0;
     }
 
@@ -12505,10 +12506,45 @@ extern "C" float importance_sample_weight(int thread_id, Tensor *tensor, float m
 }
 
 
+
+__global__ void mean_over_semilast_dim_kernel(const float *x, float *y, const int dims_prod, const int T, const int C, const int warps_per_block)
+{
+  int tid = threadIdx.x;
+  int b = blockIdx.x;
+
+  if (b>=dims_prod)
+    return;
+
+  int warpId = tid / warpSize;
+  int laneId = tid % warpSize;
+
+  for (int warp_tile=0; warp_tile<ceilf(C/(float)warps_per_block); ++warp_tile)
+  {
+    int c = warp_tile*warps_per_block + tid;
+
+    float sumval=0.0f;
+    if (c<C)
+    {
+      for (int lane_tile=laneId; lane_tile<T; lane_tile+=warpSize)
+        sumval += x[b*T*C + lane_tile*T + c];
+
+      float mask_sumval;
+      for(int mask=warpSize/2; mask>0; mask>>=1)
+      {
+        mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+        sumval+=mask_sumval;
+      }
+      sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+      y[b*C + c] = sumval/T;
+    }
+  }
+}
+
 //TODO: mean over axis
 extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
 {
-  std::cout << "MEAN OF " << tensor->name << "\n";
+  //std::cout << "MEAN OF " << tensor->name << "\n";
 
 
   float *tensor_ptr = tensor->tensor_ptr;
@@ -12562,7 +12598,11 @@ extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions???");
+      LogErrorS("A tensor with 10 dimensions??? (mean)");
+      std::cout << "Input tensor dims:" << "\n";
+      PrintDims(tensor->dims);
+      std::cout << "Mean dims:" << "\n";
+      PrintDims(sum_dims);
       return nullptr;
     }
 
@@ -12601,11 +12641,27 @@ extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
   //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
 
   
-  int grid_size = dims_prod;
-  int block_size = 32;
-  size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
-
   
+  
+
+  if (sum_dims[0]==(dims.size()-2))
+  {
+    std::vector<float> _dims = RemoveLastDim(RemoveLastDim(dims));
+    dims_prod = DimsProd(_dims);
+
+    int threads = THREADS_PER_BLOCK/WARP_SIZE;
+    threads = fminf(threads, dims[dims.size()-2])*WARP_SIZE;
+
+    int warps_per_block = std::ceil(threads/(float)WARP_SIZE);
+
+    mean_over_semilast_dim_kernel<<<dims_prod, threads, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
+
+    Tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
+    new_tensor->AttrLNode(tensor, mean_over_semilast_dim_op);
+    new_tensor->scalar = dims[dims.size()-2];
+    return new_tensor;
+  }
+
   /*
   if (dims.size()==1)
   {
@@ -12623,6 +12679,34 @@ extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
   */
   LogErrorS("Mean of specific dim is not implemented yet.");
   return nullptr;
+}
+
+
+
+__global__ void mean_over_semilast_dim_backward_kernel(float *dx, const float *dy, const int dims_prod, const int T, const int C)
+{
+  int idx = blockIdx.x*blockDim.x + threadIdx.x;
+
+  if(idx>=dims_prod)
+    return;
+
+  int b = idx / (T*C);
+  int t = idx / C;
+  int c = idx % C;
+
+  if (t<T)
+    dx[b*T*C + t*C + c] = dy[b*C + c] / T;
+
+}
+
+void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node)
+{
+  std::vector<float> dims = node->L_Node->dims;
+  float x_dims_prod = node->L_Node->dims_prod;
+  float y_dims_prod = node->dims_prod;
+
+
+  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dy,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
 }
 
 
@@ -12728,7 +12812,7 @@ extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions???");
+      LogErrorS("A tensor with 10 dimensions??? (sum)");
       return nullptr;
     }
 
@@ -12787,6 +12871,7 @@ extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...)
   new_tensor->op=sum_op;
   return new_tensor;
 }
+
 
 __device__ float atomicMul(float* address, float val) {
     int *addr_as_int = (int *)address;
@@ -12906,7 +12991,7 @@ extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions???");
+      LogErrorS("A tensor with 10 dimensions??? (prod)");
       return nullptr;
     }
 
@@ -13078,7 +13163,7 @@ extern "C" void *tmax(int thread_id, Tensor *tensor, float first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions???");
+      LogErrorS("A tensor with 10 dimensions??? (max)");
       return nullptr;
     }
 
@@ -13205,7 +13290,7 @@ extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions???");
+      LogErrorS("A tensor with 10 dimensions??? (argmax)");
       return nullptr;
     }
 
@@ -14608,6 +14693,7 @@ class MHSA
     
     int B, T, maxT, nh, C, d, B_back, T_back;
     int M, Br, Bc, Tr, Tc;
+    int Br_back, Bc_back, Tr_back, Tc_back;
     std::string Init, Name;
     float *W, *W_proj, *l, *qkv, *out, *qkv_back, *out_back, *l_back, *dW, *dW_proj;
     bool first_backward, changed_descriptors;
@@ -14623,10 +14709,10 @@ class MHSA
 
       float *W_cpu, *W_proj_cpu;
 
-      W_cpu = make_gpt_init(3*C * C);
-      W_proj_cpu = make_gpt_init(C * C);
-      //W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
-      //W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
+      //W_cpu = make_gpt_init(3*C * C);
+      //W_proj_cpu = make_gpt_init(C * C);
+      W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
+      W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
 
       W = get_from_pool(0, 3*C * C, "MHSA W");
       W_proj = get_from_pool(0, C * C, "MHSA W_proj");
@@ -14651,7 +14737,7 @@ class MHSA
     }
   
   float *Forward(Tensor *, int, int, int);
-  void SetDescriptors(int, int);
+  void SetDescriptors(int, int, int);
   void Backward(float *, float *, float *);
   void SetBackwardDescriptors();
   void FirstBackward();
@@ -15005,9 +15091,14 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
 
 
 
-void MHSA::SetDescriptors(int B, int T)
+void MHSA::SetDescriptors(int B, int T, int thread_id)
 {
   
+  if(B!=0)
+  {
+    //move_to_pool();
+  }
+
   Bc = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
   Br = (int)fminf(Bc, d);
   Bc = fminf(Bc, 32);
@@ -15031,23 +15122,24 @@ void MHSA::SetDescriptors(int B, int T)
   this->B=B;
   this->T=T;
 
+  qkv = get_from_pool(thread_id, B*T*3*C, "mhsa qkv");
+  out = get_from_pool(thread_id, B*T*C, "mhsa out");
+  l = get_from_pool(thread_id, B*T*nh, "mhsa l");
+
   changed_descriptors = true;
 }
 
 float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 {
-  std::cout << "MHSA::Forward" << "\n";
+  //std::cout << "MHSA::Forward" << "\n";
 
-  float *qkv = get_from_pool(thread_id, B*T*3*C, "mhsa qkv");
-  out = get_from_pool(thread_id, B*T*C, "mhsa out");
+
   float *proj_out = get_from_pool(thread_id, B*T*C, "mhsa out");
-  l = get_from_pool(thread_id, B*T*nh, "mhsa l");
-
 
   cudaStream_t stream = ThreadsStream[thread_id];  
 
   if (this->B!=B || this->T!=T)
-    SetDescriptors(B, T);
+    SetDescriptors(B, T, thread_id);
 
 
 
@@ -15063,7 +15155,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
 
   
-  int warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
+  int warps_per_block = std::ceil((block_size.x*block_size.y)/(float)WARP_SIZE);
 
   // Attention
 
@@ -15079,12 +15171,13 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
                                                           B, nh, T, d, C, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, TILE_SIZE_SQ);
   
 
-
+  
   // Out Proj
   
   dim3 grid_size_proj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
   
   mult_kernel<<<grid_size_proj, block_size, shared_mem_size, stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
+  
   
 
   if (thread_id==0 && nn_mode==training_mode)
@@ -15095,6 +15188,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
     T_back = T;
     l_back = l;
   } else {
+    move_to_pool(thread_id, B*T*3*C, qkv, "MHSA qkv");
     move_to_pool(thread_id, B*T*C, out, "MHSA pre out-proj");
     move_to_pool(thread_id, B*T*nh, l, "MHSA l");
   }
@@ -15103,24 +15197,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 }
 
 
-void MHSA::SetBackwardDescriptors()
-{
 
-}
-
-void MHSA::FirstBackward()
-{
-  dW = get_from_pool(0, 3*C * C, "MHSA dW");
-  dW_proj = get_from_pool(0, C * C, "MHSA dW");
-
-  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW, 3*C*C);
-  set_to_zero_kernel<<<std::ceil((C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW_proj, C*C);
-
-  NamedParamGrads[Name+"W"] = dW;
-  NamedParamGrads[Name+"W_proj"] = dW_proj;
-
-  first_backward=false;
-}
 
 
 __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const float*qkv, const float *o, const int qkv_offset, float *l, float *D,
@@ -15233,8 +15310,10 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
     }
 
 
+    
     for (int i=0; i<Tr; ++i)
     {
+
       
       for (int tile=0; tile<ceilf((Br*d)/(float)threads_per_block); ++tile)
       {
@@ -15245,10 +15324,22 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
 
         if (br<Br)
         {
-          q_smem[br*d+_d] = q[b*T*C + (i*Br+br)*C + h*d + _d];
-          o_smem[br*d+_d] = o[b*T*C + (i*Br+br)*C + h*d + _d];
-          d_q_smem[br*d+_d] = d_q[b*T*C + (i*Br+br)*C + h*d + _d];
-          d_o_smem[br*d+_d] = d_o[b*T*C + (i*Br+br)*C + h*d + _d];
+          if ((i*Br+br)<T)
+          {
+            q_smem[br*d+_d] = q[b*T*C + (i*Br+br)*C + h*d + _d];
+            o_smem[br*d+_d] = o[b*T*C + (i*Br+br)*C + h*d + _d];
+            d_q_smem[br*d+_d] = d_q[b*T*C + (i*Br+br)*C + h*d + _d];
+            d_o_smem[br*d+_d] = d_o[b*T*C + (i*Br+br)*C + h*d + _d]; 
+            //q_smem[br*d+_d] = 0.0f;
+            //o_smem[br*d+_d] = 0.0f;
+            //d_q_smem[br*d+_d] = 0.0f;
+            //d_o_smem[br*d+_d] = 0.0f;
+          } else {
+            q_smem[br*d+_d] = 0.0f;
+            o_smem[br*d+_d] = 0.0f;
+            d_q_smem[br*d+_d] = 0.0f;
+            d_o_smem[br*d+_d] = 0.0f;
+          }
 
           if (_d==0 && (i*Br+br)<T)
           {
@@ -15257,6 +15348,7 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
           }
         }
       }
+      
 
       __syncthreads();
 
@@ -15419,12 +15511,14 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
           d_k_smem[bc*d + _d] += sumval;
         }
       }
+      
       __syncthreads();
     }
 
 
 
     // Write dK, dV to HBM
+    
 
     for (int tile=0; tile<ceilf((Bc*d)/(float)threads_per_block); ++tile)
     {
@@ -15439,15 +15533,65 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
       }
     }
     __syncthreads();
+    
+
   }
+}
 
 
+
+
+
+
+void MHSA::SetBackwardDescriptors()
+{
+
+  Bc_back = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
+  Br_back = (int)fminf(Bc_back, d);
+  Bc_back = fminf(Bc_back, 32);
+  Br_back = fminf(Br_back, 32);
+
+  
+  int last_id = (4*Bc_back + 3*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back;
+
+  while (((4*Bc_back + 3*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float) > M && Br_back>1 && Bc_back>1)
+  {
+    if(Br_back>Bc_back/2)
+      Br_back=Br_back-1;
+    else
+      Bc_back=Bc_back-1;
+  }
+  
+
+  Tc_back = std::ceil(T/(float)Bc_back);
+  Tr_back = std::ceil(T/(float)Br_back);
+
+
+  changed_descriptors=false;
+}
+
+
+void MHSA::FirstBackward()
+{
+  dW = get_from_pool(0, 3*C * C, "MHSA dW");
+  dW_proj = get_from_pool(0, C * C, "MHSA dW");
+
+  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW, 3*C*C);
+  set_to_zero_kernel<<<std::ceil((C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW_proj, C*C);
+
+  NamedParamGrads[Name+"W"] = dW;
+  NamedParamGrads[Name+"W_proj"] = dW_proj;
+
+  first_backward=false;
 }
 
 
 
 void MHSA::Backward(float *x, float *dx, float *dy)
 {
+
+  if (changed_descriptors)
+    SetBackwardDescriptors();
 
   if (first_backward)
     FirstBackward();
@@ -15459,8 +15603,8 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
   // Set Streams
   cudaStream_t dw_proj_stream, dw_stream;
-  cudaStreamCreate(&dw_stream);
   cudaStreamCreate(&dw_proj_stream);
+  cudaStreamCreate(&dw_stream);
 
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
@@ -15480,12 +15624,23 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
 
   // Attention Backward
-  int warps_per_block = (block_size.x*block_size.y)/WARP_SIZE;
+  int warps_per_block = std::ceil((block_size.x*block_size.y)/(float)WARP_SIZE);
 
+
+
+  int res = ((2*(Br+Bc)*d) + Br*Bc + 3*Br);
+  int last_id = (4*Bc_back + 3*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back;
+  //std::cout << "MHSA backward last idx forward: " << res*sizeof(float) << ", backward: " << last_id*sizeof(float) <<  ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
+  //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
+
+  M = deviceProp.sharedMemPerBlock;
   dim3 grid_size_mhsa(nh, B);
   flash_attn_backward_kernel<<<grid_size_mhsa, block_size, M, main_stream->stream>>>(d_qkv, d_attn, qkv_back, out_back, B_back*T_back*C, l, D,
-                                                          B_back, nh, T_back, d, C, Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, TILE_SIZE_SQ);
+                                                          B_back, nh, T_back, d, C, Bc_back, Br_back, Tc_back, Tr_back, TILE_SIZE, warps_per_block, TILE_SIZE_SQ);
+  RegisterEvent(main_stream->stream);
+  StreamAwaitStreamB(dw_stream, main_stream->stream);
   
+  cudaCheck(cudaGetLastError());
   
   // Backward to W
   dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C*C)/(float)TILE_SIZE));
@@ -15493,22 +15648,28 @@ void MHSA::Backward(float *x, float *dx, float *dy)
   RegisterEvent(dw_stream);
 
 
-
   dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B_back*T_back)/(float)TILE_SIZE));
   mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, 3*C);
 
 
-  // Wait all Streams
+  // Wait Parallel Backward Streams
   StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
   StreamAwaitStreamB(main_stream->stream, dw_stream);
 
-  cudaStreamDestroy(dw_stream);
   cudaStreamDestroy(dw_proj_stream);
+  cudaStreamDestroy(dw_stream);
 
+  cudaStreamSynchronize(main_stream->stream);
+  cudaDeviceSynchronize();
 
+  cudaCheck(cudaGetLastError());
+
+  // Clean-up
   move_to_pool(0, B_back*T_back*C, d_attn, "MHSA d_attn");
   move_to_pool(0, B_back*T_back*3*C, d_qkv, "MHSA d_qkv");
-  move_to_pool(0, B_back*T_back*nh, "MHSA backward D");
+  move_to_pool(0, B_back*T_back*nh, D, "MHSA backward D");
+
+  cudaCheck(cudaGetLastError());
 }
 
 
@@ -15574,8 +15735,8 @@ extern "C" void *MHSAForward(char *self, Tensor *tensor, int thread_id, char *co
 
   NamedMHSA[conv_name] = std::move(mhsa);
 
-  std::cout << "Return with dims:" << "\n";
-  PrintDims(new_dims);
+  //std::cout << "Return with dims:" << "\n";
+  //PrintDims(new_dims);
   
 
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
@@ -19127,6 +19288,9 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       case broadcast_lastdim_add_op:
         device_dx = device_dy;
         broadcast_lastdim_add_backward(device_dw, device_dy, w_size, x_size);
+        break;
+      case mean_over_semilast_dim_op:
+        mean_over_semilast_dim_backward(device_dx, device_dy, back_node);
         break;
       
       // Custom Ops
@@ -23405,7 +23569,7 @@ static void InitializeModule() {
   FunctionType *meanTy = FunctionType::get(
       int8PtrTy,
       {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-      false
+      true // vararg
   );
   TheModule->getOrInsertFunction("mean", meanTy);
   
