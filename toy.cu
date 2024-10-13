@@ -12695,7 +12695,7 @@ __global__ void mean_over_semilast_dim_backward_kernel(float *dx, const float *d
   int c = idx % C;
 
 
-  dx[b*T*C + t*C + c] = dy[b*C + c] * T;
+  dx[b*T*C + t*C + c] = dy[b*C + c] / T;
 }
 
 void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node)
@@ -14707,10 +14707,10 @@ class MHSA
 
       float *W_cpu, *W_proj_cpu;
 
-      W_cpu = make_gpt_init(3*C*C);
-      W_proj_cpu = make_gpt_init(C*C);
-      //W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
-      //W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
+      //W_cpu = make_gpt_init(3*C*C);
+      //W_proj_cpu = make_gpt_init(C*C);
+      W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
+      W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
 
       cudaMalloc(&W,       3*C*C*sizeof(float));
       cudaMalloc(&W_proj,  C*C*sizeof(float));
@@ -15618,6 +15618,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
   mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
 
 
+  //PrintTensorF(d_out, T, C);
 
 
   dim3 grid_size_mhsa(nh, B);
@@ -15626,7 +15627,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
   int threads_per_block = block_size.x*block_size.y;
 
 
-  int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
+  //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
   //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
   //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
   flash_attn_backward_kernel<<<grid_size_mhsa, block_size, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
@@ -15634,7 +15635,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
                                                                               Bc_back, Br_back, Tc_back, Tr_back,
                                                                               warps_per_block, threads_per_block);
 
-  PrintTensorF(d_qkv, T, 3*C);
+  //PrintTensorF(d_qkv, T, 3*C);
 
 
   dim3 grid_size_dw(std::ceil(C/float(TILE_SIZE)), std::ceil((3*C)/(float)TILE_SIZE));
