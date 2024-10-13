@@ -7524,7 +7524,7 @@ extern "C" float PrintTensorF(const float *cuda_tensor, int d1, int d2){
 
     for (int e = 0; e < ends.size(); e++)
       if (fmod((i+1),(int)ends[e]) == 0.0f)
-        std::cout << "]";
+        std::cout << "],";
     
 
     if (i!=(arr_size-1))
@@ -7536,7 +7536,7 @@ extern "C" float PrintTensorF(const float *cuda_tensor, int d1, int d2){
         std::cout << "\n";
       }
       else
-        std::cout << "  ";
+        std::cout << ",  ";
     }
 
     if(fmod(i+1, ends[1]) == 0.0f)
@@ -11077,7 +11077,7 @@ void matmul_backward(float *inp,  float *weight,
 
   //PrintTensorF(dw, OC, C);
 
-  WaitForAllEvents();
+  StreamAwaitStreamB(main_stream->stream, dx_stream);
   cudaStreamDestroy(dx_stream);
   */
 
@@ -12452,12 +12452,10 @@ __global__ void is_w_kernel(float *is_w_ptr, const float *probs, const float *id
   for (int mask=warpSize/2; mask > 0; mask>>=1)
   {
     __syncwarp();
-
     warp_is_w = __shfl_down_sync(0xFFFFFFFF, max_is_w, mask);
     max_is_w = fmaxf(max_is_w, warp_is_w);
   }
-  __syncwarp();
-  max_is_w = __shfl_down_sync(0xFFFFFFFF, max_is_w, 0);
+  max_is_w = __shfl_sync(0xFFFFFFFF, max_is_w, 0);
 
 
   is_w_ptr[0] = is_w / max_is_w;
@@ -12520,7 +12518,7 @@ __global__ void mean_over_semilast_dim_kernel(const float *x, float *y, const in
 
   for (int warp_tile=0; warp_tile<ceilf(C/(float)warps_per_block); ++warp_tile)
   {
-    int c = warp_tile*warps_per_block + tid;
+    int c = warp_tile*warps_per_block + warpId;
 
     float sumval=0.0f;
     if (c<C)
@@ -12531,6 +12529,7 @@ __global__ void mean_over_semilast_dim_kernel(const float *x, float *y, const in
       float mask_sumval;
       for(int mask=warpSize/2; mask>0; mask>>=1)
       {
+        __syncwarp();
         mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
         sumval+=mask_sumval;
       }
@@ -12649,12 +12648,11 @@ extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
     std::vector<float> _dims = RemoveLastDim(RemoveLastDim(dims));
     dims_prod = DimsProd(_dims);
 
-    int threads = THREADS_PER_BLOCK/WARP_SIZE;
-    threads = fminf(threads, dims[dims.size()-2])*WARP_SIZE;
+    int warps_per_block = THREADS_PER_BLOCK/WARP_SIZE;
+    warps_per_block = fminf(warps_per_block, dims[dims.size()-2]);
+    
 
-    int warps_per_block = std::ceil(threads/(float)WARP_SIZE);
-
-    mean_over_semilast_dim_kernel<<<dims_prod, threads, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
+    mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
     Tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
     new_tensor->AttrLNode(tensor, mean_over_semilast_dim_op);
@@ -12693,27 +12691,21 @@ __global__ void mean_over_semilast_dim_backward_kernel(float *dx, const float *d
 
 
   int b = idx / (T*C);
-  int t = idx / C;
+  int t = (idx/C) % T;
   int c = idx % C;
 
-  if (t>=T)
-    t = t-floorf(t/T)*T;
 
   dx[b*T*C + t*C + c] = dy[b*C + c] * T;
-  //dx[b*T*C + t*C + c] = dy[b*C + c];
-
 }
 
 void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node)
 {
-  //std::cout << "mean_over_semilast_dim_backward" << "\n";
   std::vector<float> dims = node->L_Node->dims;
   float x_dims_prod = node->L_Node->dims_prod;
   float y_dims_prod = node->dims_prod;
 
 
   mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dy,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
-  //PrintTensorF(dx, 2, 256);
 }
 
 
@@ -14601,8 +14593,8 @@ class Embedding
       float *w_cpu;
       
       
-      w_cpu = make_xavier_uniform_float(OC*C, OC,  C);
-      //w_cpu = make_normal(OC*C);
+      //w_cpu = make_xavier_uniform_float(OC*C, OC,  C);
+      w_cpu = make_normal(OC*C);
       //w_cpu = make_uniform(OC*C);
 
 
@@ -14706,8 +14698,8 @@ class MHSA
 
     MHSA(int nh, int C, int maxT, std::string Init, std::string Name)
         : nh(nh), C(C), maxT(maxT), Init(Init), Name(Name) {
-
       B = 0;
+      T = 0;
       d = C/nh;
       M = deviceProp.sharedMemPerBlock;
 
@@ -14715,19 +14707,18 @@ class MHSA
 
       float *W_cpu, *W_proj_cpu;
 
-      //W_cpu = make_gpt_init(3*C * C);
-      //W_proj_cpu = make_gpt_init(C * C);
-      W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
-      W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
+      W_cpu = make_gpt_init(3*C*C);
+      W_proj_cpu = make_gpt_init(C*C);
+      //W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
+      //W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
 
-      W = get_from_pool(0, 3*C * C, "MHSA W");
-      W_proj = get_from_pool(0, C * C, "MHSA W_proj");
+      cudaMalloc(&W,       3*C*C*sizeof(float));
+      cudaMalloc(&W_proj,  C*C*sizeof(float));
+      cudaMemcpy(W, W_cpu, 3*C*C * sizeof(float), cudaMemcpyHostToDevice);
+      cudaMemcpy(W_proj, W_proj_cpu, C*C * sizeof(float), cudaMemcpyHostToDevice);
 
-      cudaMemcpy(W, W_cpu, 3*C * C * sizeof(float), cudaMemcpyHostToDevice);
-      cudaMemcpy(W_proj, W_proj_cpu, C * C * sizeof(float), cudaMemcpyHostToDevice);
-
-      Tensor *tensor_W = createTensor(W, {3*(float)C * (float)C}, 3*C*C, true, Name+"W");
-      Tensor *tensor_W_proj = createTensor(W_proj, {(float)C * (float)C}, C*C, true, Name+"W_proj");
+      Tensor *tensor_W = createTensor(W, {3*(float)C*(float)C}, 3*C*C, true, Name+"W");
+      Tensor *tensor_W_proj = createTensor(W_proj, {(float)C*(float)C}, C*C, true, Name+"W_proj");
       tensor_W->SetIsWeight();
       tensor_W_proj->SetIsWeight();
 
@@ -14804,8 +14795,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
   
   
   const float *q = qkv;
-  const float *k = qkv + qkv_offset;
-  const float *v = qkv + 2*qkv_offset;
+  const float *k = qkv;
+  const float *v = qkv;
 
 
 
@@ -14835,7 +14826,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
       if(br<Br)
       {
         if((i*Br+br)<T)
-          q_smem[br*d + _d] = q[b*T*C + (i*Br+br)*C + h*d + _d];
+          q_smem[br*d + _d] = q[b*T*3*C + (i*Br+br)*3*C + h*d + _d];
         else
           q_smem[br*d + _d] = 0;
         
@@ -14863,8 +14854,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
         {
           if((j*Bc+bc)<T)
           {
-            k_smem[bc*d + _d] = k[b*T*C + (j*Bc+bc)*C + h*d + _d];
-            v_smem[bc*d + _d] = v[b*T*C + (j*Bc+bc)*C + h*d + _d];
+            k_smem[bc*d + _d] = k[b*T*3*C + (j*Bc+bc)*3*C +   C + h*d + _d];
+            v_smem[bc*d + _d] = v[b*T*3*C + (j*Bc+bc)*3*C + 2*C + h*d + _d];
           } else {
             k_smem[bc*d + _d] = 0;
             v_smem[bc*d + _d] = 0;
@@ -14880,7 +14871,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
 
 
       // compute q @ k.T
-      for (int warp_tile=0; warp_tile < std::ceil((Br*Bc)/warps_per_block); ++warp_tile)
+      for (int warp_tile=0; warp_tile < std::ceil((Br*Bc)/(float)warps_per_block); ++warp_tile)
       {
         int wid = warp_tile * warps_per_block + warpId;
         int br = wid / Bc; 
@@ -14910,14 +14901,14 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
 
 
         if (bc<Bc && br<Br && laneId==0)
-          Sij_smem[br*Bc + bc] = sij;
+          Sij_smem[br*Bc + bc] = sij/d_scale;
           //Sij_smem[br*Bc + bc] = sij/d_scale;
       }
       __syncthreads();
 
 
-      ///---///
 
+      ///---///
 
       
 
@@ -15046,7 +15037,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
       {
         int br = warp_tile * warps_per_block + warpId;
         
-        if (br<Br)
+        if (br<Br && laneId==0)
           last_m_smem[br] = m_smem[br];
         
         
@@ -15075,9 +15066,11 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, const int qkv_offs
       __syncthreads();
 
       
-      if (br<Br)
+      if (br<Br && laneId==0)
         l_smem[br] = m_smem[br] + logf(l_smem[br]);
       
+
+      __syncthreads();
 
       if ((i*Br+br)<T && br<Br)
       {
@@ -15161,6 +15154,8 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
   
   
+  //cudaStreamSynchronize(stream);
+  //PrintTensorF(qkv, B*T, 3*C);
 
   // Attention
 
@@ -15183,8 +15178,10 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, stream>>>(out, qkv, B*T*C, l,
                                                           B, nh, T, d, C, sqrtf(d), Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, threads_per_block);
   
-
+  //cudaStreamSynchronize(stream);
+  //PrintTensorF(out, B*T, C);
   
+
   // Out Proj
   
   dim3 grid_size_proj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
@@ -15213,11 +15210,11 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
 
 
-__global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const float *qkv, const float *o, const int qkv_offset, float *l, float *D,
-                                  const int B, const int nh, const int T, const int d, const int C, const float d_scale, const int Bc, const int Br,
-                                  const int Tc, const int Tr, const int tile_size, const float warps_per_block, const int threads_per_block)
+__global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const float *qkv, const float *o, const float *l, float *D,
+                                           const int B, const int nh, const int T, const int d, const int C, const float d_scale,
+                                           const int Bc, const int Br, const int Tc, const int Tr,
+                                           const int warps_per_block, const int threads_per_block)
 {
-
   int b = blockIdx.y; // batch idx
   int h = blockIdx.x; // head  idx
 
@@ -15235,37 +15232,26 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
 
   
   extern __shared__ float smem[];
-  
 
-  float *q_smem        = smem;                                          // [Br, d]
-  float *k_smem        = smem + Br*d;                                   // [Bc, d]
-  float *v_smem        = smem + (Bc + Br)*d;                            // [Bc, d]
-  float *o_smem        = smem + (2*Bc + Br)*d;                          // [Br, d]
+  float *q_smem     = smem;
+  float *k_smem     = smem + Br*d;
+  float *v_smem     = smem + (Br+Bc)*d;
+  float *o_smem     = smem + (Br+2*Bc)*d;
 
-  float *d_q_smem      = smem + (2*Bc + 2*Br)*d;                        // [Br, d]
-  float *d_k_smem      = smem + (2*Bc + 3*Br)*d;                        // [Bc, d]
-  float *d_v_smem      = smem + (3*Bc + 3*Br)*d;                        // [Bc, d]
-  float *d_o_smem      = smem + (4*Bc + 3*Br)*d;                        // [Br, d]
+  float *d_q_smem   = smem + (2*Br+2*Bc)*d;
+  float *d_k_smem   = smem + (3*Br+2*Bc)*d;
+  float *d_v_smem   = smem + (3*Br+3*Bc)*d;
+  float *d_o_smem   = smem + (3*Br+4*Bc)*d;
 
-  float *Sij_smem      = smem + (4*Bc + 4*Br)*d;                        // [Br, Bc]
-  float *l_smem        = smem + (4*Bc + 4*Br)*d + Br*Bc;                // [Br]
-  float *D_smem        = smem + (4*Bc + 4*Br)*d + Br*Bc + Br;           // [Br]
-  float *d_P_smem      = smem + (4*Bc + 4*Br)*d + Br*Bc + 2*Br;         // [Br, Bc]
-  float *d_S_smem      = smem + (4*Bc + 4*Br)*d + 2*Br*Bc + 2*Br;       // [Br, Bc]
-  //last_id = (4*Bc + 4*Br)*d + 3*Br*Bc + 2*Br;
-  
-  
-  const float *q = qkv;
-  const float *k = qkv + qkv_offset;
-  const float *v = qkv + 2*qkv_offset;
-
-  float *d_q = d_qkv;
-  float *d_k = d_qkv + qkv_offset;
-  float *d_v = d_qkv + 2*qkv_offset;
+  float *Sij_smem   = smem + (4*Br+4*Bc)*d;
+  float *d_Pij_smem = smem + (4*Br+4*Bc)*d + Br*Bc;
+  float *d_Sij_smem = smem + (4*Br+4*Bc)*d + 2*Br*Bc;
+  float *l_smem     = smem + (4*Br+4*Bc)*d + 3*Br*Bc;
+  float *D_smem     = smem + (4*Br+4*Bc)*d + 3*Br*Bc + Br;
 
 
 
-  // init d_q (0)
+
   for (int tile=0; tile<ceilf((T*d)/(float)threads_per_block); ++tile)
   {
     int tile_idx = tile*threads_per_block + tid;
@@ -15273,44 +15259,42 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
     int _d = tile_idx % d;
 
     if (t<T)
-      d_q[b*T*C + t*C + h*d + _d] = 0.0f;
+      d_qkv[b*T*3*C + t*3*C + h*d + _d] = 0.0f;
   }
 
 
-
-  // D = rowsum(dO * O)
-  for (int warp_tile=0; warp_tile<ceilf(T/(float)warps_per_block); ++warp_tile)
+  for (int warp_tile=0; warp_tile<std::ceil(T/warps_per_block); ++warp_tile)
   {
-    int t = warp_tile*warps_per_block + warpId;
-
-    float sumval=0.0f;
-    for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
-    {
-      if (t<T)
-        sumval += d_o[b*T*C + t*C + h*d + lane_tile]*o[b*T*C + t*C + h*d + lane_tile];
-    }
-
-    int mask_sumval;
-    for (int mask=warpSize/2; mask>0; mask>>=1)
-    {
-      mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
-      sumval += mask_sumval;
-    }
-    sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+    int t = warp_tile * warps_per_block + warpId;
 
     if (t<T)
+    {
+      float sumval=0.0f;
+      for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+        sumval += d_o[b*T*C + t*C + h*d + lane_tile]*o[b*T*C + t*C + h*d + lane_tile];
+
+      float mask_sumval;
+      for (int mask = warpSize/2; mask>0; mask>>=1)
+      {
+        __syncwarp();
+        mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+        sumval += mask_sumval;
+      }
+      sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
       D[b*T*nh + t*nh + h] = sumval;
+    }
   }
 
 
   __syncthreads();
 
-
-  for (int j=0; j<Tc; ++j)
+  for(int j=0; j<Tc; ++j)
   {
 
-    // init dK, dV (0) and load K, V
-    for (int tile=0; tile<ceilf((Bc*d)/(float)threads_per_block); ++tile)
+    // Load K, V, init dK, dV (0)
+
+    for (int tile=0; tile<std::ceil((Bc*d)/(float)threads_per_block); ++tile)
     {
       int tile_idx = tile*threads_per_block + tid;
       int bc = tile_idx / d;
@@ -15320,10 +15304,11 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
       {
         d_k_smem[bc*d + _d] = 0.0f;
         d_v_smem[bc*d + _d] = 0.0f;
-        if((j*Bc+bc)<T)
+
+        if ((j*Bc+bc)<T)
         {
-          k_smem[bc*d + _d] = k[b*T*C + (j*Bc+bc)*C + h*d + _d];
-          v_smem[bc*d + _d] = v[b*T*C + (j*Bc+bc)*C + h*d + _d];
+          k_smem[bc*d + _d] = qkv[b*T*3*C + (j*Bc+bc)*3*C +   C + h*d + _d];
+          v_smem[bc*d + _d] = qkv[b*T*3*C + (j*Bc+bc)*3*C + 2*C + h*d + _d];
         } else {
           k_smem[bc*d + _d] = 0.0f;
           v_smem[bc*d + _d] = 0.0f;
@@ -15332,101 +15317,100 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
     }
 
 
-    
-    for (int i=0; i<Tr; ++i)
+    for(int i=0; i<Tr; ++i)
     {
 
-      
-      for (int tile=0; tile<ceilf((Br*d)/(float)threads_per_block); ++tile)
+      for (int tile=0; tile<std::ceil((Br*d)/(float)threads_per_block); ++tile)
       {
         int tile_idx = tile*threads_per_block + tid;
         int br = tile_idx / d;
         int _d = tile_idx % d;
 
-
-        if (br<Br)
+        if(br<Br)
         {
-          if ((i*Br+br)<T)
+          if((i*Br+br)<T)
           {
-            if (_d==0)
+            if(_d==0)
             {
-              l_smem[br] = l[b*T*nh + (i*Br+br)*nh + h];
               D_smem[br] = D[b*T*nh + (i*Br+br)*nh + h];
+              l_smem[br] = l[b*T*nh + (i*Br+br)*nh + h];
             }
-            q_smem[br*d+_d]   =   q[b*T*C + (i*Br+br)*C + h*d + _d];
-            o_smem[br*d+_d]   =   o[b*T*C + (i*Br+br)*C + h*d + _d];
-            d_q_smem[br*d+_d] = d_q[b*T*C + (i*Br+br)*C + h*d + _d];
-            d_o_smem[br*d+_d] = d_o[b*T*C + (i*Br+br)*C + h*d + _d];
+            q_smem[br*Br + _d]   =   qkv[b*T*3*C + (i*Br+br)*3*C + h*d + _d];
+            d_q_smem[br*Br + _d] = d_qkv[b*T*3*C + (i*Br+br)*3*C + h*d + _d];
+            o_smem[br*Br + _d]   =   o[b*T*C + (i*Br+br)*C + h*d + _d];
+            d_o_smem[br*Br + _d] = d_o[b*T*C + (i*Br+br)*C + h*d + _d];
           } else {
-            q_smem[br*d+_d] = 0.0f;
-            o_smem[br*d+_d] = 0.0f;
-            d_q_smem[br*d+_d] = 0.0f;
-            d_o_smem[br*d+_d] = 0.0f;
+            q_smem[br*Br + _d]   = 0.0f;
+            d_q_smem[br*Br + _d] = 0.0f;
+            o_smem[br*Br + _d]   = 0.0f;
+            d_o_smem[br*Br + _d] = 0.0f;
           }
-
         }
       }
-      
 
       __syncthreads();
+
 
 
       // Compute probs
-      for (int warp_tile=0; warp_tile<ceilf((Br*Bc)/(float)warps_per_block); ++warp_tile)
+      for (int warp_tile=0; warp_tile < std::ceil((Br*Bc)/(float)warps_per_block); ++warp_tile)
       {
-        int wid = warp_tile*warps_per_block + warpId;
+        int wid = warp_tile * warps_per_block + warpId;
         int br = wid / Bc;
         int bc = wid % Bc;
 
-        float sumval=0.0f;
-        for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+        if (br<Br)
         {
-          if(br<Br)
-            sumval += q_smem[br*d + lane_tile] * k_smem[bc*d + lane_tile];
+          float sij=0.0f;
+          // \sum_i q[i] @ k[i].T  for each lane
+          for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+            sij += q_smem[br*d + lane_tile]*k_smem[bc*d + lane_tile];
+          
+
+          // \sum_i q[i] @ k[i].T  across the warp
+          float mask_sij;
+          for (int mask = warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_sij = __shfl_down_sync(0xFFFFFFFF, sij, mask);
+            sij += mask_sij;
+          }
+          sij = __shfl_sync(0xFFFFFFFF, sij, 0);
+
+          sij = sij/d_scale;
+
+          if (br<Br && laneId==0)
+            Sij_smem[br*Bc + bc] = expf(sij-l_smem[br]);
         }
-
-        float mask_sumval;
-        for (int mask=warpSize/2; mask>0; mask>>=1)
-        {
-          mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
-          sumval += mask_sumval;
-        }
-        sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
-
-        //sumval = sumval/d_scale;        
-
-
-        if(br<Br && laneId==0)
-          Sij_smem[br*Bc + bc] = expf(sumval - l_smem[br]); // todo: gradient of sumval/d_scale
       }
 
-      
       __syncthreads();
 
-
-
-
-      // accumulate dV
-      for (int warp_tile=0; warp_tile<ceilf((Bc*d)/(float)warps_per_block); ++warp_tile)
+      // dV
+      for (int warp_tile=0; warp_tile < std::ceil((Bc*d)/(float)warps_per_block); ++warp_tile)
       {
-        int wid = warp_tile*warps_per_block + warpId;
+        int wid = warp_tile * warps_per_block + warpId;
         int bc = wid / d;
         int _d = wid % d;
 
-        float sumval=0;
-        if(bc<Bc)
-        { 
+        if (bc<Bc)
+        {
+          float sumval=0.0f;
+          // \sum_i q[i] @ k[i].T  for each lane
           for (int lane_tile=laneId; lane_tile<Br; lane_tile+=warpSize)
-            sumval += Sij_smem[lane_tile*Bc + bc]*d_o_smem[lane_tile*d + _d];
-          
-          
+            sumval += Sij_smem[lane_tile*Bc + bc] * d_o_smem[lane_tile*d+_d];
+
+          // \sum_i q[i] @ k[i].T  across the warp
           float mask_sumval;
-          for (int mask=warpSize/2; mask>0; mask>>=1)
+          for (int mask = warpSize/2; mask>0; mask>>=1)
           {
+            __syncwarp();
             mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
             sumval += mask_sumval;
           }
           sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+          
 
           if(laneId==0)
             d_v_smem[bc*d + _d] += sumval;
@@ -15434,134 +15418,130 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
       }
 
 
-      __syncthreads();
-
-
-      // calc dP
-      for (int warp_tile=0; warp_tile<ceilf((Br*Bc)/(float)warps_per_block); ++warp_tile)
+      // d_Pij
+      for (int warp_tile=0; warp_tile < std::ceil((Br*Bc)/(float)warps_per_block); ++warp_tile)
       {
-        int wid = warp_tile*warps_per_block + warpId;
+        int wid = warp_tile * warps_per_block + warpId;
         int br = wid / Bc;
         int bc = wid % Bc;
 
-        float sumval = 0;
-        for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+        if (br<Br)
         {
-          if(br<Br)
+          float sumval=0.0f;
+          for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
             sumval += d_o_smem[br*d + lane_tile] * v_smem[bc*d + lane_tile];
-        }
 
-        float mask_sumval;
-        for (int mask=warpSize/2; mask>0; mask>>=1)
-        {
-          mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
-          sumval += mask_sumval;
+          float mask_sumval;
+          for (int mask = warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+            sumval += mask_sumval;
+          }
+          sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+
+          if(laneId==0)
+            d_Pij_smem[br*Bc + bc] = sumval;
         }
-        sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
-        
-        if(br<Br && laneId==0)
-          d_P_smem[br*Bc + bc] = sumval;
       }
 
       __syncthreads();
 
-      // calc dS
-      for (int tile=0; tile<ceilf((Br*Bc)/(float)threads_per_block); ++tile)
+      // d_Sij
+      for (int tile=0; tile<std::ceil((Br*Bc)/(float)threads_per_block); ++tile)
       {
         int tile_idx = tile*threads_per_block + tid;
         int br = tile_idx / Bc;
         int bc = tile_idx % Bc;
 
-        if(br<Br)
-          d_S_smem[br*Bc + bc] = Sij_smem[br*Bc + bc] * (d_P_smem[br*Bc + bc] - D_smem[br]);
+        if (br<Br)
+          d_Sij_smem[br*Bc + bc] = Sij_smem[br*Bc + bc] * (d_Pij_smem[br*Bc + bc] - D_smem[br]);
       }
 
       __syncthreads();
 
 
-
-
-      // calc dQ and write to HBM
-      for (int warp_tile=0; warp_tile<ceilf((Br*d)/(float)warps_per_block); ++warp_tile)
+      // dQ
+      for (int warp_tile=0; warp_tile < std::ceil((Br*d)/(float)warps_per_block); ++warp_tile)
       {
-        int wid = warp_tile*warps_per_block + warpId;
+        int wid = warp_tile * warps_per_block + warpId;
         int br = wid / d;
         int _d = wid % d;
 
-        float sumval=0;
-        if((i*Br+br)<T && br<Br)
-        {  
+        if (br<Br)
+        {
+          float sumval=0.0f;
+
           for (int lane_tile=laneId; lane_tile<Bc; lane_tile+=warpSize)
-            sumval += k_smem[lane_tile*d + _d]*d_S_smem[br*Bc + lane_tile];
-          
+            sumval += d_Sij_smem[br*Bc + lane_tile] * k_smem[lane_tile*d + _d];
+            
 
           float mask_sumval;
-          for (int mask=warpSize/2; mask>0; mask>>=1)
+          for (int mask = warpSize/2; mask>0; mask>>=1)
           {
+            __syncwarp();
             mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
             sumval += mask_sumval;
           }
           sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
 
-          if (laneId==0)
+          if(laneId==0 && (i*Br+br)<T)
           {
             d_q_smem[br*d + _d] += sumval;
-            d_q[b*T*C + (i*Br+br)*C + h*d + _d] = d_q_smem[br*d + _d];
+            d_qkv[b*T*3*C + (i*Br+br)*3*C + h*d + _d] = d_q_smem[br*d + _d];
           }
         }
       }
 
-      __syncthreads();
-      // accumulate dK
-      for (int warp_tile=0; warp_tile<ceilf((Bc*d)/(float)warps_per_block); ++warp_tile)
+
+      // dK
+      for (int warp_tile=0; warp_tile < std::ceil((Bc*d)/(float)warps_per_block); ++warp_tile)
       {
-        int wid = warp_tile*warps_per_block + warpId;
+        int wid = warp_tile * warps_per_block + warpId;
         int bc = wid / d;
         int _d = wid % d;
 
-        float sumval=0;
-        if(bc<Bc)
-        { 
+        if (bc<Bc)
+        {
+          float sumval=0.0f;
+
           for (int lane_tile=laneId; lane_tile<Br; lane_tile+=warpSize)
-            sumval += d_S_smem[lane_tile*Bc + bc]*q_smem[lane_tile*d + _d];
-          
-          
+            sumval += d_Sij_smem[lane_tile*Bc + bc] * q_smem[lane_tile*d + _d];
+            
+
           float mask_sumval;
-          for (int mask=warpSize/2; mask>0; mask>>=1)
+          for (int mask = warpSize/2; mask>0; mask>>=1)
           {
+            __syncwarp();
             mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
             sumval += mask_sumval;
           }
           sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
 
-          if (laneId==0)
+          if(laneId==0)
             d_k_smem[bc*d + _d] += sumval;
         }
       }
-      
       __syncthreads();
     }
 
+    // Store dK, dV to HBM
 
-
-    // Write dK, dV to HBM
-    
-
-    for (int tile=0; tile<ceilf((Bc*d)/(float)threads_per_block); ++tile)
+    for (int tile=0; tile<std::ceil((Bc*d)/(float)threads_per_block); ++tile)
     {
       int tile_idx = tile*threads_per_block + tid;
       int bc = tile_idx / d;
       int _d = tile_idx % d;
 
-      if(bc<Bc && (j*Bc+bc)<T)
+      if (bc<Bc && (j*Bc+bc)<T)
       {
-        d_k[b*T*C + (j*Bc+bc)*C + h*d + _d] = d_k_smem[bc*d + _d];
-        d_v[b*T*C + (j*Bc+bc)*C + h*d + _d] = d_v_smem[bc*d + _d];
+        d_qkv[b*T*3*C + (j*Bc+bc)*3*C +   C + h*d + _d] = d_k_smem[bc*d + _d];
+        d_qkv[b*T*3*C + (j*Bc+bc)*3*C + 2*C + h*d + _d] = d_v_smem[bc*d + _d];
       }
     }
 
-    __syncthreads();
 
+    __syncthreads();
   }
 }
 
@@ -15590,8 +15570,8 @@ void MHSA::SetBackwardDescriptors()
   }
   
 
-  Tc_back = std::ceil(T/(float)Bc_back);
-  Tr_back = std::ceil(T/(float)Br_back);
+  Tc_back = std::ceil(T_back/(float)Bc_back);
+  Tr_back = std::ceil(T_back/(float)Br_back);
 
 
   changed_descriptors=false;
@@ -15600,11 +15580,11 @@ void MHSA::SetBackwardDescriptors()
 
 void MHSA::FirstBackward()
 {
-  dW = get_from_pool(0, 3*C * C, "MHSA dW");
-  dW_proj = get_from_pool(0, C * C, "MHSA dW");
+  dW = get_from_pool(0, 3*C*C, "MHSA dW");
+  dW_proj = get_from_pool(0, C*C, "MHSA dW");
 
-  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW, 3*C*C);
-  set_to_zero_kernel<<<std::ceil((C*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW_proj, C*C);
+  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 3*C*C);
+  set_to_zero_kernel<<<std::ceil((C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW_proj, C*C);
 
   NamedParamGrads[Name+"W"] = dW;
   NamedParamGrads[Name+"W_proj"] = dW_proj;
@@ -15616,93 +15596,60 @@ void MHSA::FirstBackward()
 
 void MHSA::Backward(float *x, float *dx, float *dy)
 {
-
-  
   if (changed_descriptors)
     SetBackwardDescriptors();
 
   if (first_backward)
     FirstBackward();
 
-  float *d_attn = get_from_pool(0, B_back*T_back*C, "MHSA d_attn");
-  float *d_qkv = get_from_pool(0, B_back*T_back*3*C, "MHSA d_attn");
+  float *d_out = get_from_pool(0, B_back*T_back*C, "MHSA d_attn");
+  float *d_qkv = get_from_pool(0, B_back*T_back*3*C, "MHSA d_qkv");
   float *D = get_from_pool(0, B_back*T_back*nh, "MHSA backward D");
+  float *D_aux = get_from_pool(0, B_back*T_back*T_back*nh, "MHSA backward D");
   
 
-  // Set Streams
-  cudaStream_t dw_proj_stream, dw_stream;
-  cudaStreamCreate(&dw_proj_stream);
-  cudaStreamCreate(&dw_stream);
-
-  //PrintTensorF(dy, T_back, C);
-
-
-
-  // Backward to W_proj
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size_dwproj(std::ceil(C/(float)TILE_SIZE), std::ceil(C/(float)TILE_SIZE));
-  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+  int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
-  //RegisterEvent(main_stream->stream);
-  //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+  mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
 
-  cudaStreamSynchronize(main_stream->stream);
-  //mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, dw_proj_stream>>>(out_back, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, C);
-  mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(out_back, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, C);
-  RegisterEvent(dw_proj_stream);
-
-
-  dim3 grid_size_dxproj(std::ceil(C/(float)TILE_SIZE), std::ceil((B_back*T_back)/(float)TILE_SIZE));
-  mult_backwarddx<<<grid_size_dxproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_attn, dy, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, C);
+  dim3 grid_size_dxproj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+  mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
 
 
 
-  // Attention Backward
-  int warps_per_block = std::ceil((block_size.x*block_size.y)/(float)WARP_SIZE);
 
-  //PrintTensorF(d_attn, T_back, C);
-
-  int res = ((2*(Br+Bc)*d) + Br*Bc + 3*Br);
-  int last_id = (4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back;
-  //std::cout << "MHSA backward last idx forward: " << res*sizeof(float) << ", backward: " << last_id*sizeof(float) <<  ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
-  //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
-
-  M = deviceProp.sharedMemPerBlock;
   dim3 grid_size_mhsa(nh, B);
-  flash_attn_backward_kernel<<<grid_size_mhsa, block_size, M, main_stream->stream>>>(d_qkv, d_attn, qkv_back, out_back, B_back*T_back*C, l_back, D,
-                                                          B_back, nh, T_back, d, C, sqrtf(d), Bc_back, Br_back, Tc_back, Tr_back, TILE_SIZE, warps_per_block, TILE_SIZE_SQ);
-  RegisterEvent(main_stream->stream);
-  StreamAwaitStreamB(dw_stream, main_stream->stream);
-  PrintTensorF(d_qkv, T_back, C);
+
+  int warps_per_block = block_size.x;
+  int threads_per_block = block_size.x*block_size.y;
+
+
+  int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
+  //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
+  //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
+  flash_attn_backward_kernel<<<grid_size_mhsa, block_size, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
+                                                                              B, nh, T, d, C, sqrtf(d),
+                                                                              Bc_back, Br_back, Tc_back, Tr_back,
+                                                                              warps_per_block, threads_per_block);
+
+  PrintTensorF(d_qkv, T, 3*C);
+
+
+  dim3 grid_size_dw(std::ceil(C/float(TILE_SIZE)), std::ceil((3*C)/(float)TILE_SIZE));
+  mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+
+  dim3 grid_size_dx(std::ceil(C/float(TILE_SIZE)), std::ceil((B*T)/(float)TILE_SIZE));
+  mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
   
-  
-  
-  // Backward to W
-  dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C)/(float)TILE_SIZE));
-  //mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, dw_stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, 3*C);
-  mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, 3*C);
-  RegisterEvent(dw_stream);
 
 
-  dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B_back*T_back)/(float)TILE_SIZE));
-  mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B_back*T_back, C, 3*C);
-
-
-  // Wait Parallel Backward Streams
-  StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
-  StreamAwaitStreamB(main_stream->stream, dw_stream);
-
-  cudaStreamDestroy(dw_proj_stream);
-  cudaStreamDestroy(dw_stream);
-
-  cudaStreamSynchronize(main_stream->stream);
-  cudaDeviceSynchronize();
-
-  
   // Clean-up
-  move_to_pool(0, B_back*T_back*C, d_attn, "MHSA d_attn");
+  move_to_pool(0, B_back*T_back*C, d_out, "MHSA d_attn");
   move_to_pool(0, B_back*T_back*3*C, d_qkv, "MHSA d_qkv");
   move_to_pool(0, B_back*T_back*nh, D, "MHSA backward D");
+  move_to_pool(0, B_back*T_back*T_back*nh, D_aux, "MHSA backward D");
 
 }
 
