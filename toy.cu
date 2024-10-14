@@ -11193,45 +11193,297 @@ __global__ void mult_kernel(const float *x, const float *w,
 
 
 
+
 template<int WMMA_T>
-__global__ void wmma_mult_kernel(const float *x, const float *w,
+__global__ void wmma_mult_kernel_(const float *x, const float *w, const __half *xh, const __half *wh,
                       float *out, const int B, const int C, const int OC) {
   int tx = threadIdx.x;
   int ty = threadIdx.y;
   int x_block = blockIdx.x;
   int y_block = blockIdx.y;
 
-  
+  int tid = (ty * blockDim.x + tx);
 
   //int row = y_block*tile_size + ty; // B
   //int col = x_block*tile_size + tx; // OC
 
 
-  const uint32_t warpM{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};
-  const uint32_t warpN{blockIdx.y * blockDim.y + threadIdx.y};
+  
+  
+  int laneId = tx % warpSize;
+  int warp_y = threadIdx.y;
+  int warp_x = (threadIdx.x / 32);
 
 
-  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::col_major> x_frag;
-  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::row_major> w_frag;
+  const uint32_t warpX{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};  // OC
+  const uint32_t warpY{blockIdx.y * blockDim.y + threadIdx.y};               // B
+
+  
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag;
   wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
 
-  float y = 0.0f;
 
 
   wmma::fill_fragment(y_frag, 0.0f);
 
+  
   extern __shared__ float smem[];
+  __half* smem_half = reinterpret_cast<__half*>(smem);
+
+  __half *x_smem = smem_half;
+  __half *w_smem = smem_half + 16*WMMA_T*WMMA_T;
+
+  const __half *_x, *_w;
+  
 
 
-  for (int tile=0; tile<C; tile+=WMMA_T)
+
+  for (int b=0; b<ceilf((B+(WMMA_T*4-1))/(float)(WMMA_T*4)); ++b)
   {
-    
+
+    for (int oc=0; oc<ceilf((OC+(WMMA_T*4-1))/(float)(WMMA_T*4)); ++oc)
+    {
+
+      for (int tile=0; tile<C; tile+=WMMA_T)
+      {
+        
+
+        if (laneId<16)
+        {
+          for (int i=0; i<16; ++i)
+          {
+              
+            _x = xh + ( (b*4+warp_y)*WMMA_T + i)*C + tile + laneId;
+            _w = wh + (oc*warp_x*WMMA_T + i)*C + tile + laneId;
+
+            if (((b*4+warp_y)*WMMA_T+i)<B)
+              x_smem[(warp_y*WMMA_T+i)*WMMA_T+laneId] = *_x;
+            else 
+              x_smem[(warp_y*WMMA_T+i)*WMMA_T+laneId] = 0.0f;
+
+            if (((oc*4+warp_x)*WMMA_T+i)<OC)
+              w_smem[(warp_x*WMMA_T+i)*WMMA_T+laneId] = *_w;
+            else
+              w_smem[(warp_x*WMMA_T+i)*WMMA_T+laneId] = 0.0f;
+
+          }
+        }
+
+        __syncthreads();
+
+        //wmma::fill_fragment(x_frag, 0.0f);
+        //wmma::fill_fragment(w_frag, 0.0f);
+        
+
+
+        wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T, 16);
+        wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T, 16);
+
+
+
+
+        /*
+        if (b*warp_y*WMMA_T<B && oc*warp_x*WMMA_T<OC)
+        {
+          _x = xh + ( b*warp_y*WMMA_T)*C + tile;
+          _w = wh + (oc*warp_x*WMMA_T)*C + tile;
+          wmma::load_matrix_sync(x_frag, _x, C);
+          wmma::load_matrix_sync(w_frag, _w, C);
+
+          wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+        }
+        */
+
+
+
+
+
+        wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+      }
+
+      if ((b*warp_y*WMMA_T)<B && (oc*warp_x*WMMA_T)<OC)
+      {
+        float *_out = out + b*warp_y*WMMA_T*OC + oc*warp_x*WMMA_T;
+        wmma::store_matrix_sync(_out, y_frag, OC, wmma::mem_row_major);
+      }
+    }
+  
   }
 
 }
 
 
 
+
+
+
+
+template<int WMMA_T>
+__global__ void wmma_mult_kernel(const float *x, const float *w, const __half *xh, const __half *wh,
+                      float *out, const int B, const int C, const int OC) {
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  int tid = (ty * blockDim.x + tx);
+
+  //int row = y_block*tile_size + ty; // B
+  //int col = x_block*tile_size + tx; // OC
+
+
+  
+  
+  int laneId = tx % warpSize;
+  int warp_y = threadIdx.y;
+  int warp_x = (threadIdx.x / 32);
+
+
+  const uint32_t warpX{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};  // OC
+  const uint32_t warpY{blockIdx.y * blockDim.y + threadIdx.y};               // B
+
+
+  // bad:
+  // col, col, col
+  // col, row, col
+  // col, col, row
+  // col, row, row
+
+
+  // row, col, row
+  // row, row, col
+  // row, row, row /wT
+
+
+  // transposed:
+  // row, col, col
+
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
+
+
+
+  wmma::fill_fragment(y_frag, 0.0f);
+
+
+  extern __shared__ float smem[];
+  __half *hsmem = reinterpret_cast<__half*>(smem);
+
+  __half *x_smem     = hsmem;
+  __half *w_smem     = hsmem +    4*4*WMMA_T*WMMA_T;
+  __half *out_smem_h = hsmem + 2*(4*4*WMMA_T*WMMA_T);
+  float *out_smem = reinterpret_cast<float*>(out_smem_h+4);
+  
+
+  const __half *_x, *_w;
+  
+
+
+
+  for (int b=0; b<ceilf((B+(WMMA_T*4-1))/(float)(WMMA_T*4)); ++b)
+  {
+
+    for (int oc=0; oc<ceilf((OC+(WMMA_T*4-1))/(float)(WMMA_T*4)); ++oc)
+    {
+
+      for (int tile=0; tile<C; tile+=WMMA_T)
+      {
+
+
+        if(laneId<16)
+        {
+          for (int i=0; i<16; ++i)
+          {
+            
+            if (((b*4+warp_y)*WMMA_T+i)<B && (tile+laneId)<C)
+              x_smem[(warp_y*WMMA_T+i)*WMMA_T + laneId] = *(xh + ((b*4+warp_y)*WMMA_T+i)*C + tile+laneId);
+            else
+              x_smem[(warp_y*WMMA_T+i)*WMMA_T + laneId] = 0;
+
+            if (((oc*4+warp_x)*WMMA_T+i)<OC && (tile+laneId)<C)
+              w_smem[(warp_x*WMMA_T+i)*WMMA_T + laneId] = *(wh + ((oc*4+warp_x)*WMMA_T+i)*C + tile+laneId);
+            else
+              w_smem[(warp_x*WMMA_T+i)*WMMA_T + laneId] = 0;
+
+            
+            //if((tile+laneId)<OC && ((b*4+warp_y)*WMMA_T+i)<B)
+              //out[((b*4+warp_y)*WMMA_T+i)*OC+laneId] = __half2float(x_smem[(warp_y*WMMA_T+i)*WMMA_T + laneId]);
+              //out[((oc*4+warp_x)*WMMA_T+i)*OC+laneId] = __half2float(w_smem[(warp_x*WMMA_T+i)*WMMA_T + laneId]);
+          }
+        }
+
+        
+
+        __syncthreads();
+
+
+
+        if (((b*4+warp_y)*WMMA_T)<B && ((oc*4+warp_x)*WMMA_T)<OC)
+        {
+          wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T, WMMA_T);
+          wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T, WMMA_T);
+          
+
+          //wmma::load_matrix_sync(x_frag, _x, C);
+          //wmma::load_matrix_sync(w_frag, _w, C);
+
+
+          wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+        }
+        
+        
+      }
+
+      
+      if (((b*4+warp_y)*WMMA_T)<B && ((oc*4+warp_x)*WMMA_T)<OC)
+      {
+
+        //float *_out = out + (b*4+warp_y)*WMMA_T*OC + (oc*4+warp_x)*WMMA_T;
+        //wmma::store_matrix_sync(_out, y_frag, OC, wmma::mem_row_major);
+
+        float *_out = out_smem + (b*4+warp_y)*WMMA_T*WMMA_T + (oc*4+warp_x)*WMMA_T;
+        wmma::store_matrix_sync(_out, y_frag, WMMA_T, wmma::mem_row_major);
+
+        for (int tile=0; tile<(16*16)/32; ++tile)
+        {
+          int tile_idx = tile*32 + laneId;
+
+          int row = tile_idx / 16;
+          int col = tile_idx % 16;          
+
+          if(((b*4+warp_y)*WMMA_T+row)<B  &&  ((oc*4+warp_x)*WMMA_T+col)<OC)
+          out[((b*4+warp_y)*WMMA_T+row)*OC + (oc*4+warp_x)*WMMA_T+col] = _out[row*16+col];
+
+        }
+
+      }
+      
+      
+    }
+  
+  }
+
+}
+
+
+
+
+
+
+__global__ void to_half(__half *y, const float *x, int dims_prod)
+{
+  int idx = blockIdx.x*blockDim.x + threadIdx.x;
+
+  if(idx>=dims_prod)
+    return;
+
+  y[idx] = __float2half(x[idx]);
+
+}
 
 void matmul_forward(float* out,
                      float* inp, float* W,
@@ -11249,15 +11501,29 @@ void matmul_forward(float* out,
     //cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, inp, C, &beta, out, OC));
     
     cudaStream_t stream = ThreadsStream[thread_id];
-
     
+
+    /*
     dim3 block_size(TILE_SIZE, TILE_SIZE);
     dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
     int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
     mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    */
+
     
-    /*
+
+
+    
+    __half *xh, *wh;
+    cudaMalloc(&xh, B*C*sizeof(__half));
+    cudaMalloc(&wh, OC*C*sizeof(__half));
+    
+
+    to_half<<<std::ceil((B *C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, stream>>>(xh, inp, B*C);
+    to_half<<<std::ceil((OC*C)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, stream>>>(wh,  W, OC*C);
+
+    
     int const num_warps_x = 4;
     int const num_warps_y = 4;
     
@@ -11265,13 +11531,17 @@ void matmul_forward(float* out,
     constexpr int WMMA_T{16};
     dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
 
-    dim3 grid_size(std::ceil((OC + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)), std::ceil((B + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)));
-    int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+    std::cout << "Launching mma with:\n";
+    std::cout << "- Reverse Dims: [" << OC << ", "<< B << "]\n";
+    std::cout << "- Grid: (" <<std::ceil((OC + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)) << ", " << std::ceil((B + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)) << ")" << "\n";
+    //dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)));
+    dim3 grid_size(1,1);
+    int shared_mem_size = deviceProp.sharedMemPerBlock;
 
 
 
-    wmma_mult_kernel<WMMA_T><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, B, C, OC);
-    */
+    wmma_mult_kernel<WMMA_T><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, xh, wh, out, B, C, OC);
+    
   }
   else
   {
@@ -15208,7 +15478,8 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
 
 
-
+  
+  //std::cout << "" << main_stream->stream==stream << "\n";
 
   // Get qkv
 
@@ -15223,7 +15494,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   //if (thread_id==0)
   //  cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, 3*C, B*T, C, &alpha, W, C, x->tensor_ptr, C, &beta, qkv, 3*C);
   //else
-  mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
+  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
 
   
   
@@ -15248,7 +15519,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   */
 
 
-  flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, stream>>>(out, qkv, l,
+  flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(out, qkv, l,
                                                           B, nh, T, d, C, sqrtf(d), Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, threads_per_block);
   
   //cudaStreamSynchronize(stream);
@@ -15262,7 +15533,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   //if (thread_id==0)
   //  cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, C, B*T, C, &alpha, W_proj, C, out, C, &beta, proj_out, C);
   //else
-  mult_kernel<<<grid_size_proj, block_size, shared_mem_size, stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
+  mult_kernel<<<grid_size_proj, block_size, shared_mem_size, main_stream->stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
   
   
 
