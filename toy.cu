@@ -59,6 +59,7 @@
 #include <cuda_fp16.h>
 //#include "cutlass/gemm/device/gemm.h"
 #include <cudnn.h>
+#include <mma.h>
 
 #include "include/cu_commons.h"
 
@@ -111,6 +112,7 @@ cublasComputeType_t cublas_compute = CUBLAS_COMPUTE_32F;
 
 using namespace llvm;
 using namespace llvm::orc;
+using namespace nvcuda;
 
 #if __CUDA_ARCH__ == 800 || __CUDA_ARCH__ >= 900
 #define MAX_1024_THREADS_BLOCKS 2
@@ -615,6 +617,7 @@ enum BackwardTypes {
   sigmoid_op = 9,
   tanh_op = 10,
   cross_entropy_op = 11,
+  cross_entropy_idx_op = 54,
   mse_op = 44,
   add_op = 12,
   sub_op = 25,
@@ -2945,7 +2948,7 @@ struct Tensor {
   std::string from_cudnn;
   int op;
 
-  Tensor *R_Node, *L_Node;
+  Tensor *R_Node, *L_Node, *Sparse_Idx_Tensor;
   bool visited;
 
   void NewNullTensor()
@@ -2966,6 +2969,7 @@ struct Tensor {
     is_pinned=false;
     thread_id = 0;
     scalar=1;
+    Sparse_Idx_Tensor=nullptr;
   }
 
   void NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
@@ -2990,6 +2994,7 @@ struct Tensor {
     is_pinned=false;
     thread_id = 0;
     scalar=1;
+    Sparse_Idx_Tensor=nullptr;
   }
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
@@ -3005,6 +3010,7 @@ struct Tensor {
     from_grad_or_load=true;
     is_pinned=true;
     thread_id = 0;
+    Sparse_Idx_Tensor=nullptr;
   }
 
   void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr){
@@ -3014,8 +3020,6 @@ struct Tensor {
     cuda_stream = _cuda_stream;
     loader = _loader;
     is_pinned=false;
-    cpu_tensor_ptr = nullptr;
-    thread_id = 0;
   }
 
   
@@ -3030,8 +3034,6 @@ struct Tensor {
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load||new_R_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
     is_pinned=false;
-    cpu_tensor_ptr = nullptr;
-    thread_id = 0;
   }
 
   void AttrLNode(Tensor *new_L_Tensor, int op_type)
@@ -3045,8 +3047,6 @@ struct Tensor {
     weight=false;
     from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
     is_pinned=false;
-    cpu_tensor_ptr = nullptr;
-    thread_id = 0;
   }
 
   void AttributionBackwardNode(std::string _name, Tensor *new_R_Tensor)
@@ -3061,15 +3061,12 @@ struct Tensor {
     dy=nullptr;
     weight=false;
     is_pinned=false;
-    cpu_tensor_ptr = nullptr;
-    thread_id = 0;
   }
   void SetIsWeight()
   {
     weight=true;
     from_grad_or_load=true;
     is_pinned=false;
-    thread_id = 0;
   }
   void SetBias(float *b, int b_size)
   {
@@ -3077,7 +3074,6 @@ struct Tensor {
     this->b_size=b_size;
     leaf=true;
     is_pinned=false;
-    thread_id = 0;
   }
   void Sync()
   {
@@ -3140,16 +3136,11 @@ bool in_tensor_ptr_vec(Tensor *value, const std::vector<Tensor *>& list) {
 
 // Cleaners
 std::map<std::string, float *> var_to_grad;
-std::vector<float *> backprop_tensors_to_free;
 std::vector<std::tuple<float, float *, std::string>> backprop_tensors_to_pool;
 std::vector<float *> tensors_sent_to_pool;
 std::vector<Tensor *> backprop_Tensors_to_free;
+std::vector<Tensor *> backprop_Tensors_to_save;
 
-void to_free(float *tensor_ptr)
-{
-  if(!in_float_ptr_vec(tensor_ptr, backprop_tensors_to_free))
-    backprop_tensors_to_free.push_back(tensor_ptr);
-}
 void to_free_tensor(Tensor *tensor_ptr)
 {
   if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_free))
@@ -3163,6 +3154,12 @@ void to_pool(float dims_prod, float *tensor_ptr, std::string from)
     tensors_sent_to_pool.push_back(tensor_ptr);
   }
 }
+void save_from_pool(Tensor *tensor_ptr)
+{
+  if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_save))
+    backprop_Tensors_to_save.push_back(tensor_ptr);
+}
+
 
 std::map<std::string, std::vector<std::tuple<float, float*,std::string>>> forward_tensors_to_pool;
 std::map<std::string, std::vector<float*>> forward_tensors_sent_to_pool;
@@ -11042,9 +11039,10 @@ void matmul_backward(float *inp,  float *weight,
   float one = 1.0f, zero = 0.0f;
   
   
+  // backwad to dx
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
                              weight, CUBLAS_LOWP, C, dout, CUBLAS_LOWP, OC, &zero,
-                             dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));                         
+                             dinp, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
   
   
   // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
@@ -11060,7 +11058,7 @@ void matmul_backward(float *inp,  float *weight,
   cudaStreamCreate(&dx_stream);
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil(C/float(TILE_SIZE)), std::ceil(B/(float)TILE_SIZE));
+  dim3 grid_size(std::ceil(C/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
   int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
   cudaStreamSynchronize(main_stream->stream);
@@ -11070,7 +11068,7 @@ void matmul_backward(float *inp,  float *weight,
   RegisterEvent(dx_stream);
   
   
-  dim3 grid_size2(std::ceil(C/float(TILE_SIZE)), std::ceil(OC/(float)TILE_SIZE));
+  dim3 grid_size2(std::ceil(C/(float)TILE_SIZE), std::ceil(OC/(float)TILE_SIZE));
   mult_backwarddw_acc<<<grid_size2, block_size, shared_mem_size>>>(inp, dw, dout, TILE_SIZE, TILE_SIZE_SQ, B, C, OC);
 
   
@@ -11195,9 +11193,48 @@ __global__ void mult_kernel(const float *x, const float *w,
 
 
 
+template<int WMMA_T>
+__global__ void wmma_mult_kernel(const float *x, const float *w,
+                      float *out, const int B, const int C, const int OC) {
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int x_block = blockIdx.x;
+  int y_block = blockIdx.y;
+
+  
+
+  //int row = y_block*tile_size + ty; // B
+  //int col = x_block*tile_size + tx; // OC
+
+
+  const uint32_t warpM{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};
+  const uint32_t warpN{blockIdx.y * blockDim.y + threadIdx.y};
+
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::col_major> x_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::row_major> w_frag;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
+
+  float y = 0.0f;
+
+
+  wmma::fill_fragment(y_frag, 0.0f);
+
+  extern __shared__ float smem[];
+
+
+  for (int tile=0; tile<C; tile+=WMMA_T)
+  {
+    
+  }
+
+}
+
+
+
 
 void matmul_forward(float* out,
-                     float* inp, float* weight,
+                     float* inp, float* W,
                      int B, int C, int OC, int thread_id) {
         
   const float alpha = 1.0f;
@@ -11209,15 +11246,32 @@ void matmul_forward(float* out,
 
   if (thread_id==0)
   {
-    //cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, weight, C, inp, C, &beta, out, OC));
+    //cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, inp, C, &beta, out, OC));
     
     cudaStream_t stream = ThreadsStream[thread_id];
 
+    
     dim3 block_size(TILE_SIZE, TILE_SIZE);
     dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
     int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
-    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, weight, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    
+    /*
+    int const num_warps_x = 4;
+    int const num_warps_y = 4;
+    
+
+    constexpr int WMMA_T{16};
+    dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
+
+    dim3 grid_size(std::ceil((OC + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)), std::ceil((B + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)));
+    int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+
+
+
+    wmma_mult_kernel<WMMA_T><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, B, C, OC);
+    */
   }
   else
   {
@@ -11227,7 +11281,7 @@ void matmul_forward(float* out,
     dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
     int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
-    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, weight, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
   }
   
   
@@ -12695,7 +12749,7 @@ __global__ void mean_over_semilast_dim_backward_kernel(float *dx, const float *d
   int c = idx % C;
 
 
-  dx[b*T*C + t*C + c] = dy[b*C + c] * T;
+  dx[b*T*C + t*C + c] = dy[b*C + c];
 }
 
 void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node)
@@ -14584,15 +14638,15 @@ class Embedding
     int C, OC, B;
     std::string Init, Name;
     float *W, *dW;
+    bool changed_descriptors;
 
     Embedding(int C, int OC, std::string Init, std::string Name)
         : C(C), OC(OC), Init(Init), Name(Name) {
+      // C == num_codebooks
       B = 0;
 
-
       float *w_cpu;
-      
-      
+          
       //w_cpu = make_xavier_uniform_float(OC*C, OC,  C);
       //w_cpu = make_normal(OC*C);
       w_cpu = make_uniform(OC*C);
@@ -14602,21 +14656,26 @@ class Embedding
       W = get_from_pool(0, OC*C, "Embedding W");
       cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
 
-      Tensor *tensor_W = createTensor(W, {(float)OC,(float)C}, OC*C, true, Name);
+      Tensor *tensor_W = createTensor(W, {(float)C,(float)OC}, OC*C, true, Name);
+      
       
 
 
       dW = get_from_pool(0, OC*C, "embedding dW");
-      set_to_zero_kernel<<<std::ceil(OC*C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+      set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
 
       NamedTensorsT[Name] = tensor_W;
       NamedParamGrads[Name] = dW;
 
       delete[] w_cpu;
+
+      changed_descriptors=false;
     }
   
+  void SetDescriptors(int);
+  void SetBackwardDescriptors();
   float *Forward(Tensor *, int, int);
-  void Backward(float *, float *, float *);
+  void Backward(float *, float *);
 };
 
 
@@ -14693,7 +14752,7 @@ class MHSA
     int M, Br, Bc, Tr, Tc;
     int Br_back, Bc_back, Tr_back, Tc_back;
     std::string Init, Name;
-    float *W, *W_proj, *l, *m, *qkv, *out, *qkv_back, *out_back, *l_back, *m_back, *dW, *dW_proj;
+    float *W, *W_proj, *l, *qkv, *out, *qkv_back, *out_back, *l_back, *dW, *dW_proj;
     bool first_backward, changed_descriptors;
 
     MHSA(int nh, int C, int maxT, std::string Init, std::string Name)
@@ -14704,7 +14763,6 @@ class MHSA
       M = deviceProp.sharedMemPerBlock;
 
       
-
       float *W_cpu, *W_proj_cpu;
 
       //W_cpu = make_gpt_init(3*C*C);
@@ -14761,7 +14819,7 @@ __device__ float _truncf(float value) {
 }
 
 
-__global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m,
+__global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
                                   const int B, const int nh, const int T, const int d, const int C, const float d_scale, const int Bc, const int Br,
                                   const int Tc, const int Tr, const int tile_size, const float warps_per_block, const int threads_per_block)
 {
@@ -14792,8 +14850,6 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
   float *l_smem        = smem + 2*(Br+Bc)*d + Br*Bc;         // [Br]
   float *m_smem        = smem + 2*(Br+Bc)*d + Br*Bc + Br;    // [Br]
   float *last_m_smem   = smem + 2*(Br+Bc)*d + Br*Bc + 2*Br;  // [Br]
-  float *cur_m_smem    = smem + 2*(Br+Bc)*d + Br*Bc + 3*Br;  // [Br]
-  float *last_l_smem    = smem + 2*(Br+Bc)*d + Br*Bc + 4*Br;  // [Br]
   
   
   const float *q = qkv;
@@ -14817,10 +14873,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
       if(br<Br)
       {
         l_smem[br] = 0;
-        last_l_smem[br] = 0;
         m_smem[br] = -INFINITY;
         last_m_smem[br] = -INFINITY;
-        cur_m_smem[br] = -INFINITY;
 
         if((i*Br+br)<T)
           q_smem[br*d + _d] = q[b*T*3*C + (i*Br+br)*3*C + h*d + _d];
@@ -14942,10 +14996,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
 
 
         if(laneId==0 && br<Br && (i*Br+br)<T)
-        {
           m_smem[br] = fmaxf(last_m_smem[br], maxval);
-          cur_m_smem[br] = maxval;
-        }
+        
         
         
 
@@ -14986,7 +15038,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
           if(j==0)
             l_smem[br] = sumval;
           else
-            l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + expf(maxval-m_smem[br])*sumval;
+            l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + sumval;
+            //l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + expf(maxval-m_smem[br])*sumval;
         }
 
       }
@@ -15028,9 +15081,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
             if (j==0)
               o_smem[br*d + _d] = pv;
             else
-              o_smem[br*d + _d] = (last_l_smem[br]/l_smem[br]) * expf(last_m_smem[br] - m_smem[br]) * o_smem[br*d + _d] + expf(cur_m_smem[br] - m_smem[br]) * pv;
-              //o_smem[br*d + _d] = o_smem[br*d + _d]/expf(last_m_smem[br] - m_smem[br]) + pv;
-              //o_smem[br*d + _d] = o_smem[br*d + _d]/expf(last_m_smem[br] - m_smem[br]) + pv;
+              o_smem[br*d + _d] = o_smem[br*d + _d]*expf(last_m_smem[br] - m_smem[br]) + pv;
           }
         }
         
@@ -15046,11 +15097,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
         int br = warp_tile*warps_per_block + warpId;
         
         if (br<Br && (i*Br+br)<T && laneId==0)
-        {
-          last_l_smem[br] = l_smem[br];
           last_m_smem[br] = m_smem[br];
-        }
-        
         
       }
       __syncthreads();
@@ -15068,13 +15115,13 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
       
       
       __syncwarp();
-      /*
+      
       for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
       {
         if (br<Br && (i*Br+br)<T)
           o_smem[br*d + lane_tile] = o_smem[br*d + lane_tile]/l_smem[br];
       }
-      */
+      
       
       __syncthreads();
 
@@ -15090,9 +15137,9 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l, float *m
         if (laneId==0)
         {
 
-          //l[b*T*nh + (i*Br+br)*nh + h] = m_smem[br] + logf(l_smem[br]);
-          l[b*T*nh + (i*Br+br)*nh + h] = l_smem[br];
-          m[b*T*nh + (i*Br+br)*nh + h] = m_smem[br];
+          l[b*T*nh + (i*Br+br)*nh + h] = m_smem[br] + logf(l_smem[br]);
+          //l[b*T*nh + (i*Br+br)*nh + h] = l_smem[br];
+          //m[b*T*nh + (i*Br+br)*nh + h] = m_smem[br];
         }
       }
       
@@ -15119,7 +15166,7 @@ void MHSA::SetDescriptors(int B, int T, int thread_id)
   Br = fminf(Br, 32);
 
   
-  while (((2*(Br+Bc)*d) + Br*Bc + 5*Br)*sizeof(float) > M && Br>1 && Bc>1)
+  while (((2*(Br+Bc)*d) + Br*Bc + 3*Br)*sizeof(float) > M && Br>1 && Bc>1)
   {
     if(Br>Bc/2)
       Br=(int)Br/2;
@@ -15143,7 +15190,6 @@ void MHSA::SetDescriptors(int B, int T, int thread_id)
   qkv = get_from_pool(thread_id, B*T*3*C, "mhsa qkv");
   out = get_from_pool(thread_id, B*T*C, "mhsa out");
   l = get_from_pool(thread_id, B*T*nh, "mhsa l");
-  m = get_from_pool(thread_id, B*T*nh, "mhsa l");
 
   changed_descriptors = true;
 }
@@ -15171,7 +15217,12 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
 
+  const float alpha = 1.0f;
+  const float beta = 0.0f;
   
+  //if (thread_id==0)
+  //  cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, 3*C, B*T, C, &alpha, W, C, x->tensor_ptr, C, &beta, qkv, 3*C);
+  //else
   mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
 
   
@@ -15184,8 +15235,8 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   dim3 grid_size_mhsa(nh, B);
   dim3 block_size_mhsa(16, WARP_SIZE);
 
-  int warps_per_block = block_size_mhsa.x;
   int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
+  int warps_per_block = threads_per_block/WARP_SIZE;
 
   
   /*
@@ -15197,7 +15248,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   */
 
 
-  flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, stream>>>(out, qkv, l, m,
+  flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, stream>>>(out, qkv, l,
                                                           B, nh, T, d, C, sqrtf(d), Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, threads_per_block);
   
   //cudaStreamSynchronize(stream);
@@ -15208,6 +15259,9 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   
   dim3 grid_size_proj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
   
+  //if (thread_id==0)
+  //  cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, C, B*T, C, &alpha, W_proj, C, out, C, &beta, proj_out, C);
+  //else
   mult_kernel<<<grid_size_proj, block_size, shared_mem_size, stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
   
   
@@ -15232,7 +15286,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
 
 
-__global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const float *qkv, const float *o, const float *l, const float *m, float *D,
+__global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const float *qkv, const float *o, const float *l, float *D,
                                            const int B, const int nh, const int T, const int d, const int C, const float d_scale,
                                            const int Bc, const int Br, const int Tc, const int Tr,
                                            const int warps_per_block, const int threads_per_block)
@@ -15269,8 +15323,7 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
   float *d_Pij_smem = smem + (4*Br+4*Bc)*d + Br*Bc;
   float *d_Sij_smem = smem + (4*Br+4*Bc)*d + 2*Br*Bc;
   float *l_smem     = smem + (4*Br+4*Bc)*d + 3*Br*Bc;
-  float *m_smem     = smem + (4*Br+4*Bc)*d + 3*Br*Bc + Br;
-  float *D_smem     = smem + (4*Br+4*Bc)*d + 3*Br*Bc + 2*Br;
+  float *D_smem     = smem + (4*Br+4*Bc)*d + 3*Br*Bc + Br;
 
 
 
@@ -15358,7 +15411,6 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
             {
               D_smem[br] = D[b*T*nh + (i*Br+br)*nh + h];
               l_smem[br] = l[b*T*nh + (i*Br+br)*nh + h];
-              m_smem[br] = m[b*T*nh + (i*Br+br)*nh + h];
             }
             q_smem[br*d + _d]   =   qkv[b*T*3*C + (i*Br+br)*3*C + h*d + _d];
             d_q_smem[br*d + _d] = d_qkv[b*T*3*C + (i*Br+br)*3*C + h*d + _d];
@@ -15369,7 +15421,6 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
             {
               D_smem[br] = 0.0f;
               l_smem[br] = 0.0f;
-              m_smem[br] = -INFINITY;
             }
             q_smem[br*d + _d]   = 0.0f;
             d_q_smem[br*d + _d] = 0.0f;
@@ -15415,7 +15466,7 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
           sij = sij/d_scale;
 
           if (laneId==0)
-            Sij_smem[br*Bc + bc] = expf(sij-m_smem[br])/l_smem[br];
+            Sij_smem[br*Bc + bc] = expf(sij-l_smem[br]);
         }
       }
 
@@ -15609,7 +15660,7 @@ void MHSA::SetBackwardDescriptors()
   
   
 
-  while (((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 3*Br_back)*sizeof(float) > M && Br_back>1 && Bc_back>1)
+  while (((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float) > M && Br_back>1 && Bc_back>1)
   {
     if(Br_back>Bc_back/2)
       Br_back=(int)Br_back/2;
@@ -15659,16 +15710,41 @@ void MHSA::Backward(float *x, float *dx, float *dy)
   float *d_qkv = get_from_pool(0, B_back*T_back*3*C, "MHSA d_qkv");
   float *D = get_from_pool(0, B_back*T_back*nh, "MHSA backward D");
   float *D_aux = get_from_pool(0, B_back*T_back*T_back*nh, "MHSA backward D");
+
+
+  float one = 1.0f, zero = 0.0f;
   
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size_dwproj(std::ceil(C/(float)TILE_SIZE), std::ceil(C/(float)TILE_SIZE));
   int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
+
+  //cudaStream_t dw_proj_stream, dw_stream;
+  //cudaStreamCreate(&dw_proj_stream);
+  //cudaStreamCreate(&dw_stream);
+
+
+  
+  //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+  
+
+
   mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+
+
+  //cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, C, B*T, &one,
+  //                           out, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, C, &one,
+  //                           dW_proj, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 
   dim3 grid_size_dxproj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
   mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+
+  //cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B*T, C, &one,
+  //                           W_proj, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, C, &zero,
+  //                           d_out, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+
+
 
 
   //PrintTensorF(d_out, T, C);
@@ -15677,28 +15753,44 @@ void MHSA::Backward(float *x, float *dx, float *dy)
   dim3 grid_size_mhsa(nh, B);
   dim3 block_size_mhsa(16, WARP_SIZE);
 
-  int warps_per_block = block_size_mhsa.x;
   int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
+  int warps_per_block = threads_per_block/WARP_SIZE;
 
 
   //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
   //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
   //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
-  flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, m, D,
+  flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
                                                                               B, nh, T, d, C, sqrtf(d),
                                                                               Bc_back, Br_back, Tc_back, Tr_back,
                                                                               warps_per_block, threads_per_block);
 
   //PrintTensorF(d_qkv, 3, C);
   //PrintTensorF(d_qkv, T, 3*C);
-
-
-  dim3 grid_size_dw(std::ceil(C/float(TILE_SIZE)), std::ceil((3*C)/(float)TILE_SIZE));
-  mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
-
-  dim3 grid_size_dx(std::ceil(C/float(TILE_SIZE)), std::ceil((B*T)/(float)TILE_SIZE));
-  mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
   
+  //StreamAwaitStreamB(dw_stream, main_stream->stream);
+
+  dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C)/(float)TILE_SIZE));
+  mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+  
+
+  //cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, 3*C, B*T, &one,
+  //                           x, CUBLAS_LOWP, C, d_qkv, CUBLAS_LOWP, 3*C, &one,
+  //                           dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+
+
+  dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+  mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+
+  //cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B*T, 3*C, &one,
+  //                           W, CUBLAS_LOWP, C, d_qkv, CUBLAS_LOWP, 3*C, &zero,
+  //                           dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+  
+
+  //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
+  //StreamAwaitStreamB(main_stream->stream, dw_stream);
+  //cudaStreamDestroy(dw_proj_stream);
+  //cudaStreamDestroy(dw_stream);
 
 
   // Clean-up
@@ -16350,9 +16442,9 @@ void LSTM::FirstBackward()
   dU = get_from_pool(0, 4*OC* C, "lstm dU");
   dB = get_from_pool(0, 4*OC,    "lstm dB");
 
-  set_to_zero_kernel<<<std::ceil(4*OC*OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 4*OC*OC);
-  set_to_zero_kernel<<<std::ceil(4*OC* C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
-  set_to_zero_kernel<<<std::ceil(4*OC   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dB, 4*OC);
+  set_to_zero_kernel<<<std::ceil((4*OC*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 4*OC*OC);
+  set_to_zero_kernel<<<std::ceil((4*OC* C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
+  set_to_zero_kernel<<<std::ceil((4*OC)   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dB, 4*OC);
 
   NamedParamGrads[Name+"W"] = dW;
   NamedParamGrads[Name+"U"] = dU;
@@ -16377,9 +16469,9 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   
 
   //std::cout << "Copy dy to d_ht" << "\n";
-  copy_tensor_kernel<<<std::ceil((float)B*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ht, dy, B*OC);
-  set_to_zero_kernel<<<std::ceil((float)B*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
-  set_to_zero_kernel<<<std::ceil((float)T*(float)B*4*(float)OC/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ifoc, T*B*4*OC);
+  copy_tensor_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ht, dy, B*OC);
+  set_to_zero_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
+  set_to_zero_kernel<<<std::ceil(((float)T*(float)B*4*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ifoc, T*B*4*OC);
 
 
   
@@ -16430,8 +16522,8 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   //dim3 grid_size_dw(  std::ceil( 4*(float)OC*(float)OC / (float)TILE_SIZE_SQ)  );
   //dim3 grid_size_du(  std::ceil( 4*(float)OC*(float)C  / (float)TILE_SIZE_SQ)  );
 
-  dim3 grid_size_dw(std::ceil(OC/float(TILE_SIZE)), std::ceil(4*OC/(float)TILE_SIZE));
-  dim3 grid_size_du(std::ceil(C /float(TILE_SIZE)), std::ceil(4*OC/(float)TILE_SIZE));
+  dim3 grid_size_dw(std::ceil(OC/(float)TILE_SIZE), std::ceil((4*OC)/(float)TILE_SIZE));
+  dim3 grid_size_du(std::ceil(C /(float)TILE_SIZE), std::ceil((4*OC)/(float)TILE_SIZE));
 
 
   // all_ht    e [T, B,    OC]
@@ -16489,11 +16581,11 @@ void lstm_backward(float *x, float *dx, float *dy, std::string name)
   NamedLSTM[name] = std::move(lstm);
 }
 
-void embedding_backward(float *x, float *dx, float *dy, std::string name)
+void embedding_backward(float *x, float *dy, std::string name)
 {
   std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[name]);
 
-  embedding->Backward(x, dx, dy);
+  embedding->Backward(x, dy);
 
   NamedEmbedding[name] = std::move(embedding);
 }
@@ -16611,12 +16703,23 @@ __global__ void embedding_forward_kernel(const float *x, const float *w,
 
 
 
+void Embedding::SetDescriptors(int B)
+{
+  this->B=B;
+  changed_descriptors=true;
+}
+
+
 float *Embedding::Forward(Tensor *tensor, int B, int thread_id)
 {
   float *out = get_from_pool(thread_id, B*OC, "embedding out");
 
-  this->B = B;
 
+  if (this->B!=B)
+    SetDescriptors(B);
+
+  //if(thread_id==0 && nn_mode==training_mode)
+  //  NamedTensorsT[Name]->Sparse_Idx_Tensor = tensor;
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
@@ -16637,14 +16740,10 @@ __global__ void embedding_backward_kernel(const float *x,
 
   int tx = threadIdx.x;
   int ty = threadIdx.y;
-
-
-
   
 
   if(row<B && col<OC)
-  {
-    
+  {    
     float *_dw = dw + ((int)x[row])*OC + col;
     //float _dy = dy[row*OC + col];
 
@@ -16652,14 +16751,29 @@ __global__ void embedding_backward_kernel(const float *x,
     
     //dw[row*C + col] = tmp;
   }
-
-  
 }
 
-
-void Embedding::Backward(float *x, float *dx, float *dy)
+void Embedding::SetBackwardDescriptors()
 {
-  set_to_zero_kernel<<<std::ceil(OC*C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+
+  dW = get_from_pool(0, B*OC, "embedding dW");
+  set_to_zero_kernel<<<std::ceil((B*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, B*OC);
+
+  changed_descriptors=false;
+}
+
+void Embedding::Backward(float *x, float *dy)
+{
+  /*
+  if(changed_descriptors)
+    SetBackwardDescriptors();
+  //dW = dy;
+  copy_tensor_kernel<<<std::ceil((B*OC)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW, dy, B*C);
+  */
+
+  
+
+  set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
@@ -16705,7 +16819,7 @@ extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, int thread_id, c
   std::vector<float> new_dims = tensor_x->dims;
   new_dims.push_back((float)embedding->OC); 
 
-  //PrintDims(new_dims);
+  
 
 
   NamedEmbedding[conv_name] = std::move(embedding);
@@ -16714,6 +16828,10 @@ extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, int thread_id, c
   Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor_x, embedding_op);
   new_tensor->scopeless_name = conv_name;
+
+  //if(thread_id==0 && nn_mode==training_mode)
+  //  new_tensor->Sparse_Idx_Tensor = tensor_x;
+
   return new_tensor;
 }
 
@@ -18306,7 +18424,7 @@ extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
 
   int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
-  dim3 numBlocks(B, C, std::ceil(H*W/(float)block_size));
+  dim3 numBlocks(B, C, std::ceil((H*W)/(float)block_size));
   dim3 threadsPerBlock(block_size);
   cudaCheck(cudaGetLastError());
 
@@ -18388,7 +18506,7 @@ extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
 
   int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
-  dim3 numBlocks(B, C, std::ceil(H*W/(float)block_size));
+  dim3 numBlocks(B, C, std::ceil((H*W)/(float)block_size));
   dim3 threadsPerBlock(block_size);
   cudaCheck(cudaGetLastError());
 
@@ -18456,7 +18574,7 @@ extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tenso
 
   int block_size = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
-  dim3 numBlocks(B, C, std::ceil(H*W/(float)block_size));
+  dim3 numBlocks(B, C, std::ceil((H*W)/(float)block_size));
   dim3 threadsPerBlock(block_size);
   cudaCheck(cudaGetLastError());
 
@@ -18737,6 +18855,102 @@ extern "C" float cross_entropy(Tensor *y_hat, Tensor *y, float scale)
 
 
   loss_tensor->AttrNodes(y_hat, y, cross_entropy_op);
+  loss_tensor->scalar = scale;
+
+
+  todo_backward_tensors.push_back(loss_tensor);
+
+  
+
+  return 0;
+}
+
+
+
+
+__global__ void crossentropy_idx_backward_kernel(float* dlogits,
+                           const float* probs, const float* targets,
+                           int B, int C, float scale) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    //int i = threadIdx.x;
+    
+    
+    if (i < B * C) {
+        int b = i / (C);
+        int v = i % C;
+
+        float *dlogits_b = dlogits + b * C;
+        const float *probs_b = probs + b * C;
+
+
+        float p = probs_b[v];
+
+        float indicator = (v==targets[b]) ? 1.0f : 0.0f;
+        //float indicator = ix;
+
+        dlogits_b[v] += (p - indicator) * scale;
+        
+    }
+}
+
+
+
+void CrossEntropyIdxBackward(float *y_hat,
+                          float *y,
+                          int B, int C, 
+                          float *dloss,
+                          float scale)
+{
+  float *probs = get_from_pool(0, B*C,"ce probs");
+
+
+  int grid_size, block_size, shared_mem_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size  = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
+
+
+  
+
+  /*
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size  = B;
+  block_size = grid_block_mem_sizes[1];
+  shared_mem_size = 2 * block_size / 32 * sizeof(float);
+
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(y_hat, probs, B, C);
+  */
+  grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(y_hat, probs, B, C);
+  
+  
+
+
+  
+  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  
+  crossentropy_idx_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C, scale);
+  move_to_pool(0, B*C, probs,"ce probs");
+}
+
+
+
+extern "C" float cross_entropy_idx(Tensor *y_hat, Tensor *y, float scale)
+{
+  
+  Tensor *loss_tensor = new Tensor();
+
+
+  loss_tensor->AttrNodes(y_hat, y, cross_entropy_idx_op);
   loss_tensor->scalar = scale;
 
 
@@ -19340,7 +19554,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         lstm_backward(inp, device_dx, device_dy, back_node->scopeless_name);
         break;
       case embedding_op:
-        embedding_backward(inp, device_dx, device_dy, back_node->scopeless_name);
+        embedding_backward(inp, device_dy, back_node->scopeless_name);
         break;
       case mhsa_op:
         mhsa_backward(inp, device_dx, device_dy, back_node->scopeless_name);
@@ -19349,6 +19563,9 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       // Loss Ops
       case cross_entropy_op:
         CrossEntropyBackward(inp, w, B, C, device_dx, back_node->scalar);
+        break;
+      case cross_entropy_idx_op:
+        CrossEntropyIdxBackward(inp, w, B, C, device_dx, back_node->scalar);
         break;
       case mse_op:
         MSEBackward(inp, w, back_node->L_Node->dims_prod, device_dx, back_node->scalar);
@@ -19391,6 +19608,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
   //from_gradless = (from_gradless || in_int(op, loss_ops));
   TraversePreOrder(back_node->R_Node, device_dw, from_gradless, from_custom, op);
   
+
+
+  if (back_node->Sparse_Idx_Tensor!=nullptr)
+    save_from_pool(back_node->Sparse_Idx_Tensor);
 
   
   if(!in_int(op, loss_ops) && back_node->tensor_ptr!=nullptr) //loss op has leaves only
@@ -19444,16 +19665,26 @@ extern "C" float backprop()
   }
 
 
-  /*
-  for(auto &pair : var_to_grad)
-  {
-    std::cout << "FREEING A VAR TO GRAD" << "\n";
-    cudaCheck(cudaFree(pair.second));
-  }
-  */
 
-  //for(float *tensor_ptr : backprop_tensors_to_free)
-  //  cudaCheck(cudaFree(tensor_ptr));
+
+
+  for(Tensor *tensor : backprop_Tensors_to_save) // e.g: sparse idx tensors
+  {
+    
+    backprop_Tensors_to_free.erase(std::remove(backprop_Tensors_to_free.begin(), backprop_Tensors_to_free.end(), tensor), backprop_Tensors_to_free.end());
+    
+    for(std::tuple<float, float *, std::string> pair : backprop_tensors_to_pool)
+    {
+      float *tensor_ptr = std::get<1>(pair);
+      if (tensor->tensor_ptr == tensor_ptr)
+      {
+        //std::cout << "Remove " << tensor->name << "/" << tensor->scopeless_name << " from pool.\n";
+        backprop_tensors_to_pool.erase(std::remove(backprop_tensors_to_pool.begin(), backprop_tensors_to_pool.end(), pair), backprop_tensors_to_pool.end());
+        break;
+      }
+    }
+    
+  }
 
   for(Tensor *tensor : backprop_Tensors_to_free)
     delete tensor;
@@ -19464,7 +19695,7 @@ extern "C" float backprop()
     //move_to_pool(0, pair.first, pair.second);
   }
 
-  backprop_tensors_to_free.clear();
+  backprop_Tensors_to_save.clear();
   backprop_Tensors_to_free.clear();
   backprop_tensors_to_pool.clear();
   tensors_sent_to_pool.clear();
@@ -19488,6 +19719,7 @@ public:
     
   virtual void init_states(std::string, float) {}
   virtual void step(float *, float *, std::vector<float>, std::string, cudaStream_t) {}
+  virtual void sparse_step(float *, float *, float *, std::vector<float>, std::vector<float>, std::string, cudaStream_t) {}
   virtual void count_step() {
     timestep+=1;
   }
@@ -19502,6 +19734,7 @@ class SGD_optim : public Optimizer {
     
   void init_states(std::string param_name, float params_count) override;
   void step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
+  void sparse_step(float *, float *, float *, std::vector<float>, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
 };
 
 class AdamW_optim : public Optimizer {
@@ -19513,6 +19746,7 @@ class AdamW_optim : public Optimizer {
     
   void init_states(std::string param_name, float params_count) override;
   void step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
+  void sparse_step(float *, float *, float *, std::vector<float>, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
 };
 
 
@@ -19597,6 +19831,11 @@ void SGD_optim::step(float *param, float *grad, std::vector<float> dims, std::st
                                            lr, momentum, weight_decay, grad_clip);
 }
 
+void SGD_optim::sparse_step(float *param, float *grad, float *idx, std::vector<float> idx_dims, std::vector<float> dims, std::string param_name, cudaStream_t stream)
+{
+  float *m = NamedM[param_name];
+}
+
 void AdamW_optim::init_states(std::string param_name, float params_count)
 {
   if (NamedV[param_name]==nullptr)
@@ -19646,6 +19885,67 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
 }
 
 
+__global__ void sparse_adamw_kernel(float* params_memory, const float* grads_memory, const float *idx_tensor,
+                              float* m_memory, float* v_memory, long num_parameters, const int C,
+                              const float learning_rate, const float beta1, const float beta2, const float beta1_correction, const float beta2_correction,
+                              const float eps, const float weight_decay, const float grad_clip) {
+
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= num_parameters) return;  // guard
+
+  int b = i / C;
+  int c = i % C;
+
+
+  int idx = (int)idx_tensor[b]; 
+
+
+  float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
+  float m = m_memory[idx*C + c];
+  float v = v_memory[idx*C + c];
+  // update the first moment (momentum)
+  m = lerp(grad, m, beta1);
+  m_memory[idx*C + c] = m;
+  // update the second moment (RMSprop)
+  v = lerp(grad * grad, v, beta2);
+  v_memory[idx*C + c] = v;
+  m /= beta1_correction;  // m_hat
+  v /= beta2_correction;  // v_hat
+
+  float *param = params_memory + idx*C + c;
+  atomicAdd(param, -1*(learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i])));
+  //params_memory[i] -= learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i]);
+}
+
+void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector<float> idx_dims, std::vector<float> dims, std::string param_name, cudaStream_t stream)
+{
+  float *v = NamedV[param_name];
+  float *m = NamedM[param_name];
+
+  float beta1_correction = 1.0f - powf(beta1, timestep);
+  float beta2_correction = 1.0f - powf(beta2, timestep);
+
+
+  int leading_dim = dims[dims.size()-1];
+
+  int params_count = DimsProd(idx_dims)*leading_dim;
+
+  
+  int grid_size, block_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  //std::cout << "Sparse step " << "\n";
+  //PrintDims(idx_dims);
+  //PrintDims(dims);
+  sparse_adamw_kernel<<<grid_size, block_size, 0, stream>>>(param, grad, idx, m, v, params_count, leading_dim,
+                                           lr, beta1, beta2, beta1_correction, beta2_correction,
+                                           eps, weight_decay, grad_clip);
+}
+
+
+
 std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 {
   int num_streams = NamedParamGrads.size();
@@ -19666,12 +19966,23 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
     {
       float *grad = pair.second;
       Tensor *tensor = NamedTensorsT[param_name];
-
+      
       //std::cout << "param dims: "  << "\n";
       //PrintDims(tensor->dims);
-
       optimizer->init_states(param_name, tensor->dims_prod);
-      optimizer->step(tensor->tensor_ptr, grad, tensor->dims, param_name, streams[i]);
+
+      if (tensor->Sparse_Idx_Tensor!=nullptr)
+      {
+        //std::cout << "Tensor " << param_name << " has a sparse gradient "<< "\n";
+        Tensor *idx_tensor = tensor->Sparse_Idx_Tensor;
+
+        optimizer->sparse_step(tensor->tensor_ptr, grad, idx_tensor->tensor_ptr,
+                               idx_tensor->dims, tensor->dims, param_name, streams[i]);
+
+        move_to_pool(0, idx_tensor->dims_prod, idx_tensor->tensor_ptr, "sparse grad idxs");
+        delete idx_tensor;
+      } else
+        optimizer->step(tensor->tensor_ptr, grad, tensor->dims, param_name, streams[i]);
 
       int grid_size, block_size; 
       std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
@@ -23679,6 +23990,15 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *cross_entropy_idxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false
+  );
+  TheModule->getOrInsertFunction("cross_entropy_idx", cross_entropy_idxTy);
+
+
+  //
   FunctionType *mseTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
@@ -25042,9 +25362,9 @@ int main() {
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
-  loss_ops = {cross_entropy_op, mse_op, mse_is_w_op};
+  loss_ops = {cross_entropy_op, cross_entropy_idx_op, mse_op, mse_is_w_op};
 
-  custom_ops = {sigmoid_add2weights_op};
+  custom_ops = {sigmoid_add2weights_op, embedding_op};
 
   tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
 
@@ -25132,7 +25452,8 @@ int main() {
                       "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",
                       "print_tensor", "path_exists", "dir_exists", "load_bin_idx",
                       "network_ema", "mse", "priority_sample", "priority_sample_val",
-                      "importance_sample_idx", "importance_sample_weight"};
+                      "importance_sample_idx", "importance_sample_weight",
+                      "cross_entropy_idx"};
   native_functions = concat_str_vec(native_functions, return_tensor_functions);
   native_functions = concat_str_vec(native_functions, return_string_fn);
   native_fn = concat_str_vec(native_methods, native_functions);
