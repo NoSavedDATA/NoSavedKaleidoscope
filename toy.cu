@@ -11363,130 +11363,6 @@ __global__ void mult_kernel(const float *x, const float *w,
 
 
 
-template<int WMMA_T>
-__global__ void wmma_mult_kernel_(const float *x, const float *w, const __half *xh, const __half *wh,
-                      float *out, const int B, const int C, const int OC) {
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-
-  int tid = (ty * blockDim.x + tx);
-
-  //int row = y_block*tile_size + ty; // B
-  //int col = x_block*tile_size + tx; // OC
-
-
-  
-  
-  int laneId = tx % warpSize;
-  int warp_y = threadIdx.y;
-  int warp_x = (threadIdx.x / 32);
-
-
-  const uint32_t warpX{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};  // OC
-  const uint32_t warpY{blockIdx.y * blockDim.y + threadIdx.y};               // B
-
-  
-
-  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag;
-  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag;
-  wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
-
-
-
-  wmma::fill_fragment(y_frag, 0.0f);
-
-  
-  extern __shared__ float smem[];
-  __half* smem_half = reinterpret_cast<__half*>(smem);
-
-  __half *x_smem = smem_half;
-  __half *w_smem = smem_half + 16*WMMA_T*WMMA_T;
-
-  const __half *_x, *_w;
-  
-
-
-
-  for (int b=0; b<ceilf((B+(WMMA_T*4-1))/(float)(WMMA_T*4)); ++b)
-  {
-
-    for (int oc=0; oc<ceilf((OC+(WMMA_T*4-1))/(float)(WMMA_T*4)); ++oc)
-    {
-
-      for (int tile=0; tile<C; tile+=WMMA_T)
-      {
-        
-
-        if (laneId<16)
-        {
-          for (int i=0; i<16; ++i)
-          {
-              
-            _x = xh + ( (b*4+warp_y)*WMMA_T + i)*C + tile + laneId;
-            _w = wh + (oc*warp_x*WMMA_T + i)*C + tile + laneId;
-
-            if (((b*4+warp_y)*WMMA_T+i)<B)
-              x_smem[(warp_y*WMMA_T+i)*WMMA_T+laneId] = *_x;
-            else 
-              x_smem[(warp_y*WMMA_T+i)*WMMA_T+laneId] = 0.0f;
-
-            if (((oc*4+warp_x)*WMMA_T+i)<OC)
-              w_smem[(warp_x*WMMA_T+i)*WMMA_T+laneId] = *_w;
-            else
-              w_smem[(warp_x*WMMA_T+i)*WMMA_T+laneId] = 0.0f;
-
-          }
-        }
-
-        __syncthreads();
-
-        //wmma::fill_fragment(x_frag, 0.0f);
-        //wmma::fill_fragment(w_frag, 0.0f);
-        
-
-
-        wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T, 16);
-        wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T, 16);
-
-
-
-
-        /*
-        if (b*warp_y*WMMA_T<B && oc*warp_x*WMMA_T<OC)
-        {
-          _x = xh + ( b*warp_y*WMMA_T)*C + tile;
-          _w = wh + (oc*warp_x*WMMA_T)*C + tile;
-          wmma::load_matrix_sync(x_frag, _x, C);
-          wmma::load_matrix_sync(w_frag, _w, C);
-
-          wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
-        }
-        */
-
-
-
-
-
-        wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
-      }
-
-      if ((b*warp_y*WMMA_T)<B && (oc*warp_x*WMMA_T)<OC)
-      {
-        float *_out = out + b*warp_y*WMMA_T*OC + oc*warp_x*WMMA_T;
-        wmma::store_matrix_sync(_out, y_frag, OC, wmma::mem_row_major);
-      }
-    }
-  
-  }
-
-}
-
-
-
-
-
 
 
 
@@ -16267,7 +16143,7 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
   extern __shared__ float smem[];
   float *out_smem = smem;
-  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*X_WARPS*WMMA_T);
+  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T));
 
   __half *x_smem     = hsmem;
   __half *w_smem     = hsmem + 4*Y_WARPS*WMMA_T*WMMA_T;
@@ -16375,18 +16251,14 @@ float *Linear::Forward(Tensor *x, int thread_id)
   } else {
 
     
-    constexpr int num_warps_x{4};
+    constexpr int num_warps_x{8};
     constexpr int num_warps_y{4};
     
 
     constexpr int WMMA_T{16};
     dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
-
-    //std::cout << "Launching mma with:\n";
-    //std::cout << "- Reverse Dims: [" << OC << ", "<< B << "]\n";
-    //std::cout << "- Grid: (" <<std::ceil((OC + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)) << ", " << std::ceil((B + (WMMA_T * num_warps_x - 1)) / (float)(WMMA_T * num_warps_x)) << ")" << "\n";
     dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
-    //dim3 grid_size(1,1);
+
     int shared_mem_size = deviceProp.sharedMemPerBlock;
 
     wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
@@ -16704,9 +16576,28 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
   cudaStream_t stream = ThreadsStream[thread_id];
   //cudaStream_t stream = main_stream->stream;
 
+
+
+
+
   
 
   mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_x->tensor_ptr, U, x_out, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
+
+
+  /*
+  constexpr int num_warps_x{8};
+  constexpr int num_warps_y{4};
+  
+
+  constexpr int WMMA_T{16};
+  dim3 block_size_wmma(num_warps_x * WARP_SIZE, num_warps_y);
+  dim3 grid_size_wmma(std::ceil((4*OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+  wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma, block_size_wmma, deviceProp.sharedMemPerBlock, stream>>>(tensor_x->tensor_ptr, U, x_out, B*T, C, 4*OC);
+  */
+
+
+
 
 
   //move_to_pool(tensor_ht->dims_prod, tensor_ht->tensor_ptr, "input ht");
