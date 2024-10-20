@@ -681,12 +681,14 @@ enum Notators {
   bias=0,
   fp32=1,
   fp16=2,
+  causal=3,
 };
 
 std::map<std::string, int> NotatorsMap = {
   {"bias", bias},
   {"fp32", fp32},
   {"fp16", fp16},
+  {"causal", causal},
 };
 
 std::map<int, std::string> token_to_string = {
@@ -1615,14 +1617,17 @@ class MHSAExprAST : public VarExprAST {
   public:
     std::unique_ptr<ExprAST> nh, C, T;
     std::string TensorInit;
+    std::vector<int> Notators;
 
     MHSAExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
       std::string Type,
       std::unique_ptr<ExprAST> nh, std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> T,
+      std::vector<int> Notators,
       const std::string &TensorInit)
       : VarExprAST(std::move(VarNames), std::move(Type)),
                    nh(std::move(nh)), C(std::move(C)), T(std::move(T)),
+                   Notators(std::move(Notators)),
                    TensorInit(TensorInit) {}
 
   Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
@@ -2830,6 +2835,34 @@ static std::unique_ptr<ExprAST> ParseStrVecExpr() {
 }
 
 
+struct int_vec{
+  int *vec;
+  int size;
+};
+
+int_vec *CreateIntVec(int *vec, int size)
+{
+
+  int_vec *ivec = new int_vec();
+  ivec->vec = vec;
+  ivec->size = size;
+  return ivec;
+}
+
+int_vec *SetNotators(std::vector<int> Notators)
+{
+
+  int_vec *ivec = new int_vec();
+
+  int notators_size = Notators.size();
+  int *notators = new int[notators_size];
+  for (int i=0; i<notators_size; ++i)
+    notators[i] = Notators[i];
+
+  ivec->vec = notators;
+  ivec->size = notators_size;
+  return ivec;
+}
 
 
 float FirstNonzero(int *vec, int size)
@@ -3130,7 +3163,6 @@ struct Tensor {
   }
   void Sync()
   {
-    
     if(loader!=nullptr)
     {
       loader->Sync();
@@ -5618,6 +5650,7 @@ static std::unique_ptr<ExprAST> ParseMHSAExpr() {
   std::vector<std::unique_ptr<ExprAST>> dims;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   std::string init = "init_gpt";
+  std::vector<int> notators_vec;
   //std::make_unique<NumberExprAST>(NumVal)
   
   while (true) {
@@ -5635,6 +5668,9 @@ static std::unique_ptr<ExprAST> ParseMHSAExpr() {
       if (in_str(IdentifierStr, tensor_inits))
       {
         init = IdentifierStr;
+        getNextToken();
+      } else if (in_str(IdentifierStr, notators_str)){
+        notators_vec.push_back(NotatorsMap[IdentifierStr]);
         getNextToken();
       } else
         dims.push_back(std::move(ParseIdentifierExpr()));
@@ -5702,6 +5738,7 @@ static std::unique_ptr<ExprAST> ParseMHSAExpr() {
 
   auto aux = std::make_unique<MHSAExprAST>(std::move(VarNames), "mhsa",
                                              std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
+                                             std::move(notators_vec),
                                              init);
   aux->SetSelf(is_self);
   aux->SetIsAttribute(is_attr);
@@ -11363,6 +11400,245 @@ __global__ void mult_kernel(const float *x, const float *w,
 
 
 
+
+
+
+
+
+template<int WMMA_T, int X_WARPS, int Y_WARPS>
+__global__ void wmma_backwarddx_kernel(float *dx, const float *w,
+                      const float *dy, const int B, const int C, const int OC) {
+
+  int laneId = ( threadIdx.y * blockDim.x + threadIdx.x) % warpSize;
+  int mw = laneId / WMMA_T;
+  int ml = laneId % WMMA_T;
+
+  int warp_y = threadIdx.y;
+  int warp_x = (threadIdx.x / 32);
+
+
+  const uint32_t warpX{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};  // C
+  const uint32_t warpY{blockIdx.y * blockDim.y + threadIdx.y};               // B
+
+  // warpX = (oc*X_WARPS + warp_x)
+
+
+
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
+
+
+
+  wmma::fill_fragment(y_frag, 0.0f);
+
+
+  extern __shared__ float smem[];
+  float *out_smem = smem;
+  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T));
+
+  __half *x_smem     = hsmem;
+  __half *w_smem     = hsmem + Y_WARPS*WMMA_T*(WMMA_T);
+  
+  
+  
+
+#pragma unroll
+  for (int tile=0; tile<OC; tile+=WMMA_T)
+  {
+
+#pragma unroll
+    for (int i=0; i<2; ++i)
+    {
+      // warp * mw_size * i_size + mw*i_size + i
+      int row_aux1 = warp_x*((int)(warpSize/WMMA_T))*2 + mw*2+i;
+      int row_aux2 = warp_y*((int)(warpSize/WMMA_T))*2 + mw*2+i;
+      
+      if (row_aux1<WMMA_T)
+      {
+        if ((warpY*WMMA_T+row_aux1)<B && (tile+ml)<OC)
+          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = __float2half(*(dy + (warpY*WMMA_T+row_aux1)*OC + tile+ml));
+        else
+          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = 0;
+      }
+
+      if (row_aux2<WMMA_T)
+      {
+        if ((tile+ml)<OC && (warpX*WMMA_T+row_aux2)<C)
+          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = __float2half(*(w + (tile+ml)*C + warpX*WMMA_T+row_aux2));
+        else
+          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = 0;
+      }
+    }
+    
+
+    __syncthreads();
+
+
+    if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<C)
+    {
+      wmma::load_matrix_sync(x_frag, x_smem+(warp_y*WMMA_T)*WMMA_T, WMMA_T);
+      wmma::load_matrix_sync(w_frag, w_smem+(warp_x*WMMA_T)*WMMA_T, WMMA_T);
+      
+
+
+      wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+    }
+    
+    __syncthreads();
+  }
+
+
+  if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<C && (warp_y*WMMA_T)<B && (warp_x*WMMA_T)<C)
+  {
+
+    float *_out = out_smem + warp_y*WMMA_T*(X_WARPS*WMMA_T) + warp_x*WMMA_T;
+    wmma::store_matrix_sync(_out, y_frag, X_WARPS*WMMA_T, wmma::mem_row_major);
+
+    __syncthreads();
+    
+#pragma unroll
+    for (int tile=0; tile<std::ceil((WMMA_T*WMMA_T)/(float)warpSize); ++tile)
+    {
+      int tile_idx = tile*warpSize + laneId;
+
+      int row = tile_idx / WMMA_T;
+      int col = tile_idx % WMMA_T;
+
+      if((warpY*WMMA_T+row)<B  &&  (warpX*WMMA_T+col)<C && row<WMMA_T)
+        dx[(warpY*WMMA_T+row)*C + warpX*WMMA_T+col] = _out[row*(X_WARPS*WMMA_T)+col];
+
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+template<int WMMA_T, int X_WARPS, int Y_WARPS>
+__global__ void wmma_backwarddw_kernel(float *dw, const float *x,
+                      const float *dy, const int B, const int C, const int OC) {
+
+  int laneId = ( threadIdx.y * blockDim.x + threadIdx.x) % warpSize;
+  int mw = laneId / WMMA_T;
+  int ml = laneId % WMMA_T;
+
+  int warp_y = threadIdx.y;
+  int warp_x = (threadIdx.x / 32);
+
+
+  const uint32_t warpX{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};  // C
+  const uint32_t warpY{blockIdx.y * blockDim.y + threadIdx.y};               // OC
+
+  // warpX = (oc*X_WARPS + warp_x)
+
+
+
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
+
+
+
+  wmma::fill_fragment(y_frag, 0.0f);
+
+
+  extern __shared__ float smem[];
+  float *out_smem = smem;
+  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T));
+
+  __half *x_smem     = hsmem;
+  __half *w_smem     = hsmem + Y_WARPS*WMMA_T*(WMMA_T);
+  
+  
+  
+
+#pragma unroll
+  for (int tile=0; tile<B; tile+=WMMA_T)
+  {
+  
+
+#pragma unroll
+    for (int i=0; i<2; ++i)
+    {
+      // warp * mw_size * i_size + mw*i_size + i
+      int row_aux1 = warp_x*((int)(warpSize/WMMA_T))*2 + mw*2+i;
+      int row_aux2 = warp_y*((int)(warpSize/WMMA_T))*2 + mw*2+i;
+      
+      if (row_aux1<WMMA_T)
+      {
+        if ((tile+ml)<B && (warpY*WMMA_T+row_aux1)<OC)
+          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = __float2half(*(dy + (tile+ml)*OC + warpY*WMMA_T+row_aux1));
+        else
+          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = 0;
+      }
+
+      if (row_aux2<WMMA_T)
+      {
+        if ((tile+ml)<B && (warpX*WMMA_T+row_aux2)<C)
+          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = __float2half(*(x + (tile+ml)*C + warpX*WMMA_T+row_aux2));
+        else
+          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = 0;
+      }
+    }
+    
+
+    __syncthreads();
+
+
+    if ((warpY*WMMA_T)<OC && (warpX*WMMA_T)<C)
+    {
+      wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T*WMMA_T, WMMA_T);
+      wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T*WMMA_T, WMMA_T);
+      
+
+
+      wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+    }
+    
+    __syncthreads();
+  }
+
+
+  if ((warpY*WMMA_T)<OC && (warpX*WMMA_T)<C && (warp_y*WMMA_T)<OC && (warp_x*WMMA_T)<C)
+  {
+    float *_out = out_smem + warp_y*WMMA_T*(X_WARPS*WMMA_T) + warp_x*WMMA_T;
+    wmma::store_matrix_sync(_out, y_frag, X_WARPS*WMMA_T, wmma::mem_row_major);
+
+    __syncthreads();
+    
+#pragma unroll
+    for (int tile=0; tile<std::ceil((WMMA_T*WMMA_T)/(float)warpSize); ++tile)
+    {
+      int tile_idx = tile*warpSize + laneId;
+
+      int row = tile_idx / WMMA_T;
+      int col = tile_idx % WMMA_T;
+
+      if((warpY*WMMA_T+row)<OC  &&  (warpX*WMMA_T+col)<C && row<WMMA_T)
+        dw[(warpY*WMMA_T+row)*C + warpX*WMMA_T+col] = _out[row*(X_WARPS*WMMA_T)+col];
+
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
 template<int WMMA_T, int X_WARPS, int Y_WARPS>
 __global__ void wmma_mult_kernel(const float *x, const float *w,
                       float *out, const int B, const int C, const int OC) {
@@ -11394,7 +11670,8 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
   extern __shared__ float smem[];
   float *out_smem = smem;
-  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T));
+  float *aux_smem = out_smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T);
+  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T) + WMMA_T*WMMA_T);
 
   __half *x_smem     = hsmem;
   __half *w_smem     = hsmem + Y_WARPS*WMMA_T*(WMMA_T);
@@ -11405,7 +11682,8 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 #pragma unroll
   for (int tile=0; tile<C; tile+=WMMA_T)
   {
-    
+
+#pragma unroll
     for (int i=0; i<2; ++i)
     {
       // warp * mw_size * i_size + mw*i_size + i
@@ -11435,12 +11713,82 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
     if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<OC)
     {
+
+      //wmma::fill_fragment(x_frag, 0.0f);
+
+      
+      
+
+      /*
+      asm volatile(".reg .b32 x<8>;"
+                  "wmma.load.a.sync.aligned.m16n16k16.shared.row.f16"
+                  " {x0, x1, x2, x3, x4, x5, x6, x7}, [%0], 16;"
+                  :    // output registers
+                  : "r"(x_smem+warp_y*WMMA_T*WMMA_T));
+      */
+
+
+
+      /*
+      asm volatile(".reg .b32 x<8>;"
+                   ".reg .b32 w<8>;"
+                  "wmma.load.a.sync.aligned.m16n16k16.shared.row.f16"
+                  " {x0, x1, x2, x3, x4, x5, x6, x7}, [%0], 16;"
+                  "wmma.load.b.sync.aligned.m16n16k16.shared.col.f16"
+                  " {w0, w1, w2, w3, w4, w5, w6, w7}, [%1], 16;"
+                  :    // output registers
+                  : "r"(x_smem+warp_y*WMMA_T*WMMA_T), "r"(w_smem+warp_x*WMMA_T*WMMA_T));
+      */
+
+
+
       wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T*WMMA_T, WMMA_T);
-      wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T*WMMA_T, WMMA_T);
+
+      /*
+      asm volatile(".reg .b32 x<8>;"
+                  "wmma.load.a.sync.aligned.m16n16k16.shared.row.f16"
+                  " {%0,%1,%2,%3,%4,%5,%6,%7}, [%8], 16;"
+                  : "=r"(x_frag.x[0]), "=r"(x_frag.x[1]), "=r"(x_frag.x[2]), "=r"(x_frag.x[3]), "=r"(x_frag.x[4]), "=r"(x_frag.x[5]), "=r"(x_frag.x[6]), "=r"(x_frag.x[7])
+                  : "r"(x_smem+warp_y*WMMA_T*WMMA_T));
+      */
       
 
 
-      wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+      wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T*WMMA_T, WMMA_T);
+
+
+
+      //wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+
+
+      asm volatile("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32"
+                   "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7},"
+                   "{%8,  %9,  %10, %11, %12, %13, %14, %15},"
+                   "{%16, %17, %18, %19, %20, %21, %22, %23},"
+                   "{%24, %25, %26, %27, %28, %29, %30, %31};"
+                   : "=f"(y_frag.x[0]), "=f"(y_frag.x[1]), "=f"(y_frag.x[2]), "=f"(y_frag.x[3]), "=f"(y_frag.x[4]), "=f"(y_frag.x[5]), "=f"(y_frag.x[6]), "=f"(y_frag.x[7])
+                   : "r"(*reinterpret_cast<const unsigned *>(x_frag.x)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+2)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+4)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+6)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+8)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+10)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+12)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+14)), \
+                     "r"(*reinterpret_cast<const unsigned *>(w_frag.x)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+2)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+4)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+6)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+8)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+10)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+12)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+14)), \
+                     "f"(y_frag.x[0]), "f"(y_frag.x[1]), "f"(y_frag.x[2]), "f"(y_frag.x[3]), "f"(y_frag.x[4]), "f"(y_frag.x[5]), "f"(y_frag.x[6]), "f"(y_frag.x[7]));
+
+      /*
+      __half const *x_frag_addr = reinterpret_cast<const __half *>(x_frag.x);
+      __half const *w_frag_addr = reinterpret_cast<const __half *>(w_frag.x);
+      asm volatile("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32"
+                   "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7},"
+                   "{%8,  %9,  %10, %11, %12, %13, %14, %15},"
+                   "{%16, %17, %18, %19, %20, %21, %22, %23},"
+                   "{%24, %25, %26, %27, %28, %29, %30, %31};"
+                   : "=f"(y_frag.x[0]), "=f"(y_frag.x[1]), "=f"(y_frag.x[2]), "=f"(y_frag.x[3]), "=f"(y_frag.x[4]), "=f"(y_frag.x[5]), "=f"(y_frag.x[6]), "=f"(y_frag.x[7])
+                   : "r"(*x_frag_addr),     "r"(*(x_frag_addr+2)),  "r"(*(x_frag_addr+4)),  "r"(*(x_frag_addr+6)),  \
+                     "r"(*(x_frag_addr+8)), "r"(*(x_frag_addr+10)), "r"(*(x_frag_addr+12)), "r"(*(x_frag_addr+14)), \
+                     "r"(*w_frag_addr),     "r"(*(w_frag_addr+2)),  "r"(*(w_frag_addr+4)),  "r"(*(w_frag_addr+6)),  \
+                     "r"(*(w_frag_addr+8)), "r"(*(w_frag_addr+10)), "r"(*(w_frag_addr+12)), "r"(*(w_frag_addr+14)), \
+                     "f"(y_frag.x[0]), "f"(y_frag.x[1]), "f"(y_frag.x[2]), "f"(y_frag.x[3]), "f"(y_frag.x[4]), "f"(y_frag.x[5]), "f"(y_frag.x[6]), "f"(y_frag.x[7]));
+      */
+
+
+      //y_frag.x[0] = x_frag.num_elements;
     }
     
     __syncthreads();
@@ -11448,10 +11796,7 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
 
   if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<OC && (warp_y*WMMA_T)<B && (warp_x*WMMA_T)<OC)
-  {
-    //float *_out = out_smem + warpY*WMMA_T*OC + warpX*WMMA_T;
-    //wmma::store_matrix_sync(_out, y_frag, OC, wmma::mem_row_major);
-    
+  { 
 
     float *_out = out_smem + warp_y*WMMA_T*(X_WARPS*WMMA_T) + warp_x*WMMA_T;
     wmma::store_matrix_sync(_out, y_frag, X_WARPS*WMMA_T, wmma::mem_row_major);
@@ -14901,6 +15246,7 @@ class Embedding
       Tensor *tensor_W = createTensor(W, {(float)C,(float)OC}, OC*C, true, Name);
       
       
+      
 
 
       dW = get_from_pool(0, OC*C, "embedding dW");
@@ -14989,20 +15335,20 @@ class Linear
 {
   public:
     
-    int B, C, OC, notators_size;
+    int B, C, OC;
     std::string Init, Name;
     float *W, *dW;
     bool first_backward, changed_descriptors;
 
-    int *Notators;
+    int_vec *Notators;
     bool _fp32;
 
-    Linear(int C, int OC, std::string Init, int *Notators, int notators_size, std::string Name)
-        : C(C), OC(OC), Init(Init), Notators(Notators), notators_size(notators_size), Name(Name) {
+    Linear(int C, int OC, std::string Init, int_vec *Notators, std::string Name)
+        : C(C), OC(OC), Init(Init), Notators(Notators), Name(Name) {
       B = 0;
 
       _fp32 = true;
-      if (in_int_ptr(fp16, Notators, notators_size))
+      if (in_int_ptr(fp16, Notators->vec, Notators->size))
         _fp32 = false;
 
 
@@ -15071,14 +15417,28 @@ class MHSA
     int Br_back, Bc_back, Tr_back, Tc_back;
     std::string Init, Name;
     float *W, *W_proj, *l, *qkv, *out, *qkv_back, *out_back, *l_back, *dW, *dW_proj;
-    bool first_backward, changed_descriptors;
+    bool first_backward, changed_descriptors, _fp32, _fp32_back, _causal;
+    int_vec *Notators;
 
-    MHSA(int nh, int C, int maxT, std::string Init, std::string Name)
-        : nh(nh), C(C), maxT(maxT), Init(Init), Name(Name) {
+    MHSA(int nh, int C, int maxT, std::string Init, int_vec *Notators, std::string Name)
+        : nh(nh), C(C), maxT(maxT), Init(Init), Notators(Notators), Name(Name) {
       B = 0;
       T = 0;
       d = C/nh;
       M = deviceProp.sharedMemPerBlock;
+
+
+      _fp32 = true;
+      _fp32_back = true;
+      _causal = false;
+
+      if (in_int_ptr(fp16, Notators->vec, Notators->size))
+      {
+        _fp32 = false;
+        _fp32_back = false;
+      }
+      if (in_int_ptr(causal, Notators->vec, Notators->size))
+        _causal = true;
 
       
       float *W_cpu, *W_proj_cpu;
@@ -15103,6 +15463,7 @@ class MHSA
 
       delete[] W_cpu;
       delete[] W_proj_cpu;
+      delete[] Notators;
 
 
       first_backward = true;
@@ -15202,7 +15563,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
         
         o_smem[br*d + _d] = 0;
       }
-      __syncthreads();
+      
     }
 
 
@@ -15232,8 +15593,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
           }
         }
         
-        __syncthreads();
       }
+      __syncthreads();
 
 
 
@@ -15250,7 +15611,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
 
         // \sum_i q[i] @ k[i].T  for each lane
         
-        __syncwarp();
+        
         float sij = 0;
         for (int lane_tile = laneId; lane_tile < d; lane_tile += warpSize)
         {
@@ -15287,7 +15648,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
       {
         int br = warp_tile * warps_per_block + warpId;
         
-        __syncwarp();
+        
         float maxval = -INFINITY;
         if (br<Br && (i*Br+br)<T)
         {
@@ -15320,7 +15681,7 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
         
         
 
-        __syncthreads();
+        
 
         // Pij = exp(Sij - mi)
         if (br<Br&&(i*Br+br)<T)
@@ -15329,10 +15690,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
             Sij_smem[br*Bc + lane_tile] = expf(Sij_smem[br*Bc + lane_tile] - m_smem[br]);
         }
         
-        __syncthreads();
-
-
-        __syncwarp();
+        
+        
         float sumval=0.0f;
         if (br<Br&&(i*Br+br)<T)
         {
@@ -15363,6 +15722,8 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
 
       }
 
+      __syncthreads();
+
       
 
 
@@ -15373,7 +15734,6 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
         int _d = wid % d;
 
 
-        __syncwarp();
         float pv=0;
 
         if(br<Br && (i*Br+br)<T)
@@ -15433,7 +15793,6 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
       int br = warp_tile*warps_per_block + warpId;
       
       
-      __syncwarp();
       
       for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
       {
@@ -15442,11 +15801,9 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
       }
       
       
-      __syncthreads();
-
-      
 
       __syncthreads();
+
 
       if ((i*Br+br)<T && br<Br)
       {
@@ -15464,10 +15821,357 @@ __global__ void flash_attn_kernel(float *o, const float *qkv, float *l,
       
       __syncthreads();
     }
-  
-    
   }
 }
+
+
+
+
+
+
+
+
+
+
+template<int WMMA_T, int num_warps>
+__global__ void flash_attn_fp16_kernel(float *o, const float *qkv, float *l,
+                                  const int B, const int nh, const int T, const int d, const int C, const float d_scale, const int Bc, const int Br,
+                                  const int Tc, const int Tr, const int tile_size, const float warps_per_block, const int threads_per_block)
+{
+  int b = blockIdx.y; // batch idx
+  int h = blockIdx.x; // head  idx
+
+  if(b>=B||h>=nh)
+    return;
+
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  int tid = (ty * blockDim.x + tx);
+  
+  int warpId = tid / warpSize;
+  int laneId = tid % warpSize;
+
+  
+  extern __shared__ float smem[];
+  
+
+  float *q_smem        = smem;                               // [Br,  d]
+  float *k_smem        = smem + Br*d;                        // [Bc,  d]
+  float *v_smem        = smem + (Br+Bc)*d;                   // [Bc,  d]
+  float *o_smem        = smem + (Br+2*Bc)*d;                 // [Br,  d]
+  float *Sij_smem      = smem + 2*(Br+Bc)*d;                 // [Br, Bc]
+  float *l_smem        = smem + 2*(Br+Bc)*d + Br*Bc;         // [Br]
+  float *m_smem        = smem + 2*(Br+Bc)*d + Br*Bc + Br;    // [Br]
+  float *last_m_smem   = smem + 2*(Br+Bc)*d + Br*Bc + 2*Br;  // [Br]
+  
+  
+  const float *q = qkv;
+  const float *k = qkv;
+  const float *v = qkv;
+
+
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> q_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> k_frag;
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> sij_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> v_frag;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> sij_mem_frag, out_mem_frag;
+
+
+  for (int i=0; i<Tr; ++i)
+  {
+
+    // Load Qi and Oi of size [Br, d] each
+    
+    
+    for (int tile=0; tile<ceilf((Br*d)/(float)threads_per_block); ++tile)
+    {
+      int tile_idx = tile*threads_per_block + tid;
+      int br = tile_idx / d;
+      int _d = tile_idx % d;
+
+
+      if(br<Br)
+      {
+        l_smem[br] = 0;
+        m_smem[br] = -INFINITY;
+        last_m_smem[br] = -INFINITY;
+
+        if((i*Br+br)<T)
+          q_smem[br*d + _d] = q[b*T*3*C + (i*Br+br)*3*C + h*d + _d];
+        else
+          q_smem[br*d + _d] = 0;
+        
+        o_smem[br*d + _d] = 0;
+      }
+    }
+
+
+      
+    for (int j=0; j<Tc; ++j)
+    {
+
+
+      // Load Kj and Vj of size [Bc, d] each
+      for (int tile=0; tile<ceilf((Bc*d)/(float)threads_per_block); ++tile)
+      {
+        int tile_idx = tile*threads_per_block + tid;
+        int bc = tile_idx / d;
+        int _d = tile_idx % d;
+
+        
+        
+        if(bc<Bc)
+        {
+          if((j*Bc+bc)<T)
+          {
+            k_smem[bc*d + _d] = k[b*T*3*C + (j*Bc+bc)*3*C +   C + h*d + _d];
+            v_smem[bc*d + _d] = v[b*T*3*C + (j*Bc+bc)*3*C + 2*C + h*d + _d];
+          } else {
+            k_smem[bc*d + _d] = 0;
+            v_smem[bc*d + _d] = 0;
+          }
+        }
+        
+      }
+      __syncthreads();
+
+
+
+      // compute q @ k.T
+      for (int warp_tile=0; warp_tile < std::ceil((Br*Bc)/(float)warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile * warps_per_block + warpId;
+        int br = wid / Bc; 
+        int bc = wid % Bc;
+
+
+        wmma::fill_fragment(sij_mem_frag, 0.0f);
+
+        //if (br<Br)
+        //  Sij_smem[br*Bc + bc] = 0.0f;
+
+        // \sum_i q[i] @ k[i].T  for each lane
+        
+        
+        float sij = 0;
+        for (int lane_tile = laneId; lane_tile < d; lane_tile += warpSize)
+        {
+          if (bc<Bc && br<Br && (j*Bc+bc)<T && (i*Br+br)<T)
+            sij += q_smem[br*d + lane_tile]*k_smem[bc*d + lane_tile];
+        }
+
+        
+
+        // \sum_i q[i] @ k[i].T  across the warp
+        float mask_sij;
+        for (int mask = warpSize/2; mask>0; mask>>=1)
+        {
+          __syncwarp();
+          mask_sij = __shfl_down_sync(0xFFFFFFFF, sij, mask);
+          sij += mask_sij;
+        }
+        sij = __shfl_sync(0xFFFFFFFF, sij, 0);
+
+
+        if (bc<Bc && br<Br && (j*Bc+bc)<T && (i*Br+br)<T && laneId==0)
+          Sij_smem[br*Bc + bc] = sij/d_scale;
+      }
+      __syncthreads();
+
+
+
+      ///---///
+
+      
+
+      // get the softmax statistics and Pij
+      for (int warp_tile=0; warp_tile < std::ceil(Br/warps_per_block); ++warp_tile)
+      {
+        int br = warp_tile * warps_per_block + warpId;
+        
+        
+        float maxval = -INFINITY;
+        if (br<Br && (i*Br+br)<T)
+        {
+          
+          for (int lane_tile=laneId; lane_tile<Bc && (j*Bc+lane_tile)<T; lane_tile+=warpSize)
+            maxval = fmaxf(maxval, Sij_smem[br*Bc + lane_tile]);
+          
+          
+          
+
+          float mask_maxval;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_maxval = __shfl_down_sync(0xFFFFFFFF, maxval, mask);
+
+            if (mask_maxval > maxval)
+                maxval = mask_maxval;
+            
+          }
+          maxval = __shfl_sync(0xFFFFFFFF, maxval, 0);
+
+        }
+
+
+
+        if(laneId==0 && br<Br && (i*Br+br)<T)
+          m_smem[br] = fmaxf(last_m_smem[br], maxval);
+        
+        
+        
+
+        
+
+        // Pij = exp(Sij - mi)
+        if (br<Br&&(i*Br+br)<T)
+        {
+          for (int lane_tile=laneId; lane_tile<Bc && (j*Bc+lane_tile)<T; lane_tile+=warpSize)
+            Sij_smem[br*Bc + lane_tile] = expf(Sij_smem[br*Bc + lane_tile] - m_smem[br]);
+        }
+        
+        
+        
+        float sumval=0.0f;
+        if (br<Br&&(i*Br+br)<T)
+        {
+          
+          for (int lane_tile=laneId; lane_tile<Bc && (j*Bc+lane_tile)<T; lane_tile+=warpSize)
+            sumval += Sij_smem[br*Bc + lane_tile];
+          
+          
+
+          float mask_sumval;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_sumval = __shfl_down_sync(0xFFFFFFFF, sumval, mask);
+            sumval += mask_sumval;
+          }
+          sumval = __shfl_sync(0xFFFFFFFF, sumval, 0);
+        }
+
+        if(laneId==0 && br<Br && (i*Br+br)<T)
+        {
+          if(j==0)
+            l_smem[br] = sumval;
+          else
+            l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + sumval;
+            //l_smem[br] = expf(last_m_smem[br]-m_smem[br])*l_smem[br] + expf(maxval-m_smem[br])*sumval;
+        }
+
+      }
+
+      __syncthreads();
+
+      
+
+
+      for (int warp_tile=0; warp_tile < std::ceil((Br*d)/warps_per_block); ++warp_tile)
+      {
+        int wid = warp_tile * warps_per_block + warpId;
+        int br = wid / d;
+        int _d = wid % d;
+
+
+        float pv=0;
+
+        if(br<Br && (i*Br+br)<T)
+        {
+          
+          for (int lane_tile=laneId; lane_tile<Bc && (j*Bc+lane_tile)<T; lane_tile+=warpSize)
+            pv += Sij_smem[br*Bc + lane_tile] * v_smem[lane_tile*d + _d];
+          
+          
+
+          float mask_p;
+          for (int mask=warpSize/2; mask>0; mask>>=1)
+          {
+            __syncwarp();
+            mask_p = __shfl_down_sync(0xFFFFFFFF, pv, mask);
+            pv+=mask_p;
+          }
+          pv = __shfl_sync(0xFFFFFFFF, pv, 0);
+
+
+          
+          if (laneId==0)
+          { 
+            if (j==0)
+              o_smem[br*d + _d] = pv;
+            else
+              o_smem[br*d + _d] = o_smem[br*d + _d]*expf(last_m_smem[br] - m_smem[br]) + pv;
+          }
+        }
+        
+      }
+
+      __syncthreads();
+
+
+
+
+      for (int warp_tile=0; warp_tile < std::ceil(Br/warps_per_block); ++warp_tile)
+      {
+        int br = warp_tile*warps_per_block + warpId;
+        
+        if (br<Br && (i*Br+br)<T && laneId==0)
+          last_m_smem[br] = m_smem[br];
+        
+      }
+      __syncthreads();
+    }
+    
+
+
+
+
+
+    // Load Oi into HBM O
+    for (int warp_tile=0; warp_tile < std::ceil(Br/(float)warps_per_block); ++warp_tile)
+    {
+      int br = warp_tile*warps_per_block + warpId;
+      
+      
+      
+      for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+      {
+        if (br<Br && (i*Br+br)<T)
+          o_smem[br*d + lane_tile] = o_smem[br*d + lane_tile]/l_smem[br];
+      }
+      
+      
+
+      __syncthreads();
+
+
+      if ((i*Br+br)<T && br<Br)
+      {
+        for (int lane_tile=laneId; lane_tile<d; lane_tile+=warpSize)
+          o[b*T*C + (i*Br+br)*C + h*d + lane_tile] = o_smem[br*d + lane_tile];
+        
+        if (laneId==0)
+        {
+
+          l[b*T*nh + (i*Br+br)*nh + h] = m_smem[br] + logf(l_smem[br]);
+          //l[b*T*nh + (i*Br+br)*nh + h] = l_smem[br];
+          //m[b*T*nh + (i*Br+br)*nh + h] = m_smem[br];
+        }
+      }
+      
+      __syncthreads();
+    }
+  }
+}
+
+
+
+
 
 
 
@@ -15479,11 +16183,31 @@ void MHSA::SetDescriptors(int B, int T, int thread_id)
     //move_to_pool();
   }
 
-  Bc = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
-  Br = (int)fminf(Bc, d);
-  Bc = fminf(Bc, 32);
-  Br = fminf(Br, 32);
+  
+  //std::cout << "M: " << M << "\n";
 
+  if (!_fp32)
+  {
+    Bc = 16;
+    Br = 16;
+
+    while (((2*(Br+Bc)*d) + Br*Bc + 3*Br)*sizeof(float) < M && Br<32 && Bc<32)
+    {
+      if(Br>Bc/2)
+        Br=Br*2;
+      else
+        Bc=Bc*2;
+    }
+  } else {
+    
+    Bc = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
+    Br = (int)fminf(Bc, d);
+    Bc = fminf(Bc, 32);
+    Br = fminf(Br, 32);    
+  }
+
+
+  
   
   while (((2*(Br+Bc)*d) + Br*Bc + 3*Br)*sizeof(float) > M && Br>1 && Bc>1)
   {
@@ -15491,6 +16215,21 @@ void MHSA::SetDescriptors(int B, int T, int thread_id)
       Br=(int)Br/2;
     else
       Bc=(int)Bc/2;
+  }
+
+
+  if (!_fp32 && (Bc<16 || Br<16))
+  {
+    std::string _err = "fp16 is not supported for head dimension " + std::to_string(d) + ", got Br = " + std::to_string(Br) + " and Bc = " + std::to_string(Bc) + ".\n     Falling back into floating point precision 32 (fp32).";
+    LogErrorS(_err);
+    _fp32 = true;
+  }
+
+    if (!_fp32 && (d%16!=0))
+  {
+    std::string _err = "fp16 is not supported for head dimension " + std::to_string(d) + ". It must be a multiple of 16.\n     Falling back into floating point precision 32 (fp32).";
+    LogErrorS(_err);
+    _fp32 = true;
   }
   
 
@@ -15518,6 +16257,8 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   //std::cout << "MHSA::Forward" << "\n";
 
 
+  
+
   float *proj_out = get_from_pool(thread_id, B*T*C, "mhsa out");
 
   cudaStream_t stream = ThreadsStream[thread_id];  
@@ -15530,76 +16271,118 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   
   //std::cout << "" << main_stream->stream==stream << "\n";
 
-  // Get qkv
+  if (_fp32)
+  {
+    // Get qkv
 
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil((3*C)/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
-  int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+    dim3 block_size(TILE_SIZE, TILE_SIZE);
+    dim3 grid_size(std::ceil((3*C)/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+    int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
 
-  const float alpha = 1.0f;
-  const float beta = 0.0f;
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
+    
+    //if (thread_id==0)
+      cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, 3*C, B*T, C, &alpha, W, C, x->tensor_ptr, C, &beta, qkv, 3*C);
+    //else
+    //mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
+
+    
+    
+    //cudaStreamSynchronize(stream);
+    //PrintTensorF(qkv, B*T, 3*C);
+
+    // Attention
+
+    dim3 grid_size_mhsa(nh, B);
+    dim3 block_size_mhsa(16, WARP_SIZE);
+
+    int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
+    int warps_per_block = threads_per_block/WARP_SIZE;
+
+    
+
+    flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, stream>>>(out, qkv, l,
+                                                            B, nh, T, d, C, sqrtf(d), Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, threads_per_block);
+    
+    //cudaStreamSynchronize(stream);
+    //PrintTensorF(out, B*T, C);
+    
+
+    // Out Proj
+    
+
+    //if (thread_id==0)
+      cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, C, B*T, C, &alpha, W_proj, C, out, C, &beta, proj_out, C);
+    //else
+    dim3 grid_size_proj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+    //mult_kernel<<<grid_size_proj, block_size, shared_mem_size, stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
+
+    //dim3 grid_size_wmma(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    //wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma, block_size_wmma, shared_mem_wmma, stream>>>(out, W_proj, proj_out, B*T, C, C);
+  } else {
+    // Get qkv
+
+    constexpr int num_warps_x{8};
+    constexpr int num_warps_y{4};
+    
+
+    constexpr int WMMA_T{16};
+    dim3 block_size_wmma(num_warps_x * WARP_SIZE, num_warps_y);
+    dim3 grid_size_wmma_proj(std::ceil((3*C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    int shared_mem_wmma = (num_warps_y*WMMA_T*WMMA_T*num_warps_x+ WMMA_T*WMMA_T)*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+    wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma_proj, block_size_wmma, shared_mem_wmma, stream>>>(x->tensor_ptr, W, qkv, B*T, C, 3*C);
   
-  //if (thread_id==0)
-  //  cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, 3*C, B*T, C, &alpha, W, C, x->tensor_ptr, C, &beta, qkv, 3*C);
-  //else
-  mult_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(x->tensor_ptr, W, qkv, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, 3*C);
 
-  /*
-  constexpr int num_warps_x{8};
-  constexpr int num_warps_y{4};
+    
+    
+    //cudaStreamSynchronize(stream);
+    //PrintTensorF(qkv, B*T, 3*C);
+
+    // Attention
+
+    constexpr int num_warps{16};
+
+    dim3 grid_size_mhsa(nh, B);
+    dim3 block_size_mhsa(num_warps, WARP_SIZE);
+
+    int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
+    int warps_per_block = threads_per_block/WARP_SIZE;
+
+    
+    /*
+    std::cout << "\n\nB: " << B << ", T: " << T << ", nh: " << nh << ", d: " << d << ", C: " << C << "\n";
+    std::cout << "Launching flash attention with Bc: " << Bc << ", Br: " << Br << ", Tc " << Tc << ", Tr: " << Tr << "\n";
+    std::cout << "TILE_SIZE " << TILE_SIZE  << "\n";
+    int res = ((2*(Br+Bc)*d) + Br*Bc + 3*Br);
+    std::cout << "last idx: " << res*sizeof(float) << ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
+    */
+
+
+    //flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, stream>>>(out, qkv, l,
+    //                                                        B, nh, T, d, C, sqrtf(d), Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, threads_per_block);
+
+    flash_attn_fp16_kernel<WMMA_T, num_warps><<<grid_size_mhsa, block_size_mhsa, M, stream>>>(out, qkv, l,
+                                                            B, nh, T, d, C, sqrtf(d), Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, threads_per_block);
+    
+    //cudaStreamSynchronize(stream);
+    //PrintTensorF(out, B*T, C);
+    
+
+    // Out Proj
+
+    dim3 grid_size_wmma(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma, block_size_wmma, shared_mem_wmma, stream>>>(out, W_proj, proj_out, B*T, C, C);
+  }
   
 
-  constexpr int WMMA_T{16};
-  dim3 block_size_wmma(num_warps_x * WARP_SIZE, num_warps_y);
-  dim3 grid_size_wmma_proj(std::ceil((3*C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
-  int shared_mem_wmma = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
-  wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma_proj, block_size_wmma, shared_mem_wmma, stream>>>(x->tensor_ptr, W, qkv, B*T, C, 3*C);
-*/  
-
-  
-  
-  //cudaStreamSynchronize(stream);
-  //PrintTensorF(qkv, B*T, 3*C);
-
-  // Attention
-
-  dim3 grid_size_mhsa(nh, B);
-  dim3 block_size_mhsa(16, WARP_SIZE);
-
-  int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
-  int warps_per_block = threads_per_block/WARP_SIZE;
-
-  
-  /*
-  std::cout << "\n\nB: " << B << ", T: " << T << ", nh: " << nh << ", d: " << d << ", C: " << C << "\n";
-  std::cout << "Launching flash attention with Bc: " << Bc << ", Br: " << Br << ", Tc " << Tc << ", Tr: " << Tr << "\n";
-  std::cout << "TILE_SIZE " << TILE_SIZE  << "\n";
-  int res = ((2*(Br+Bc)*d) + Br*Bc + 3*Br);
-  std::cout << "last idx: " << res*sizeof(float) << ", M: " << M << ", warps_per_block: " << warps_per_block <<  "\n\n\n";
-  */
 
 
-  flash_attn_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(out, qkv, l,
-                                                          B, nh, T, d, C, sqrtf(d), Bc, Br, Tc, Tr, TILE_SIZE, warps_per_block, threads_per_block);
-  
-  //cudaStreamSynchronize(stream);
-  //PrintTensorF(out, B*T, C);
-  
+  //add_forward<<<std::ceil((B*T*C)/THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, stream>>>(proj_out, x->tensor_ptr, proj_out, B*T*C);
 
-  // Out Proj
-  
 
-  //if (thread_id==0)
-  //  cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, C, B*T, C, &alpha, W_proj, C, out, C, &beta, proj_out, C);
-  //else
-  dim3 grid_size_proj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
-  mult_kernel<<<grid_size_proj, block_size, shared_mem_size, main_stream->stream>>>(out, W_proj, proj_out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B*T, C, C);
 
-  //dim3 grid_size_wmma(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
-  //wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma, block_size_wmma, shared_mem_wmma, stream>>>(out, W_proj, proj_out, B*T, C, C);
-  
-  
 
   if (thread_id==0 && nn_mode==training_mode)
   {
@@ -15987,10 +16770,27 @@ __global__ void flash_attn_backward_kernel(float *d_qkv, const float *d_o, const
 void MHSA::SetBackwardDescriptors()
 {
 
-  Bc_back = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
-  Br_back = (int)fminf(Bc_back, d);
-  Bc_back = fminf(Bc_back, 32);
-  Br_back = fminf(Br_back, 32);
+
+
+  if (!_fp32_back)
+  {
+    Bc_back = 16;
+    Br_back = 16;
+
+    while (((2*(Br_back+Bc_back)*d) + Br_back*Bc_back + 3*Br_back)*sizeof(float) < M && Br_back<32 && Bc_back<32)
+    {
+      if(Br_back>Bc_back/2)
+        Br_back=Br_back*2;
+      else
+        Bc_back=Bc_back*2;
+    }
+  } else {
+    Bc_back = std::ceil(  M / ((float)(4*d * sizeof(float)))  );
+    Br_back = (int)fminf(Bc_back, d);
+    Bc_back = fminf(Bc_back, 32);
+    Br_back = fminf(Br_back, 32);
+  }
+    
 
   
   
@@ -16001,9 +16801,15 @@ void MHSA::SetBackwardDescriptors()
       Br_back=(int)Br_back/2;
     else
       Bc_back=(int)Bc_back/2;
-    std::cout << "Reduce." << "\n";
   }
   
+
+  if (!_fp32_back && (Bc_back<16 || Br_back<16))
+  {
+    std::string _err = "fp16 is not supported for head dimension " + std::to_string(d) + ", got Br = " + std::to_string(Br_back) + " and Bc = " + std::to_string(Bc_back) + ".\n     Falling back into floating point precision 32 (fp32) at the backward mode.";
+    LogErrorS(_err);
+    _fp32_back = true;
+  }
 
   Tc_back = std::ceil(T_back/(float)Bc_back);
   Tr_back = std::ceil(T_back/(float)Br_back);
@@ -16050,82 +16856,155 @@ void MHSA::Backward(float *x, float *dx, float *dy)
   float one = 1.0f, zero = 0.0f;
   
 
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size_dwproj(std::ceil(C/(float)TILE_SIZE), std::ceil(C/(float)TILE_SIZE));
-  int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
+  if (_fp32_back)
+  {
+    
+    dim3 block_size(TILE_SIZE, TILE_SIZE);
+    dim3 grid_size_dwproj(std::ceil(C/(float)TILE_SIZE), std::ceil(C/(float)TILE_SIZE));
+    dim3 grid_size_dxproj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+    int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
 
-  //cudaStream_t dw_proj_stream, dw_stream;
-  //cudaStreamCreate(&dw_proj_stream);
-  //cudaStreamCreate(&dw_stream);
+    //cudaStream_t dw_proj_stream, dw_stream;
+    //cudaStreamCreate(&dw_proj_stream);
+    //cudaStreamCreate(&dw_stream);
 
 
+    
+    //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+    
+
+
+    //mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+    //mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+
+
+    
+    cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, C, B*T, &one,
+                              out, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, C, &one,
+                              dW_proj, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B*T, C, &one,
+                              W_proj, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, C, &zero,
+                              d_out, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    
+
+
+
+    //PrintTensorF(d_out, T, C);
+
+
+    dim3 grid_size_mhsa(nh, B);
+    dim3 block_size_mhsa(16, WARP_SIZE);
+
+    int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
+    int warps_per_block = threads_per_block/WARP_SIZE;
+
+
+    //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
+    //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
+    //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
+    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
+                                                                                B, nh, T, d, C, sqrtf(d),
+                                                                                Bc_back, Br_back, Tc_back, Tr_back,
+                                                                                warps_per_block, threads_per_block);
+
+    //PrintTensorF(d_qkv, 3, C);
+    //PrintTensorF(d_qkv, T, 3*C);
+    
+    //StreamAwaitStreamB(dw_stream, main_stream->stream);
+
+    dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
+    dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C)/(float)TILE_SIZE));
+    //mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+    //mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+    
+    
+    cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, 3*C, B*T, &one,
+                              x, CUBLAS_LOWP, C, d_qkv, CUBLAS_LOWP, 3*C, &one,
+                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B*T, 3*C, &one,
+                              W, CUBLAS_LOWP, C, d_qkv, CUBLAS_LOWP, 3*C, &zero,
+                              dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+    
+
+    //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
+    //StreamAwaitStreamB(main_stream->stream, dw_stream);
+    //cudaStreamDestroy(dw_proj_stream);
+    //cudaStreamDestroy(dw_stream);
+  } else {
+    
+
+    //cudaStream_t dw_proj_stream, dw_stream;
+    //cudaStreamCreate(&dw_proj_stream);
+    //cudaStreamCreate(&dw_stream);
+
+
+    
+    //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+    
+    constexpr int num_warps_x{4};
+    constexpr int num_warps_y{4};
+    
+    constexpr int WMMA_T{16};
+    
+    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+
+    dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
+
+    dim3 grid_size_dx_proj(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    dim3 grid_size_dw_proj(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((C + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx_proj, block_size, shared_mem_size, main_stream->stream>>>(d_out, W_proj, dy, B*T, C, C);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw_proj, block_size, shared_mem_size, main_stream->stream>>>(dW_proj, out, dy, B*T, C, C);
+    
+    
+
+
+    dim3 grid_size_mhsa(nh, B);
+    dim3 block_size_mhsa(16, WARP_SIZE);
+
+    int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
+    int warps_per_block = threads_per_block/WARP_SIZE;
+
+
+    //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
+    //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
+    //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
+    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
+                                                                                B, nh, T, d, C, sqrtf(d),
+                                                                                Bc_back, Br_back, Tc_back, Tr_back,
+                                                                                warps_per_block, threads_per_block);
+
+    //PrintTensorF(d_qkv, 3, C);
+    //PrintTensorF(d_qkv, T, 3*C);
+    
+    //StreamAwaitStreamB(dw_stream, main_stream->stream);
+
+
+
+    dim3 grid_size_dx(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    dim3 grid_size_dw(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((3*C + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(dx, W, d_qkv, B*T, C, 3*C);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(dW, x, d_qkv, B*T, C, 3*C);
+    
+    
   
-  //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
-  
 
+    //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
+    //StreamAwaitStreamB(main_stream->stream, dw_stream);
+    //cudaStreamDestroy(dw_proj_stream);
+    //cudaStreamDestroy(dw_stream);
 
-  //mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
-
-
-  cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, C, B*T, &one,
-                             out, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, C, &one,
-                             dW_proj, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-
-  dim3 grid_size_dxproj(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
-  //mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
-
-  cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B*T, C, &one,
-                             W_proj, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, C, &zero,
-                             d_out, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+  }
 
 
 
 
-  //PrintTensorF(d_out, T, C);
 
 
-  dim3 grid_size_mhsa(nh, B);
-  dim3 block_size_mhsa(16, WARP_SIZE);
 
-  int threads_per_block = block_size_mhsa.x*block_size_mhsa.y;
-  int warps_per_block = threads_per_block/WARP_SIZE;
-
-
-  //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
-  //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
-  //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
-  flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
-                                                                              B, nh, T, d, C, sqrtf(d),
-                                                                              Bc_back, Br_back, Tc_back, Tr_back,
-                                                                              warps_per_block, threads_per_block);
-
-  //PrintTensorF(d_qkv, 3, C);
-  //PrintTensorF(d_qkv, T, 3*C);
-  
-  //StreamAwaitStreamB(dw_stream, main_stream->stream);
-
-  dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C)/(float)TILE_SIZE));
-  //mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
-  
-
-  cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, 3*C, B*T, &one,
-                             x, CUBLAS_LOWP, C, d_qkv, CUBLAS_LOWP, 3*C, &one,
-                             dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-
-
-  dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
-  //mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
-
-  cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B*T, 3*C, &one,
-                             W, CUBLAS_LOWP, C, d_qkv, CUBLAS_LOWP, 3*C, &zero,
-                             dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
-  
-
-  //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
-  //StreamAwaitStreamB(main_stream->stream, dw_stream);
-  //cudaStreamDestroy(dw_proj_stream);
-  //cudaStreamDestroy(dw_stream);
+  //add_forward<<<std::ceil((B*T*C)/THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dx, dy, B*T*C);
 
 
   // Clean-up
@@ -16264,7 +17143,6 @@ float *Linear::Forward(Tensor *x, int thread_id)
 
     mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
   } else {
-
     
     constexpr int num_warps_x{8};
     constexpr int num_warps_y{4};
@@ -16274,10 +17152,13 @@ float *Linear::Forward(Tensor *x, int thread_id)
     dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
     dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    //int shared_mem_size = deviceProp.sharedMemPerBlock;
     int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
 
     wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
+
+    //PrintTensorF(out, 1, 1);
+
+    cudaCheck(cudaGetLastError());
 
   }
   
@@ -16313,6 +17194,9 @@ void Linear::Backward(float *x, float *dx, float *dy)
   //if(changed_descriptors)
   //  SetBackwardDescriptors();
 
+
+  if (_fp32)
+  {
   // backwad to dx
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
                              W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
@@ -16323,6 +17207,29 @@ void Linear::Backward(float *x, float *dx, float *dy)
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
                              x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+  } else {
+
+    constexpr int num_warps_x{4};
+    constexpr int num_warps_y{4};
+    
+
+    constexpr int WMMA_T{16};
+    dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
+    dim3 grid_size_dx(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    dim3 grid_size_dw(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((OC + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    
+    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(dx, W, dy, B, C, OC);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(dW, x, dy, B, C, OC);
+
+    /*
+    // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+    cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                             x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
+                             dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+    */
+  }
 }
 
 void linear_backward(float *x, float *dx, float *dy, std::string name)
@@ -17317,7 +18224,7 @@ void Embedding::Backward(float *x, float *dy)
 
   
 
-  set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+  
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
@@ -18645,13 +19552,13 @@ extern "C" float CreateEmbeddingOnDemand(char *tensor_name, char *init,
 
 
 extern "C" float CreateLinearOnDemand(char *tensor_name, char *init,
-                                      float C, float OC, int *Notators, float notators_size)
+                                      float C, float OC, int_vec *Notators)
 {
   std::cout << "\nCreate linear on demand:\n  C " << C << " OC " << OC << "\n";
   std::cout << "" << tensor_name << " " << init << "\n";
 
 
-  std::unique_ptr<Linear> linear = std::make_unique<Linear>((int) C, int (OC), init, Notators, notators_size, tensor_name);
+  std::unique_ptr<Linear> linear = std::make_unique<Linear>((int) C, int (OC), init, Notators, tensor_name);
 
   std::cout << "Adding " << tensor_name << " to NamedMHSA dict\n";
   NamedLinear[tensor_name] = std::move(linear);
@@ -18662,12 +19569,12 @@ extern "C" float CreateLinearOnDemand(char *tensor_name, char *init,
 
 
 extern "C" float CreateMHSAOnDemand(char *tensor_name, char *init,
-                                      float nh, float C, float T)
+                                      float nh, float C, float T, int_vec *notators)
 {
   std::cout << "\nCreate mhsa on demand:\n   nh: " << nh << " C " << C << " T " << T << "\n";
   std::cout << "" << tensor_name << " " << init << "\n";
 
-  std::unique_ptr<MHSA> mhsa = std::make_unique<MHSA>((int)nh, (int)T, (int) C, init, tensor_name);
+  std::unique_ptr<MHSA> mhsa = std::make_unique<MHSA>((int)nh, (int)T, (int) C, init, notators, tensor_name);
 
   std::cout << "Adding " << tensor_name << " to NamedMHSA dict\n";
   NamedMHSA[tensor_name] = std::move(mhsa);
@@ -20468,16 +21375,21 @@ __global__ void sparse_adamw_kernel(float* params_memory, const float* grads_mem
   float v = v_memory[idx*C + c];
   // update the first moment (momentum)
   m = lerp(grad, m, beta1);
-  m_memory[idx*C + c] = m;
   // update the second moment (RMSprop)
   v = lerp(grad * grad, v, beta2);
-  v_memory[idx*C + c] = v;
+  
   m /= beta1_correction;  // m_hat
   v /= beta2_correction;  // v_hat
 
-  float *param = params_memory + idx*C + c;
-  atomicAdd(param, -1*(learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i])));
-  //params_memory[i] -= learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i]);
+  //float *param = params_memory + idx*C + c;
+  float p = params_memory[idx*C + c];
+
+  p = p - learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i]);
+  //atomicAdd(param, -1*(learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i])));
+  __threadfence();
+  m_memory[idx*C + c] = m;
+  v_memory[idx*C + c] = v;
+  params_memory[idx*C + c] = p;
 }
 
 void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector<float> idx_dims, std::vector<float> dims, std::string param_name, cudaStream_t stream)
@@ -20516,9 +21428,14 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   std::vector<cudaStream_t> streams(num_streams);
 
   for (int i = 0; i < num_streams; ++i)
+  {
+
     cudaStreamCreate(&streams[i]);
+    //StreamAwaitStreamB(streams[i], main_stream->stream);
+  }
 
   cudaStreamSynchronize(main_stream->stream);
+
   int i=0;
   for (auto& pair : NamedParamGrads)
   {
@@ -20560,9 +21477,14 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 
   
   for (int i = 0; i < num_streams; ++i)
+  {
     cudaStreamSynchronize(streams[i]);
+    //StreamAwaitStreamB(main_stream->stream, streams[i]);
+  }
   for (int i = 0; i < num_streams; ++i)
     cudaStreamDestroy(streams[i]);
+
+  cudaStreamSynchronize(main_stream->stream);
 
   return std::move(optimizer);
 }
@@ -22800,12 +23722,10 @@ Value *LinearExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {scope_str, var_name});
     
-    int notators_size = Notators.size();
-    int *notators = new int[notators_size];
-    for (int i=0; i<notators_size; ++i)
-      notators[i] = Notators[i];
+    
+    int_vec *notators = SetNotators(Notators);
 
-
+    
 
     std::cout << "Parsing MHSA var for: " << VarName << "\n";
 
@@ -22813,7 +23733,7 @@ Value *LinearExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                               {var_name, Builder->CreateGlobalString(TensorInit),
                                                C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
                                                OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               VoidPtr_toValue(notators), ConstantFP::get(*TheContext, APFloat((float)notators_size))});
+                                               VoidPtr_toValue(notators)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -22849,7 +23769,7 @@ Value *MHSAExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
                                             {scope_str, var_name});
     
-    
+    int_vec *notators = SetNotators(Notators);
 
 
     std::cout << "Parsing MHSA var for: " << VarName << "\n";
@@ -22858,7 +23778,8 @@ Value *MHSAExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
                                               {var_name, Builder->CreateGlobalString(TensorInit),
                                                nh->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
                                                C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               T->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+                                               T->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               VoidPtr_toValue(notators)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -25578,8 +26499,7 @@ FunctionType *unbugTy = FunctionType::get(
        int8PtrTy,
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
-       int8PtrTy,
-       Type::getFloatTy(*TheContext),},
+       int8PtrTy,},
       false
   );
   TheModule->getOrInsertFunction("CreateLinearOnDemand", CreateLinearOnDemandTy);
@@ -25592,7 +26512,8 @@ FunctionType *unbugTy = FunctionType::get(
        int8PtrTy,
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext)},
+       Type::getFloatTy(*TheContext),
+       int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("CreateMHSAOnDemand", CreateMHSAOnDemandTy);
@@ -26105,7 +27026,7 @@ int main() {
 
 
   tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal"};
-  notators_str = {"bias", "fp32", "fp16"};
+  notators_str = {"bias", "fp32", "fp16", "causal"};
 
 
   // Prime the first token.
