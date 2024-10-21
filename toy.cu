@@ -8202,7 +8202,7 @@ __global__ void set_to_one_kernel(float *y, int dims_prod) {
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < dims_prod)
-        y[i] = 0;
+        y[i] = 1;
 }
 
 __global__ void set_to_minus_inf_kernel(float *y, int dims_prod) {
@@ -11639,6 +11639,130 @@ __global__ void wmma_backwarddw_kernel(float *dw, const float *x,
 
 
 
+
+
+
+// sm80
+template <class Func>
+__device__ inline void
+wmma_foreach_ij(wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> &frag,
+           Func func) {
+
+  const unsigned lane_id = threadIdx.x & 0x1f;
+  const auto i_offset = lane_id / 4;
+  const auto j_offset = (lane_id & 0b11) * 2;
+  for (unsigned _x = 0; _x < frag.num_elements / 2; _x++) {
+    const unsigned i = i_offset + (_x & 0b10) * 4;
+    const unsigned j = j_offset + (_x & 0b1) + (_x & 0b100) * 2;
+    const unsigned frag_index_list[2] = {_x, _x + 8};
+    func(frag_index_list, 2, i, j);
+  }
+}
+
+template <class Func>
+__device__ inline void
+wmma_foreach_ij(wmma::fragment<wmma::matrix_b, 16, 16, 16, half,
+                                  wmma::col_major> &frag,
+           Func func) {
+  const unsigned lane_id = threadIdx.x & 0x1f;
+  const auto i_offset = (lane_id & 0b11) * 2;
+  const auto j_offset = lane_id / 4;
+  for (unsigned x = 0; x < frag.num_elements / 2; x++) {
+    const unsigned i = i_offset + (x & 0b1) + (x & 0b10) * 4;
+    const unsigned j = j_offset + (x & 0b100) * 2;
+    const unsigned frag_index_list[2] = {x, x + 8};
+    func(frag_index_list, 2, i, j);
+  }
+}
+
+
+/*
+// sm75
+template <class Func>
+__device__ inline void
+wmma_foreach_ij(wmma::fragment<wmma::matrix_a, 16, 16, 16, half,
+                                  wmma::row_major> &frag,
+           Func func) {
+  const unsigned lane_id = threadIdx.x & 0x1f;
+  const auto i_offset = lane_id / 4;
+  const auto j_offset = (lane_id & 0b11) * 2;
+  for (unsigned x = 0; x < frag.num_elements / 2; x++) {
+    const unsigned i = i_offset + (x & 0b10) * 4;
+    const unsigned j = j_offset + (x & 0b100) * 2 + (x & 0b1);
+    const unsigned frag_index_list[2] = {x, x + 8};
+    func(frag_index_list, 2, i, j);
+  }
+}
+*/
+
+
+
+/*
+// sm70
+template <class Func>
+__device__ inline void
+wmma_foreach_ij(wmma::fragment<wmma::matrix_a, 16, 16, 16, half,
+                                  wmma::row_major> &frag,
+           Func func) {
+  const unsigned lane_id = threadIdx.x & 0x1f;
+  const auto i_offset =
+      (lane_id & 0b11) + (lane_id & 0b100) * 2 + (lane_id & 0b10000) / 4;
+  const auto j_offset = 0;
+  for (unsigned x = 0; x < frag.num_elements; x++) {
+    const unsigned i = i_offset;
+    const unsigned j = j_offset + x;
+    const unsigned frag_index_list[1] = {x};
+    func(frag_index_list, 1, i, j);
+  }
+}
+*/
+
+
+/*
+template <class Func, class T>
+__device__ void foreach_ij(fragment<nvcuda::wmma::matrix_a, 16, 16, 16, T,
+                                    nvcuda::wmma::row_major> &frag,
+                           const Func func) {
+  const auto m = threadIdx.x & 0xf;
+  const auto n_offset = (mtk::wmma::detail::common::get_lane_id() >> 4) << 3;
+  for (unsigned i = 0; i < frag.num_elements; i++) {
+    {
+      const unsigned frag_index_list[1] = {i};
+      func(frag_index_list, 1, m, n_offset + i);
+    }
+  }
+}
+*/
+
+
+
+
+
+/*
+
+nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, 16, 16, 16, half, nvcuda::wmma::col_major> frag_b;
+nvcuda::wmma::fill_fragment(frag_b, __float2half(0.f));
+
+__shared__ half matrix[16 * 2];
+mtk::wmma::foreach_ij<decltype(frag_b)>(
+  [&](const unsigned* frag_index_list,
+      const unsigned fragment_index_count,
+      const unsigned i,
+      const unsigned j) {
+    for (unsigned f = 0; f < fragment_index_count; f++)
+      if (j < 2) {
+        frag_b.x[frag_index_list[f]] = matrix[j * 16 + i];
+      }
+  });
+  
+  
+  */
+
+
+
+
+
+
 template<int WMMA_T, int X_WARPS, int Y_WARPS>
 __global__ void wmma_mult_kernel(const float *x, const float *w,
                       float *out, const int B, const int C, const int OC) {
@@ -11662,6 +11786,8 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
   wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag;
   wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag;
   wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
+
+  using FRAG_T = wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major>;
 
 
 
@@ -11742,7 +11868,10 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
 
 
+
       wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T*WMMA_T, WMMA_T);
+
+
 
       /*
       asm volatile(".reg .b32 x<8>;"
@@ -11823,6 +11952,217 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
 
 
+
+template<int WMMA_T, int X_WARPS, int Y_WARPS>
+__global__ void wmma_mult_kernel_(const float *x, const float *w,
+                      float *out, const int B, const int C, const int OC) {
+
+  int laneId = ( threadIdx.y * blockDim.x + threadIdx.x) % warpSize;
+  int mw = laneId / WMMA_T;
+  int ml = laneId % WMMA_T;
+
+  int warp_y = threadIdx.y;
+  int warp_x = (threadIdx.x / 32);
+
+
+  const uint32_t warpX{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};  // OC
+  const uint32_t warpY{blockIdx.y * blockDim.y + threadIdx.y};               // B
+
+  // warpX = (oc*X_WARPS + warp_x)
+
+
+
+
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag;
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag;
+  wmma::fragment<wmma::accumulator, 16, 16, 16, float> y_frag;
+
+  using FRAG_T = wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major>;
+
+
+
+  wmma::fill_fragment(y_frag, 0.0f);
+
+
+  extern __shared__ float smem[];
+  float *out_smem = smem;
+  float *aux_smem = out_smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T);
+  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T) + WMMA_T*WMMA_T);
+
+  __half *x_smem     = hsmem;
+  __half *w_smem     = hsmem + Y_WARPS*WMMA_T*(WMMA_T);
+  
+  
+  
+
+#pragma unroll
+  for (int tile=0; tile<C; tile+=WMMA_T)
+  {
+
+#pragma unroll
+    for (int i=0; i<2; ++i)
+    {
+      // warp * mw_size * i_size + mw*i_size + i
+      int row_aux1 = warp_x*((int)(warpSize/WMMA_T))*2 + mw*2+i;
+      int row_aux2 = warp_y*((int)(warpSize/WMMA_T))*2 + mw*2+i;
+      
+      if (row_aux1<WMMA_T)
+      {
+        if ((warpY*WMMA_T+row_aux1)<B && (tile+ml)<C)
+          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = __float2half(*(x + (warpY*WMMA_T+row_aux1)*C + tile+ml));
+        else
+          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = 0;
+      }
+
+      if (row_aux2<WMMA_T)
+      {
+        if ((warpX*WMMA_T+row_aux2)<OC && (tile+ml)<C)
+          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = __float2half(*(w + (warpX*WMMA_T+row_aux2)*C + tile+ml));
+        else
+          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = 0;
+      }
+    }
+    
+
+    __syncthreads();
+
+
+    if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<OC)
+    {      
+      /*
+      wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T*WMMA_T, WMMA_T);
+
+      for (int i=0; i<32; ++i)
+      {
+        if(laneId==i&&warp_y==1&&warp_x==2)
+        {
+          for (int j=0; j<x_frag.num_elements;++j)
+          {
+            printf("%d  ", (int)x_frag.x[j]);
+            //printf("%f  ", x_frag.x[j]);
+          }
+          printf("\n");
+        }
+        __syncwarp();
+      }
+      */
+      
+      const auto func = [&](const unsigned* frag_index_list,
+            const unsigned fragment_index_count,
+            const unsigned i,
+            const unsigned j) {
+
+          //__half tmp = x_smem[(warp_y*WMMA_T)*WMMA_T + j*16+i]; // col major
+          __half tmp = x_smem[(warp_y*WMMA_T)*WMMA_T + i*16+j]; // row major
+
+          for (unsigned f = 0; f < fragment_index_count; f++)
+          {
+            x_frag.x[frag_index_list[f]] = tmp;
+
+            // This view will kill high dim mma
+            //if(warp_y==0&&warp_x==0)
+            //bank[laneId*16+frag_index_list[f]] = __half2float(x_frag.x[frag_index_list[f]]);
+          }
+        };
+
+
+
+      wmma_foreach_ij(
+          x_frag,
+          func
+        );
+        
+
+      
+      __syncwarp();
+
+
+
+      //wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T*WMMA_T, WMMA_T);
+
+      
+      const auto func2 = [&](const unsigned* frag_index_list,
+            const unsigned fragment_index_count,
+            const unsigned i,
+            const unsigned j) {
+
+          __half tmp = w_smem[warp_x*WMMA_T*WMMA_T + j*16+i]; // col major
+          //__half tmp = w_smem[warp_x*WMMA_T*WMMA_T + i*16+j]; // row major
+
+          for (unsigned f = 0; f < fragment_index_count; f++)
+          {
+            w_frag.x[frag_index_list[f]] = tmp;
+            //bank[laneId*16+frag_index_list[f]] = __half2float(tmp);
+            //bank[laneId*16+frag_index_list[f]] = __half2float(w_frag.x[frag_index_list[f]]);
+            
+          }
+        };
+
+
+
+      wmma_foreach_ij(
+          w_frag,
+          func2
+        );
+        
+
+      
+      __syncwarp();
+      
+
+
+      //wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+
+      
+      asm volatile("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32"
+                   "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7},"
+                   "{%8,  %9,  %10, %11, %12, %13, %14, %15},"
+                   "{%16, %17, %18, %19, %20, %21, %22, %23},"
+                   "{%24, %25, %26, %27, %28, %29, %30, %31};"
+                   : "=f"(y_frag.x[0]), "=f"(y_frag.x[1]), "=f"(y_frag.x[2]), "=f"(y_frag.x[3]), "=f"(y_frag.x[4]), "=f"(y_frag.x[5]), "=f"(y_frag.x[6]), "=f"(y_frag.x[7])
+                   : "r"(*reinterpret_cast<const unsigned *>(x_frag.x)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+2)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+4)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+6)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+8)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+10)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+12)), "r"(*reinterpret_cast<const unsigned *>(x_frag.x+14)), \
+                     "r"(*reinterpret_cast<const unsigned *>(w_frag.x)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+2)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+4)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+6)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+8)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+10)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+12)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+14)), \
+                     "f"(y_frag.x[0]), "f"(y_frag.x[1]), "f"(y_frag.x[2]), "f"(y_frag.x[3]), "f"(y_frag.x[4]), "f"(y_frag.x[5]), "f"(y_frag.x[6]), "f"(y_frag.x[7]));
+      
+
+
+
+    }
+    
+    __syncthreads();
+  }
+
+
+  if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<OC && (warp_y*WMMA_T)<B && (warp_x*WMMA_T)<OC)
+  { 
+
+    float *_out = out_smem + warp_y*WMMA_T*(X_WARPS*WMMA_T) + warp_x*WMMA_T;
+    wmma::store_matrix_sync(_out, y_frag, X_WARPS*WMMA_T, wmma::mem_row_major);
+
+    __syncthreads();
+    
+#pragma unroll
+    for (int tile=0; tile<std::ceil((WMMA_T*WMMA_T)/(float)warpSize); ++tile)
+    {
+      int tile_idx = tile*warpSize + laneId;
+
+      int row = tile_idx / WMMA_T;
+      int col = tile_idx % WMMA_T;
+
+      if((warpY*WMMA_T+row)<B  &&  (warpX*WMMA_T+col)<OC && row<WMMA_T)
+        out[(warpY*WMMA_T+row)*OC + warpX*WMMA_T+col] = _out[row*(X_WARPS*WMMA_T)+col];
+
+    }
+  }
+}
+
+
+
+
+
+
+
+
 __global__ void to_half(__half *y, const float *x, int dims_prod)
 {
   int idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -11850,14 +12190,35 @@ void matmul_forward(float* out,
     //cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, inp, C, &beta, out, OC));
     
     cudaStream_t stream = ThreadsStream[thread_id];
-    
+
 
     
     dim3 block_size(TILE_SIZE, TILE_SIZE);
     dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
     int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
-
+    /*
     mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    
+    constexpr int num_warps_x{4};
+    constexpr int num_warps_y{4};
+    
+
+    constexpr int WMMA_T{16};
+    dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
+    dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+
+    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+
+
+    float *bank;
+    cudaMalloc(&bank, 32*16*sizeof(float));
+    
+    set_to_one_kernel<<<16, 32,0,stream>>>(bank, 16*32);
+    wmma_mult_kernel_<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, bank, B, C, OC);
+
+
+    PrintTensorF(bank, 32, 16);
+    */
     
   }
   else
@@ -17144,7 +17505,7 @@ float *Linear::Forward(Tensor *x, int thread_id)
     mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
   } else {
     
-    constexpr int num_warps_x{8};
+    constexpr int num_warps_x{4};
     constexpr int num_warps_y{4};
     
 
@@ -17154,11 +17515,15 @@ float *Linear::Forward(Tensor *x, int thread_id)
 
     int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
 
-    wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
 
-    //PrintTensorF(out, 1, 1);
 
-    cudaCheck(cudaGetLastError());
+    wmma_mult_kernel_<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
+    //wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
+
+
+    //PrintTensorF(bank, 32, 16);
+
+    //cudaCheck(cudaGetLastError());
 
   }
   
@@ -23252,6 +23617,8 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
       tensor_cpu = make_gpt_init(product);
     if (std::strcmp(init, "int") == 0)
       tensor_cpu = make_random_int(product, 10);
+    if (std::strcmp(init, "arange") == 0)
+      tensor_cpu = make_arange(product);
     if (std::strcmp(init, "binary") == 0)
       tensor_cpu = make_random_int(product, 1);
 
@@ -26842,6 +27209,7 @@ int main() {
 
   std::cout << "CuDNN Version: " << CUDNN_MAJOR << "." << CUDNN_MINOR << "." << CUDNN_PATCHLEVEL << std::endl;
   printf("Device %d: %s\n", deviceIdx, deviceProp.name);
+  std::cout << "Device Max Compute Capability (SM): " << deviceProp.major << "." << deviceProp.minor << std::endl;
 
 
     
@@ -27025,7 +27393,7 @@ int main() {
 
 
 
-  tensor_inits = {"binary", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal"};
+  tensor_inits = {"binary", "arange", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal"};
   notators_str = {"bias", "fp32", "fp16", "causal"};
 
 
