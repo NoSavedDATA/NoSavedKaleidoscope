@@ -11448,6 +11448,7 @@ __global__ void wmma_backwarddx_kernel(float *dx, const float *w,
   for (int tile=0; tile<OC; tile+=WMMA_T)
   {
 
+    /*
 #pragma unroll
     for (int i=0; i<2; ++i)
     {
@@ -11471,22 +11472,64 @@ __global__ void wmma_backwarddx_kernel(float *dx, const float *w,
           w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = 0;
       }
     }
+    */
+
+
+    wmma::fill_fragment(x_frag, 0.0f);
+    const auto func_x = [&](const unsigned* frag_index_list,
+        const unsigned fragment_index_count,
+        const unsigned i,
+        const unsigned j) {
+
+      if((warpY*WMMA_T+i)<B && (tile+j)<OC)
+      {
+        __half tmp = __float2half(*(dy + (warpY*WMMA_T+i)*OC + tile + j));
+#pragma unroll
+        for (unsigned f = 0; f < fragment_index_count; f++)
+            x_frag.x[frag_index_list[f]] = tmp;
+      } // else did not work, so fill_fragment is a workaround
+    };
     
+    __syncwarp();
+    wmma_foreach_ij(
+        x_frag,
+        func_x
+      );
 
-    __syncthreads();
 
 
+    wmma::fill_fragment(w_frag, 0.0f);
+    const auto func_w = [&](const unsigned* frag_index_list,
+          const unsigned fragment_index_count,
+          const unsigned i,
+          const unsigned j) {
+        
+        if(((tile+i)<OC && warpX*WMMA_T+j)<C)
+        { 
+          __half tmp = __float2half(*(w + (tile+i)*C + warpX*WMMA_T+j));
+  #pragma unroll
+          for (unsigned f = 0; f < fragment_index_count; f++)
+            w_frag.x[frag_index_list[f]] = tmp;
+        }
+      };
+
+    __syncwarp();
+    wmma_foreach_ij(
+        w_frag,
+        func_w
+      );
+
+
+
+
+    __syncwarp();
     if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<C)
     {
-      wmma::load_matrix_sync(x_frag, x_smem+(warp_y*WMMA_T)*WMMA_T, WMMA_T);
-      wmma::load_matrix_sync(w_frag, w_smem+(warp_x*WMMA_T)*WMMA_T, WMMA_T);
-      
-
-
+      //wmma::load_matrix_sync(x_frag, x_smem+(warp_y*WMMA_T)*WMMA_T, WMMA_T);
+      //wmma::load_matrix_sync(w_frag, w_smem+(warp_x*WMMA_T)*WMMA_T, WMMA_T);
       wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
     }
     
-    __syncthreads();
   }
 
 
@@ -11565,8 +11608,7 @@ __global__ void wmma_backwarddw_kernel(float *dw, const float *x,
 #pragma unroll
   for (int tile=0; tile<B; tile+=WMMA_T)
   {
-  
-
+    /*
 #pragma unroll
     for (int i=0; i<2; ++i)
     {
@@ -11590,22 +11632,60 @@ __global__ void wmma_backwarddw_kernel(float *dw, const float *x,
           w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = 0;
       }
     }
+    */
+    wmma::fill_fragment(x_frag, 0.0f);
+    const auto func_x = [&](const unsigned* frag_index_list,
+        const unsigned fragment_index_count,
+        const unsigned i,
+        const unsigned j) {
+
+      if((tile+j)<B && (warpY*WMMA_T+i)<OC)
+      {
+        __half tmp = __float2half(*(dy + (tile+j)*OC + warpY*WMMA_T+i));
+#pragma unroll
+        for (unsigned f = 0; f < fragment_index_count; f++)
+            x_frag.x[frag_index_list[f]] = tmp;
+      } // else did not work, so fill_fragment is a workaround
+    };
     
+    __syncwarp();
+    wmma_foreach_ij(
+        x_frag,
+        func_x
+      );
 
-    __syncthreads();
 
 
+    wmma::fill_fragment(w_frag, 0.0f);
+    const auto func_w = [&](const unsigned* frag_index_list,
+          const unsigned fragment_index_count,
+          const unsigned i,
+          const unsigned j) {
+        
+        if((tile+i)<B && (warpX*WMMA_T+j)<C)
+        { 
+          __half tmp = __float2half(*(x + (tile+i)*C + warpX*WMMA_T+j));
+  #pragma unroll
+          for (unsigned f = 0; f < fragment_index_count; f++)
+            w_frag.x[frag_index_list[f]] = tmp;
+        }
+      };
+
+    __syncwarp();
+    wmma_foreach_ij(
+        w_frag,
+        func_w
+      );
+
+
+
+    __syncwarp();
     if ((warpY*WMMA_T)<OC && (warpX*WMMA_T)<C)
     {
-      wmma::load_matrix_sync(x_frag, x_smem+warp_y*WMMA_T*WMMA_T, WMMA_T);
-      wmma::load_matrix_sync(w_frag, w_smem+warp_x*WMMA_T*WMMA_T, WMMA_T);
-      
-
-
       wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
     }
     
-    __syncthreads();
+    
   }
 
 
@@ -11811,7 +11891,7 @@ mtk::wmma::foreach_ij<decltype(frag_b)>(
 
 
 template<int WMMA_T, int X_WARPS, int Y_WARPS>
-__global__ void wmma_mult_kernel(const float *x, const float *w,
+__global__ void wmma_mult_kernel_(const float *x, const float *w,
                       float *out, const int B, const int C, const int OC) {
 
   int laneId = ( threadIdx.y * blockDim.x + threadIdx.x) % warpSize;
@@ -11934,9 +12014,9 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
 
 
-      //wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
+      wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
 
-
+      /*
       asm volatile("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32"
                    "{%0,  %1,  %2,  %3,  %4,  %5,  %6,  %7},"
                    "{%8,  %9,  %10, %11, %12, %13, %14, %15},"
@@ -11947,7 +12027,7 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
                      "r"(*reinterpret_cast<const unsigned *>(w_frag.x)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+2)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+4)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+6)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+8)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+10)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+12)), "r"(*reinterpret_cast<const unsigned *>(w_frag.x+14)), \
                      "f"(y_frag.x[0]), "f"(y_frag.x[1]), "f"(y_frag.x[2]), "f"(y_frag.x[3]), "f"(y_frag.x[4]), "f"(y_frag.x[5]), "f"(y_frag.x[6]), "f"(y_frag.x[7]));
 
-      /*
+      
       __half const *x_frag_addr = reinterpret_cast<const __half *>(x_frag.x);
       __half const *w_frag_addr = reinterpret_cast<const __half *>(w_frag.x);
       asm volatile("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32"
@@ -12001,8 +12081,8 @@ __global__ void wmma_mult_kernel(const float *x, const float *w,
 
 
 template<int WMMA_T, int X_WARPS, int Y_WARPS>
-__global__ void wmma_mult_kernel_(const float *x, const float *w,
-                      float *out, const int B, const int C, const int OC, const __half *zero_half) {
+__global__ void wmma_mult_kernel(const float *x, const float *w,
+                      float *out, const int B, const int C, const int OC) {
 
   int laneId = ( threadIdx.y * blockDim.x + threadIdx.x) % warpSize;
   int mw = laneId / WMMA_T;
@@ -12033,148 +12113,64 @@ __global__ void wmma_mult_kernel_(const float *x, const float *w,
 
   extern __shared__ float smem[];
   float *out_smem = smem;
-  float *aux_smem = out_smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T);
-  __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T) + WMMA_T*WMMA_T);
-
-  __half *x_smem     = hsmem;
-  __half *w_smem     = hsmem + Y_WARPS*WMMA_T*(WMMA_T);
   
-  
-
-  
-
-
-
-
-
-
-  
-
 
   for (int tile=0; tile<C; tile+=WMMA_T)
   {
-      //if (laneId==0&&warp_x==0&&warp_y==0)
-      //  printf("--B: %d, C: %d\n", B, C);
+    
 
-
+    
     wmma::fill_fragment(x_frag, 0.0f);
-
-    const auto func = [&](const unsigned* frag_index_list,
+    const auto func_x = [&](const unsigned* frag_index_list,
         const unsigned fragment_index_count,
         const unsigned i,
         const unsigned j) {
 
-      __half tmp = __float2half(*(x + (warpY*WMMA_T+i)*C + tile + j));
-
-
-
       if((warpY*WMMA_T+i)<B && (tile+j)<C)
       {
+        __half tmp = __float2half(*(x + (warpY*WMMA_T+i)*C + tile + j));
 #pragma unroll
         for (unsigned f = 0; f < fragment_index_count; f++)
             x_frag.x[frag_index_list[f]] = tmp;
       } // else did not work, so fill_fragment is a workaround
     };
     
-
-
-
     __syncwarp();
     wmma_foreach_ij(
         x_frag,
-        func//, to_zero_func,
-        //warpY * WMMA_T, B, tile, C
+        func_x
       );
+
+
+
+    wmma::fill_fragment(w_frag, 0.0f);
+    const auto func_w = [&](const unsigned* frag_index_list,
+          const unsigned fragment_index_count,
+          const unsigned i,
+          const unsigned j) {
+        
+        if((warpX*WMMA_T+j)<OC && (tile+i)<C)
+        { 
+          __half tmp = __float2half(*(w + (warpX*WMMA_T+j)*C + tile+i));
+  #pragma unroll
+          for (unsigned f = 0; f < fragment_index_count; f++)
+            w_frag.x[frag_index_list[f]] = tmp;
+        }
+      };
+
     __syncwarp();
+    wmma_foreach_ij(
+        w_frag,
+        func_w
+      );
 
 
 
 
-    for (int i=0; i<2; ++i)
-    {
-      // warp * mw_size * i_size + mw*i_size + i
-      int row_aux1 = warp_x*((int)(warpSize/WMMA_T))*2 + mw*2+i;
-      int row_aux2 = warp_y*((int)(warpSize/WMMA_T))*2 + mw*2+i;
-      
-      /*
-      if (row_aux1<WMMA_T)
-      {
-        if ((warpY*WMMA_T+row_aux1)<B && (tile+ml)<C)
-          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = __float2half(*(x + (warpY*WMMA_T+row_aux1)*C + tile+ml));
-        else
-          x_smem[(warp_y*WMMA_T+row_aux1)*WMMA_T + ml] = 0;
-      }
-      */
-
-      if (row_aux2<WMMA_T)
-      {
-        if ((warpX*WMMA_T+row_aux2)<OC && (tile+ml)<C)
-          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = __float2half(*(w + (warpX*WMMA_T+row_aux2)*C + tile+ml));
-        else
-          w_smem[(warp_x*WMMA_T+row_aux2)*WMMA_T + ml] = 0;
-      }
-    }
-    
-
-    __syncthreads();
-
-
+    __syncwarp();
     if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<OC)
     {
 
-
-      /*
-      const auto func = [&](const unsigned* frag_index_list,
-            const unsigned fragment_index_count,
-            const unsigned i,
-            const unsigned j) {
-
-          //__half tmp = x_smem[(warp_y*WMMA_T)*WMMA_T + j*16+i]; // col major
-          __half tmp = x_smem[(warp_y*WMMA_T)*WMMA_T + i*16+j]; // row major
-
-          for (unsigned f = 0; f < fragment_index_count; f++)
-          {
-            x_frag.x[frag_index_list[f]] = tmp;
-
-            // This view will kill high dim mma
-            //if(warp_y==0&&warp_x==0)
-            //bank[laneId*16+frag_index_list[f]] = __half2float(x_frag.x[frag_index_list[f]]);
-          }
-        };
-
-      wmma_foreach_ij(
-          x_frag,
-          func
-        );
-      __syncwarp();
-      */
-
-
-      
-      const auto func2 = [&](const unsigned* frag_index_list,
-            const unsigned fragment_index_count,
-            const unsigned i,
-            const unsigned j) {
-
-          __half tmp = w_smem[warp_x*WMMA_T*WMMA_T + j*16+i]; // col major
-          //__half tmp = w_smem[warp_x*WMMA_T*WMMA_T + i*16+j]; // row major
-
-          for (unsigned f = 0; f < fragment_index_count; f++)
-          {
-            w_frag.x[frag_index_list[f]] = tmp;
-            //bank[laneId*16+frag_index_list[f]] = __half2float(tmp);
-            //bank[laneId*16+frag_index_list[f]] = __half2float(w_frag.x[frag_index_list[f]]);
-            
-          }
-        };
-
-
-      wmma_foreach_ij(
-          w_frag,
-          func2
-        );
-      __syncwarp();
-      
 
 
       //wmma::mma_sync(y_frag, x_frag, w_frag, y_frag);
@@ -12193,7 +12189,6 @@ __global__ void wmma_mult_kernel_(const float *x, const float *w,
 
     }
     
-    __syncthreads();
   }
 
 
@@ -12257,11 +12252,12 @@ void matmul_forward(float* out,
 
 
     
+    /*
     dim3 block_size(TILE_SIZE, TILE_SIZE);
     dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
     int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
-    /*
     mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    */
     
     constexpr int num_warps_x{4};
     constexpr int num_warps_y{4};
@@ -12271,18 +12267,18 @@ void matmul_forward(float* out,
     dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
     dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float);
 
 
-    float *bank;
-    cudaMalloc(&bank, 32*16*sizeof(float));
+    // float *bank;
+    // cudaMalloc(&bank, 32*16*sizeof(float));
     
-    set_to_one_kernel<<<16, 32,0,stream>>>(bank, 16*32);
-    wmma_mult_kernel_<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, bank, B, C, OC);
+    // set_to_one_kernel<<<16, 32,0,stream>>>(bank, 16*32);
+    
+    wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, B, C, OC);
 
 
-    PrintTensorF(bank, 32, 16);
-    */
+    //PrintTensorF(bank, 32, 16);
     
   }
   else
@@ -17577,14 +17573,14 @@ float *Linear::Forward(Tensor *x, int thread_id)
     dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
     dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float);
 
 
     // float *bank;
     // cudaMalloc(&bank, 16*32*4);
     
-    const __half zero_half = __float2half(0.0f);
-    wmma_mult_kernel_<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC, &zero_half);
+    
+    wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
     // PrintTensorF(bank, 32, 16);
 
     //wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
