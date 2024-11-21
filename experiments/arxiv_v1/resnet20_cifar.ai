@@ -1,0 +1,397 @@
+start_timer(0)
+
+class Dataset
+    def __init__(f batch_size, f num_workers, s path)
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+        float _len, yield_ptr, running_workers
+        self._len = 0
+        self.yield_ptr = 0
+        self.running_workers = 1
+
+        
+        float_vec can_load_, can_process_
+        self.can_load_ = zeros_vec(num_workers)
+        self.can_process_ = ones_vec(num_workers)
+
+        str_vec files
+        self.files = glob(path)
+
+        pinned_tensor[num_workers, batch_size, 3,32,32] self.p_x
+        pinned_tensor[num_workers, batch_size] self.p_y
+
+        tensor[0] self.mean
+        tensor[0] self.std
+
+        self.mean = [0.485, 0.456, 0.406]
+        self.std = [0.229, 0.224, 0.225]
+        #self.std = [1, 1, 1]
+
+
+    def len()
+        self._len  = LenStrVec(self.files)
+        self.files = ShuffleStrVec(self.files)
+        self._len
+
+
+    def terminate_workers()
+        print("Terminating workers", 0)
+        self.running_workers = 0
+        sleep(1)
+        0
+
+
+    def increment_yield_ptr()
+        lock "yield"
+            if (self.yield_ptr + self.batch_size*(self.num_workers+2)) > self._len
+                self.yield_ptr = 0
+                self.files = ShuffleStrVec(self.files)
+                0
+            else
+                self.yield_ptr = self.yield_ptr + self.batch_size
+        self.yield_ptr
+
+
+    def getitem_w(f idx, f b, f w)
+        str aux
+
+        aux = self.files[idx]
+        
+        wload_img(self.p_x, aux, w, b)
+        
+
+        self.p_y[w,b] = to_float(aux.split_idx("/", -2))
+        
+        0
+
+
+    def worker(f w)
+
+        float bs, can_process, yield_ptr
+        bs = self.batch_size
+
+
+        while self.running_workers == 1
+            
+            can_process = self.can_process_[w]
+            #print("worker", w)
+            #print("can_process:", can_process)
+            if 1==can_process
+
+                self.can_load_[w] = 0
+                self.can_process_[w] = 0
+
+                yield_ptr = self.increment_yield_ptr()
+                
+
+                for b=0, b < bs
+                    self.getitem_w(yield_ptr+b, b, w)
+                    
+
+
+                self.can_load_[w] = 1
+                
+                0
+
+
+    def attr_w(t x, t y)
+
+        float w = -1
+
+        while w == -1
+            w = self.can_load_.first_nonzero()
+        
+        
+        
+        #print("ATTRIBUTING", w)
+
+        self.can_process_[w] = 0
+        self.can_load_[w] = 0
+        
+        
+        x.gpuw(self.p_x, w)
+        y.gpuw(self.p_y, w)
+
+        
+        x = RandomCrop(x, 4)
+        x = RandomHorizontalFlip(x)
+        #x.save_img("flipped")
+        x = NormalizeImg(x, self.mean, self.std)
+        #x = x * (1 + rand_like(x))
+        
+        
+        self.can_process_[w] = 1
+
+        return x, y
+
+
+    
+    def attr(t x, t y)
+
+
+        float bs, can_process, yield_ptr
+        bs = self.batch_size
+
+        
+        yield_ptr = self.increment_yield_ptr()
+                
+
+        for b=0, b < bs
+            self.getitem_w(yield_ptr+b, b, 0)
+        
+
+        x.gpuw(self.p_x, 0)
+        y.gpuw(self.p_y, 0)
+
+        x = NormalizeImg(x, self.mean, self.std)
+
+        return x, y
+
+
+
+
+
+class Residual_Block
+    def __init__(f in_channels, f out_channels)
+
+        
+
+        Conv2d[in_channels, out_channels, 3,1,1,xavu_relu] self.conv1
+        BatchNorm2d[out_channels] self.bn1
+
+        Conv2d[out_channels, out_channels, 3,1,1,xavu_relu] self.conv2
+        BatchNorm2d[out_channels] self.bn2
+    
+    def forward(t x)
+        tensor[0] z
+
+        z = x
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = relu(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = relu(x) + z
+
+        return x
+
+
+class Parametrized_Residual_Block
+    def __init__(f in_channels, f out_channels, f stride)
+
+
+        Conv2d[in_channels, out_channels, 1,stride,0,xavu_relu] self.residual
+        BatchNorm2d[out_channels] self.residual_bn
+
+        Conv2d[in_channels, out_channels, 3,stride,1,xavu_relu] self.conv1
+        BatchNorm2d[out_channels] self.bn1
+
+        Conv2d[out_channels, out_channels, 3,1,1,xavu_relu] self.conv2
+        BatchNorm2d[out_channels] self.bn2
+    
+    def forward(t x)
+        tensor[0] z
+
+        z = self.residual(x)
+        z = self.residual_bn(z)
+        
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = relu(x)
+        
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = relu(x) + z
+
+        return x
+
+
+class Model
+    def __init__()
+
+        Conv2d[3,16,3,1,1,xavu_relu] self.conv1
+        BatchNorm2d[16] self.bn1
+        
+
+        Residual_Block self.residual_1
+        self.residual_1.__init__(16, 16)
+        Residual_Block self.residual_2
+        self.residual_2.__init__(16, 16)
+        Residual_Block self.residual_3
+        self.residual_3.__init__(16, 16)
+
+        Parametrized_Residual_Block self.residual_4
+        self.residual_4.__init__(16, 32, 2)
+        Residual_Block self.residual_5
+        self.residual_5.__init__(32, 32)
+        Residual_Block self.residual_6
+        self.residual_6.__init__(32, 32)
+
+        Parametrized_Residual_Block self.residual_7
+        self.residual_7.__init__(32, 64, 2)
+        Residual_Block self.residual_8
+        self.residual_8.__init__(64, 64)
+        Residual_Block self.residual_9
+        self.residual_9.__init__(64, 64)
+
+        AvgPool2d[8,1,0] self.pool_out
+        param[10, 64, xavu] self.w1
+
+        
+
+    def forward(t x)
+
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = relu(x)
+
+
+        x = self.residual_1.forward(x)
+        x = self.residual_2.forward(x)
+        x = self.residual_3.forward(x)
+
+
+        x = self.residual_4.forward(x)
+        x = self.residual_5.forward(x)
+        x = self.residual_6.forward(x)
+
+        
+        x = self.residual_7.forward(x)
+        x = self.residual_8.forward(x)
+        x = self.residual_9.forward(x)
+
+
+        x = self.pool_out(x)
+
+        x = x.view(-1,64)
+
+        x = x@self.w1
+
+
+        return x
+
+
+
+Model model
+model.__init__();
+
+
+
+float max_lr, lr, max_steps, batch_size, steps_per_epoch, epoch, max_epochs
+
+max_epochs = 200
+batch_size = 128
+
+
+epoch = 0
+lr = 0.1
+
+steps_per_epoch = round(50000/batch_size)
+max_steps = 64000
+
+Dataset dataset
+dataset.__init__(batch_size, 3, "/home/nosaveddata/cifar/train/*/*.jpg");
+
+
+
+
+finish
+
+    async dataset.worker(0)
+    async dataset.worker(1)
+    async dataset.worker(2)
+
+
+    sleep(2)
+
+    
+    for i=0, i<max_steps
+        #print("i",i)
+        tensor[0] x
+        tensor[0] y
+
+
+        dataset.attr_w(x, y)
+
+
+        model.forward(x)
+        y = y.onehot(10)
+
+
+        cross_entropy(x, y, 1/(batch_size*10))
+        backprop()
+
+        if (i%steps_per_epoch==0)
+            print("Epoch", epoch)
+            epoch = epoch + 1
+            
+            print("lr", lr)
+
+
+
+        if (i+1)%32000==0
+            lr = lr/10
+
+        if (i+1)%48000==0
+            lr = lr/10
+
+
+        SGD(lr, 0.9, 0.0001, 10)
+        #print("i",i)
+        
+        0
+        
+
+    dataset.terminate_workers()
+
+
+
+
+eval()
+
+
+float val_steps, val_batch_size
+
+val_batch_size = 100
+
+
+
+Dataset val_dataset
+val_dataset.__init__(val_batch_size, 1, "/home/nosaveddata/cifar/test/*/*.jpg");
+val_steps = val_dataset.len();
+val_steps = round(val_steps/val_batch_size)
+
+
+
+tensor[1,zeros] acc
+
+for i=0, i<val_steps
+    #print("i:", i)
+    tensor[0] x
+    tensor[0] y
+    tensor[1] batch_acc
+
+    val_dataset.attr(x, y)
+
+
+
+    model.forward(x)
+
+    x = x.argmax(-1)
+    
+    
+    batch_acc = x==y
+    acc = acc + batch_acc.mean()
+    clean_forward()
+
+
+acc = 100*acc/val_steps
+
+print("Accuracy",0)
+acc;
+
+
+
+end_timer(0);

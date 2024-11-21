@@ -1,0 +1,9 @@
+bin/
+samples/
+include/_mma/
+mma
+mma.cu
+toy.o
+toy_backup.cu
+print_colors.png
+compiler.code-workspace
