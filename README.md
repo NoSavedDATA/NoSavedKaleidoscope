@@ -8,7 +8,7 @@ All the code is open sourced.
 
 
 <div align="center">
-  <img src="assets/Logo1.jpg" alt="Logo" width="260" height="260">
+  <img src="assets/kaleidoscope.jpg" alt="Logo" width="260" height="260">
 </div>
 
 Features: 
@@ -84,17 +84,6 @@ clang++ test.cu --cuda-path="/usr/local/cuda-12" --cuda-gpu-arch=sm_75 -L"/usr/l
 - C++ vs Python vs NSK speed benchmarks;
 - NSK vs PyTorch benchmarks.
 
-## Awards:
-
-<div align="center">
-  <img src="assets/Screenshot_2.jpg" alt="Logo" width="350" height="350">
-</div>
-
-- After LSTM cuda kernel fusion:
-
-<div align="center">
-  <img src="assets/Scooby not Doo.png" alt="Logo" width="350" height="350">
-</div>
 
 ## Changelogs
 
