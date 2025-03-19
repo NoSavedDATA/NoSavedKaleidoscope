@@ -14,7 +14,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 
-#include "include/KaleidoscopeJIT.h"
+#include "src/KaleidoscopeJIT.h"
 
 
 #include <algorithm>
@@ -58,15 +58,18 @@
 #include <cuda_fp16.h>
 #include <cudnn.h>
 #include <mma.h>
-#include <cute/tensor.hpp>
+// #include <cute/tensor.hpp>
 
 
-#include "cutlass/gemm/device/gemm.h"
-#include "cutlass/cutlass.h"
+// #include "include/cutlass/gemm/device/gemm.h"
+// #include "include/cutlass/cutlass.h"
 
-#include "include/mma/common.h"
-#include "include/_mma/mma_async_stage3.cu"
-#include "include/cu_commons.h"
+#include "src/mma/include.h"
+#include "src/common/include.h"
+#include "src/tensor/include.h"
+// #include "src/mma/tensor_struct.cu"
+// #include "src/_mma/mma_async_stage3.cu"
+#include "src/cu_commons.h"
 
 
 pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex, aux_mutex;
@@ -135,7 +138,37 @@ using namespace nvcuda;
     }                                                        \
   }
 
-// Error Colors
+
+int ASYNC_LOADER_THREADS = 6;
+const int num_parallel_streams=32; //global of src/mma/tensor_struc.h
+CudaStreams *parallel_streams[num_parallel_streams];
+cudaEvent_t parallel_events[num_parallel_streams];
+std::vector<cudaEvent_t> Registered_Events;
+int open_streams[num_parallel_streams];
+CudaStreams *main_stream, *backward_stream;
+std::map<int, cudaStream_t> ThreadsStream;
+std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops, weightless_ops;
+int nn_mode=training_mode;
+std::map<std::string, int> NotatorsMap = {
+  {"bias", bias},
+  {"fp32", fp32},
+  {"fp16", fp16},
+  {"causal", causal},
+};
+
+bool ShallCodegen = true;
+
+
+// Tensors
+std::map<std::string, Tensor *> NamedTensorsT;
+std::map<std::string, float *> NamedPinnedTensors;
+std::map<std::string, std::vector<float>> NamedDims;
+std::vector<Tensor> TensorsToDelete;
+
+
+
+
+  // Error Colors
 
 // \033[0m default
 // \033[31m red
@@ -278,7 +311,7 @@ private:
 };
 
 
-bool in_str(std::string str, std::vector<std::string> list);
+// bool in_str(std::string str, std::vector<std::string> list);
 
 //MT19937 mt(generate_custom_seed());
 LCG rng(generate_custom_seed());
@@ -2805,11 +2838,7 @@ void CleanScopeTensors(std::string scope);
 using backward_tuple = std::tuple<int, int, int, int, int, float *, float *, float *, std::string, std::string, std::string>;
 std::vector<Tensor *> todo_backward_tensors;
 
-// Tensors
-static std::map<std::string, Tensor *> NamedTensorsT;
-static std::map<std::string, float *> NamedPinnedTensors;
-static std::map<std::string, std::vector<float>> NamedDims;
-static std::vector<Tensor> TensorsToDelete;
+
 
 
 unsigned char* current_data_attr;
@@ -12108,36 +12137,36 @@ void matmul_forward(float* out,
 
   if (thread_id==0)
   {
-    //cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, inp, C, &beta, out, OC));
+    cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, inp, C, &beta, out, OC));
     
     cudaStream_t stream = ThreadsStream[thread_id];
 
 
     
-    /*
-    dim3 block_size(TILE_SIZE, TILE_SIZE);
-    dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
-    int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
-    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
-    */
-    
-    constexpr int num_warps_x{4};
-    constexpr int num_warps_y{4};
+
+    // dim3 block_size(TILE_SIZE, TILE_SIZE);
+    // dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
+    // int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+    // mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+   
+
+    // constexpr int num_warps_x{4};
+    // constexpr int num_warps_y{4};
     
 
-    constexpr int WMMA_T{16};
-    dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
-    dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    // constexpr int WMMA_T{16};
+    // dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
+    // dim3 grid_size(std::ceil((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float);
+    // int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float);
 
 
-    // float *bank;
-    // cudaMalloc(&bank, 32*16*sizeof(float));
+    // // float *bank;
+    // // cudaMalloc(&bank, 32*16*sizeof(float));
     
-    // set_to_one_kernel<<<16, 32,0,stream>>>(bank, 16*32);
+    // // set_to_one_kernel<<<16, 32,0,stream>>>(bank, 16*32);
     
-    wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, B, C, OC);
+    // wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(inp, W, out, B, C, OC);
 
 
     //PrintTensorF(bank, 32, 16);
@@ -16928,13 +16957,13 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
   } else {
     // Get qkv
 
-    constexpr int num_warps_x{4};
-    constexpr int num_warps_y{4};
+    // constexpr int num_warps_x{4};
+    // constexpr int num_warps_y{4};
     
 
     constexpr int WMMA_T{16};
-    dim3 block_size_wmma(num_warps_x * WARP_SIZE, num_warps_y);
-    dim3 grid_size_wmma_proj(std::floor((3*C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::floor((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    // dim3 block_size_wmma(num_warps_x * WARP_SIZE, num_warps_y);
+    // dim3 grid_size_wmma_proj(std::floor((3*C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::floor((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
     // int shared_mem_wmma = (num_warps_y*WMMA_T*WMMA_T*num_warps_x+ WMMA_T*WMMA_T)*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
     // wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma_proj, block_size_wmma, shared_mem_wmma, stream>>>(x->tensor_ptr, W, qkv, B*T, C, 3*C);
 
@@ -16958,7 +16987,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
 
 
-    cudaCheck(cudaGetLastError());
+    // cudaCheck(cudaGetLastError());
     
     
     //cudaStreamSynchronize(stream);
@@ -17001,7 +17030,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
     blocking_mma<WMMA_T>(out, W_proj, proj_out, B*T, C, C, stream);
                           
-    cudaCheck(cudaGetLastError());
+    // cudaCheck(cudaGetLastError());
     
     // move_to_pool(thread_id, B*T*C, x_half->half_ptr, "MHSA qkv");
     // move_to_pool(thread_id, 3*C*C, w_half->half_ptr, "MHSA qkv");
