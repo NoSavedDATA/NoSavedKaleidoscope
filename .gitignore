@@ -1,4 +1,3 @@
-bin/
 samples/
 include/_mma/
 mma
@@ -7,3 +6,4 @@ toy.o
 toy_backup.cu
 print_colors.png
 compiler.code-workspace
+aux.cu
