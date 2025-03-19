@@ -1,4 +1,6 @@
 samples/
+obj/
+bin/
 include/_mma/
 mma
 mma.cu
