@@ -1,3 +1,3 @@
 #pragma once
 
-#include"extension_functions.cu"
+#include"extension_functions.h"

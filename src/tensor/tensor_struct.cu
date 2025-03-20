@@ -29,7 +29,9 @@
 #include <stdlib.h>
 #include <omp.h>
 
-#include "../common/extension_functions.cu"
+#include <cuda_fp16.h>
+
+#include "../common/include.h"
 #include "tensor_struct.h"
 
 
