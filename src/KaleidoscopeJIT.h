@@ -9,9 +9,7 @@
 // Contains a simple JIT definition for use in the kaleidoscope tutorials.
 //
 //===----------------------------------------------------------------------===//
-
-#ifndef LLVM_EXECUTIONENGINE_ORC_KALEIDOSCOPEJIT_H
-#define LLVM_EXECUTIONENGINE_ORC_KALEIDOSCOPEJIT_H
+#pragma once
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/Orc/CompileOnDemandLayer.h"
@@ -259,5 +257,3 @@ private:
 
 } // end namespace orc
 } // end namespace llvm
-
-#endif // LLVM_EXECUTIONENGINE_ORC_KALEIDOSCOPEJIT_H
