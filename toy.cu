@@ -47,6 +47,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
+#include <iostream>
 
 
 
@@ -68,7 +69,6 @@
 #include "src/common/include.h"
 #include "src/tensor/include.h"
 #include "src/compiler_frontend/include.h"
-#include "src/cu_commons.h"
 
 
 pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex, aux_mutex;
@@ -315,8 +315,8 @@ private:
 //MT19937 mt(generate_custom_seed());
 LCG rng(generate_custom_seed());
 
-//std::random_device rd; // it is already defined at cu_common.h
-std::mt19937 MAIN_PRNG(rd()^get_millisecond_time());
+std::random_device rd2; // it is already defined at cu_common.h
+std::mt19937 MAIN_PRNG(rd2()^get_millisecond_time());
 
 
 unsigned long long get_int_seed()
@@ -449,94 +449,6 @@ enum NameSolverTypes {
 
 
 
-
-/// LogError* - These are little helper functions for error handling.
-std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
-  ShallCodegen = false;
-  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
-  if (Str!=" ")
-    std::cout << "\nLine: " << LineCounter << "\n   \033[31m Error: \033[0m " << Str << "\n\n";
-  
-  
-  return nullptr;
-}
-
-std::unique_ptr<ExprAST> LogError(std::string Str) {
-  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
-  LogErrorS(Str);
-
-  while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
-    getNextToken();
-  
-  return nullptr;
-}
-
-
-std::unique_ptr<ExprAST> LogError_toNextToken(std::string Str) {
-  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
-  LogErrorS(Str);
-
-  getNextToken();
-  
-  return nullptr;
-}
-
-
-std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
-  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
-  LogErrorS(Str);
-
-  while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
-    getNextToken();
-
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return nullptr;
-}
-
-void LogWarning(const char *Str) {
-  std::cout << "\nLine: " << LineCounter << "\n   \033[33m Aviso: \033[0m " << Str << "\n\n";
-}
-
-// Modified LogError function with token parameter
-std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
-  ShallCodegen = false;
-  //char buf[100];
-  //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
-  //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
-  std::cout << "\nLine: " << LineCounter << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
-  
-  while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
-    getNextToken();
-
-  return nullptr;
-}
-
-
-std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
-  LogError(Str);
-  while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
-    getNextToken();
-  return nullptr;
-}
-
-
-std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str) {
-  LogError(Str);
-  while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
-  {
-    std::cout << "LogErrorP: " << IdentifierStr << "\n";
-    
-    getNextToken();
-    }
-  return nullptr;
-}
-
-Value *LogErrorV(std::string Str) {
-  LogError(Str);
-  return nullptr;
-}
 
 static std::unique_ptr<ExprAST> ParseExpression(std::string class_name="");
 static std::unique_ptr<ExprAST> ParsePrimary(std::string class_name);
@@ -1492,75 +1404,6 @@ static std::map<std::string, int> objectVecsLastId;
 
 
 
-
-extern "C" void PrintDims(std::vector<float> dims)
-{
-  std::cout << "dims: [";
-  for (int i=0; i<dims.size();i++)
-  {
-    std::cout << (int)dims[i];
-    if (i==dims.size()-1)
-      std::cout << "]";
-    else
-      std::cout << ", ";
-  }
-  std::cout  << "\n";
-}
-int DimsProd(std::vector<float> dims)
-{
-  if (dims.size()==1)
-    return (int) dims[0];
-
-  float aux=1;
-  for (int i = 0; i < dims.size(); i++)
-    aux = aux*dims[i];
-  return (int)aux;
-}
-
-std::vector<float> BatchLessDims(std::vector<float> dims)
-{
-  // Removes first dim (batch dim).
-  if (dims.size()<=1)
-    LogError("Cannot remove the batch dimension of a unidimensional tensor.");
-
-  std::vector<float> new_dims;
-
-  for (int i=0; i<dims.size()-1;i++)
-    new_dims.push_back(dims[i+1]);
-
-  return new_dims;
-}
-
-std::vector<float> RemoveLastDim(std::vector<float> dims)
-{
-  // Removes first dim (batch dim).
-  if (dims.size()<=1)
-  {
-    return {1.0f};
-    //LogError("Cannot remove the batch dimension of a unidimensional tensor.");
-  }
-
-  std::vector<float> new_dims;
-
-  for (int i=0; i<dims.size()-1;i++)
-    new_dims.push_back(dims[i]);
-
-  return new_dims;
-}
-
-std::vector<float> RemoveFirstDim(std::vector<float> dims)
-{
-  // Removes first dim (batch dim).
-  if (dims.size()<=1)
-    return {1.0f};
-
-  std::vector<float> new_dims;
-
-  for (int i=0; i<dims.size()-1;i++)
-    new_dims.push_back(dims[i+1]);
-
-  return new_dims;
-}
 
 
 
@@ -5234,43 +5077,6 @@ extern "C" float end_timer(float id)
 
 
 
-std::vector<float> format_BatchFirst_Dims(std::vector<float> dims)
-{
-  std::vector<float> new_dims;
-  new_dims.push_back(dims[0]);
-  int aux=1;
-  for (int i = 0; i < dims.size()-1; i++)
-    aux *= dims[i+1];
-  new_dims.push_back(aux);
-  return new_dims;
-}
-
-
-std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
-{
-  std::vector<float> new_dims;
-  int aux=1;
-  for (int i = 0; i < dims.size()-1; i++)
-    aux *= dims[i];
-  new_dims.push_back(aux);
-  new_dims.push_back(dims[dims.size()-1]);
-  return new_dims;
-}
-
-
-
-int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
-{
-  float aux=1;
-  for (int i = 0; i < Ldims.size()-1; i++)
-    aux = aux * Ldims[i];
-  aux = aux * Rdims[0];
-  return (int)aux;
-}
-
-
-float *get_from_pool(int, float, std::string);
-
 extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
 {
   //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
@@ -5572,10 +5378,6 @@ extern "C" char * shuffle_str(char *string_list)
 
 
 
-//std::map<float, std::vector<float *>> TensorPool;
-std::map<int, std::map<float, std::vector<float *>>> TensorPool;
-std::map<int, std::map<float, std::vector<half *>>> TensorHalfPool;
-
 void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string from)
 {
   //if (dims_prod==50*256)
@@ -5603,36 +5405,6 @@ void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string
   }  
 }
 
-float *get_from_pool(int thread_id, float dims_prod, std::string from)
-{
-  //if (dims_prod==32)
-  //  std::cout << "get B*OC of " << from << "\n";
-
-  if (dims_prod==0)
-    return nullptr;
-
-
-  float *tensor_ptr;
-
-  if(TensorPool[thread_id].count(dims_prod)>0)
-  {
-    std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
-    if (tensors_in_pool.size()>0)
-    {
-      //std::cout << "GETTING FROM POOL: " << dims_prod << "\n";
-      tensor_ptr = tensors_in_pool.back();
-      TensorPool[thread_id][dims_prod].pop_back();
-      return tensor_ptr;
-    }
-  }
-
-  
-
-  std::cout << "Malloc new space from " << from << " of size: " << dims_prod << ", at thread: " << thread_id << "\n";
-
-  cudaCheck(cudaMalloc(&tensor_ptr, dims_prod*sizeof(float)));
-  return tensor_ptr;
-}
 
 
 
@@ -22559,91 +22331,7 @@ extern "C" float print_randoms(float N, float std) {
 
 
 
-extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight, int thread_id, char *scope)
-{
-  //std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
 
-  Tensor *tensor;
-
-  std::vector<float> dims = NamedDims[tensor_name];
-  NamedDims[tensor_name].clear(); //TODO: Global vars are bad with threads.
-
-  int product = DimsProd(dims);
-
-  float *tensor_ptr;
-  float *tensor_cpu;
-
-  if(product>0)
-  {
-    if (std::strcmp(init, "randu") == 0)
-      tensor_cpu = make_random_float_uniform(product);
-    if (std::strcmp(init, "zeros") == 0)
-      tensor_cpu = make_zeros_float(product);
-    if (std::strcmp(init, "ones") == 0)
-      tensor_cpu = make_ones_float(product);
-    if (std::strcmp(init, "normal") == 0)
-      tensor_cpu = make_normal(product);
-    if (std::strcmp(init, "xavu") == 0)
-      tensor_cpu = make_xavier_uniform_float(product, dims[dims.size()-1], dims[dims.size()-2]);
-    if (std::strcmp(init, "xavu_relu") == 0)
-      tensor_cpu = make_xavier_uniform_float_relu(product, dims[dims.size()-1], dims[dims.size()-2]);
-    if (std::strcmp(init, "xavu_tanh") == 0)
-      tensor_cpu = make_xavier_uniform_float_tanh(product, dims[dims.size()-1], dims[dims.size()-2]);
-    if (std::strcmp(init, "he_normal_relu") == 0)
-      tensor_cpu = make_he_normal_float_relu(product, dims[dims.size()-1]);
-    if (std::strcmp(init, "init_gpt") == 0)
-      tensor_cpu = make_gpt_init(product);
-    if (std::strcmp(init, "int") == 0)
-      tensor_cpu = make_random_int(product, 10);
-    if (std::strcmp(init, "arange") == 0)
-      tensor_cpu = make_arange(product);
-    if (std::strcmp(init, "binary") == 0)
-      tensor_cpu = make_random_int(product, 1);
-
-    cudaCheck(cudaGetLastError());
-    std::string _name = "create tensor ";
-    _name = _name + tensor_name;
-    tensor_ptr = get_from_pool(thread_id, product, _name);
-    //std::cout << "cpy of: " << tensor_name << "\n";
-
-    cudaStream_t stream = ThreadsStream[thread_id];
-    cudaCheck(cudaMemcpyAsync(tensor_ptr, tensor_cpu, product*sizeof(float), cudaMemcpyHostToDevice, stream));
-    //cudaStreamSynchronize(stream);
-    delete[] tensor_cpu;
-  }
-
-
-  
-  /*
-  if(NamedTensorsT.count(tensor_name)>0)
-  {
-    tensor = NamedTensorsT[tensor_name];
-    if (tensor!=nullptr)
-    
-      delete tensor;
-      //cudaCheck(cudaFree(aux_ptr));
-  }
-  */
-  
-  
-
-
-  tensor = createTensor(tensor_ptr, dims, product, true, tensor_name);
-  tensor->scopeless_name = scopeless_name;
-  if((bool)is_weight)
-    tensor->SetIsWeight();
-  tensor->op = create_tensor_op;
-
-  
-  NamedTensorsT[tensor_name] = tensor;
-
-  
-  delete[] tensor_name;
-  delete[] scopeless_name;
-
-
-  return 0;
-}
 
 
 Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
@@ -26127,7 +25815,7 @@ static void HandleTopLevelExpression() {
 static void MainLoop() {
   while (true) {
     //if (CurTok!=tok_space)
-    //  std::cout << "MAIN LOOP, reading token: " << ReverseToken(CurTok) << "\n";
+     std::cout << "MAIN LOOP, reading token: " << ReverseToken(CurTok) << "\n";
     
 
     switch (CurTok) {
@@ -26179,8 +25867,16 @@ extern "C" float printd(float X) {
 // Main driver code.
 //===----------------------------------------------------------------------===//
 
-int main() {
+__attribute__((constructor))
+void early_init() {
+    // std::cout << "Constructor Function Executed\n";
+  InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
+  InitializeNativeTargetAsmParser();
+}
 
+int main() {
+  std::cout << "Start Main.\n";
   int deviceIdx = 0;
   cudaCheck(cudaSetDevice(deviceIdx));
   cudaGetDeviceProperties(&deviceProp, deviceIdx);
@@ -26258,9 +25954,6 @@ int main() {
 
 
 
-  InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
-  InitializeNativeTargetAsmParser();
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
@@ -26377,13 +26070,15 @@ int main() {
 
   // Prime the first token.
   //fprintf(stderr, "ready> ");
+  std::cout << "Call get next token";
   getNextToken();
 
   TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
   InitializeModule();
 
   // Run the main "interpreter loop" now.
-  
+    
+  std::cout << "Initializing Main Loop";
 
   MainLoop();
 

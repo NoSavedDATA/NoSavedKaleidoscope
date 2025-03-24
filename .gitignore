@@ -2,6 +2,8 @@ samples/
 obj/
 bin/
 include/_mma/
+src_backup
+src_reference
 mma
 mma.cu
 toy.o
@@ -9,3 +11,7 @@ toy_backup.cu
 print_colors.png
 compiler.code-workspace
 aux.cu
+llvm.sh
+mouse.o
+mouse.cu
+*backup

@@ -1,39 +1,16 @@
-#include <algorithm>
-#include <cstdarg>
-#include <cassert>
-#include <cctype>
-#include <cstring>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <map>
-#include <memory>
-#include <string>
-#include <iostream>
-#include <numeric>
-#include <utility>
-#include <vector>
-#include <iomanip>
-#include <math.h>
-#include <fenv.h>
-#include <tuple>
-#include <glob.h>
-#include <chrono>
-#include <thread>
-#include <random>
-#include <float.h>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
-#include <stdio.h>
-#include <stdlib.h>
-#include <omp.h>
-
+#include<map>
+#include<vector>
+#include<string>
+#include<iostream>
+#include<algorithm>
+#include<random>
+#include<memory>
+#include<cstring>
+#include<sstream>
 
 // Cuda
 #include <cuda_fp16.h>
 #include "include.h"
-// extern bool ShallCodegen;
 
 float FirstNonzero(int *vec, int size)
 {  

@@ -1,35 +1,11 @@
 
-
-#include <algorithm>
-#include <cstdarg>
-#include <cassert>
-#include <cctype>
-#include <cstring>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <map>
-#include <memory>
-#include <string>
-#include <iostream>
-#include <numeric>
-#include <utility>
-#include <vector>
-#include <iomanip>
-#include <math.h>
-#include <fenv.h>
-#include <tuple>
-#include <glob.h>
-#include <chrono>
-#include <thread>
-#include <random>
-#include <float.h>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
-#include <stdio.h>
-#include <stdlib.h>
-#include <omp.h>
+#include<map>
+#include<vector>
+#include<stdio.h>
+#include<stdlib.h>
+#include<ctype.h>
+#include<string>
+#include<iostream>
 
 #include "tokenizer.h"
 
@@ -205,8 +181,9 @@ int SeenTabs = 0;
 int LastSeenTabs = 0;
 
 /// get_token - Return the next token from standard input.
-int get_token() {
+static int get_token() {
   static int LastChar = ' ';
+  std::cout << "\nGet token. " << " last char: " << LastChar << ".\n";
 
   
 
@@ -529,17 +506,17 @@ int get_token() {
 }
 
 
-int CurTok;
-std::map<char, int> BinopPrecedence;
 
 /// CurTok/getNextToken - Provide a simple token buffer.  CurTok is the current
 /// token the parser is looking at.  getNextToken reads another token from the
 /// lexer and updates CurTok with its results.
+int CurTok;
 int getNextToken() { return CurTok = get_token(); }
+
 
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
-
+std::map<char, int> BinopPrecedence;
 /// get_tokenPrecedence - Get the precedence of the pending binary operator token.
 int get_tokenPrecedence() {
   if (CurTok==tok_space)

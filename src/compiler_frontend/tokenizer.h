@@ -86,7 +86,7 @@ enum Token {
 
   
 std::string ReverseToken(int _char);
-int get_token();
+static int get_token();
 
 extern std::map<int, std::string> token_to_string;
 
@@ -109,7 +109,7 @@ extern int LastSeenTabs;
 /// token the parser is looking at.  getNextToken reads another token from the
 /// lexer and updates CurTok with its results.
 extern int CurTok;
-extern int getNextToken();
+int getNextToken();
 
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
