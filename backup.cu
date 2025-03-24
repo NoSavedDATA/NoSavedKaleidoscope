@@ -47,7 +47,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
-#include <iostream>
 
 
 
@@ -156,6 +155,8 @@ std::map<std::string, int> NotatorsMap = {
 };
 
 bool ShallCodegen = true;
+
+
 
 
 // Tensors
@@ -315,8 +316,8 @@ private:
 //MT19937 mt(generate_custom_seed());
 LCG rng(generate_custom_seed());
 
-std::random_device rd2; // it is already defined at cu_common.h
-std::mt19937 MAIN_PRNG(rd2()^get_millisecond_time());
+//std::random_device rd; // it is already defined at cu_common.h
+std::mt19937 MAIN_PRNG(rd()^get_millisecond_time());
 
 
 unsigned long long get_int_seed()
@@ -25867,14 +25868,6 @@ extern "C" float printd(float X) {
 // Main driver code.
 //===----------------------------------------------------------------------===//
 
-__attribute__((constructor))
-void early_init() {
-    // std::cout << "Constructor Function Executed\n";
-  InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
-  InitializeNativeTargetAsmParser();
-}
-
 int main() {
   std::cout << "Start Main.\n";
   int deviceIdx = 0;
@@ -25954,6 +25947,9 @@ int main() {
 
 
 
+  InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter(); // Prepare for target hardware
+  InitializeNativeTargetAsmParser();
 
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};

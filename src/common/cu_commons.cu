@@ -10,13 +10,9 @@
 #include <iostream>
 #include <random>
 
+
 #include <Eigen/Dense>
-
-
-template<class T>
-__host__ __device__ T ceil_div(T dividend, T divisor) {
-    return (dividend + divisor-1) / divisor;
-}
+#include "cu_commons.h"
 
 // ----------------------------------------------------------------------------
 // checking utils
@@ -29,17 +25,15 @@ void cuda_check(cudaError_t error, const char *file, int line) {
         exit(EXIT_FAILURE);
     }
 };
-#define cudaCheck(err) (cuda_check(err, __FILE__, __LINE__))
 
 // cuBLAS error checking
-void cublasCheck(cublasStatus_t status, const char *file, int line)
+void _cublasCheck(cublasStatus_t status, const char *file, int line)
 {
     if (status != CUBLAS_STATUS_SUCCESS) {
         printf("[cuBLAS ERROR]: %d %s %d\n", status, file, line);
         exit(EXIT_FAILURE);
     }
 }
-#define cublasCheck(status) { cublasCheck((status), __FILE__, __LINE__); }
 
 // ----------------------------------------------------------------------------
 // random utils
@@ -51,7 +45,9 @@ unsigned int get_millisecond_time() {
 }
 
 std::random_device rd;  // obtain a random seed
+// std::mt19937 WEIGHT_PRNG(get_millisecond_time()); // initialize the Mersenne Twister generator
 std::mt19937 WEIGHT_PRNG(rd()^get_millisecond_time()); // initialize the Mersenne Twister generator
+
 //std::mt19937 WEIGHT_PRNG(0);
 
 float* make_random_float_uniform(size_t N) {
@@ -135,7 +131,7 @@ float* make_normal(float N) {
     return arr;
 }
 
-float* make_embedding_uniform(float N, float scale=0.05) {
+float* make_embedding_uniform(float N, float scale) {
     std::uniform_real_distribution<float> dist(-scale, scale);
 
     float* arr = (float*)malloc(N * sizeof(float));
@@ -347,54 +343,3 @@ float* make_lstm_torch(float OC, float C) {
     return arr;
 }
 
-
-
-// ----------------------------------------------------------------------------
-// testing and benchmarking utils
-
-template<class T>
-void validate_result(T* device_result, const T* cpu_reference, const char* name, std::size_t num_elements, T tolerance=1e-4) {
-    T* out_gpu = (T*)malloc(num_elements * sizeof(T));
-    cudaCheck(cudaMemcpy(out_gpu, device_result, num_elements * sizeof(T), cudaMemcpyDeviceToHost));
-    int nfaults = 0;
-    for (int i = 0; i < num_elements; i++) {
-        // print the first few comparisons
-        if (i < 5) {
-            printf("%f %f\n", cpu_reference[i], out_gpu[i]);
-        }
-        // ensure correctness for all elements. We can set an "ignore" mask by writing NaN
-        if (fabs(cpu_reference[i] - out_gpu[i]) > tolerance && !isnan(cpu_reference[i])) {
-            printf("Mismatch of %s at %d: CPU_ref: %f vs GPU: %f\n", name, i, cpu_reference[i], out_gpu[i]);
-            nfaults ++;
-            if (nfaults >= 10) {
-                free(out_gpu);
-                exit(EXIT_FAILURE);
-            }
-        }
-    }
-
-    // reset the result pointer, so we can chain multiple tests and don't miss trivial errors,
-    // like the kernel not writing to part of the result.
-    // cudaMemset(device_result, 0, num_elements * sizeof(T));
-    // AK: taking this out, ~2 hours of my life was spent finding this line
-
-    free(out_gpu);
-}
-
-template<class Kernel, class... KernelArgs>
-float benchmark_kernel(int repeats, Kernel kernel, KernelArgs&&... kernel_args) {
-    cudaEvent_t start, stop;
-    cudaCheck(cudaEventCreate(&start));
-    cudaCheck(cudaEventCreate(&stop));
-    cudaCheck(cudaEventRecord(start, nullptr));
-    for (int i = 0; i < repeats; i++) {
-        kernel(std::forward<KernelArgs>(kernel_args)...);
-    }
-    cudaCheck(cudaEventRecord(stop, nullptr));
-    cudaCheck(cudaEventSynchronize(start));
-    cudaCheck(cudaEventSynchronize(stop));
-    float elapsed_time;
-    cudaCheck(cudaEventElapsedTime(&elapsed_time, start, stop));
-
-    return elapsed_time / repeats;
-}

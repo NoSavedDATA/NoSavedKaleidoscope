@@ -1,33 +1,10 @@
-#include <algorithm>
-#include <cstdarg>
-#include <cassert>
-#include <cctype>
-#include <cstring>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <map>
-#include <memory>
-#include <string>
-#include <iostream>
-#include <numeric>
-#include <utility>
-#include <vector>
-#include <iomanip>
-#include <math.h>
-#include <fenv.h>
-#include <tuple>
-#include <glob.h>
-#include <chrono>
-#include <thread>
-#include <random>
-#include <float.h>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
-#include <stdio.h>
-#include <stdlib.h>
-#include <omp.h>
+#include<string>
+#include<map>
+#include<vector>
+#include<iostream>
+#include<algorithm>
+#include<random>
+#include<thread>
 
 #include <cuda_fp16.h>
 
