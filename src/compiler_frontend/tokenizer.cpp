@@ -183,7 +183,7 @@ int LastSeenTabs = 0;
 /// get_token - Return the next token from standard input.
 static int get_token() {
   static int LastChar = ' ';
-  std::cout << "\nGet token. " << " last char: " << LastChar << ".\n";
+  // std::cout << "\nGet token. " << " last char: " << LastChar << ".\n";
 
   
 
