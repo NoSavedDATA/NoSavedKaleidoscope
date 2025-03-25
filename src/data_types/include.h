@@ -1,5 +1,27 @@
 #pragma once
 
+#include "llvm/IR/Value.h"
+#include "llvm/IR/Instructions.h"
+#include <vector>
+#include <map>
+
+#include "str.h"
+#include "str_vec.h"
+#include "float_vec.h"
+
+using namespace llvm;
+
+extern std::map<std::string, Value *> NamedValues;
+extern std::map<std::string, char *> NamedStrs;
+extern std::map<std::string, AllocaInst *> NamedStrVecs;
+extern std::map<std::string, AllocaInst *> NamedFloatVecs;
+extern std::map<std::string, std::vector<char *>> ClassStrVecs;
+extern std::map<std::string, std::vector<float>> ClassFloatVecs;
+extern std::map<std::string, float> NamedClassValues;
+extern std::map<std::string, std::string> NamedObjects;
+extern std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
+extern std::map<std::string, char *> ScopeNamesToClean;
+extern std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;
 
 
 enum Types {

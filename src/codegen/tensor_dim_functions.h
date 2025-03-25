@@ -21,3 +21,8 @@ std::vector<float> format_LinearLayer_Dims(std::vector<float> dims);
 
 
 int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims);
+
+std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims);
+
+
+extern "C" void *NewDimsOnIdx(std::vector<float> dims);

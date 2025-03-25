@@ -9,6 +9,7 @@
 
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
+#include "../tensor/include.h"
 #include "include.h"
 
 
@@ -115,4 +116,49 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
     aux = aux * Ldims[i];
   aux = aux * Rdims[0];
   return (int)aux;
+}
+
+
+std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
+{
+  
+
+  std::vector<float> new_dims;
+  if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
+  {
+    LogError("The last dimension of multiplied tensors must be the same.");
+    std::cout << "Dim LHS: ";
+    PrintDims(Ldims);
+    std::cout << "Dim RHS: ";
+    PrintDims(Rdims);
+    return {}; 
+  }
+  for (int i = 0; i < Ldims.size()-1; i++)
+    new_dims.push_back(Ldims[i]);
+  new_dims.push_back(Rdims[0]);
+
+
+  return new_dims;
+}
+
+
+
+extern "C" void *NewDimsOnIdx(std::vector<float> dims)
+{
+  std::vector<float> new_dims;
+
+  for (int i = 0; i < dims.size()-1; i++)
+    new_dims.push_back(dims[i+1]);
+
+
+  // Aux to not lose pointers
+  std::string random_str = RandomString(15);
+  NamedDims[random_str] = new_dims; // Deal with new_dims being deleted after scope finished.
+  AuxRandomStrs[random_str] = "dim";
+
+
+  std::cout << "NewDimsOnIdx" << "\n";
+  PrintDims(NamedDims[random_str]);
+
+  return &NamedDims[random_str];
 }

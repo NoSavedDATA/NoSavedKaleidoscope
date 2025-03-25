@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <random>
 
 // REFERENCES:
 // https://github.com/karpathy/llm.c/blob/master/dev/cuda/common.h

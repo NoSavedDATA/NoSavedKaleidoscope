@@ -65,10 +65,7 @@
 // #include "include/cutlass/gemm/device/gemm.h"
 // #include "include/cutlass/cutlass.h"
 
-#include "src/mma/include.h"
-#include "src/common/include.h"
-#include "src/tensor/include.h"
-#include "src/compiler_frontend/include.h"
+#include "src/include.h"
 
 
 pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex, aux_mutex;
@@ -165,10 +162,17 @@ std::map<std::string, std::vector<float>> NamedDims;
 std::vector<Tensor> TensorsToDelete;
 
 
+LCG rng(generate_custom_seed());
+
+std::random_device rd2; // it is already defined at cu_common.h
+std::mt19937 MAIN_PRNG(rd2()^get_millisecond_time());
+
+
+std::vector<std::string> rds;
+
 
 
   // Error Colors
-
 // \033[0m default
 // \033[31m red
 // \033[33m yellow
@@ -176,190 +180,20 @@ std::vector<Tensor> TensorsToDelete;
 
 
 
-unsigned int generate_custom_seed() {
-    // Combine time, process ID, and thread ID to generate a seed
-    auto now = std::chrono::high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
-    unsigned int nanoseconds = get_millisecond_time();
-
-    unsigned int tid = std::hash<std::thread::id>{}(std::this_thread::get_id());
-
-
-    unsigned int seed = nanoseconds ^ tid;
-    return seed;
-}
 
 
 
-class PhiloxRNG {
-public:
-    using uint32 = uint32_t;
-    using uint64 = uint64_t;
-
-    PhiloxRNG(uint64 seed1, uint64 seed2) : key{ static_cast<uint32>(seed1), static_cast<uint32>(seed1 >> 32),
-                                                 static_cast<uint32>(seed2), static_cast<uint32>(seed2 >> 32) } {}
-
-    std::array<uint32, 4> operator()() {
-        std::array<uint32, 4> ctr = { counter++, 0, 0, 0 };
-        for (int i = 0; i < rounds; i++) {
-            ctr = singleRound(ctr);
-        }
-        return ctr;
-    }
-
-private:
-    uint32 counter = 0;
-    uint32 key[4];
-    static constexpr int rounds = 10;
-
-    std::array<uint32, 4> singleRound(const std::array<uint32, 4>& ctr) const {
-        std::array<uint32, 4> output;
-        const uint64 mult = 0xD2511F53;
-        const uint64 add = 0xCD9E8D57;
-
-        uint64 x = static_cast<uint64>(ctr[0]) * mult;
-        uint64 y = static_cast<uint64>(ctr[2]) * add;
-
-        output[0] = static_cast<uint32>(y >> 32) ^ ctr[1] ^ key[0];
-        output[1] = static_cast<uint32>(x >> 32) ^ ctr[3] ^ key[1];
-        output[2] = static_cast<uint32>(y) ^ ctr[2];
-        output[3] = static_cast<uint32>(x) ^ ctr[0];
-
-        return output;
-    }
-};
 
 
 
-class MT19937 {
-public:
-    MT19937(uint32_t seed) {
-        // Initialize the state vector
-        state[0] = seed;
-        for (int i = 1; i < n; i++) {
-            state[i] = f * (state[i - 1] ^ (state[i - 1] >> (w - 2))) + i;
-        }
-        index = n;
-    }
 
-    uint32_t extract() {
-        if (index >= n) {
-            twist();
-        }
-
-        uint32_t y = state[index++];
-        // Tempering
-        y ^= (y >> u);
-        y ^= (y << s) & b;
-        y ^= (y << t) & c;
-        y ^= (y >> l);
-
-        return y;
-    }
-
-private:
-    static const int w = 32;
-    static const int n = 624;
-    static const int m = 397;
-    static const int r = 31;
-    static const uint32_t a = 0x9908B0DF;
-    static const int u = 11;
-    static const uint32_t d = 0xFFFFFFFF;
-    static const int s = 7;
-    static const uint32_t b = 0x9D2C5680;
-    static const int t = 15;
-    static const uint32_t c = 0xEFC60000;
-    static const int l = 18;
-    static const uint32_t f = 1812433253;
-
-    uint32_t state[n];
-    int index;
-
-    void twist() {
-        for (int i = 0; i < n; i++) {
-            uint32_t x = (state[i] & 0x80000000) + (state[(i + 1) % n] & 0x7FFFFFFF);
-            uint32_t xA = x >> 1;
-            if (x % 2 != 0) {
-                xA ^= a;
-            }
-            state[i] = state[(i + m) % n] ^ xA;
-        }
-        index = 0;
-    }
-};
-
-
-class LCG {
-public:
-    LCG(uint32_t seed) : state(seed) {}
-
-    uint32_t next() {
-        state = (a * state + c) % m;
-        return state;
-    }
-
-    void setSeed(uint32_t seed) {
-        state = seed;
-    }
-
-private:
-    uint32_t state;
-    static constexpr uint32_t a = 1664525; // Multiplier
-    static constexpr uint32_t c = 1013904223; // Increment
-    static constexpr uint32_t m = 0xFFFFFFFF; // Modulus (2^32 - 1)
-};
 
 
 // bool in_str(std::string str, std::vector<std::string> list);
 
 //MT19937 mt(generate_custom_seed());
-LCG rng(generate_custom_seed());
-
-std::random_device rd2; // it is already defined at cu_common.h
-std::mt19937 MAIN_PRNG(rd2()^get_millisecond_time());
 
 
-unsigned long long get_int_seed()
-{
-  std::uniform_int_distribution<unsigned long long> dist(0, ULLONG_MAX);
-  return dist(MAIN_PRNG);
-}
-
-std::vector<std::string> rds;
-
-
-char *RandomString(size_t length) {
-  //unsigned int seed = generate_custom_seed();
-
-  const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  pthread_mutex_lock(&random_seed_mutex);
-
-  //MT19937 mt(generate_custom_seed());
-  //LCG rng(generate_custom_seed());
-
-  char *random_string = new char[length+1];
-
-  for (int i = 0; i < length; i++) {
-
-      //int random_index = mt.extract() % charset.length();
-      int random_index = rng.next() % charset.length();
-      random_string[i] = charset[random_index];
-  }
-
-  //random_string[length] = '\0';
-
-  //std::cout << "" << random_string << "\n";
-
-  pthread_mutex_unlock(&random_seed_mutex);
-
-  
-  //std::string aux = random_string;
-  //if(!in_str(aux,rds))
-  //  rds.push_back(aux);
-  
-
-  return random_string;
-}
 
 
 
@@ -1980,18 +1814,17 @@ ExitOnError ExitOnErr;
 
 
 // Vars
-static std::map<std::string, Value *> NamedValues;
-static std::map<std::string, char *> NamedStrs;
-static std::map<std::string, AllocaInst *> NamedStrVecs;
-static std::map<std::string, AllocaInst *> NamedFloatVecs;
-static std::map<std::string, std::vector<char *>> ClassStrVecs;
-static std::map<std::string, std::vector<float>> ClassFloatVecs;
-static std::map<std::string, float> NamedClassValues;
-static std::map<std::string, std::string> NamedObjects;
-
-static std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
-static std::map<std::string, char *> ScopeNamesToClean;
-static std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;
+std::map<std::string, Value *> NamedValues;
+std::map<std::string, char *> NamedStrs;
+std::map<std::string, AllocaInst *> NamedStrVecs;
+std::map<std::string, AllocaInst *> NamedFloatVecs;
+std::map<std::string, std::vector<char *>> ClassStrVecs;
+std::map<std::string, std::vector<float>> ClassFloatVecs;
+std::map<std::string, float> NamedClassValues;
+std::map<std::string, std::string> NamedObjects;
+std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
+std::map<std::string, char *> ScopeNamesToClean;
+std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;
 
 
 // Aux to not lose pointers
@@ -2040,237 +1873,18 @@ Value* FloatPtr_toValue(float* vec)
 
 
 
-extern "C" void __slee_p_(float id)
-{
-  std::cout << "\n\nSleep " << id << " begin" << "\n";
-  std::random_device rd;
-  std::mt19937 gen(rd());
-
-  std::uniform_int_distribution<> dis(3, 7); // Generate between 1 and 100
-  int random_number = dis(gen);
-
-  //std::this_thread::sleep_for(std::chrono::seconds(random_number));
-  std::this_thread::sleep_for(std::chrono::seconds((int)id));
-
-  std::cout << "Sleep " << id << " finish" << "\n";
-
-  //return id;
-}
-
-
-extern "C" float silent_sleep(float id)
-{
-  std::random_device rd;
-  std::mt19937 gen(rd());
-
-  std::uniform_int_distribution<> dis(3, 7); // Generate between 1 and 100
-  int random_number = dis(gen);
-
-  //std::this_thread::sleep_for(std::chrono::seconds(random_number));
-  std::this_thread::sleep_for(std::chrono::seconds((int)id));
-
- 
-  return 0;
-}
-
-
-std::chrono::high_resolution_clock::time_point START_TIME;
-
-extern "C" float start_timer(float id)
-{
-  START_TIME = std::chrono::high_resolution_clock::now();
- 
-  return 0;
-}
-
-extern "C" float end_timer(float id)
-{
-  std::chrono::high_resolution_clock::time_point endTime = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsedTime = endTime - START_TIME;
-
-  // Print the elapsed time in seconds
-  std::cout << "Elapsed time: " << elapsedTime.count() << " seconds.\n";
-
-  //std::cout << "Length " << rds.size() << "\n";
-
-  return 0;
-}
 
 
 
-extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
-{
-  //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
-  
-  float *tensor_ptr, *tensor_cpu;
-
-  
-  tensor_cpu = pinned_tensor->cpu_tensor_ptr;
-  std::vector<float> dims = pinned_tensor->dims;
-  float dims_prod = pinned_tensor->dims_prod;
-  
 
 
 
-  
-  if (tensor->dims_prod==dims_prod)
-    tensor_ptr = tensor->tensor_ptr;
-  else
-    tensor_ptr = get_from_pool(thread_id, dims_prod, "gpu");
-  
-  //tensor_ptr = get_from_pool(dims_prod, "gpu");
-
-
-  
-  Loader *loader=nullptr;
-  CudaStreams *cuda_stream=nullptr;
-  
-  
-  cuda_stream = AllocateStream(0);
-  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
-  //cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
-  pinned_tensor->cuda_stream = cuda_stream;
-  
 
 
 
-  if (nn_mode==eval_mode)
-  {
-
-  } else {
-    
-    Tensor *attr_tensor;
-    attr_tensor = createTensor(tensor_ptr, dims, dims_prod, true, "");
-    attr_tensor->op = gpu_op;
-    todo_backward_tensors.push_back(attr_tensor); // pass to gc
-    
-  }
-
-  tensor->AttrTensor(tensor_ptr, dims, dims_prod, cuda_stream, loader);
-  tensor->from_grad_or_load = true;
-
-  return 0;
-}
 
 
 
-extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, float idx)
-{
-  //std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
-  
-  float *tensor_ptr, *tensor_cpu;
-
-  
-  
-  std::vector<float> dims, batchless_dims;
-  dims = pinned_tensor->dims;
-  
-
-  batchless_dims = BatchLessDims(dims);
-  float batchless_dims_prod = (float)DimsProd(batchless_dims);
-
-
-  tensor_cpu = pinned_tensor->cpu_tensor_ptr + static_cast<int>(idx*batchless_dims_prod);
-
-  
-  if (tensor->dims_prod==batchless_dims_prod)
-    tensor_ptr = tensor->tensor_ptr;
-  else
-    tensor_ptr = get_from_pool(thread_id, batchless_dims_prod, "gpuw");
-  
-  //tensor_ptr = get_from_pool(batchless_dims_prod, "gpuw");
-
-
-  
-  Loader *loader=nullptr;
-  CudaStreams *cuda_stream=nullptr;
-  
-  
-  if (batchless_dims_prod<2000){
-    cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
-  }
-  else// if (batchless_dims_prod<1000)
-  {
-    cuda_stream = AllocateStream(0);
-    cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
-    //cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
-    pinned_tensor->cuda_stream = cuda_stream;
-  }
-  /*
-  else
-  {
-    //cuda_stream = AllocateStream(0);
-    //cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
-    loader = new Loader();
-    loader->Load(tensor_ptr, tensor_cpu, batchless_dims_prod);
-  }
-  */
-
-
-
-  if (nn_mode==eval_mode)
-  {
-
-  } else {
-    
-    Tensor *attr_tensor;
-    attr_tensor = createTensor(tensor_ptr, batchless_dims, batchless_dims_prod, true, "");
-    attr_tensor->op = gpu_op;
-    todo_backward_tensors.push_back(attr_tensor); // pass to gc
-    
-  }
-
-  tensor->AttrTensor(tensor_ptr, batchless_dims, batchless_dims_prod, cuda_stream, loader);
-  tensor->from_grad_or_load = true;
-
-  return 0;
-}
-
-
-
-std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
-{
-  
-
-  std::vector<float> new_dims;
-  if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
-  {
-    LogError("The last dimension of multiplied tensors must be the same.");
-    std::cout << "Dim LHS: ";
-    PrintDims(Ldims);
-    std::cout << "Dim RHS: ";
-    PrintDims(Rdims);
-    return {}; 
-  }
-  for (int i = 0; i < Ldims.size()-1; i++)
-    new_dims.push_back(Ldims[i]);
-  new_dims.push_back(Rdims[0]);
-
-
-  return new_dims;
-}
-
-
-
-extern "C" void *NewDimsOnIdx(std::vector<float> dims)
-{
-  std::vector<float> new_dims;
-
-  for (int i = 0; i < dims.size()-1; i++)
-    new_dims.push_back(dims[i+1]);
-
-
-  // Aux to not lose pointers
-  std::string random_str = RandomString(15);
-  NamedDims[random_str] = new_dims; // Deal with new_dims being deleted after scope finished.
-  AuxRandomStrs[random_str] = "dim";
-
-
-  std::cout << "NewDimsOnIdx" << "\n";
-  PrintDims(NamedDims[random_str]);
-
-  return &NamedDims[random_str];
-}
 
 
 extern "C" float Add(float value, float v2)
@@ -2293,60 +1907,11 @@ extern "C" float UnbugFloat(float value){
 }
 
 
-extern "C" float PrintStr(char* value){
-  std::cout << "Str: " << value << "\n";
-  return 0;
-}
 
 
-extern "C" float PrintStrVec(std::vector<char*> vec)
-{
-  for (int i=0; i<vec.size(); i++)
-    std::cout << vec[i] << "\n";
-
-  return 0;
-}
 
 
-extern "C" float PrintFloatVec(std::vector<float> vec)
-{
 
-  std::cout << "Float vector:\n[";
-  for (int i=0; i<vec.size()-1; i++)
-    std::cout << "" << vec[i] << ", ";
-  std::cout << "" << vec[vec.size()-1];
-  std::cout << "]\n\n";
-
-  return 0;
-}
-
-
-extern "C" float first_nonzero(char *self)
-{
-  //std::cout << "first_nonzero call of: " << self <<"\n";
-
-  std::vector<float> vec;
-  vec = ClassFloatVecs[self];
-  
-  /*
-  std::cout << "[";
-  for (int i=0; i<vec.size(); i++)
-    std::cout << vec[i] << ", ";
-  std::cout << "]" << "\n";
-  */
-
-
-  float idx = -1;
-  for (int i=0; i<vec.size(); i++)
-    if (vec[i]!=0)
-    {
-      idx = i;
-      break;
-    }
-
-  delete[] self;
-  return idx;
-}
 
 
 
