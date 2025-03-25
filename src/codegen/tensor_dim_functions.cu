@@ -9,6 +9,7 @@
 
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
+#include "../data_types/include.h"
 #include "../tensor/include.h"
 #include "include.h"
 

@@ -1,8 +1,11 @@
 #include <iostream>
+#include <map>
+#include <string>
 
 #include "../common/extension_functions.h"
 #include "str.h"
 
+std::map<std::string, std::string> AuxRandomStrs;
 
 extern "C" float PrintStr(char* value){
   std::cout << "Str: " << value << "\n";

@@ -319,3 +319,19 @@ extern "C" void *randu_like(int thread_id, Tensor tensor)
 void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaStream_t stream) {
   cudaMemcpyAsync(d_data + offset, h_data + offset, size*sizeof(float), cudaMemcpyHostToDevice, stream);
 }
+
+
+extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
+{
+  std::vector<float> dims = tensor->dims;
+
+  std::vector<float> workerless_dims = BatchLessDims(dims);
+  int workerless_dims_prod = DimsProd(workerless_dims);
+
+  int idx_offset = (int) (workerless_dims_prod*worker_idx);
+
+  for(int i=0; i<workerless_dims_prod; i++)
+    tensor->cpu_tensor_ptr[i+idx_offset] = 0.0f;
+  
+  return 0;
+}

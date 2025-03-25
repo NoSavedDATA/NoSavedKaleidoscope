@@ -73,3 +73,8 @@ private:
 
 
 extern "C" float print_randoms(float N, float std); 
+
+extern LCG rng;
+
+extern std::random_device rd2; // it is already defined at cu_common.h
+extern std::mt19937 MAIN_PRNG;
