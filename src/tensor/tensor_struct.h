@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cuda_runtime.h>
+#include <cuda_fp16.h>
+#include <thread>
+
 enum NN_Mode {
   eval_mode = 0,
   training_mode = 1,

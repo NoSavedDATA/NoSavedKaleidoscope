@@ -49,8 +49,7 @@ class FunctionAST {
         : Proto(std::move(Proto)), Body(std::move(Body)) {}
     */
     FunctionAST(std::unique_ptr<PrototypeAST> Proto,
-                std::vector<std::unique_ptr<ExprAST>> Body)
-        : Proto(std::move(Proto)), Body(std::move(Body)) {}
+                std::vector<std::unique_ptr<ExprAST>> Body);
   
   const PrototypeAST& getProto() const;
   const std::string& getName() const;
@@ -79,16 +78,12 @@ class KaleidoscopeASTMaterializationUnit : public MaterializationUnit {
     KaleidoscopeASTMaterializationUnit(KaleidoscopeASTLayer &L,
                                       std::unique_ptr<FunctionAST> F);
 
-  StringRef getName() const override {
-    return "KaleidoscopeASTMaterializationUnit";
-  }
+  StringRef getName() const override; 
 
   void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
 
   private:
-    void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
-      llvm_unreachable("Kaleidoscope functions are not overridable");
-    }
+    void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override; 
 
   KaleidoscopeASTLayer &L;
   std::unique_ptr<FunctionAST> F;
@@ -97,29 +92,15 @@ class KaleidoscopeASTMaterializationUnit : public MaterializationUnit {
 
 class KaleidoscopeASTLayer {
 public:
-  KaleidoscopeASTLayer(IRLayer &BaseLayer, const DataLayout &DL)
-      : BaseLayer(BaseLayer), DL(DL) {}
+  KaleidoscopeASTLayer(IRLayer &BaseLayer, const DataLayout &DL);
 
-  Error add(ResourceTrackerSP RT, std::unique_ptr<FunctionAST> F) {
-    return RT->getJITDylib().define(
-        std::make_unique<KaleidoscopeASTMaterializationUnit>(*this,
-                                                             std::move(F)),
-        RT);
-  }
+  Error add(ResourceTrackerSP RT, std::unique_ptr<FunctionAST> F); 
 
   void emit(std::unique_ptr<MaterializationResponsibility> MR,
-            std::unique_ptr<FunctionAST> F) {
-    BaseLayer.emit(std::move(MR), irgenAndTakeOwnership(*F, ""));
-  }
+            std::unique_ptr<FunctionAST> F); 
   
 
-  MaterializationUnit::Interface getInterface(FunctionAST &F) {
-    MangleAndInterner Mangle(BaseLayer.getExecutionSession(), DL);
-    SymbolFlagsMap Symbols;
-    Symbols[Mangle(F.getName())] =
-        JITSymbolFlags(JITSymbolFlags::Exported | JITSymbolFlags::Callable);
-    return MaterializationUnit::Interface(std::move(Symbols), nullptr);
-  }
+  MaterializationUnit::Interface getInterface(FunctionAST &F); 
 
   private:
     IRLayer &BaseLayer;
@@ -127,14 +108,8 @@ public:
 };
 
 
-KaleidoscopeASTMaterializationUnit::KaleidoscopeASTMaterializationUnit(
-    KaleidoscopeASTLayer &L, std::unique_ptr<FunctionAST> F)
-    : MaterializationUnit(L.getInterface(*F)), L(L), F(std::move(F)) {}
 
 
-void KaleidoscopeASTMaterializationUnit::materialize(
-    std::unique_ptr<MaterializationResponsibility> R)
-    { L.emit(std::move(R), std::move(F)); }
 
 
 class KaleidoscopeJIT {
@@ -152,107 +127,30 @@ private:
 
   JITDylib &MainJD;
 
-  static void handleLazyCallThroughError() {
-    errs() << "LazyCallThrough error: Could not find function body";
-    exit(1);
-  }
+  static void handleLazyCallThroughError(); 
 
 public:
   KaleidoscopeJIT(std::unique_ptr<ExecutionSession> ES,
                   std::unique_ptr<EPCIndirectionUtils> EPCIU,
-                  JITTargetMachineBuilder JTMB, DataLayout DL)
-      : ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)),
-        Mangle(*this->ES, this->DL),
-        ObjectLayer(*this->ES,
-                    []() { return std::make_unique<SectionMemoryManager>(); }),
-        CompileLayer(*this->ES, ObjectLayer,
-                     std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
-        OptimizeLayer(*this->ES, CompileLayer, optimizeModule),
-        ASTLayer(OptimizeLayer, this->DL),
-        MainJD(this->ES->createBareJITDylib("<main>")) {
-    MainJD.addGenerator(
-        cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(
-            DL.getGlobalPrefix())));
-  }
+                  JITTargetMachineBuilder JTMB, DataLayout DL);
 
-  ~KaleidoscopeJIT() {
-    if (auto Err = ES->endSession())
-      ES->reportError(std::move(Err));
-    if (auto Err = EPCIU->cleanup())
-      ES->reportError(std::move(Err));
-  }
+  ~KaleidoscopeJIT(); 
 
-  static Expected<std::unique_ptr<KaleidoscopeJIT>> Create() {
-    auto EPC = SelfExecutorProcessControl::Create();
-    if (!EPC)
-      return EPC.takeError();
+  static Expected<std::unique_ptr<KaleidoscopeJIT>> Create(); 
 
-    auto ES = std::make_unique<ExecutionSession>(std::move(*EPC));
+  const DataLayout &getDataLayout() const; 
 
-    auto EPCIU = EPCIndirectionUtils::Create(*ES);
-    if (!EPCIU)
-      return EPCIU.takeError();
+  JITDylib &getMainJITDylib();
 
-    (*EPCIU)->createLazyCallThroughManager(
-        *ES, ExecutorAddr::fromPtr(&handleLazyCallThroughError));
+  Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr);
 
-    if (auto Err = setUpInProcessLCTMReentryViaEPCIU(**EPCIU))
-      return std::move(Err);
+  Error addAST(std::unique_ptr<FunctionAST> F, ResourceTrackerSP RT = nullptr); 
 
-    JITTargetMachineBuilder JTMB(
-        ES->getExecutorProcessControl().getTargetTriple());
-
-    auto DL = JTMB.getDefaultDataLayoutForTarget();
-    if (!DL)
-      return DL.takeError();
-
-    return std::make_unique<KaleidoscopeJIT>(std::move(ES), std::move(*EPCIU),
-                                             std::move(JTMB), std::move(*DL));
-  }
-
-  const DataLayout &getDataLayout() const { return DL; }
-
-  JITDylib &getMainJITDylib() { return MainJD; }
-
-  Error addModule(ThreadSafeModule TSM, ResourceTrackerSP RT = nullptr) {
-    if (!RT)
-      RT = MainJD.getDefaultResourceTracker();
-
-    return OptimizeLayer.add(RT, std::move(TSM));
-  }
-
-  Error addAST(std::unique_ptr<FunctionAST> F, ResourceTrackerSP RT = nullptr) {
-    if (!RT)
-      RT = MainJD.getDefaultResourceTracker();
-    return ASTLayer.add(RT, std::move(F));
-  }
-
-  Expected<ExecutorSymbolDef> lookup(StringRef Name) {
-    return ES->lookup({&MainJD}, Mangle(Name.str()));
-  }
+  Expected<ExecutorSymbolDef> lookup(StringRef Name); 
 
 private:
   static Expected<ThreadSafeModule>
-  optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R) {
-    TSM.withModuleDo([](Module &M) {
-      // Create a function pass manager.
-      auto FPM = std::make_unique<legacy::FunctionPassManager>(&M);
-
-      // Add some optimizations.
-      FPM->add(createInstructionCombiningPass());
-      FPM->add(createReassociatePass());
-      FPM->add(createGVNPass());
-      FPM->add(createCFGSimplificationPass());
-      FPM->doInitialization();
-
-      // Run the optimizations over all functions in the module being added to
-      // the JIT.
-      for (auto &F : M)
-        FPM->run(F);
-    });
-
-    return std::move(TSM);
-  }
+  optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R); 
 };
 
 } // end namespace orc
