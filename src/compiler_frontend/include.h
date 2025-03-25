@@ -1,9 +1,12 @@
 #pragma once
 
-#include "tokenizer.h"
+#include "codegen.h"
 #include "expressions.h"
 #include "logging.h"
+#include "modules.h"
+#include "name_solver.h"
 #include "parser.h"
+#include "tokenizer.h"
 
 #include "../threads/include.h"
 #include "../KaleidoscopeJIT.h"

@@ -5,6 +5,7 @@
 #include<cstring>
 #include<random>
 #include<thread>
+#include<cstdarg>
 
 #include "../backprop/include.h"
 #include "../codegen/tensor_dim_functions.h"
@@ -334,4 +335,136 @@ extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
     tensor->cpu_tensor_ptr[i+idx_offset] = 0.0f;
   
   return 0;
+}
+
+
+extern "C" void *view(int thread_id, Tensor *tensor, float first_dim, ...)
+{
+  //std::cout << "Executing: " << tensor.name << "." << "view" << "\n";
+   
+  std::vector<float> new_dims, new_dims_no_minus, current_dims;
+  bool has_minus = false;
+  current_dims = tensor->dims;
+
+  
+  va_list args;
+  va_start(args, first_dim);
+
+  if (first_dim!=-1)
+    new_dims_no_minus.push_back(first_dim);
+  else
+    has_minus=true;
+  
+  
+  new_dims.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions??? (view)");
+      return 0;
+    }
+
+    float dim = va_arg(args, float);
+    if (dim==TERMINATE_VARARG)
+      break;
+    new_dims.push_back(dim);
+
+    if (dim!=-1)
+      new_dims_no_minus.push_back(dim);
+    else
+      has_minus=true;
+  }
+  va_end(args);
+
+
+  
+
+
+  int current_dims_prod = DimsProd(current_dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+
+  if (has_minus)
+  {
+    float hidden_dim = (float)current_dims_prod / (float)DimsProd(new_dims_no_minus);
+
+    if ((float)((int)hidden_dim) != hidden_dim)
+    {
+      LogErrorS("Automatic view dimension calculus resulted on a non-integer dimension.");
+      PrintDims(current_dims);
+      std::cout << "Current dims product: " << current_dims_prod  << ".\n";
+      PrintDims(new_dims);
+      std::cout << "New dims product: " << std::to_string(DimsProd(new_dims_no_minus))  << ".\n";
+      return 0;
+    }
+    
+    for (int i=0; i<new_dims.size(); i++)
+      if (new_dims[i]==-1)
+        new_dims[i] = hidden_dim;
+    
+  } else {
+    if (current_dims_prod != new_dims_prod)
+    {
+      LogErrorS("Incompatible view dimensions.");
+      PrintDims(current_dims);
+      std::cout << "Current dims product: " << current_dims_prod  << ".\n";
+      PrintDims(new_dims);
+      std::cout << "New dims product: " << new_dims_prod  << ".\n";
+      return 0;
+    }
+  }
+
+  
+
+  Tensor *new_tensor = createTensor(tensor->tensor_ptr, new_dims, DimsProd(new_dims), false, "");
+  new_tensor->view_of = tensor->name;
+  new_tensor->op=view_op;
+  return new_tensor;
+}
+
+
+
+extern "C" void *NewVecToTensor(int thread_id, float first_dim, ...)
+{
+  std::vector<float> values;
+
+  
+  va_list args;
+  va_start(args, first_dim);
+
+
+  values.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("Tried to create a tensor from brackets with more than 10 positions. This is not yet supported");
+      return nullptr;
+    }
+
+    float dim = va_arg(args, float);
+    if (dim==TERMINATE_VARARG)
+      break;
+    values.push_back(dim);
+
+
+  }
+  va_end(args);
+
+
+  float dims_prod = values.size();
+
+  float *tensor_ptr, *tensor_cpu;
+  tensor_cpu = values.data();
+
+  tensor_ptr = get_from_pool(thread_id, dims_prod, "tensor from brackets");
+  cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
+  
+
+  Tensor *new_tensor = createTensor(tensor_ptr, {dims_prod}, dims_prod, true, "");
+  new_tensor->op=create_tensor_from_brackets_op;
+  return new_tensor;
 }

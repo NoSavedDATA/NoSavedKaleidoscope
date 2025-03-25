@@ -16,3 +16,6 @@ extern "C" void * ShuffleStrVec(std::vector<char*> vec);
 
 //deprecated
 extern "C" char * shuffle_str(char *string_list);
+
+
+extern "C" void * _glob_b_(char *pattern);

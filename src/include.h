@@ -5,6 +5,7 @@
 #include"codegen/include.h"
 #include"common/include.h"
 #include"compiler_frontend/include.h"
+#include"cuda_kernels/include.h"
 #include"cuda_threads/include.h"
 #include"data_types/include.h"
 #include"mma/include.h"
