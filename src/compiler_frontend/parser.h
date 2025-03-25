@@ -8,6 +8,7 @@
 
 #include "include.h"
 #include "../data_types/include.h"
+#include "../notators/include.h"
 #include "../tensor/include.h"
 #include "../KaleidoscopeJIT.h"
 
@@ -219,4 +220,5 @@ std::unique_ptr<PrototypeAST> ParseExtern();
   
   
   
-std::unique_ptr<ExprAST> ParseClass();  
+std::unique_ptr<ExprAST> ParseClass(); 
+ 

@@ -1,10 +1,15 @@
 #pragma once
 
+
+
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <thread>
+#include <string>
 #include <vector>
 #include <map>
+
+#include "../cuda_threads/include.h"
 
 enum NN_Mode {
   eval_mode = 0,
@@ -78,57 +83,22 @@ enum BackwardTypes {
 
 
 
-enum Notators {
-  bias=0,
-  fp32=1,
-  fp16=2,
-  causal=3,
-};
 
 
 
 
 
-struct CudaStreams {
-  cudaStream_t stream;
-  int idx;
-};
 
 
 
-extern int ASYNC_LOADER_THREADS;
-extern CudaStreams *parallel_streams[];
-extern const int num_parallel_streams;
-extern cudaEvent_t parallel_events[];
-extern std::vector<cudaEvent_t> Registered_Events;
-extern int open_streams[];
-extern CudaStreams *main_stream, *backward_stream;
-extern std::map<int, cudaStream_t> ThreadsStream;
+
+
 extern std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops, weightless_ops;
 extern int nn_mode;
-extern std::map<std::string, int> NotatorsMap;
-
-
-
-CudaStreams *AllocateStream(int line);
-
-void SynchronizeStream(CudaStreams *cuda_stream);
 
 
 
 
-
-
-
-
-struct Loader {
-    std::vector<std::thread> threads;
-    std::vector<CudaStreams *> streams;
-
-    void Load(float *tensor_ptr, const float *tensor_cpu, int all_dims_prod);
-
-    void Sync(); 
-};
 
 
 

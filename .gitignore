@@ -2,6 +2,8 @@ samples/
 obj/
 bin/
 include/_mma/
+include/cutlass/
+include/stb/
 src_backup
 src_reference
 mma

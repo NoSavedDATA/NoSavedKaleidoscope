@@ -9,7 +9,6 @@
 #include<sstream>
 
 // Cuda
-#include <cuda_fp16.h>
 #include "include.h"
 
 float FirstNonzero(int *vec, int size)

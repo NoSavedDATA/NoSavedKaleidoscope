@@ -5,6 +5,7 @@
 #include "logging.h"
 #include "parser.h"
 
+#include "../threads/include.h"
 #include "../KaleidoscopeJIT.h"
 
 
@@ -24,7 +25,6 @@ extern std::map<std::string, std::string> floatFunctions;
 extern std::map<std::string, std::string> stringMethods;
 extern std::vector<std::string> str_vecVars;
 extern std::vector<std::string> float_vecVars;
-extern std::map<std::string, pthread_mutex_t *> lockVars;
 
 
 

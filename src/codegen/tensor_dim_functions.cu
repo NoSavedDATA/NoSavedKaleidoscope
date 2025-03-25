@@ -162,3 +162,17 @@ extern "C" void *NewDimsOnIdx(std::vector<float> dims)
 
   return &NamedDims[random_str];
 }
+
+
+extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
+{
+  std::vector<float> dims;
+  
+  if (NamedDims.count(tensor_name)>0)
+    dims = NamedDims[tensor_name];
+
+  dims.push_back(d);
+
+  NamedDims[tensor_name] = dims;
+  return 0;
+}

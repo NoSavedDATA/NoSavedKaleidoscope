@@ -1,8 +1,14 @@
 #pragma once
 
+#include"backprop/include.h"
+#include"char_pool/include.h"
 #include"codegen/include.h"
 #include"common/include.h"
 #include"compiler_frontend/include.h"
+#include"cuda_threads/include.h"
 #include"data_types/include.h"
 #include"mma/include.h"
+#include"notators/include.h"
+#include"processing/include.h"
 #include"tensor/include.h"
+#include"threads/include.h"
