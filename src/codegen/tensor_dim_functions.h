@@ -1,5 +1,6 @@
-
 #pragma once
+
+#include <vector>
 
 
 extern "C" void PrintDims(std::vector<float> dims);
@@ -26,3 +27,5 @@ std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
 
 
 extern "C" void *NewDimsOnIdx(std::vector<float> dims);
+
+extern "C" float StoreDimsOnDemand(char *tensor_name, float d);

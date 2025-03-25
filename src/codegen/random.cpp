@@ -1,5 +1,7 @@
 #include <cstdint>
 #include <stdint.h>
+#include <thread>
+#include <iostream>
 #include "../common/include.h"
 #include "include.h"
 
@@ -103,4 +105,24 @@ std::array<uint32, 4> PhiloxRNG::singleRound(const std::array<uint32, 4>& ctr) c
     output[3] = static_cast<uint32>(x) ^ ctr[0];
 
     return output;
+}
+
+
+
+extern "C" float print_randoms(float N, float std) {
+    //float std = sqrt(2/fan_in);
+    
+    int n = (int) N;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<> dist(0.0, std);
+
+    float* arr = (float*)malloc(n * sizeof(float));
+    std::cout << "[";
+    for (size_t i = 0; i < n; i++)
+      std::cout << dist(gen) << " ";
+    std::cout << "]";
+
+    return 0;
 }

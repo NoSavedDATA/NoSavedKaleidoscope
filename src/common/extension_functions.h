@@ -4,6 +4,9 @@
 #include <map>
 #include <string>
 
+#include <cuda_fp16.h>
+
+
 float FirstNonzero(int *vec, int size);
 
 void LogErrorCodegen(std::string Str, int line);

@@ -70,3 +70,6 @@ private:
 
     std::array<uint32, 4> singleRound(const std::array<uint32, 4>& ctr) const; 
 };
+
+
+extern "C" float print_randoms(float N, float std); 

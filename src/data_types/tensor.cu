@@ -6,9 +6,13 @@
 #include<random>
 #include<thread>
 
+#include "../backprop/include.h"
+#include "../codegen/tensor_dim_functions.h"
 #include "../common/include.h"
+#include "../compiler_frontend/logging.h"
 #include "../tensor/include.h"
 #include "include.h"
+
 
 
 
@@ -99,6 +103,17 @@ extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, c
   return 0;
 }
 
+
+
+
+extern "C" void *LoadTensor(char *tensor_name){
+  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
+  Tensor *ret = NamedTensorsT[tensor_name];
+  move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
+  //std::cout << "return load." << "\n";
+  //delete[] tensor_name;
+  return ret;
+}
 
 
 
@@ -229,4 +244,78 @@ extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, floa
   tensor->from_grad_or_load = true;
 
   return 0;
+}
+
+
+extern "C" float cpu(int thread_id, Tensor *tensor)
+{
+
+  float *tensor_ptr, *tensor_cpu;
+  tensor_ptr = tensor->tensor_ptr;
+  tensor_cpu = tensor->cpu_tensor_ptr;
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  cudaStreamSynchronize(stream);
+
+  if (tensor_ptr==nullptr)
+    LogErrorS("Cannot load tensor to cpu from an null tensor.");
+
+  if (tensor_cpu!=nullptr)
+    cudaCheck(cudaFree(tensor_cpu));
+
+  float dims_prod = tensor->dims_prod;
+
+
+
+  cudaMallocHost(&tensor_cpu, dims_prod*sizeof(float));
+  cudaMemcpy(tensor_cpu, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
+
+  tensor->cpu_tensor_ptr = tensor_cpu;
+
+
+  return 0;
+}
+
+extern "C" float cpu_idx(Tensor *tensor, float idx)
+{
+
+  float *tensor_cpu;
+  tensor_cpu = tensor->cpu_tensor_ptr;
+
+
+  if (tensor_cpu==nullptr)
+    LogErrorS("Cannot idx a null cpu tensor.");
+
+  float dims_prod = tensor->dims_prod;
+  if (idx>dims_prod)
+    LogErrorS("Idx higher than dims prod at cpu_idx().");
+
+  
+
+  return tensor_cpu[(int)idx];
+}
+
+
+extern "C" void *randu_like(int thread_id, Tensor tensor)
+{
+  float dims_prod = tensor.dims_prod;
+
+  float *tensor_ptr, *tensor_cpu;
+
+  tensor_cpu = make_random_float_uniform(dims_prod);
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  cudaMalloc(&tensor_ptr, dims_prod*sizeof(float));
+  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice, stream);
+  delete[] tensor_cpu;
+
+  Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
+  new_tensor->op = randu_like_op;
+  return new_tensor;
+}
+
+
+
+void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaStream_t stream) {
+  cudaMemcpyAsync(d_data + offset, h_data + offset, size*sizeof(float), cudaMemcpyHostToDevice, stream);
 }
