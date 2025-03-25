@@ -6,7 +6,6 @@ include/cutlass/
 include/stb/
 src_backup
 src_reference
-mma
 mma.cu
 toy.o
 toy_backup.cu

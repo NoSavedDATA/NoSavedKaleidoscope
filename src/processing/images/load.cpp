@@ -1,6 +1,7 @@
 #include <iostream>
 
 
+#include "../../common/cu_commons.h"
 #include "../../compiler_frontend/logging.h"
 #include "../../codegen/tensor_dim_functions.h"
 #include "stb_lib.h"
@@ -290,3 +291,32 @@ extern "C" float * wload_img_resize(Tensor *tensor, char *img_name, float worker
 
 
 
+float *current_data;
+extern "C" float load_preprocess_img(Tensor tensor, char *img_name)
+{
+  float *img;
+  img = load_img(img_name); 
+  
+  std::vector<float> dims = tensor.dims;
+
+  
+  // Last three dims.
+  int img_dims_prod = dims[dims.size()-1]*dims[dims.size()-2]*dims[dims.size()-3];
+
+
+  current_data = new float[img_dims_prod];
+  cudaCheck(cudaMallocHost(&current_data, img_dims_prod*sizeof(float)));
+
+
+  for (int j = 0; j < img_dims_prod; ++j)
+    current_data[j] = img[j];
+  delete[] img;
+
+
+  float *x = tensor.tensor_ptr;
+  //cudaMalloc(&x, img_dims_prod*sizeof(float));
+  cudaCheck(cudaMemcpy(x, current_data, img_dims_prod*sizeof(float), cudaMemcpyHostToDevice));
+
+
+  return 0;
+}
