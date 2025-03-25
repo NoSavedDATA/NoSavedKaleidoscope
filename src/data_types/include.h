@@ -26,6 +26,11 @@ extern std::map<std::string, char *> ScopeNamesToClean;
 extern std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;
 
 
+extern std::map<std::string, std::string> AuxRandomStrs;
+extern std::map<std::string, std::vector<char *>> StrVecAuxHash;
+extern std::map<std::string, std::vector<float>>  FloatVecAuxHash;
+
+
 enum Types {
   type_float = 0,
   type_tensor = 1,

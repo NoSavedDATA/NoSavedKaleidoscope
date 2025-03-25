@@ -25,3 +25,4 @@ extern "C" void *randu_like(int thread_id, Tensor tensor);
 
 void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaStream_t stream);
 
+extern "C" float write_zerosw(Tensor *tensor, float worker_idx);
