@@ -87,6 +87,7 @@ std::map<int, std::string> token_to_string = {
 
   { tok_mhsa, "MHSA"},
   { tok_linear, "Linear"},
+  { tok_data, "data"},
   
 
   { 10, "tok space"},
@@ -269,71 +270,89 @@ static int get_token() {
         IdentifierStr += LastChar;
       else
         name_ok = false;
-
+      if (IdentifierStr == "data")
+      {
+        LastChar = getchar();
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_data;
+      }
       if (IdentifierStr == "tensor")
       {
         LastChar = getchar();
-        return tok_tensor;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_tensor;
       }
       if (IdentifierStr == "param")
       {
         LastChar = getchar();
-        return tok_param;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_param;
       }
       if (IdentifierStr == "pinned_tensor")
       {
         LastChar = getchar();
-        return tok_pinned_tensor;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_pinned_tensor;
       }
       if (IdentifierStr == "Conv2d")
       {
         LastChar = getchar();
-        return tok_conv2d;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_conv2d;
       }
       if (IdentifierStr == "LSTM")
       {
         LastChar = getchar();
-        return tok_lstm;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_lstm;
       }
       if (IdentifierStr == "MHSA")
       {
         LastChar = getchar();
-        return tok_mhsa;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_mhsa;
       }
       if (IdentifierStr == "Linear")
       {
         LastChar = getchar();
-        return tok_linear;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_linear;
       }
       if (IdentifierStr == "Embedding")
       {
         LastChar = getchar();
-        return tok_embedding;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_embedding;
       }
       if (IdentifierStr == "MaxPool2d")
       {
         LastChar = getchar();
-        return tok_maxpool2d;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_maxpool2d;
       }
       if (IdentifierStr == "AvgPool2d")
       {
         LastChar = getchar();
-        return tok_avgpool2d;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_avgpool2d;
       }
       if (IdentifierStr == "BatchNorm2d")
       {
         LastChar = getchar();
-        return tok_batchnorm2d;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_batchnorm2d;
       }
       if (IdentifierStr == "BN2dRelu")
       {
         LastChar = getchar();
-        return tok_bn2drelu;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_bn2drelu;
       }
       if (IdentifierStr == "Relu")
       {
         LastChar = getchar();
-        return tok_relu;
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_relu;
       }
       if (LastChar=='.')
       {

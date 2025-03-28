@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 
+#include "codegen_notes.h"
 #include "float.h"
 #include "float_vec.h"
 #include "str.h"

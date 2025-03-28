@@ -160,24 +160,32 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
   {
     if (in_str(IdName, pinnedTensorVars))
       type = "pinned_tensor";
-    if (in_str(IdName, tensorVars))
+    else if (in_str(IdName, tensorVars))
       type = "tensor";
-    if (in_str(IdName, floatVars))
+    else if (in_str(IdName, floatVars))
       type = "float";
-    if (in_str(IdName, strVars))
+    else if (in_str(IdName, strVars))
       type = "str";
-    if (in_str(IdName, objectVars))
+    else if (in_str(IdName, objectVars))
       type = "object";
+    else
+      type = "none";
 
-
-    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-    auto aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
+    std::unique_ptr<ExprAST> aux;
+    if (type!="none")
+    {
+      auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+      aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
+    } else {
+      std::cout << "Returning ParseIdentifierExpr as a String Expression: " << IdName << "\n";
+      aux = std::make_unique<StringExprAST>(IdName);
+    }
     
     
     if (CurTok==tok_space)
       getNextToken();
 
-    return aux;
+    return std::move(aux);
   }
 
 
@@ -1255,6 +1263,117 @@ std::unique_ptr<ExprAST> ParseTensorExpr(std::string class_name) {
   return aux;
 }
 
+
+
+
+
+std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
+  // bool is_weight;
+  // if (CurTok==tok_tensor)
+  //   is_weight=false;
+  // if (CurTok==tok_param)
+  //   is_weight=true;
+
+  std::cout << "Parsing data with data type: " << IdentifierStr << ".\n";
+
+  std::string data_type = IdentifierStr;
+
+  getNextToken(); // eat data token.
+  
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::vector<std::unique_ptr<ExprAST>> notes;
+
+  if (CurTok == '[')
+  {
+    getNextToken();
+    
+    //std::make_unique<NumberExprAST>(NumVal)
+    
+    while (true) {
+      if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+        return LogError("Expected a number or var on the tensor dimension.");
+      
+      if (CurTok==tok_number)
+      {
+        if (std::fmod(NumVal, 1.0) != 0)
+          LogWarning("A tensor's dimension should be int, not float.");
+      
+        notes.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+        getNextToken();
+      } else if (CurTok==tok_identifier)
+      {
+        std::cout << "Notes with tok identifier\n";
+        notes.push_back(std::move(ParseIdentifierExpr()));
+        std::cout << "Push back\n";
+      }
+      else {
+        //notes.push_back(std::move(ParseExpression(class_name)));
+        notes.push_back(std::move(ParsePrimary(class_name)));
+      }
+
+      
+      if (CurTok != ',')
+        break;
+      getNextToken(); // eat the ','.
+    }
+
+    
+    if (CurTok != ']')
+      return LogError("] not found at tensor declaration.");
+    getNextToken();
+  }
+
+
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true; //TODO: set self per VarName instead.
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected tensor identifier name.");
+
+  while (true) {
+    std::string Name = IdentifierStr;
+    tensorVars.push_back(IdentifierStr);
+    getNextToken(); // eat identifier.
+
+    
+    std::unique_ptr<ExprAST> Init = nullptr;
+    VarNames.push_back(std::make_pair(Name, std::move(Init))); 
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError("Expected tensor identifier names.");
+  }
+
+
+
+  auto aux = std::make_unique<DataExprAST>(std::move(VarNames), data_type,
+                                             std::move(notes));
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+  
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return aux;
+}
 
 
 
@@ -2425,6 +2544,8 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
     return ParseReturnExpr(class_name);
   case tok_var:
     return ParseVarExpr(class_name);
+  case tok_data:
+    return ParseDataExpr(class_name);
   case tok_tensor:
     return ParseTensorExpr(class_name);
   case tok_param:

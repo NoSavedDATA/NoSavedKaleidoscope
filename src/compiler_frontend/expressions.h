@@ -240,6 +240,19 @@ class ExprAST {
   };
   
   
+  class DataExprAST : public VarExprAST {
+    public:
+      std::vector<std::unique_ptr<ExprAST>> Notes;
+  
+      DataExprAST(
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+        std::string Type,
+        std::vector<std::unique_ptr<ExprAST>> Notes);
+  
+    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+  };
+
+
   
   class Conv2dExprAST : public VarExprAST {
     public:
