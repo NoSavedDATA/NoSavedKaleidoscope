@@ -96,23 +96,17 @@ std::unique_ptr<ExprAST> ParseStrVecExpr();
 std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name=""); 
   
   
-  //
-std::unique_ptr<ExprAST> ParsePinnedTensorExpr(); 
-  
-  
-  
-  
-  
-  //
 std::unique_ptr<ExprAST> ParseTensorExpr(std::string class_name=""); 
-  
-  
-  
-  
-  //
+
+
+std::unique_ptr<ExprAST> ParsePinnedTensorExpr(); 
+   
+
+std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name=""); 
+
+
 std::unique_ptr<ExprAST> ParseConv2dExpr(); 
-  
-  
+    
   
   //
 std::unique_ptr<ExprAST> ParseLSTMExpr(); 

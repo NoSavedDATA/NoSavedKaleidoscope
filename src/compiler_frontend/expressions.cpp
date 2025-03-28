@@ -212,6 +212,13 @@ PinnedTensorExprAST::PinnedTensorExprAST(
                 V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
   
   
+DataExprAST::DataExprAST(
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+  std::string Type,
+  std::vector<std::unique_ptr<ExprAST>> Notes)
+  : VarExprAST(std::move(VarNames), std::move(Type)),
+                Notes(std::move(Notes)) {}
+
   
   
 Conv2dExprAST::Conv2dExprAST(
