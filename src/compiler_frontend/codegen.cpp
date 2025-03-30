@@ -357,6 +357,15 @@ Value *DataExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     std::cout << "TYPE: " << Type << ".\n";
 
+    std::string create_fn = Type + "_Create";
+    std::cout << "CREATE FN: " <<  create_fn << ".\n";
+
+    create_fn = "tensor_Create";
+
+    Builder->CreateCall(TheModule->getFunction(create_fn),
+                                              {var_name, scopeless_name, notes_vector,
+                                               thread_id, scope_str});    
+
 
     // Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
     //                                           {var_name, scopeless_name, init,

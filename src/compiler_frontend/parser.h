@@ -96,7 +96,6 @@ std::unique_ptr<ExprAST> ParseStrVecExpr();
 std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name=""); 
   
   
-std::unique_ptr<ExprAST> ParseTensorExpr(std::string class_name=""); 
 
 
 std::unique_ptr<ExprAST> ParsePinnedTensorExpr(); 

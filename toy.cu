@@ -18722,6 +18722,15 @@ FunctionType *unbugTy = FunctionType::get(
   );
   TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVector);
 
+
+
+  FunctionType *tensor_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
+
   //
   FunctionType *CreateTensorOnDemandTy = FunctionType::get(
       Type::getFloatTy(*TheContext),

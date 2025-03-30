@@ -8,6 +8,19 @@
 #include "codegen_notes.h"
 
 
+template float AnyVector::get<float>(size_t);
+template char *AnyVector::get<char *>(size_t);
+
+
+template <typename T>
+T AnyVector::get(size_t index) {
+    if (index >= data->size()) {
+        // throw std::out_of_range("Index out of range");
+        std::cout << "Index out of range.";
+    }
+    return std::any_cast<T>((*data)[index]);
+}
+
 AnyVector::AnyVector() {
     data = new std::vector<std::any>(); // Allocate memory
     data_types = new std::vector<std::string>();
@@ -23,19 +36,21 @@ void AnyVector::append(std::any value, std::string data_type) {
     data_types->push_back(data_type);
 }
 
-template <typename T>
-T AnyVector::get(size_t index) {
-    if (index >= data->size()) {
-        // throw std::out_of_range("Index out of range");
-        std::cout << "Index out of range.";
-    }
-    return std::any_cast<T>((*data)[index]);
-}
 
 size_t AnyVector::size() const {
     return data->size();
 }
 
+
+void AnyVector::print() {
+    for(int i=0; i<data->size(); i++)
+    {
+        if (data_types->at(i)=="string")
+            std::cout << "Notes["<<i<<"]: " << get<char *>(i) << ".\n";
+        if (data_types->at(i)=="float")
+            std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
+    }
+}
 
 
 

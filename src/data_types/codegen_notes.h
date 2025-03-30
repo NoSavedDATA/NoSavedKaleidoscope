@@ -19,7 +19,11 @@ public:
     T get(size_t index); 
 
     size_t size() const; 
+
+    void print();
 };
+
+
 
 
 extern "C" AnyVector *CreateNotesVector();
