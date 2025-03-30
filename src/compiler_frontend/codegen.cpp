@@ -355,6 +355,7 @@ Value *DataExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     }
 
+    std::cout << "TYPE: " << Type << ".\n";
 
 
     // Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),

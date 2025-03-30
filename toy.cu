@@ -14205,7 +14205,8 @@ __global__ void sgd_kernel(float* params_memory, const float* grads_memory, floa
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    if (i >= num_parameters) return;  // guard
    
-   float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip) + weight_decay * params_memory[i];
+  //  float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip) + weight_decay * params_memory[i];
+   float grad = grads_memory[i];
    float m = m_memory[i];
    
    // update the first moment (momentum)
@@ -14222,7 +14223,8 @@ __global__ void adamw_kernel(float* params_memory, const float* grads_memory, fl
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    if (i >= num_parameters) return;  // guard
    
-   float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
+  //  float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
+   float grad = grads_memory[i];
    float m = m_memory[i];
    float v = v_memory[i];
    // update the first moment (momentum)
