@@ -16818,6 +16818,9 @@ Function *FunctionAST::codegen() {
     if (arg_name == "has_grad")
       has_grad = &Arg;
     
+    std::string type = "";
+    if (typeVars.find(arg_name) != typeVars.end())
+      type = typeVars[arg_name];
 
     // Coder args
     if (in_str(arg_name, floatVars))
@@ -16838,7 +16841,7 @@ Function *FunctionAST::codegen() {
       Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
                                                   {var_name, &Arg});
     }
-    else if (!in_str(arg_name, tensorVars))
+    else if (type!="tensor")
     {
       AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
       Builder->CreateStore(&Arg, Alloca);
@@ -16851,7 +16854,7 @@ Function *FunctionAST::codegen() {
     }
     else
     {
-      if (in_str(arg_name, tensorVars))
+      if (type=="tensor")
       {
         //Builder->CreateCall(TheModule->getFunction("print"),
         //  {Builder->CreateGlobalString(__print), &Arg});

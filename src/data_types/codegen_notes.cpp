@@ -57,7 +57,7 @@ void AnyVector::print() {
 extern "C" AnyVector *CreateNotesVector() {
     // std::cout << "Creating vector\n";
     AnyVector *notes_vector = new AnyVector();
-    std::cout << "Notes Vector created.\n";
+    // std::cout << "Notes Vector created.\n";
 
     return notes_vector;
 }
