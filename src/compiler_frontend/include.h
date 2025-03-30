@@ -17,6 +17,11 @@ return_pinned_methods, vararg_methods, string_methods, native_methods, native_fu
 return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str;
 
 
+
+
+extern std::map<std::string, std::vector<std::string>> data_typeVars;
+extern std::map<std::string, std::string> typeVars;
+
 extern std::vector<std::string> tensorVars;
 extern std::vector<std::string> pinnedTensorVars;
 extern std::vector<std::string> floatVars;

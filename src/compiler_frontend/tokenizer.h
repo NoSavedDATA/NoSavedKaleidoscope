@@ -58,7 +58,6 @@ enum Token {
     // var definition
     tok_var = -15,
     tok_tensor = -16,
-    tok_param = -44,
     tok_pinned_tensor = -25,
     tok_var_str = -17,
     tok_str_vec = -24,
@@ -82,7 +81,7 @@ enum Token {
     tok_global = -49,
     tok_no_grad = -50,
 
-    tok_data = -53,
+    tok_data = -44,
 };
 
   

@@ -282,12 +282,6 @@ static int get_token() {
         if (!(isalnum(LastChar) || LastChar=='_'))
           return tok_tensor;
       }
-      if (IdentifierStr == "param")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_param;
-      }
       if (IdentifierStr == "pinned_tensor")
       {
         LastChar = getchar();

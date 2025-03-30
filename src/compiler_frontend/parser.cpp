@@ -1069,8 +1069,13 @@ std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
   
   while (true) {
     if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+    {
+      std::cout << "Got token: " << ReverseToken(CurTok) << "\n";
       return LogError("Expected a number or var on the tensor dimension.");
+    }
     
+
+
     if (CurTok==tok_number)
     {
       if (std::fmod(NumVal, 1.0) != 0)
@@ -1157,111 +1162,6 @@ std::unique_ptr<ExprAST> ParsePinnedTensorExpr() {
 
 
 
-//
-std::unique_ptr<ExprAST> ParseTensorExpr(std::string class_name) {
-  bool is_weight;
-  if (CurTok==tok_tensor)
-    is_weight=false;
-  if (CurTok==tok_param)
-    is_weight=true;
-
-  getNextToken(); // eat the tensor.
-
-  
-  if (CurTok != '[')
-    return LogError("tensor declaration expected [");
-  getNextToken();
-  
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu_relu";
-  //std::make_unique<NumberExprAST>(NumVal)
-  
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected a number or var on the tensor dimension.");
-    
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("A tensor's dimension should be int, not float.");
-    
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      //dims.push_back(std::move(ParseExpression(class_name)));
-      dims.push_back(std::move(ParsePrimary(class_name)));
-    }
-
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
-
-  
-  if (CurTok != ']')
-    return LogError("] not found at tensor declaration.");
-    getNextToken();
-
-
-
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true; //TODO: set self per VarName instead.
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    getNextToken();
-  }
-
-  if (CurTok != tok_identifier)
-    return LogError("Expected tensor identifier name.");
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    tensorVars.push_back(IdentifierStr);
-    getNextToken(); // eat identifier.
-
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init))); 
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected tensor identifier names.");
-  }
-
-
-
-  auto aux = std::make_unique<TensorExprAST>(std::move(VarNames), "tensor",
-                                             std::move(dims), init, is_weight);
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
 
 
 
@@ -2547,9 +2447,7 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_data:
     return ParseDataExpr(class_name);
   case tok_tensor:
-    return ParseTensorExpr(class_name);
-  case tok_param:
-    return ParseTensorExpr(class_name);
+    return ParseDataExpr(class_name);
   case tok_pinned_tensor:
     return ParsePinnedTensorExpr();
   case tok_conv2d:
