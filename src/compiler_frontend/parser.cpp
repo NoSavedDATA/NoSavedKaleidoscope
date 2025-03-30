@@ -19,8 +19,8 @@ using namespace llvm;
 
 
 
-
-
+std::map<std::string, std::vector<std::string>> data_typeVars;
+std::map<std::string, std::string> typeVars;
 
 
 /// numberexpr ::= number
@@ -160,8 +160,8 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
   {
     if (in_str(IdName, pinnedTensorVars))
       type = "pinned_tensor";
-    else if (in_str(IdName, tensorVars))
-      type = "tensor";
+    else if (typeVars.find(IdName) != typeVars.end())
+      type = typeVars[IdName];
     else if (in_str(IdName, floatVars))
       type = "float";
     else if (in_str(IdName, strVars))
@@ -201,8 +201,9 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
       type = "str_vec";
     if (in_str(IdName, float_vecVars))
       type = "float_vec";
-    if (in_str(IdName, tensorVars))
-      type = "tensor";
+    if (typeVars.find(IdName) != typeVars.end())
+      type = typeVars[IdName];
+    
 
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
     auto aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
@@ -882,8 +883,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     
     if (in_str(IdName, pinnedTensorVars))
       type = "pinned_tensor";
-    if (in_str(IdName, tensorVars))
-      type = "tensor";
+    if (typeVars.find(IdName) != typeVars.end())
+      type = typeVars[IdName];
     if (in_str(IdName, objectVars))
       type = "object";
     if (functionVars.find(IdName) != functionVars.end())
@@ -930,8 +931,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
       type = "float_vec";
     if (in_str(IdName, pinnedTensorVars))
       type = "pinned_tensor";
-    if (in_str(IdName, tensorVars))
-      type= "tensor";
+    if (typeVars.find(IdName) != typeVars.end())
+      type = typeVars[IdName];
     if (in_str(IdName, objectVars))
       type = "object_vec";
 
@@ -1245,7 +1246,8 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
 
   while (true) {
     std::string Name = IdentifierStr;
-    tensorVars.push_back(IdentifierStr);
+    // tensorVars.push_back(IdentifierStr);
+    typeVars[IdentifierStr] = data_type;
     getNextToken(); // eat identifier.
 
     
@@ -2830,7 +2832,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
       if (type=="float")
         floatVars.push_back(IdentifierStr);
       else if (type=="tensor")
-        tensorVars.push_back(IdentifierStr);
+        typeVars[IdentifierStr] = type;
       else if (type=="function")
         functionVars[IdentifierStr] = "ConvForward2d";
       else

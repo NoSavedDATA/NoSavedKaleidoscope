@@ -21,7 +21,6 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, AnyVecto
 {
   // std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
 
-  notes_vector->print();
 
   std::vector<float> dims;
   char *init = "xavu";
