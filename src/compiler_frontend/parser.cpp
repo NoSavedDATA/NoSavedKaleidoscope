@@ -162,10 +162,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
       type = "pinned_tensor";
     else if (typeVars.find(IdName) != typeVars.end())
       type = typeVars[IdName];
-    else if (in_str(IdName, floatVars))
-      type = "float";
-    else if (in_str(IdName, strVars))
-      type = "str";
     else if (in_str(IdName, objectVars))
       type = "object";
     else
@@ -439,7 +435,7 @@ std::unique_ptr<ExprAST> ParseForExpr(std::string class_name) {
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
-  floatVars.push_back(IdName);
+  typeVars[IdName] = "float";
 
   if (CurTok != '=')
     return LogError("Expected for's control variable initial value.");
@@ -584,124 +580,7 @@ std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name) {
 }
 
 
-/// varexpr ::= 'var' identifier ('=' expression)?
-//                    (',' identifier ('=' expression)?)* 'in' expression
-std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name) {
-  getNextToken(); // eat the var.
-  
 
-  // mem2reg is alloca-driven: it looks for allocas and if it can handle them, it promotes them. It DOES NOT APPLY TO GLOBAL variables or heap allocations.
-  // mem2reg only promotes allocas whose uses are direct loads and stores. If the address of the stack object is passed to a function,
-  //or if any funny pointer arithmetic is involved, the alloca will not be promoted.
-
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-
-  // At least one variable name is required.
-  if (CurTok != tok_identifier)
-    return LogError("Expected an identifier after float.");
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    floatVars.push_back(IdentifierStr);
-    getNextToken(); // eat identifier.
-
-    // Read the optional initializer.
-    std::unique_ptr<ExprAST> Init = nullptr;
-    if (CurTok == '=')
-    {
-      getNextToken(); // eat the '='.
-
-      Init = ParseExpression(class_name);
-      if (!Init)
-        return nullptr;
-    }
-
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers after float.");
-  }
-
-  if (CurTok==tok_space)
-    getNextToken();
-
-
-  return std::make_unique<VarExprAST>(std::move(VarNames), "var");
-}
-
-
-
-
-std::unique_ptr<ExprAST> ParseStrExpr() {
-  getNextToken(); // eat str
-  
-
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-
-  // At least one variable name is required.
-  if (CurTok != tok_identifier)
-    return LogError("Esperado identificador após var.");
-
-  
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true; //TODO: set self per VarName instead.
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    getNextToken();
-  }
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    strVars.push_back(Name);
-    getNextToken(); // eat identifier.
-
-    // Read the optional initializer.
-    std::unique_ptr<ExprAST> Init = nullptr;
-    if (CurTok == '=') {
-      getNextToken(); // eat the '='.
-
-      Init = ParseStringExpr();
-      if (!Init)
-        return nullptr;
-    }
-
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Esperado um ou mais identificadores após var.");
-  }
-
-  auto aux = std::make_unique<StrExprAST>(std::move(VarNames));
-
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-  
-
-  if (CurTok==tok_space)
-    getNextToken();
-
-
-  return aux;
-}
 
 std::unique_ptr<ExprAST> ParseNewVector(std::string class_name) {
   std::cout << "Parsing new vector" << ReverseToken(CurTok)  << "\n";
@@ -891,12 +770,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
       type = "tensor";
     if (stringMethods.find(IdName) != stringMethods.end())
       type = "str";
-    if (in_str(IdName, floatVars))
-      type = "float";
     if (in_str(IdName, float_vecVars))
       type = "float_vec";
-    if (in_str(IdName, strVars))
-      type = "str";
     if (in_str(IdName, str_vecVars))
       type = "str_vec";
 
@@ -1202,11 +1077,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
         notes.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
         getNextToken();
       } else if (CurTok==tok_identifier)
-      {
-        std::cout << "Notes with tok identifier\n";
         notes.push_back(std::move(ParseIdentifierExpr()));
-        std::cout << "Push back\n";
-      }
       else {
         //notes.push_back(std::move(ParseExpression(class_name)));
         notes.push_back(std::move(ParsePrimary(class_name)));
@@ -1246,13 +1117,28 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
 
   while (true) {
     std::string Name = IdentifierStr;
-    // tensorVars.push_back(IdentifierStr);
     typeVars[IdentifierStr] = data_type;
     getNextToken(); // eat identifier.
 
     
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init))); 
+    // std::unique_ptr<ExprAST> Init = nullptr;
+    // VarNames.push_back(std::make_pair(Name, std::move(Init))); 
+
+    std::unique_ptr<ExprAST> Init;
+    if (CurTok == '=')
+    {
+      getNextToken(); // eat the '='.
+      Init = ParseExpression(class_name);
+      if (!Init)
+        return nullptr;
+    } else
+    {
+      if (data_type!="str")
+        Init = std::make_unique<NumberExprAST>(0.0f);
+      else
+        Init = std::make_unique<StringExprAST>("");
+    }
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -2421,7 +2307,7 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_str:
     return ParseStringExpr();
   case tok_var_str:
-    return ParseStrExpr();
+    return ParseDataExpr();
   case tok_str_vec:
     return ParseStrVecExpr();
   case tok_float_vec:
@@ -2445,7 +2331,7 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_return:
     return ParseReturnExpr(class_name);
   case tok_var:
-    return ParseVarExpr(class_name);
+    return ParseDataExpr(class_name);
   case tok_data:
     return ParseDataExpr(class_name);
   case tok_tensor:
@@ -2829,14 +2715,12 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
 
       ArgNames.push_back(IdentifierStr);
 
-      if (type=="float")
-        floatVars.push_back(IdentifierStr);
-      else if (type=="tensor")
+      if (type=="float" || type=="tensor")
         typeVars[IdentifierStr] = type;
       else if (type=="function")
         functionVars[IdentifierStr] = "ConvForward2d";
       else
-        strVars.push_back(IdentifierStr);
+        typeVars[IdentifierStr] = "str";
       
       getNextToken(); // eat arg name
     }

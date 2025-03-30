@@ -22,10 +22,7 @@ return_string_fn, threaded_tensor_functions, require_scope_functions, notators_s
 extern std::map<std::string, std::vector<std::string>> data_typeVars;
 extern std::map<std::string, std::string> typeVars;
 
-extern std::vector<std::string> tensorVars;
 extern std::vector<std::string> pinnedTensorVars;
-extern std::vector<std::string> floatVars;
-extern std::vector<std::string> strVars;
 extern std::vector<std::string> objectVars;
 extern std::vector<std::string> globalVars;
 extern std::map<std::string, std::string> functionVars;

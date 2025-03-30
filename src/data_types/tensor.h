@@ -6,7 +6,7 @@
 #include "../char_pool/include.h"
 
 
-extern "C" float CreateTensorOnDemand(char *tensor_name, char *scopeless_name, char *init, int is_weight, int thread_id, char *scope);
+extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
 
 extern "C" void *LoadTensor(char *tensor_name);
 

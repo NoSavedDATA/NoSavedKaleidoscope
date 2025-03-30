@@ -193,10 +193,7 @@ PointerType *floatPtrTy, *int8PtrTy;
 
 
 //global
-std::vector<std::string> tensorVars;
 std::vector<std::string> pinnedTensorVars;
-std::vector<std::string> floatVars;
-std::vector<std::string> strVars;
 std::vector<std::string> objectVars;
 std::vector<std::string> globalVars;
 std::map<std::string, std::string> functionVars;
@@ -1036,31 +1033,7 @@ extern "C" void StoreArgOnDemand(char *scope, char *name, float value){
 
 }
 
-extern "C" float StoreStrOnDemand(char *name, char *value){
-  
-  //NamedStrs[name] = CopyString(value); //TODO: Break?
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  NamedStrs[name] = value;
-  //std::cout << "Store " << value << " at " << name << "\n";
-  pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
 
-  return 0;
-}
-extern "C" void *LoadStrOnDemand(char *name){
-  
-  //char *ret = CopyString(NamedStrs[name]);
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  char *ret = NamedStrs[name];
-  pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
-
-  return ret;
-}
 
 
 extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
@@ -1092,14 +1065,6 @@ extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
 
 
 
-extern "C" void StoreOnDemand(char *name, float value){
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  NamedClassValues[name] = value;
-  pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "StoreOnDemand");
-  //delete[] name;
-}
 extern "C" float LoadOnDemand(char *object_var_name) {
   
   pthread_mutex_lock(&clean_scope_mutex);
@@ -16822,8 +16787,8 @@ Function *FunctionAST::codegen() {
     if (typeVars.find(arg_name) != typeVars.end())
       type = typeVars[arg_name];
 
-    // Coder args
-    if (in_str(arg_name, floatVars))
+    // Coder args    
+    if (type=="float")
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
@@ -16831,7 +16796,7 @@ Function *FunctionAST::codegen() {
 
       Builder->CreateCall(TheModule->getFunction("StoreArgOnDemand"),
                                                   {scope_str, var_name, &Arg});
-    } else if (in_str(arg_name, strVars))
+    } else if (type=="str")
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Store scope vars to clean for this too
@@ -18726,21 +18691,26 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVector);
 
 
+  FunctionType *str_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("str_Create", str_Create);
+
+  FunctionType *float_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("float_Create", float_Create);
 
   FunctionType *tensor_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
-
-  //
-  FunctionType *CreateTensorOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("CreateTensorOnDemand", CreateTensorOnDemandTy);
 
 
   //
