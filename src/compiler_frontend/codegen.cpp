@@ -235,22 +235,15 @@ Value *StrVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     // Remember the old variable binding so that we can restore the binding when
     // we unrecurse.
     //std::cout << "STRING CODEGEN FOR " << VarName << "\n";
-    //OldBindings.push_back(NamedStrVecs[VarName]);
 
     
     // Remember this binding.
 
-    if (Type=="str")
-      NamedStrVecs[VarName] = Alloca;
-    if (Type=="float")
-      NamedFloatVecs[VarName] = Alloca;
     
     
   }
 
 
-  //for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
-  //  NamedStrVecs[VarNames[i].first] = OldBindings[i];
 
   
   return ConstantFP::get(*TheContext, APFloat(0.0f));
