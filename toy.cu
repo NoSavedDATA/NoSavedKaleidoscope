@@ -237,7 +237,6 @@ ExitOnError ExitOnErr;
 std::map<std::string, Value *> NamedValues;
 std::map<std::string, char *> NamedStrs;
 std::map<std::string, AllocaInst *> NamedStrVecs;
-std::map<std::string, AllocaInst *> NamedFloatVecs;
 std::map<std::string, std::vector<char *>> ClassStrVecs;
 std::map<std::string, std::vector<float>> ClassFloatVecs;
 std::map<std::string, float> NamedClassValues;
@@ -1138,8 +1137,6 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
   /*
   std::cout << "\nVARIABLE EXPR CODEGEN: " << Name << "\n";
-  for (const auto &entry : NamedStrVecs)
-    std::cout << "NamedStrVec: " << entry.first << "\n";
   for (const auto &entry : NamedValues)
     std::cout << "NamedValues: " << entry.first << "\n";
   for (const auto &entry : NamedClassValues)
@@ -1225,17 +1222,11 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
     return V;
   } else if (type=="str_vec") {
 
-    //std::cout << "\nVariable Str Vector " << Name << " Codegen. \nNamedStrVecs.count(Name): " << NamedStrVecs.count(Name) <<"\n\n";
 
 
 
-    V = NamedStrVecs[Name];
-    
-    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
-    if (!seen_var_attr)
-      Builder->CreateCall(TheModule->getFunction("PrintStrVec"), {V});
 
-    return V;
+    return nullptr;
   } else if (NamedPinnedTensors.count(Name)>0) {
     //std::cout << "\nVariable Tensor " << Name << " Codegen.\n";
   
@@ -1338,21 +1329,13 @@ Value *VecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   if (Type=="str_vec")
   {
-    V = NamedStrVecs[Name];
-    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
-
-
-    V = Builder->CreateCall(TheModule->getFunction("IndexStrVec"), {V, idx});
-
-    return V;
+    return nullptr;
   }
   if (Type=="float_vec")
   {
-    V = NamedFloatVecs[Name];
-    V = Builder->CreateLoad(int8PtrTy, V, Name.c_str());
 
 
-    V = Builder->CreateCall(TheModule->getFunction("IndexStrVec"), {V, idx});
+    V = Builder->CreateCall(TheModule->getFunction("IndexFloatVec"), {V, idx});
 
     return V;
   }
@@ -14915,48 +14898,28 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
     } else if (LType=="str_vec") {
 
-      //std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
-      Value *Variable = NamedStrVecs[Lname];
-      
-      if(LHS->GetSelf())
-        Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-      else
-        Builder->CreateStore(Val, Variable);
+      std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
 
     } else if (LType=="float_vec") {
 
       //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
 
-      Value *Variable = NamedFloatVecs[Lname];
       
 
-      if(LHS->GetSelf())
+      if(LHS->GetIsVec())
       {
-        if(LHS->GetIsVec())
-        {
-          VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
-          
+        VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+        
 
-          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
-                                                  {Lvar_name,
-                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                                   Val});
+        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
+                                                {Lvar_name,
+                                                  LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                                  Val});
 
-        } else
-          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-      }
-      else
-      {
-        if(LHS->GetIsVec())
-        {
-          // TODO: Implement non-object-attr float vector index attribution.
-        } else
-          Builder->CreateStore(Val, Variable);
-      }
+      } else
+        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
+                                                {Lvar_name,
+                                                  Val});
         
 
     } else {
@@ -15077,34 +15040,22 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
 
-      Value *Variable = NamedFloatVecs[Lname];
       
 
-      if(LHS->GetSelf())
+      if(LHS->GetIsVec())
       {
-        if(LHS->GetIsVec())
-        {
-          VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
-          
+        VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+        
 
-          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
-                                                  {Lvar_name,
-                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                                   Val});
+        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
+                                                {Lvar_name,
+                                                  LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                                  Val});
 
-        } else
-          Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-      }
-      else
-      {
-        if(LHS->GetIsVec())
-        {
-          // TODO: Implement non-object-attr float vector index attribution.
-        } else
-          Builder->CreateStore(Val, Variable);
-      }
+      } else
+        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
+                                                {Lvar_name,
+                                                  Val});
         
 
     } else {
