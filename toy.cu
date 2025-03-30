@@ -188,12 +188,10 @@ PointerType *floatPtrTy, *int8PtrTy;
 
 
 
-//global
 
 
 
 //global
-std::vector<std::string> pinnedTensorVars;
 std::vector<std::string> objectVars;
 std::vector<std::string> globalVars;
 std::map<std::string, std::string> functionVars;
@@ -18652,13 +18650,6 @@ FunctionType *unbugTy = FunctionType::get(
   TheModule->getOrInsertFunction("StoreDimsOnDemand", StoreDimsOnDemandTy);
   
 
-  //
-  FunctionType *CreatePinnedTensorOnDemandTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("CreatePinnedTensorOnDemand", CreatePinnedTensorOnDemandTy);
 
 
   FunctionType *Add_String_To_NotesVector = FunctionType::get(
@@ -18711,6 +18702,13 @@ FunctionType *unbugTy = FunctionType::get(
       false 
   );
   TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
+
+  FunctionType *pinned_tensor_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_Create);
 
 
   //

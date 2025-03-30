@@ -159,11 +159,6 @@ VarExprAST::VarExprAST(
     : VarNames(std::move(VarNames)), Type(Type) {}
   
   
-StrExprAST::StrExprAST(
-    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames)
-    : VarNames(std::move(VarNames)) {
-      this->SetType("str");
-    }
   
   
   
@@ -193,15 +188,7 @@ ObjectExprAST::ObjectExprAST(
 
 
 
-  
-PinnedTensorExprAST::PinnedTensorExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::vector<std::unique_ptr<ExprAST>> V_Dims,
-  const std::string &TensorInit)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                V_Dims(std::move(V_Dims)), TensorInit(TensorInit) {}
-  
+ 
   
 DataExprAST::DataExprAST(
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
