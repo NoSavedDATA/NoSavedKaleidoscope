@@ -193,15 +193,6 @@ ObjectExprAST::ObjectExprAST(
 
 
 
-TensorExprAST::TensorExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::vector<std::unique_ptr<ExprAST>> V_Dims,
-  const std::string &TensorInit, bool IsWeight)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                V_Dims(std::move(V_Dims)), TensorInit(TensorInit), IsWeight(IsWeight) {}
-
-
   
 PinnedTensorExprAST::PinnedTensorExprAST(
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,

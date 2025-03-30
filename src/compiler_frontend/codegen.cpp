@@ -181,53 +181,6 @@ Value *StrExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_s
 
 
 
-Value *TensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    
-    Value *var_name, *scopeless_name, *init;
-    
-    init = Builder->CreateGlobalString(TensorInit);
-    var_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {Builder->CreateGlobalString(VarName)});
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
-                                            {first_arg, var_name});
-    scopeless_name = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {var_name});
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeRight"),
-                                            {scope_str, var_name});
-
-    Value *aux;
-    for (int j=0; j<V_Dims.size(); j++)
-    {
-      aux = V_Dims[j]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-      Builder->CreateCall(TheModule->getFunction("StoreDimsOnDemand"),
-                                                  {var_name, aux});
-    }
-
-    Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
-                                              {var_name, scopeless_name, init,
-                                               ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight), thread_id,
-                                               scope_str});
-  }
-
-
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
 
 
 
@@ -302,8 +255,8 @@ Value *DataExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
   // Register all variables and emit their initializer.
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
+    const std::string &VarName = VarNames[i].first; 
+    ExprAST *Init = VarNames[i].second.get();
     
     Value *var_name, *scopeless_name, *init;
     
@@ -360,18 +313,10 @@ Value *DataExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     std::string create_fn = Type + "_Create";
     std::cout << "CREATE FN: " <<  create_fn << ".\n";
 
-    create_fn = "tensor_Create";
 
     Builder->CreateCall(TheModule->getFunction(create_fn),
-                                              {var_name, scopeless_name, notes_vector,
-                                               thread_id, scope_str});    
-
-
-    // Builder->CreateCall(TheModule->getFunction("CreateTensorOnDemand"),
-    //                                           {var_name, scopeless_name, init,
-    //                                            ConstantInt::get(Type::getInt32Ty(*TheContext), IsWeight), thread_id,
-    //                                            scope_str});
-
+                                              {var_name, scopeless_name, Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), notes_vector,
+                                               thread_id, scope_str});
     
     Builder->CreateCall(TheModule->getFunction("Dispose_NotesVector"), {notes_vector});
 

@@ -78,14 +78,8 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(std::string class_name="");
 std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name=""); 
 
 
-/// varexpr ::= 'var' identifier ('=' expression)?
-//                    (',' identifier ('=' expression)?)* 'in' expression
-std::unique_ptr<ExprAST> ParseVarExpr(std::string class_name=""); 
 
 
-
-
-std::unique_ptr<ExprAST> ParseStrExpr(); 
 
 std::unique_ptr<ExprAST> ParseNewVector(std::string class_name=""); 
 

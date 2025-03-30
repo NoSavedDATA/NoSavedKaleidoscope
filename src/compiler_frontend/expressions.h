@@ -208,22 +208,7 @@ class ExprAST {
   };
   
   
-  
-  class TensorExprAST : public VarExprAST {
-    public:
-      std::vector<std::unique_ptr<ExprAST>> V_Dims;
-      std::string TensorInit;
-      bool IsWeight;
-  
-      TensorExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::vector<std::unique_ptr<ExprAST>> V_Dims,
-        const std::string &TensorInit, bool IsWeight);
-  
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
-  };
-  
+   
   
   class PinnedTensorExprAST : public VarExprAST {
     public:
