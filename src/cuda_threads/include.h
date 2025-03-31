@@ -3,6 +3,8 @@
 
 #include "threads.h"
 #include <cuda_runtime.h>
+#include <map>
+#include <vector>
 
 
 

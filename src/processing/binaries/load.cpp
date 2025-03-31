@@ -5,7 +5,7 @@
 #include <cstdarg>
 
 #include "../../common/include.h"
-#include "../../codegen/tensor_dim_functions.h"
+#include "../../tensor/tensor_dim_functions.h"
 #include "../../tensor/tensor_struct.h"
 #include "../../compiler_frontend/logging.h"
 

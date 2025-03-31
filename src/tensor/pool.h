@@ -1,6 +1,8 @@
 #pragma once
 
 
+#include <cuda_fp16.h>
+
 #include <string>
 #include <vector>
 #include <map>

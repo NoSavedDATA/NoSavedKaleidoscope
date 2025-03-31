@@ -1,5 +1,6 @@
 
 #include "../common/extension_functions.h"
+#include "../codegen/scope.h"
 #include "cleaners.h"
 
 
@@ -74,5 +75,42 @@ void to_pool_threaded(float dims_prod, float *tensor_ptr, std::string scope, int
 
 
 
+void ThreadedCleanupToPool(Tensor *back_node, std::string scope, int thread_id)
+{
+  if(back_node==nullptr||back_node->weight)
+    return;
+  //std::cout << "-----Clean threaeded " << back_node->name << "\n";
+  
+
+  
+  if (!in_str(scope, scopes));
+    scopes.push_back(scope);
+
+  ThreadedCleanupToPool(back_node->L_Node, scope, thread_id);
+  ThreadedCleanupToPool(back_node->R_Node, scope, thread_id);
+
+  
+  to_pool_threaded(back_node->dims_prod, back_node->tensor_ptr, scope, thread_id, "");
+  to_free_tensor_threaded(back_node, scope, thread_id);
+}
+
+void CleanThreadTensors(std::string scope, int thread_id)
+{
+  for(Tensor *tensor : threaded_Tensors_to_free[thread_id][scope])
+    delete tensor;
+
+  std::vector<float*> scope_tensors_ptrs;
+  
+
+  for(std::tuple<float, float *, std::string> pair : threaded_tensors_to_pool[thread_id][scope])
+    move_to_pool(thread_id, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
 
 
+  threaded_Tensors_to_free[thread_id][scope].clear();
+  threaded_tensors_to_pool[thread_id][scope].clear();
+  threaded_tensors_sent_to_pool[thread_id][scope].clear();
+
+  threaded_Tensors_to_free[thread_id].erase(scope);
+  threaded_tensors_to_pool[thread_id].erase(scope);
+  threaded_tensors_sent_to_pool[thread_id].erase(scope);
+}

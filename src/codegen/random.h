@@ -78,3 +78,6 @@ extern LCG rng;
 
 extern std::random_device rd2; // it is already defined at cu_common.h
 extern std::mt19937 MAIN_PRNG;
+
+
+extern "C" float randint(float b, float f);

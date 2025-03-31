@@ -1,5 +1,5 @@
 
-
+#include<cstdarg>
 #include<vector>
 #include<map>
 #include<iostream>
@@ -7,6 +7,7 @@
 #include<thread>
 #include<string>
 
+#include "../codegen/string.h"
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
 #include "../data_types/include.h"
@@ -176,4 +177,76 @@ extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
 
   NamedDims[tensor_name] = dims;
   return 0;
+}
+
+
+
+extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
+  
+  //std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
+
+  Tensor *tensor = NamedTensorsT[tensor_name];
+
+  std::vector<float> idxs, new_dims_no_minus, dims;
+  int current_dims_prod;
+  bool has_minus = false;
+  dims = tensor->dims;
+
+  int idx_at = 0;
+
+  
+  va_list args;
+  va_start(args, first_idx);
+
+  if (first_idx!=-1)
+    new_dims_no_minus.push_back(first_idx);
+  else
+    has_minus=true;
+  
+    
+  idxs.push_back(first_idx);
+
+  dims = RemoveFirstDim(dims);
+  
+  current_dims_prod = DimsProd(dims);
+
+  idx_at += (int)(current_dims_prod*first_idx);
+
+
+
+  //std::cout << "Get idx of " << tensor_name << "\nCalculateIdxOffset pushing dim: " << first_idx << "\n";
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions??? (calc idx)");
+      return 0;
+    }
+
+    float idx = va_arg(args, float);
+    if (idx==TERMINATE_VARARG)
+      break;
+
+    idxs.push_back(idx);
+    
+    dims = RemoveFirstDim(dims);
+    
+    current_dims_prod = DimsProd(dims);
+
+    idx_at += (int)(current_dims_prod*idx);
+
+    //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
+    
+
+    if (idx!=-1)
+      new_dims_no_minus.push_back(idx);
+    else
+      has_minus=true;
+  }
+  va_end(args);
+
+
+
+  return idx_at;
 }

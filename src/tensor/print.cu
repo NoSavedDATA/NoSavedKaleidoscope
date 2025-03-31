@@ -9,9 +9,8 @@
 #include <cstring> 
 
 
-#include "../codegen/tensor_dim_functions.h"
 #include "../common/cu_commons.h"
-#include "tensor_struct.h"
+#include "include.h"
 
 
 extern "C" float PrintTensor(int thread_id, char* tensorName){

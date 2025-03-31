@@ -18,6 +18,9 @@ using namespace llvm;
 
 
 
+extern bool seen_var_attr;
+
+
 Function *getFunction(std::string Name);
 
 
