@@ -8,7 +8,6 @@
 #include<cstdarg>
 
 #include "../backprop/include.h"
-#include "../codegen/tensor_dim_functions.h"
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
 #include "../tensor/include.h"

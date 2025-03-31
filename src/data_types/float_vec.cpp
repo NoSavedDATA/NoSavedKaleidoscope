@@ -7,6 +7,46 @@
 
 std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
+
+
+extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope)
+{
+
+  delete[] name;
+  delete[] scopeless_name;
+
+  return 0;
+}
+
+
+extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value){
+  std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
+
+  ClassFloatVecs[name] = value;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
+  return 0;
+}
+
+extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
+  //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
+
+  ClassFloatVecs[name][(int)idx] = value;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
+  return 0;
+}
+
+
+extern "C" void *LoadFloatVecOnDemand(char *object_var_name) {
+  std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+  
+  void *ret = &ClassFloatVecs[object_var_name];
+  delete[] object_var_name;
+  return ret;
+}
+
+
 extern "C" float PrintFloatVec(std::vector<float> vec)
 {
 

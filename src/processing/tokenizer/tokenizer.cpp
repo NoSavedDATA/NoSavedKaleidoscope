@@ -7,8 +7,8 @@
 #include <algorithm>
 
 
-#include "../../codegen/tensor_dim_functions.h"
 #include "../../compiler_frontend/logging.h"
+#include "../../tensor/tensor_dim_functions.h"
 #include "../../tensor/tensor_struct.h"
 #include "../../threads/include.h"
 

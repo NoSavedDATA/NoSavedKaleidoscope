@@ -191,10 +191,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
     std::vector<std::unique_ptr<ExprAST>> Idx;
     Idx = ParseIdx(class_name);
     
-    if (in_str(IdName, str_vecVars))
-      type = "str_vec";
-    if (in_str(IdName, float_vecVars))
-      type = "float_vec";
     if (typeVars.find(IdName) != typeVars.end())
       type = typeVars[IdName];
     
@@ -597,64 +593,6 @@ std::unique_ptr<ExprAST> ParseNewVector(std::string class_name) {
 }
 
 
-std::unique_ptr<ExprAST> ParseStrVecExpr() {
-  int vec_type = CurTok;
-  std::string vec_type_str;
-
-  if (vec_type==tok_str_vec)
-    vec_type_str = "str";
-  if (vec_type==tok_float_vec)
-    vec_type_str = "float";
-    
-  getNextToken(); // eat str_vec
-
-  
-  
-  
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-
-  // At least one variable name is required.
-  if (CurTok != tok_identifier)
-    return LogError("Expected identifier after vector var.");
-
-  
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    getNextToken(); // eat identifier.
-
-    // Read the optional initializer.
-    std::unique_ptr<ExprAST> Init = nullptr;
-    if (CurTok == '=') {
-      getNextToken(); // eat the '='.
-
-      Init = ParseStringExpr();
-      if (!Init)
-        return nullptr;
-    }
-
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-
-    if (vec_type==tok_str_vec)
-      str_vecVars.push_back(Name);
-    if (vec_type==tok_float_vec)
-      float_vecVars.push_back(Name);
-    
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Esperado um ou mais identificadores após var.");
-  }
-
-  if (CurTok==tok_space)
-    getNextToken();
-
-  return std::make_unique<StrVecExprAST>(std::move(VarNames), vec_type_str);
-}
 
 
 
@@ -749,15 +687,10 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   
   
   //std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
-
-
-
   
 
   if (!is_vec&&CurTok!='(') // Simple variable ref.
-  {
-    //std::cout << "Parsing a var" << "\n";
-    
+  { 
     if (typeVars.find(IdName) != typeVars.end())
       type = typeVars[IdName];
     if (in_str(IdName, objectVars))
@@ -766,10 +699,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
       type = "tensor";
     if (stringMethods.find(IdName) != stringMethods.end())
       type = "str";
-    if (in_str(IdName, float_vecVars))
-      type = "float_vec";
-    if (in_str(IdName, str_vecVars))
-      type = "str_vec";
 
     std::cout << "Var type: " << type << "\n";
 
@@ -796,10 +725,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     
     
     
-    if (in_str(IdName, str_vecVars))
-      type= "str_vec";
-    if (in_str(IdName, float_vecVars))
-      type = "float_vec";
     if (typeVars.find(IdName) != typeVars.end())
       type = typeVars[IdName];
     if (in_str(IdName, objectVars))
@@ -2189,9 +2114,9 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_var_str:
     return ParseDataExpr();
   case tok_str_vec:
-    return ParseStrVecExpr();
+    return ParseDataExpr();
   case tok_float_vec:
-    return ParseStrVecExpr();
+    return ParseDataExpr();
   case '(':
     return ParseParenExpr();
   case tok_if:

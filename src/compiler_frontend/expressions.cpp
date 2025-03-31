@@ -159,13 +159,6 @@ VarExprAST::VarExprAST(
     : VarNames(std::move(VarNames)), Type(Type) {}
   
   
-  
-  
-  
-StrVecExprAST::StrVecExprAST(
-    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-    std::string Type)
-    : VarNames(std::move(VarNames)), Type(Type) {}
 
 
   

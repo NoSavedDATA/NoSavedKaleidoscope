@@ -29,3 +29,6 @@ std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
 extern "C" void *NewDimsOnIdx(std::vector<float> dims);
 
 extern "C" float StoreDimsOnDemand(char *tensor_name, float d);
+
+
+extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) ;

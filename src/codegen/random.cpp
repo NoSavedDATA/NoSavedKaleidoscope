@@ -128,3 +128,17 @@ extern "C" float print_randoms(float N, float std) {
 
     return 0;
 }
+
+
+
+extern "C" float randint(float b, float f)
+{
+
+  std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+  float rand_float = dist(MAIN_PRNG);
+
+  int rand_int = static_cast<int>(rand_float * (f - b + 1)) + b;
+
+  return (float) rand_int;
+}

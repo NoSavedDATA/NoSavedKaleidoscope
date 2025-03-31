@@ -27,9 +27,6 @@ extern std::vector<std::string> globalVars;
 extern std::map<std::string, std::string> functionVars;
 extern std::map<std::string, std::string> floatFunctions;
 extern std::map<std::string, std::string> stringMethods;
-extern std::vector<std::string> str_vecVars;
-extern std::vector<std::string> float_vecVars;
-
 
 
 extern std::vector<std::string> Classes;
@@ -43,3 +40,5 @@ extern float TERMINATE_VARARG;
 extern std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 extern std::unique_ptr<llvm::orc::KaleidoscopeJIT> TheJIT;
 extern ExitOnError ExitOnErr;
+
+extern PointerType *floatPtrTy, *int8PtrTy;

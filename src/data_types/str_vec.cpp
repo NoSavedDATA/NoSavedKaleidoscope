@@ -11,6 +11,36 @@
 #include "../compiler_frontend/logging.h"
 #include "include.h"
 
+
+
+extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope)
+{
+
+  delete[] name;
+  delete[] scopeless_name;
+
+  return 0;
+}
+
+
+extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
+  std::cout << "STORING " << name << " on demand as StrVec type.\n";
+  ClassStrVecs[name] = value;
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
+  return 0;
+}
+
+
+extern "C" void *LoadStrVecOnDemand(char *object_var_name) {
+  //std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+  
+  void *ret = &ClassStrVecs[object_var_name];
+  delete[] object_var_name;
+  return ret;
+}
+
+
 extern "C" float PrintStrVec(std::vector<char*> vec)
 {
   for (int i=0; i<vec.size(); i++)

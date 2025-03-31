@@ -3,7 +3,7 @@
 
 #include "../../common/cu_commons.h"
 #include "../../compiler_frontend/logging.h"
-#include "../../codegen/tensor_dim_functions.h"
+#include "../../tensor/tensor_dim_functions.h"
 #include "stb_lib.h"
 #include "load.h"
 #include "interpolate.h"

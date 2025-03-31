@@ -53,5 +53,8 @@ int DoesTreeContainWeight(Tensor *back_node);
 void CleanScopeTensors(std::string scope);
 
 
+void ThreadedCleanupToPool(Tensor *back_node, std::string scope, int thread_id);
+void CleanThreadTensors(std::string scope, int thread_id);
+
 
 

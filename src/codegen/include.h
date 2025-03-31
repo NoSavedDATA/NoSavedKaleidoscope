@@ -4,11 +4,13 @@
 #include <map>
 
 #include"../threads/include.h"
+#include"call_expr.h"
 #include"functions.h"
+#include"function_expr.h"
 #include"print.h"
 #include"random.h"
+#include"scope.h"
 #include"string.h"
-#include"tensor_dim_functions.h"
 #include"time.h"
 #include"vec.h"
 
