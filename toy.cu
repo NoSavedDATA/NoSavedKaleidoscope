@@ -1034,7 +1034,7 @@ extern "C" void StoreArgOnDemand(char *scope, char *name, float value){
 
 
 extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
-  //std::cout << "STORING " << self << "." << object_var_name << " on demand as StrVec type.\n";
+  std::cout << "STORING " << name << " on demand as StrVec type.\n";
   ClassStrVecs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
@@ -15027,14 +15027,10 @@ Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     } else if (LType=="str_vec") {
 
       //std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
-      Value *Variable = NamedStrVecs[Lname];
       
-      if(LHS->GetSelf())
-        Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
+      Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
                                                   {Lvar_name,
                                                    Val});
-      else
-        Builder->CreateStore(Val, Variable);
 
     } else if (LType=="float_vec") {
 
