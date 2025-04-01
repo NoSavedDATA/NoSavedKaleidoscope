@@ -6,9 +6,11 @@
 #include <vector>
 
 
+#include "../backprop/include.h"
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
 #include "../tensor/include.h"
+#include "calculate_grids.h"
 #include "dim_kernels.h"
 #include "handles.h"
 
@@ -431,4 +433,86 @@ extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
 
   Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
+}
+
+
+
+extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float dim)
+{
+  //std::cout << "Gather THREAD IS: " << thread_id << "\n";
+
+
+  if(dim<0)
+    dim = tensor->dims.size()+dim;
+
+  if(dim == tensor->dims.size()-1)
+  {
+    //std::cout << "Gather over last dim"  << "\n";
+
+    float *tensor_ptr = tensor->tensor_ptr;
+    std::vector<float> dims, new_dims;
+    dims = tensor->dims;
+    new_dims = RemoveLastDim(dims);
+    float leading_dim = dims[dim];
+
+    //PrintDims(dims);
+    //PrintDims(new_dims);
+
+    
+    float dims_prod = tensor->dims_prod;
+    float new_dims_prod = DimsProd(new_dims);
+
+    int grid_size, block_size, shared_mem_size; 
+    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(new_dims_prod);
+    grid_size = grid_block_mem_sizes[0];
+    block_size = grid_block_mem_sizes[1];
+    
+
+    float *y = get_from_pool(thread_id, new_dims_prod, "gather");
+    //float *y;
+    
+
+    tensor->Sync();
+    cudaStream_t stream = ThreadsStream[thread_id];
+    gather_last_dim_kernel<<<grid_size, block_size, 0, stream>>>(y, tensor->tensor_ptr, idx_tensor->tensor_ptr, leading_dim, new_dims_prod);
+
+
+
+    
+
+    Tensor *new_tensor = createTensor(y, new_dims, new_dims_prod, false, "");
+    //idx_tensor->op = detach_op;
+    new_tensor->AttrNodes(tensor, wrapTensorWithDetached(idx_tensor), gather_last_dim_op);
+    //new_tensor->AttrLNode(idx_tensor, gather_last_dim_op);
+    todo_backward_tensors.push_back(new_tensor);
+    return new_tensor;
+  }
+}
+
+
+
+void gather_last_dim_backward(float *dx, float *dy, Tensor *node)
+{
+  // consider dx was set to zero already
+  
+
+  float *idx = node->R_Node->tensor_ptr;
+
+  std::vector<float> dims = node->L_Node->dims;
+  int leading_dim = dims[dims.size()-1];
+
+  float dims_prod = node->dims_prod;
+
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+
+  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, idx, leading_dim, dims_prod);
+
+  //PrintTensorF(idx, 1, node->R_Node->dims_prod);
+  //PrintTensorF(dx, dims[0], dims[1]);
+
 }

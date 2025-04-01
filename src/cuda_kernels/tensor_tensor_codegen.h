@@ -29,3 +29,5 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
 
 extern "C" void *CudaDiv(int is_forward_func,
                           Tensor *tensor_x, Tensor *tensor_w, int thread_id); 
+
+void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod);

@@ -20,6 +20,7 @@ extern const int TILE_SIZE_SQ;
 #define CUBLAS_LOWP CUDA_R_32F
 #define PRECISION_MODE PRECISION_FP32
 
+#define GELU_SCALING_FACTOR sqrtf(2.0f / M_PI)
 
 
 extern float eps;

@@ -380,3 +380,15 @@ extern "C" void *CudaDiv(int is_forward_func,
   new_tensor->AttrNodes(tensor_x, tensor_w, div_op);
   return new_tensor;
 }
+
+
+void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod)
+{
+  //std::cout << "hadamard_backward" <<  "\n";
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  hadamard_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, w, dx, dw, dy, dims_prod);
+}

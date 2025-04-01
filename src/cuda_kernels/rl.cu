@@ -1,0 +1,51 @@
+#include <cublas_v2.h>
+#include <cuda_fp16.h>
+#include <mma.h>
+#include <cstdarg>
+#include <iostream>
+#include <vector>
+
+
+#include "../backprop/include.h"
+#include "../common/include.h"
+#include "../compiler_frontend/logging.h"
+#include "../tensor/include.h"
+#include "calculate_grids.h"
+#include "rl_kernels.h"
+#include "handles.h"
+
+
+
+extern "C" void *rl_discounted_return(int thread_id, Tensor *reward, Tensor *terminated, float gamma)
+{
+  //std::cout << "rl_discounted_return THREAD IS: " << thread_id << "\n";
+
+  std::vector<float> dims = reward->dims;
+
+  if (reward->dims.size()!=2||terminated->dims.size()!=2)
+    LogErrorS("rl_discounted_return requires dims [B, T]");
+
+  int B = dims[0];
+  int T = dims[1];
+  
+
+  int grid_size, block_size, shared_mem_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+  
+
+  float *G = get_from_pool(thread_id, B, "rl_discounted_return");
+
+  reward->Sync();
+  terminated->Sync();
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+  rl_discounted_return_kernel<<<grid_size, block_size, 0, stream>>>(G, reward->tensor_ptr, terminated->tensor_ptr, T, gamma, B);
+
+
+
+  Tensor *new_tensor = createTensor(G, {(float)B}, B, false, "");
+  new_tensor->AttrNodes(reward, terminated, detach_op);
+  return new_tensor;
+}

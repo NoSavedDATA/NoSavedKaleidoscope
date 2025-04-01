@@ -285,3 +285,29 @@ __global__ void prod_over_semilast_dim_kernel(const float *tensor,
         atomicMul(summed_b, ix);        
     }
 }
+
+__global__ void gather_last_dim_kernel(float* y, const float* tensor, const float *tensor_idx,
+                                      const int leading_dim, float dims_prod) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < dims_prod) {
+      int t_idx = (int)tensor_idx[idx];
+      y[idx] = tensor[idx*leading_dim + t_idx];
+    }
+}
+
+
+__global__ void gather_last_dim_backward_kernel(float* dx, const float* dy, const float *tensor_idx,
+                                      const int leading_dim, float dims_prod) {
+    // Handles idx repetition
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < dims_prod) {
+      int t_idx = (int)tensor_idx[idx];
+
+      float *indexed_dx = dx + idx*leading_dim + t_idx;
+
+      atomicAdd(indexed_dx, dy[idx]);
+      //dx[idx*leading_dim + t_idx] = dy[idx];
+    }
+}

@@ -22,3 +22,6 @@ extern "C" void *CudaScalarMinor(Tensor tensor, float R, int thread_id);
 extern "C" void *CudaScalarMinorEq(Tensor tensor, float R, int thread_id);
 extern "C" void *CudaScalarHigher(Tensor tensor, float R, int thread_id);
 extern "C" void *CudaScalarHigherEq(Tensor tensor, float R, int thread_id);
+
+
+void scalarmult_backward(float *dx, float *dy, float scalar, float dims_prod);

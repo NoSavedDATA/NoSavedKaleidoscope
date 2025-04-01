@@ -16,3 +16,4 @@ llvm.sh
 mouse.o
 mouse.cu
 *backup
+trace.log

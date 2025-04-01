@@ -60,3 +60,11 @@ __global__ void prod_over_last_dim_kernel(const float *tensor,
 __global__ void prod_over_semilast_dim_kernel(const float *tensor,
                            float *summed,
                            int dims_prod, int last_dim_size, int summed_dim_size); 
+
+__global__ void gather_last_dim_kernel(float* y, const float* tensor, const float *tensor_idx,
+                                      const int leading_dim, float dims_prod); 
+
+
+
+__global__ void gather_last_dim_backward_kernel(float* dx, const float* dy, const float *tensor_idx,
+                                      const int leading_dim, float dims_prod); 

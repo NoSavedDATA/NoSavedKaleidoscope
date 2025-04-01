@@ -239,3 +239,15 @@ extern "C" void *CudaScalarHigherEq(Tensor tensor, float R, int thread_id) {
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
+
+
+void scalarmult_backward(float *dx, float *dy, float scalar, float dims_prod)
+{
+  //std::cout << "scalar mult backward with scalar " << scalar <<  "\n";
+  int grid_size, block_size;
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, scalar, dims_prod);
+}

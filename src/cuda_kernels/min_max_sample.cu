@@ -12,7 +12,7 @@
 #include "../tensor/include.h"
 #include "calculate_grids.h"
 #include "elementwise_kernels_inline.cu"
-#include "tensor_scalar_kernels.cu"
+#include "tensor_scalar_kernels_inline.cu"
 #include "min_max_sample_kernels.h"
 
 
