@@ -4,6 +4,10 @@
 #include <cublas_v2.h>
 #include <random>
 
+#include <iostream>
+#include <cudnn.h>
+#include <cstdlib>
+
 // REFERENCES:
 // https://github.com/karpathy/llm.c/blob/master/dev/cuda/common.h
 
@@ -25,6 +29,17 @@ void cuda_check(cudaError_t error, const char *file, int line);
 void _cublasCheck(cublasStatus_t status, const char *file, int line);
 
 #define cublasCheck(status) (_cublasCheck((status), __FILE__, __LINE__))
+
+
+#define checkCUDNN(expression)                               \
+  {                                                          \
+    cudnnStatus_t status = (expression);                     \
+    if (status != CUDNN_STATUS_SUCCESS) {                    \
+      std::cerr << "Error on line " << __LINE__ << ": "      \
+                << cudnnGetErrorString(status) << std::endl; \
+      std::exit(EXIT_FAILURE);                               \
+    }                                                        \
+  }
 
 // ----------------------------------------------------------------------------
 // random utils
