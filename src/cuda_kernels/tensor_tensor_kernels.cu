@@ -40,3 +40,17 @@ __global__ void hadamard_kernel(float *y, const float *x,
     if (i < dims_prod)
         y[i] = x[i] * w[i];
 }
+
+
+__global__ void hadamard_backward_kernel(const float *x, const float *w,
+                                         float *dx, float *dw, const float *dy,
+                                         int dims_prod) {
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i < dims_prod)
+    {
+      dx[i] = w[i] * dy[i];
+      dw[i] = x[i] * dy[i];
+    }
+}

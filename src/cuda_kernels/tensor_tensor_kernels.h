@@ -16,3 +16,7 @@ __global__ void equal_forward(float *y, const float *x,
 
 __global__ void hadamard_kernel(float *y, const float *x,
                             const float *w, int dims_prod); 
+
+__global__ void hadamard_backward_kernel(const float *x, const float *w,
+                                         float *dx, float *dw, const float *dy,
+                                         int dims_prod); 

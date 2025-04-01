@@ -130,6 +130,13 @@ extern "C" float print_randoms(float N, float std) {
 }
 
 
+unsigned long long time_seed() {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto duration = now.time_since_epoch();
+    auto seed = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    return seed;
+}
+
 
 extern "C" float randint(float b, float f)
 {

@@ -81,3 +81,5 @@ extern std::mt19937 MAIN_PRNG;
 
 
 extern "C" float randint(float b, float f);
+
+unsigned long long time_seed(); 
