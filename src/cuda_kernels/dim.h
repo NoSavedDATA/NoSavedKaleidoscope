@@ -1,0 +1,25 @@
+#include <cublas_v2.h>
+#include <cuda_fp16.h>
+#include <mma.h>
+
+
+#include "../tensor/include.h"
+
+
+
+
+extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, float dim);
+
+//TODO: mean over axis
+extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...);
+
+
+void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node);
+
+
+
+extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...);
+
+
+extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...);
+

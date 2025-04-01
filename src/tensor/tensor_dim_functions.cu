@@ -10,6 +10,8 @@
 #include "../codegen/string.h"
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
+#include "../cuda_kernels/calculate_grids.h"
+#include "../cuda_kernels/dim_kernels.h"
 #include "../data_types/include.h"
 #include "../tensor/include.h"
 #include "include.h"
@@ -249,4 +251,29 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
 
   return idx_at;
+}
+
+
+void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size)
+{
+
+  int leading_dim = y_size/x_size;
+
+
+  int grid_size, block_size; 
+  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(y_size);
+  grid_size = grid_block_mem_sizes[0];
+  block_size = grid_block_mem_sizes[1];
+
+
+  sum_over_last_dim_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dy, dx, y_size, leading_dim);
+}
+
+
+extern "C" float shape(int thread_id, Tensor tensor)
+{
+  std::cout << "\nTensor \033[95m" << tensor.name<<"/"<<tensor.scopeless_name << "\033[0m:\n   ";
+  PrintDims(tensor.dims);
+
+  return 0;
 }

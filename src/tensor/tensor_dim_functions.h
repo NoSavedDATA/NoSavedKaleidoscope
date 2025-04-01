@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "tensor_struct.h"
 
 extern "C" void PrintDims(std::vector<float> dims);
 
@@ -32,3 +33,9 @@ extern "C" float StoreDimsOnDemand(char *tensor_name, float d);
 
 
 extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) ;
+
+void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size);
+
+
+extern "C" float shape(int thread_id, Tensor tensor);
+

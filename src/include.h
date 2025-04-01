@@ -10,6 +10,7 @@
 #include"data_types/include.h"
 #include"math/include.h"
 #include"mma/include.h"
+#include"networks/include.h"
 #include"notators/include.h"
 #include"os/include.h"
 #include"processing/include.h"
