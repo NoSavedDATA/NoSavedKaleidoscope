@@ -19,3 +19,20 @@ extern const int TILE_SIZE_SQ;
 
 #define CUBLAS_LOWP CUDA_R_32F
 #define PRECISION_MODE PRECISION_FP32
+
+
+
+extern float eps;
+
+extern cudaDeviceProp deviceProp;
+
+
+extern int WARP_SIZE;
+
+
+
+extern int THREADS_PER_BLOCK;
+
+extern const int TILE_SIZE; 
+extern const int TILE_SIZE_SQ;
+

@@ -3,9 +3,8 @@
 #include <vector>
 
 #include "../common/cu_commons.h"
+#include "handles.h"
 
-
-cudaDeviceProp deviceProp;
 
 
 std::vector<int> CalculateGridAndBlockSizes(int dims_prod, int pre_block_size=-1)

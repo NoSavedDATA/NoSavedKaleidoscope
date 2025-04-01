@@ -15,3 +15,5 @@ cublasComputeType_t cublas_compute_type;
 
 cublasComputeType_t cublas_compute = CUBLAS_COMPUTE_32F;
 
+
+float eps = 1e-8;
