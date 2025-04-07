@@ -1,6 +1,7 @@
 #include "llvm/IR/Value.h"
 
 
+
 #include <map>
 #include <vector>
 #include <thread>
@@ -18,6 +19,8 @@
 using namespace llvm;
 
 
+
+std::map<std::string, std::string> ops_type_return;
 
 std::map<std::string, std::vector<std::string>> data_typeVars;
 std::map<std::string, std::string> typeVars;
@@ -2201,9 +2204,13 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name) {
 }
 
 
+
+
+
+
 /// binoprhs
 ///   ::= ('+' unary)*
-std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
+std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPrec,
                                               std::unique_ptr<ExprAST> LHS,
                                               std::string class_name) {
   
@@ -2222,6 +2229,9 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
   if (LHS->GetType()=="str")
     L_cuda = type_string;
 
+  std::string L_type = LHS->GetType();
+  std::string R_type;
+
   while (true)
   {
     // If this is a binop, find its precedence.
@@ -2234,10 +2244,10 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     if (TokPrec==BinopPrecedence[':'])
     {
       getNextToken();
-      return std::make_tuple(std::move(LHS), L_cuda);
+      return std::make_tuple(std::move(LHS), L_cuda, L_type);
     }
     if (TokPrec < ExprPrec)
-      return std::make_tuple(std::move(LHS), L_cuda);
+      return std::make_tuple(std::move(LHS), L_cuda, L_type);
     
       
 
@@ -2246,7 +2256,7 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     {
       //std::cout << "Returning tok space with " << SeenTabs << " tabs. \n\n\n";
       getNextToken();
-      return std::make_tuple(std::move(LHS), L_cuda);
+      return std::make_tuple(std::move(LHS), L_cuda, L_type);
     }
 
     int BinOp = CurTok;
@@ -2271,11 +2281,11 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     if(CurTok==':')
     {
       getNextToken();
-      return std::make_tuple(std::move(LHS),L_cuda);
+      return std::make_tuple(std::move(LHS), L_cuda, L_type);
     }
 
     if (CurTok==')')
-      return std::make_tuple(std::move(LHS),L_cuda);
+      return std::make_tuple(std::move(LHS), L_cuda, L_type);
 
     
     getNextToken(); // eat binop
@@ -2291,7 +2301,7 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
     
     auto RHS = ParseUnary(class_name); // Returns an identifier, number or expression result
     if (!RHS)
-      return std::make_tuple(nullptr,0);
+      return std::make_tuple(nullptr,0,"float");
 
 
     if (RHS->GetType()=="tensor")
@@ -2302,6 +2312,8 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       R_cuda=type_object;
     if (RHS->GetType()=="str")
       R_cuda = type_string;
+    
+    R_type = RHS->GetType();
     
     
     
@@ -2318,23 +2330,33 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       auto tuple = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
       RHS = std::move(std::get<0>(tuple));
       R_cuda = std::get<1>(tuple);
+      R_type = std::get<2>(tuple);
 
 
       if (!RHS)
-        return std::make_tuple(nullptr,0);
+        return std::make_tuple(nullptr,0,"float");
       
     }
 
 
     //std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
     //std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n";
-    //std::cout << "L type: " << L_cuda << " R type: " << R_cuda << "\n\n";
+    
+    std::string op_type = L_type + "_";
+    op_type = op_type + R_type;
+    std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
+    std::cout << "op type: " << op_type << ".\n";
+    std::string return_type = ops_type_return[op_type];
+    std::cout << "return type: " << return_type << "...\n";
+
+
+
 
 
     if (L_cuda==type_string||R_cuda==type_string)
     {
       LHS = std::make_unique<ConcatStringsExprAST>(BinOp, std::move(LHS), std::move(RHS));
-      LHS->SetType("str");
+      LHS->SetType(return_type);
     }
     else if (R_cuda==type_object)
     {
@@ -2346,25 +2368,25 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
       //std::cout << "\nParse BinaryTensorPinned " << ReverseToken(BinOp) <<  "\n";
       LHS = std::make_unique<BinaryTensorPinnedExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
-      LHS->SetType("tensor");
+      LHS->SetType(return_type);
     }
     else if (L_cuda==type_pinned_tensor && R_cuda==type_float)
     {
       LHS = std::make_unique<BinaryPinnedScalarExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
-      LHS->SetType("pinned_tensor");
+      LHS->SetType(return_type);
     }
     else if (L_cuda==type_pinned_tensor && R_cuda==type_tensor)
     {
       LHS = std::make_unique<BinaryPinnedAndTensorExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
-      LHS->SetType("pinned_tensor");
+      LHS->SetType(return_type);
     }
     else if (L_cuda==type_tensor && R_cuda==type_float)
     {
       LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
-      LHS->SetType("tensor");  
+      LHS->SetType(return_type);  
     }
     else if (L_cuda==type_float && R_cuda==type_tensor)
     {
@@ -2392,16 +2414,15 @@ std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
           LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(LHS), std::move(RHS));
       }
-      LHS->SetType("tensor");  
-      L_cuda=type_tensor;
-      R_cuda=type_float;
+      LHS->SetType(return_type);  
+      // L_cuda=type_tensor;
+      // R_cuda=type_float;
     }
     else if (L_cuda==type_tensor && R_cuda==type_tensor)
     { 
       LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
                                                       std::move(LHS), std::move(RHS));
-      R_cuda=type_float;
-      LHS->SetType("tensor");
+      LHS->SetType(return_type);
     }
     else
       LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));

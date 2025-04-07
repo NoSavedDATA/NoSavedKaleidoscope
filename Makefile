@@ -80,9 +80,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 $(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
+	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
 
 # $(OBJ): $(SRC)
 # 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
+
 
 
 clean:

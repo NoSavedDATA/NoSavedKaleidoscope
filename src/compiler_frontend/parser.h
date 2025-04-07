@@ -4,6 +4,7 @@
 
 
 #include <map>
+#include <string>
 #include <vector>
 
 #include "include.h"
@@ -18,6 +19,7 @@ using namespace llvm;
 
 
 
+extern std::map<std::string, std::string> ops_type_return;
 
 
 std::unique_ptr<ExprAST> ParseExpression(std::string class_name="");
@@ -174,7 +176,7 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name="");
   
   /// binoprhs
   ///   ::= ('+' unary)*
-std::tuple<std::unique_ptr<ExprAST>, int> ParseBinOpRHS(int ExprPrec,
+std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPrec,
                                                 std::unique_ptr<ExprAST> LHS,
                                                 std::string class_name=""); 
   

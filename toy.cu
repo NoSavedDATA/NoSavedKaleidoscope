@@ -5599,6 +5599,14 @@ int main() {
   native_fn = concat_str_vec(native_methods, native_functions);
 
 
+
+  ops_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
+                     {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
+                     {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
+                     {"object_object", "object"}, {"str_object", "object"}};
+
+
+
   native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward",
                     "ReluForward", "LSTMForward", "EmbeddingForward", "MHSAForward", "LinearForward"};
 

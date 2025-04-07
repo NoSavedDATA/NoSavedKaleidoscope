@@ -10,7 +10,7 @@
 #include "modules.h"
 
 Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
-  std::cout << "\n\n\nName solver type: " << Type << "\n\n\n\n";
+  // std::cout << "\n\n\nName solver type: " << Type << "\n\n\n\n";
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
