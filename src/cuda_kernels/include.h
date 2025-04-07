@@ -3,7 +3,9 @@
 
 #include "activation_functions/include.h"
 #include "dropout/include.h"
+#include "image_processing/include.h"
 #include "loss_functions/include.h"
+#include "type_cast/include.h"
 #include "atomic_kernels.cu"
 #include "calculate_grids.h"
 #include "dim.h"

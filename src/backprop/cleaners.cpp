@@ -1,6 +1,6 @@
 
-#include "../common/extension_functions.h"
 #include "../codegen/scope.h"
+#include "../common/include.h"
 #include "cleaners.h"
 
 
@@ -113,4 +113,78 @@ void CleanThreadTensors(std::string scope, int thread_id)
   threaded_Tensors_to_free[thread_id].erase(scope);
   threaded_tensors_to_pool[thread_id].erase(scope);
   threaded_tensors_sent_to_pool[thread_id].erase(scope);
+}
+
+
+
+int DoesTreeContainWeight(Tensor *back_node)
+{
+  if(back_node==nullptr)
+    return 0;
+  
+  if(back_node->weight)
+    return 1;
+
+  //if(in_int(back_node->op, activation_ops))
+  //  return 1;
+  
+  return DoesTreeContainWeight(back_node->L_Node) + DoesTreeContainWeight(back_node->R_Node);
+}
+
+
+void ForwardCleanupToPool(Tensor *back_node, std::string scope)
+{
+  if(back_node==nullptr||back_node->weight)
+    return;
+  
+
+  
+  if (!in_str(scope, scopes));
+    scopes.push_back(scope);
+
+  ForwardCleanupToPool(back_node->L_Node, scope);
+  ForwardCleanupToPool(back_node->R_Node, scope);
+
+  
+  to_pool_forward(back_node->dims_prod, back_node->tensor_ptr, scope, "");
+  to_free_tensor_forward(back_node, scope);
+}
+
+
+void CleanScopeTensors(std::string scope)
+{
+  for(Tensor *tensor : forward_Tensors_to_free[scope])
+    delete tensor;
+
+  std::vector<float*> scope_tensors_ptrs;
+
+  //for(auto &pair : scope_tensors[scope])
+  //  scope_tensors_ptrs.push_back(pair.second);
+
+  for(std::tuple<float, float *, std::string> pair : forward_tensors_to_pool[scope])
+  {
+    //if(!in_float_ptr_vec(std::get<1>(pair), scope_tensors_ptrs))
+      move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
+
+    //move_to_pool(pair.first, pair.second);
+    //cudaCheck(cudaFree(std::get<1>(pair)));
+  }
+
+  forward_Tensors_to_free[scope].clear();
+  forward_tensors_to_pool[scope].clear();
+  forward_tensors_sent_to_pool[scope].clear();
+
+  forward_Tensors_to_free.erase(scope);
+  forward_tensors_to_pool.erase(scope);
+  forward_tensors_sent_to_pool.erase(scope);
+}
+
+extern "C" float clean_forward(char *scope, char *previous_scope, int thread_id, int has_grad)
+{//TODO: break? clears threaded tensors
+  for(std::string _scope : scopes)
+    CleanScopeTensors(_scope);
+  scopes.clear();
+  
+  cudaCheck(cudaGetLastError());
+  return 0;
 }

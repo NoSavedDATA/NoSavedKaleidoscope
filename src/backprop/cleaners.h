@@ -57,4 +57,7 @@ void ThreadedCleanupToPool(Tensor *back_node, std::string scope, int thread_id);
 void CleanThreadTensors(std::string scope, int thread_id);
 
 
+void CleanScopeTensors(std::string scope);
 
+
+extern "C" float clean_forward(char *scope, char *previous_scope, int thread_id, int has_grad);

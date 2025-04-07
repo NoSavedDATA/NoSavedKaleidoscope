@@ -13,6 +13,7 @@
 #include "calculate_grids.h"
 #include "dim_kernels.h"
 #include "handles.h"
+#include "template_dim_kernels.h"
 
 
 
@@ -515,4 +516,22 @@ void gather_last_dim_backward(float *dx, float *dy, Tensor *node)
   //PrintTensorF(idx, 1, node->R_Node->dims_prod);
   //PrintTensorF(dx, dims[0], dims[1]);
 
+}
+
+
+inline void transpose(Tensor *tensor, int thread_id, cudaStream_t stream)
+{
+
+  float *transposed = get_from_pool(thread_id, tensor->dims_prod, "transpose");
+
+
+  constexpr int tile_size{32}; // todo
+
+  dim3 grid_size(std::ceil(tensor->dims[0]/(float)tile_size), std::ceil(tensor->dims[1]/(float)tile_size));
+  dim3 block_size(tile_size, 8);
+
+  transpose_kernel<tile_size, 8><<<grid_size, block_size, 0, stream>>>(tensor->tensor_ptr, transposed);
+
+  // move_to_pool(thread_id, tensor->dims_prod, tensor->tensor_ptr, "transpose");
+  tensor->tensor_ptr = transposed;
 }
