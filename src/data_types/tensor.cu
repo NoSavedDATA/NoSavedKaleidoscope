@@ -111,7 +111,7 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float in
 
 
 
-extern "C" void *LoadTensor(char *tensor_name){
+extern "C" void *tensor_Load(char *tensor_name, int thread_id){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   Tensor *ret = NamedTensorsT[tensor_name];
   move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");

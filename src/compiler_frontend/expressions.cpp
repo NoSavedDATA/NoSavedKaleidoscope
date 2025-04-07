@@ -301,9 +301,9 @@ UnaryExprAST::UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
   
   
   /// BinaryExprAST - Expression class for a binary operator.
-BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
+BinaryExprAST::BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
               std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+    : Op(Op), Elements(Elements), Operation(Operation), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
   
   
   

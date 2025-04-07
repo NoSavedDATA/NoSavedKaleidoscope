@@ -26,6 +26,19 @@ extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, An
   return 0;
 }
 
+extern "C" void *str_Load(char *name, int thread_id){
+  // std::cout << "Load str " << name << ".\n";
+  //char *ret = CopyString(NamedStrs[name]);
+  
+  pthread_mutex_lock(&clean_scope_mutex);
+  char *ret = NamedStrs[name];
+  pthread_mutex_unlock(&clean_scope_mutex);
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] name;
+
+  return ret;
+}
+
 
 extern "C" float StoreStrOnDemand(char *name, char *value){
   
@@ -39,18 +52,6 @@ extern "C" float StoreStrOnDemand(char *name, char *value){
   //delete[] name;
 
   return 0;
-}
-extern "C" void *LoadStrOnDemand(char *name){
-  
-  //char *ret = CopyString(NamedStrs[name]);
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  char *ret = NamedStrs[name];
-  pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
-
-  return ret;
 }
 
 

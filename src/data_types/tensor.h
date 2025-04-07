@@ -7,8 +7,8 @@
 
 
 extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
+extern "C" void *tensor_Load(char *, int);
 
-extern "C" void *LoadTensor(char *tensor_name);
 
 
 extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor);

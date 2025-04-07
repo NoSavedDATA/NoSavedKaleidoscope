@@ -40,6 +40,17 @@ extern "C" float float_Create(char *name, char *scopeless_name, float init_val, 
   return 0;
 }
 
+extern "C" float float_Load(char *object_var_name, int thread_id) {
+  
+  pthread_mutex_lock(&clean_scope_mutex);
+  float ret = NamedClassValues[object_var_name];
+  pthread_mutex_unlock(&clean_scope_mutex);
+  
+  move_to_char_pool(strlen(object_var_name)+1, object_var_name, "free");
+  //delete[] object_var_name;
+  return ret;
+}
+
 
 extern "C" void StoreOnDemand(char *name, float value){
   
@@ -58,16 +69,6 @@ extern "C" void StoreOnDemandNoFree(char *name, float value){
 }
 
 
-extern "C" float LoadOnDemand(char *object_var_name) {
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  float ret = NamedClassValues[object_var_name];
-  pthread_mutex_unlock(&clean_scope_mutex);
-  
-  move_to_char_pool(strlen(object_var_name)+1, object_var_name, "free");
-  //delete[] object_var_name;
-  return ret;
-}
 
 extern "C" float LoadOnDemandNoFree(char *object_var_name) {
   
