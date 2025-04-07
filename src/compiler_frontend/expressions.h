@@ -369,9 +369,10 @@ class ExprAST {
   class BinaryExprAST : public ExprAST {
     char Op;
     std::unique_ptr<ExprAST> LHS, RHS;
+    std::string Elements, Operation;
   
   public:
-    BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
+    BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
     Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;

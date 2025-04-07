@@ -21,6 +21,7 @@ using namespace llvm;
 
 
 std::map<std::string, std::string> ops_type_return;
+std::map<int, std::string> op_map;
 
 std::map<std::string, std::vector<std::string>> data_typeVars;
 std::map<std::string, std::string> typeVars;
@@ -146,7 +147,7 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdx(std::string class_name) {
 /// identifierexpr
 ///   ::= identifier
 ///   ::= identifier '(' expression* ')'
-std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
+std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be_string) {
   
   for(int i=0; i<Classes.size(); i++)
     if(IdentifierStr==Classes[i])  // Object object
@@ -166,7 +167,13 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
     else if (in_str(IdName, objectVars))
       type = "object";
     else
+    {
       type = "none";
+      // std::string _error = "Variable " + IdName + " not found.";
+      // return LogError(_error);
+    } 
+
+    // std::cout << "Var type is: " << type << ".\n";
 
     std::unique_ptr<ExprAST> aux;
     if (type!="none")
@@ -174,6 +181,12 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name) {
       auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
       aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
     } else {
+      if(!can_be_string)
+      {
+        std::string _error = "Variable " + IdName + " was not found in scope.";
+        return LogError(_error);
+      }  
+
       std::cout << "Returning ParseIdentifierExpr as a String Expression: " << IdName << "\n";
       aux = std::make_unique<StringExprAST>(IdName);
     }
@@ -696,12 +709,19 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   { 
     if (typeVars.find(IdName) != typeVars.end())
       type = typeVars[IdName];
-    if (in_str(IdName, objectVars))
+    else if (in_str(IdName, objectVars))
       type = "object";
-    if (functionVars.find(IdName) != functionVars.end())
+    else if (functionVars.find(IdName) != functionVars.end())
       type = "tensor";
-    if (stringMethods.find(IdName) != stringMethods.end())
+    else if (stringMethods.find(IdName) != stringMethods.end())
       type = "str";
+    else {
+      std::string _error = "Self/attribute variable " + IdName + " was not found in scope.";
+      return LogError(_error);
+      // type = "none";
+    }
+
+      
 
     std::cout << "Var type: " << type << "\n";
 
@@ -885,7 +905,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
         notes.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
         getNextToken();
       } else if (CurTok==tok_identifier)
-        notes.push_back(std::move(ParseIdentifierExpr()));
+        notes.push_back(std::move(ParseIdentifierExpr(class_name, true)));
       else {
         //notes.push_back(std::move(ParseExpression(class_name)));
         notes.push_back(std::move(ParsePrimary(class_name)));
@@ -2342,11 +2362,11 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
     //std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
     //std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n";
     
-    std::string op_type = L_type + "_";
-    op_type = op_type + R_type;
+    std::string op_elements = L_type + "_";
+    op_elements = op_elements + R_type;
     std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
-    std::cout << "op type: " << op_type << ".\n";
-    std::string return_type = ops_type_return[op_type];
+    std::cout << "op type: " << op_elements << ".\n";
+    std::string return_type = ops_type_return[op_elements];
     std::cout << "return type: " << return_type << "...\n";
 
 
@@ -2407,25 +2427,30 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
         LHS = std::make_unique<BinaryTensorScalarExprAST>('+',
                                                     std::move(RHS), std::move(LHS));
       } else {
-        if (BinOp!=':') // Avoid codegen reversing //todo: is this necessary anymore?
           LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
                                                     std::move(RHS), std::move(LHS));
-        else
-          LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
-                                                    std::move(LHS), std::move(RHS));
       }
       LHS->SetType(return_type);  
       // L_cuda=type_tensor;
       // R_cuda=type_float;
     }
-    else if (L_cuda==type_tensor && R_cuda==type_tensor)
-    { 
-      LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
-                                                      std::move(LHS), std::move(RHS));
-      LHS->SetType(return_type);
-    }
+    // else if (L_cuda==type_tensor && R_cuda==type_tensor)
+    // { 
+    //   LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
+    //                                                   std::move(LHS), std::move(RHS));
+    //   LHS->SetType(return_type);
+    // }
     else
-      LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+    {
+
+      std::cout << "Elements type: " << op_elements << ".\n";
+      std::string operation = op_map[BinOp];
+      std::string op_type = op_elements + "_" + operation;
+      std::cout << "Operation: " << op_type << ".\n";
+      std::cout << "op: " << BinOp << ".\n";
+
+      LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(LHS), std::move(RHS));
+    }
      
 
     LhsTok = RhsTok;    

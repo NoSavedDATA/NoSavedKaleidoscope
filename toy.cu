@@ -895,153 +895,6 @@ extern "C" float train()
 
 
 
-Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
-  Value *RtensorName = Builder->CreateGlobalString(RHS->GetName());
-  Value *object_name;
-
-
-  
-  // if is attribution
-  if (Op == '=') {
-  
-    seen_var_attr=true;
-
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-    
-
-    if (!LHS->GetIsVec())
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-      
-      //std::cout << "1 1 attr\n";
-
-
-      Builder->CreateCall(TheModule->getFunction("AttrTensor"),
-                          {LtensorName, RtensorPtr, scope_str, thread_id, has_grad});
-      //std::cout << "Post attr call\n\n";
-    } else
-    {
-      std::cout << "1 1 INDEXED attr\n";
-
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-
-      if(LHSE->Idx[0]->GetType()!="tensor")
-      {
-        std::vector<Value *> idx_calc_args;
-        idx_calc_args.push_back(LtensorName);
-        for (int i=0; i<LHSE->Idx.size(); i++)
-          idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
-        Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                              idx_calc_args);
-
-        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-                            {LtensorName, RtensorPtr,
-                             idx_at, thread_id});
-      } else {
-        VariableExprAST *idx = static_cast<VariableExprAST *>(LHSE->Idx[0].get());
-        Value *idx_tensor_name = idx->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-        
-        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdxTensor"), {LtensorName, idx_tensor_name, RtensorPtr, thread_id});
-
-      }
-    }
-
-    seen_var_attr=false;
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
-
-
-
-
-  std::string functionName = Builder->GetInsertBlock()->getParent()->getName().str();
-  std::cout << "\nTensor Tensor for function: " << functionName << "\n";
-  int forward_func = 0;
-  if(ends_with(functionName, "forward"))
-    forward_func = 1;
-  forward_func = 1; // TODO: RemoveLastDim this line
-
-
-
-  
-  Value *LtensorPtr = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-  Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-
-
-
-  if (!LtensorPtr || !RtensorPtr)
-    return nullptr;
-
-  Function *CudaFn;
-
-  std::cout << "Tensor tensor: " << LHS->GetName() << ", " << RHS->GetName() << "\n";
-    
-
-
-  Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
-  
-  /*
-  void *vec = &NamedDims[LHS->GetName()];
-  Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
-  LLVMValue = Builder->CreateIntToPtr(LLVMValue, int8PtrTy);
-  */
-
-  
-  Value *new_dims;
-
-  switch (Op)
-  {
-  case '@':
-    return Builder->CreateCall(TheModule->getFunction("CudaMult"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, thread_id});
-  case '/':
-  {
-    return Builder->CreateCall(TheModule->getFunction("CudaDiv"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, thread_id});
-  }
-  case '+':
-    return Builder->CreateCall(TheModule->getFunction("CudaAdd"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, thread_id});
-  case '*':
-    return Builder->CreateCall(TheModule->getFunction("CudaHadamard"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, thread_id});
-  case '-':
-    return Builder->CreateCall(TheModule->getFunction("CudaSub"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, thread_id});
-  case tok_equal:
-    return Builder->CreateCall(TheModule->getFunction("CudaEqual"),
-                               {is_forward_func, LtensorPtr, RtensorPtr, thread_id}, "cudaequal");
-  case ':':
-    return LtensorPtr;
-  default:
-    break;
-  }
-  
-
-  std::string _error = "The operator " + ReverseToken(Op) + " is not implemented for operations between tensors";
-  LogErrorS(_error);
-  
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {LtensorName, RtensorName};
-  return Builder->CreateCall(F, Ops, "binop");
-}
 
 
 
@@ -1327,158 +1180,6 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
 
 
-Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // Special case '=' because we don't want to emit the LHS as an expression.
-  if (Op == '=') {
-
-    //std::cout << "\n0 0 ATTRIBUTION" << "\n\n\n";
-
-    seen_var_attr=true;
-    // Assignment requires the LHS to be an identifier.
-    // This assume we're building without RTTI because LLVM builds that way by
-    // default.  If you build LLVM with RTTI this can be changed to a
-    // dynamic_cast for automatic error checking.
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-
-
-    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
-    std::string Lname = std::get<0>(name_solver->Names[0]);
-    std::string LType = LHS->GetType();
-
-
-    if (!LHSE)
-      return LogErrorV("'=' destiny must be a variable.");
-    // Codegen the RHS.
-    
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-
-    if (!Val)
-    {
-      seen_var_attr=false;
-      return nullptr;
-    }
-
-    // Look up the name.
-    if (LType=="float") {
-      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-
-    } else if (LType=="str") {
-
-
-      Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-                                                   
-
-    } else if (LType=="str_vec") {
-
-      //std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
-      
-      Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-
-    } else if (LType=="float_vec") {
-
-      //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
-
-      
-
-      if(LHS->GetIsVec())
-      {
-        VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
-        
-
-        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
-                                                {Lvar_name,
-                                                  LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                                  Val});
-
-      } else
-        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
-                                                {Lvar_name,
-                                                  Val});
-        
-
-    } else {
-      
-      seen_var_attr=false;
-      
-      
-      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-      
-
-      //std::string _error = "Could not find variable " + Lname + ".";
-      //return LogErrorV(_error);
-    }
-
-    seen_var_attr=false;
-    return Val;
-  }
-
-
-  
-
-  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-  
-  if (!L || !R)
-    return nullptr;
-
-
-    switch (Op) {
-    case '+':
-      return Builder->CreateFAdd(L, R, "addtmp");
-    case ':':
-      return L;
-    case tok_space:
-      return R;
-    case '-':
-      return Builder->CreateFSub(L, R, "subtmp");
-    case '*':
-      return Builder->CreateFMul(L, R, "multmp");
-    case '/':
-      return Builder->CreateFDiv(L, R, "divtmp");
-    case '%':
-      return Builder->CreateFRem(L, R, "remtmp");
-    case 77:
-      return LogErrorV("GOTCHA");
-    case '<':
-      L = Builder->CreateFCmpULT(L, R, "cmptmp");
-      // Convert bool 0/1 to float 0.0 or 1.0
-      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-    case '>':
-      L = Builder->CreateFCmpULT(R, L, "cmptmp");
-      // Convert bool 0/1 to float 0.0 or 1.0
-      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-    case tok_equal:
-      L = Builder->CreateFCmpUEQ(L, R, "cmptmp");
-      // Convert bool 0/1 to float 0.0 or 1.0
-      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-    case tok_diff:
-      L = Builder->CreateFCmpUNE(L, R, "cmptmp");
-      // Convert bool 0/1 to float 0.0 or 1.0
-      return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-    default:
-      break;
-    }
-  
-
-  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
-  // a call to it.
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {L, R};
-  return Builder->CreateCall(F, Ops, "binop");
-}
 
 
 
@@ -1520,7 +1221,7 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
                                                 {scope_str, tensor_name});
         
 
-      Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("LoadTensor"),
+      Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("tensor_Load"),
                                               {tensor_name});
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
 
@@ -1705,24 +1406,13 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-
   
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
 
 
-
-
-  //std::cout << "\n\nFinish codegen for: " << functionName <<  "\n";
-
-
-  
-
   for (int i=0; i < Bodies.size(); i++)
     Bodies[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-  
-
-  
   
 
   PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
@@ -2522,7 +2212,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
       if (in_str(Callee, return_tensor_methods))
       {
-        ArgsV[1] = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {ArgsV[1]});
+        ArgsV[1] = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {ArgsV[1]});
         must_free_arg0 = false;
       }
 
@@ -2610,7 +2300,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope, thread_id, has_grad);
 
-      arg = Builder->CreateCall(TheModule->getFunction("LoadTensor"), {arg});
+      arg = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {arg});
     }
     else
       arg = Args[i]->codegen(fa, _scope, previous_scope, thread_id, has_grad);
@@ -2655,7 +2345,7 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     }
     else if (CalleeOverride=="SplitString")
     {
-      Value *V = Builder->CreateCall(TheModule->getFunction("LoadStrOnDemand"), 
+      Value *V = Builder->CreateCall(TheModule->getFunction("str_Load"), 
                                      {Builder->CreateGlobalString(PreDot)});
       
       ret = Builder->CreateCall(getFunction("SplitString"), 
@@ -3471,13 +3161,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("CudaDiv", CudaDivTy);
 
 
-  //
-  FunctionType *LoadTensorTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy}, 
-      false
-  );
-  TheModule->getOrInsertFunction("LoadTensor", LoadTensorTy);
 
 
   //
@@ -4521,13 +4204,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("LoadStrVecOnDemand", LoadStrVecOnDemandTy);
 
 
-  //
-  FunctionType *LoadFloatVecOnDemandTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("LoadFloatVecOnDemand", LoadFloatVecOnDemandTy);
 
   
   //
@@ -4539,13 +4215,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
 
   
-  //
-  FunctionType *LoadStrOnDemandTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("LoadStrOnDemand", LoadStrOnDemandTy);
 
 
   //
@@ -4912,13 +4581,40 @@ static void InitializeModule() {
   
 
   //
-  FunctionType *LoadOnDemandTy = FunctionType::get(
+  FunctionType *float_LoadTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
-  TheModule->getOrInsertFunction("LoadOnDemand", LoadOnDemandTy);
+  TheModule->getOrInsertFunction("float_Load", float_LoadTy);
+
+  FunctionType *float_vec_LoadTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("float_vec_Load", float_vec_LoadTy);
+
+  FunctionType *str_LoadTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("str_Load", str_LoadTy);
+
+  FunctionType *str_vec_LoadTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
   
+  FunctionType *tensor_LoadTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      false
+  );
+  TheModule->getOrInsertFunction("tensor_Load", tensor_LoadTy);
 
   //
   FunctionType *LoadOnDemandNoFreeTy = FunctionType::get(
@@ -5604,6 +5300,10 @@ int main() {
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"}};
+
+  op_map = {{'*', "mult"}, {'+', "sum"}, {'-', "subtract"}, {'/', "divide"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
+            {tok_diff, "different"}, {'/', "divide"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"},
+            {77, "error"}};
 
 
 

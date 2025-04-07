@@ -20,6 +20,7 @@ using namespace llvm;
 
 
 extern std::map<std::string, std::string> ops_type_return;
+extern std::map<int, std::string> op_map;
 
 
 std::unique_ptr<ExprAST> ParseExpression(std::string class_name="");
@@ -47,7 +48,7 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdx(std::string class_name="");
 /// identifierexpr
 ///   ::= identifier
 ///   ::= identifier '(' expression* ')'
-std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name=""); 
+std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="", bool can_be_string=false); 
 
 
 

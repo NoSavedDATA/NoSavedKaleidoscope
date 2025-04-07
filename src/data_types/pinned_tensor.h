@@ -15,4 +15,3 @@
 
 extern "C" float pinned_tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
 
-extern "C" void CreatePinnedTensorOnDemand(char *tensor_name, char *init);

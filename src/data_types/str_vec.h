@@ -5,6 +5,7 @@
 
 
 extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
+extern "C" void *str_vec_Load(char *, int);
 
 
 extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value);
