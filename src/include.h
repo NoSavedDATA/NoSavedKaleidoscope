@@ -12,6 +12,7 @@
 #include"mma/include.h"
 #include"networks/include.h"
 #include"notators/include.h"
+#include"optimizers/include.h"
 #include"os/include.h"
 #include"processing/include.h"
 #include"tensor/include.h"

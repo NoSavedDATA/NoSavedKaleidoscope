@@ -29,3 +29,6 @@ extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float
 
 
 void gather_last_dim_backward(float *dx, float *dy, Tensor *node);
+
+
+inline void transpose(Tensor *tensor, int thread_id, cudaStream_t stream); 
