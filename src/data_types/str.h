@@ -3,9 +3,9 @@
 
 extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, AnyVector *notes_vector, int thread_id, char *scope);
 extern "C" void *str_Load(char *, int);
+extern "C" float str_Store(char *, char *, int);
 
 
-extern "C" float StoreStrOnDemand(char *name, char *value);
 
 
 extern "C" float PrintStr(char* value);

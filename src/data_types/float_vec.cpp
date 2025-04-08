@@ -26,7 +26,7 @@ extern "C" void *float_vec_Load(char *object_var_name, int thread_id) {
   return ret;
 }
 
-extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value){
+extern "C" float float_vec_Store(char *name, std::vector<float> value, int thread_id){
   std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
@@ -35,7 +35,7 @@ extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value){
   return 0;
 }
 
-extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value){
+extern "C" float float_vec_Store_Idx(char *name, float idx, float value, int thread_id){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name][(int)idx] = value;

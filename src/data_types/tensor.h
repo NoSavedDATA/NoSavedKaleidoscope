@@ -9,6 +9,9 @@
 extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
 extern "C" void *tensor_Load(char *, int);
 
+extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int thread_id, int has_grad);
+
+
 
 
 extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor);

@@ -3,7 +3,6 @@
 #include "tensor_struct.h"
 
 
-extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int thread_id, int has_grad);
 
 // Copies a pinned_tensor's reserved memory into a tensor.
 extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor, int thread_id);

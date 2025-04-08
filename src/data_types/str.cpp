@@ -40,7 +40,7 @@ extern "C" void *str_Load(char *name, int thread_id){
 }
 
 
-extern "C" float StoreStrOnDemand(char *name, char *value){
+extern "C" float str_Store(char *name, char *value, int thread_id){
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   
