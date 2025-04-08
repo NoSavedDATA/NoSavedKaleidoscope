@@ -76,11 +76,12 @@ extern "C" void FreeChar(char *_char) {
 
 extern "C" char *CopyString(char *in_str)
 {
+
   size_t length = strlen(in_str) + 1;
   char *copied = get_from_char_pool(length, "copy");
   memcpy(copied, in_str, length);
 
-  //std::cout << "copy " << in_str << "\n";
+  // std::cout << "copy " << in_str << "\n";
 
   return copied;
 }

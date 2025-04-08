@@ -1366,6 +1366,9 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   
 
   int thread = 0;
+  Value *scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Create"), {}); 
+  // Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
+  
 
   //TODO: Solve scope_str discontinuity on async functions
   if (starts_with(functionName.c_str(), "__async_"))
@@ -1382,11 +1385,13 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
     has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
 
+    // Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {scope_struct, scope_str});
+    // Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
+    // Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, has_grad}); 
 
   }
   
 
-  // Value *scope_mangler = Builder->CreateCall(TheModule->getFunction("scope_mangler_Create"), {});
 
 
   //std::cout << "\n\n\nFunction name: " << functionName << "\n";
@@ -1580,8 +1585,6 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     //std::cout << "\nCall codegen for argument n°: " << i << ".\n";
 
     // deal with firstarg on self.mcts(self.actions)
-    Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
-    //Value *fa = first_arg;
 
     //deal with scope on model.forward()
     Value *_scope = (!in_str(tgt_function, native_methods)) ? previous_scope : scope_str;
@@ -1599,7 +1602,10 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
       arg = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {arg});
     }
     else
+    {
+      Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
       arg = Args[i]->codegen(fa, _scope, previous_scope, thread_id, has_grad);
+    }
 
   
     ArgsV.push_back(arg);
