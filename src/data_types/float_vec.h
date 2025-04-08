@@ -10,9 +10,9 @@ extern "C" void *float_vec_Load(char *, int);
 
 
 
-extern "C" float StoreFloatVecOnDemand(char *name, std::vector<float> value);
+extern "C" float float_vec_Store(char *, std::vector<float>, int);
 
-extern "C" float StoreFloatVecOnDemandOnIdx(char *name, float idx, float value);
+extern "C" float float_vec_Store_Idx(char *, float, float, int);
 
 
 

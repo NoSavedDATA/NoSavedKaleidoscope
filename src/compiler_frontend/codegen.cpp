@@ -68,45 +68,6 @@ Value *StringExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 Value *VarExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-  std::vector<Value *> OldBindings;
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-    // Emit the initializer before adding the variable to scope, this prevents
-    // the initializer from referencing the variable itself, and permits stuff
-    // like this:
-    //  var a = 1 in
-    Value *InitVal;
-    if (Init) {
-      InitVal = Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-      if (!InitVal)
-        return nullptr;
-    } else { // If not specified, use 0.0.
-      InitVal = ConstantFP::get(*TheContext, APFloat(0.0));
-    }
-
-
-
-    Value *var_name = Builder->CreateGlobalString(VarName);
-    var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                        {scope_str, var_name});
-
-
-    Builder->CreateCall(TheModule->getFunction("AddFloatToScopeCleanList"),
-                                        {scope_str, var_name});
-
-    Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                        {var_name, InitVal});
-                                                  
-    
-  }
-
 
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -125,7 +86,6 @@ Value *DataExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
-  std::cout << "EXECUTING DATA CODEGEN.\n";
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
@@ -510,7 +470,7 @@ Value *VariableExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
   
 
   std::string load_fn = type + "_Load";
-  std::cout << "Load fn: " << load_fn << ".\n";
+  // std::cout << "Load fn: " << load_fn << ".\n";
   V = Builder->CreateCall(TheModule->getFunction(load_fn),
                                                   {var_name, thread_id});
   return V;
@@ -678,172 +638,6 @@ Value *ObjectVecIdxExprAST::codegen(Value *first_arg, Value *scope_str, Value *p
 
 
 
-Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // Special case '=' because we don't want to emit the LHS as an expression.
-
-  if (Op == '=') {
-
-    //std::cout << "\n0 0 ATTRIBUTION" << "\n\n\n";
-
-    seen_var_attr=true;
-    // Assignment requires the LHS to be an identifier.
-    // This assume we're building without RTTI because LLVM builds that way by
-    // default.  If you build LLVM with RTTI this can be changed to a
-    // dynamic_cast for automatic error checking.
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-
-
-    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
-    std::string Lname = std::get<0>(name_solver->Names[0]);
-    std::string LType = LHS->GetType();
-
-
-    if (!LHSE)
-      return LogErrorV("'=' destiny must be a variable.");
-    // Codegen the RHS.
-    
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-
-    if (!Val)
-    {
-      seen_var_attr=false;
-      return nullptr;
-    }
-
-    // Look up the name.
-    if (LType=="float") {
-      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-
-    } else if (LType=="str") {
-
-
-      Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-                                                   
-
-    } else if (LType=="str_vec") {
-
-      //std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
-      
-      Builder->CreateCall(TheModule->getFunction("StoreStrVecOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-
-    } else if (LType=="float_vec") {
-
-      //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
-
-      
-
-      if(LHS->GetIsVec())
-      {
-        VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
-        
-
-        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
-                                                {Lvar_name,
-                                                  LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                                  Val});
-
-      } else
-        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
-                                                {Lvar_name,
-                                                  Val});
-        
-
-    } else {
-      
-      seen_var_attr=false;
-      
-      
-      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
-                                                  {Lvar_name,
-                                                   Val});
-      
-
-      //std::string _error = "Could not find variable " + Lname + ".";
-      //return LogErrorV(_error);
-    }
-
-    seen_var_attr=false;
-    return Val;
-  }
-
-
-  
-
-  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-  
-  if (!L || !R)
-    return nullptr;
-
-
-  if (Elements=="float_float")
-  {
-
-    switch (Op) {
-      case '+':
-        return Builder->CreateFAdd(L, R, "addtmp");
-      case ':':
-        return L;
-      case tok_space:
-        return R;
-      case '-':
-        return Builder->CreateFSub(L, R, "subtmp");
-      case '*':
-        return Builder->CreateFMul(L, R, "multmp");
-      case '/':
-        return Builder->CreateFDiv(L, R, "divtmp");
-      case '%':
-        return Builder->CreateFRem(L, R, "remtmp");
-      case 77:
-        return LogErrorV("GOTCHA");
-      case '<':
-        L = Builder->CreateFCmpULT(L, R, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-      case '>':
-        L = Builder->CreateFCmpULT(R, L, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-      case tok_equal:
-        L = Builder->CreateFCmpUEQ(L, R, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-      case tok_diff:
-        L = Builder->CreateFCmpUNE(L, R, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
-      default:
-        break;
-      }
-  } else {
-    std::cout << "Codegen for operation: " << Operation << ".\n";
-
-    
-
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
-
-
-
-  
-
-  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
-  // a call to it.
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {L, R};
-  return Builder->CreateCall(F, Ops, "binop");
-}
 
 
 
@@ -1255,6 +1049,138 @@ Value *BinaryPinnedAndTensorExprAST::codegen(Value *first_arg, Value *scope_str,
   return Builder->CreateCall(F, Ops, "binop");
 }
 
+
+
+
+
+Value *BinaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  if (Op == '=') {
+
+
+    seen_var_attr=true;
+    // Assignment requires the LHS to be an identifier.
+    // This assume we're building without RTTI because LLVM builds that way by
+    // default.  If you build LLVM with RTTI this can be changed to a
+    // dynamic_cast for automatic error checking.
+
+
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+
+
+    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+    std::string Lname = std::get<0>(name_solver->Names[0]);
+    std::string LType = LHS->GetType();
+
+
+    if (!LHSE)
+      return LogErrorV("'=' destiny must be a variable.");
+
+    // Codegen the RHS.
+    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    if (!Val)
+    {
+      seen_var_attr=false;
+      return nullptr;
+      
+    }
+
+    std::string store_op = LType + "_Store";
+
+
+
+    if(LHS->GetIsVec())
+    {
+      VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+
+      store_op = store_op + "_Idx";
+      
+      Builder->CreateCall(TheModule->getFunction(store_op),
+                                              {Lvar_name,
+                                                LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                                Val, thread_id});
+
+    } else { 
+        Builder->CreateCall(TheModule->getFunction(store_op), {Lvar_name, Val, thread_id});
+    }
+    
+
+    seen_var_attr=false;
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  }
+
+
+  
+
+  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  
+  if (!L || !R)
+    return nullptr;
+
+
+  // if (Elements=="float_float")
+  // {
+
+    switch (Op) {
+      case '+':
+        return Builder->CreateFAdd(L, R, "addtmp");
+      case ':':
+        return L;
+      case tok_space:
+        return R;
+      case '-':
+        return Builder->CreateFSub(L, R, "subtmp");
+      case '*':
+        return Builder->CreateFMul(L, R, "multmp");
+      case '/':
+        return Builder->CreateFDiv(L, R, "divtmp");
+      case '%':
+        return Builder->CreateFRem(L, R, "remtmp");
+      case 77:
+        return LogErrorV("GOTCHA");
+      case '<':
+        L = Builder->CreateFCmpULT(L, R, "cmptmp");
+        // Convert bool 0/1 to float 0.0 or 1.0
+        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+      case '>':
+        L = Builder->CreateFCmpULT(R, L, "cmptmp");
+        // Convert bool 0/1 to float 0.0 or 1.0
+        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+      case tok_equal:
+        L = Builder->CreateFCmpUEQ(L, R, "cmptmp");
+        // Convert bool 0/1 to float 0.0 or 1.0
+        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+      case tok_diff:
+        L = Builder->CreateFCmpUNE(L, R, "cmptmp");
+        // Convert bool 0/1 to float 0.0 or 1.0
+        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+      default:
+        break;
+      }
+  // } else {
+    // std::cout << "Codegen for operation: " << Operation << ".\n";
+
+    
+
+    // return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // }
+
+
+
+  
+
+  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
+  // a call to it.
+  Function *F = getFunction(std::string("binary") + Op);
+  assert(F && "Operator not found.");
+
+  Value *Ops[] = {L, R};
+  return Builder->CreateCall(F, Ops, "binop");
+}
 
 
 

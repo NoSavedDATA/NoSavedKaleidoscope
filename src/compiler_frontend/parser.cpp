@@ -2434,12 +2434,12 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
       // L_cuda=type_tensor;
       // R_cuda=type_float;
     }
-    // else if (L_cuda==type_tensor && R_cuda==type_tensor)
-    // { 
-    //   LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
-    //                                                   std::move(LHS), std::move(RHS));
-    //   LHS->SetType(return_type);
-    // }
+    else if (L_cuda==type_tensor && R_cuda==type_tensor)
+    { 
+      LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
+                                                      std::move(LHS), std::move(RHS));
+      LHS->SetType(return_type);
+    }
     else
     {
 

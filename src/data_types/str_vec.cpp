@@ -31,12 +31,11 @@ extern "C" void *str_vec_Load(char *object_var_name, int thread_id) {
 }
 
 
-extern "C" float StoreStrVecOnDemand(char *name, std::vector<char *> value){
+extern "C" void str_vec_Store(char *name, std::vector<char *> value, int thread_id){
   std::cout << "STORING " << name << " on demand as StrVec type.\n";
   ClassStrVecs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
-  return 0;
 }
 
 

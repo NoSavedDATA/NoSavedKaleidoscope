@@ -1088,16 +1088,16 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
     // Look up the name.
     if (LType=="float") {
-      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+      Builder->CreateCall(TheModule->getFunction("float_Store"),
                                                   {Lvar_name,
-                                                   Val});
+                                                   Val, thread_id});
 
     } else if (LType=="str") {
 
 
-      Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
+      Builder->CreateCall(TheModule->getFunction("str_Store"),
                                                   {Lvar_name,
-                                                   Val});
+                                                   Val, thread_id});
                                                    
 
     } else if (LType=="str_vec") {
@@ -1115,13 +1115,13 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
         VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
         
 
-        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemandOnIdx"),
+        Builder->CreateCall(TheModule->getFunction("float_vec_Store_Idx"),
                                                 {Lvar_name,
                                                   LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                                  Val});
+                                                  Val, thread_id});
 
       } else
-        Builder->CreateCall(TheModule->getFunction("StoreFloatVecOnDemand"),
+        Builder->CreateCall(TheModule->getFunction("float_vec_Store"),
                                                 {Lvar_name,
                                                   Val});
         
@@ -1131,9 +1131,9 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
       seen_var_attr=false;
       
       
-      Builder->CreateCall(TheModule->getFunction("StoreOnDemand"),
+      Builder->CreateCall(TheModule->getFunction("float_Store"),
                                                   {Lvar_name,
-                                                   Val});
+                                                   Val, thread_id});
       
 
       //std::string _error = "Could not find variable " + Lname + ".";
@@ -2794,8 +2794,8 @@ Function *FunctionAST::codegen() {
                                     {scope_str, var_name});
 
 
-      Builder->CreateCall(TheModule->getFunction("StoreStrOnDemand"),
-                                                  {var_name, &Arg});
+      Builder->CreateCall(TheModule->getFunction("str_Store"),
+                                                  {var_name, &Arg, thread_id});
     }
     else if (type!="tensor")
     {
@@ -4204,42 +4204,22 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("LoadStrVecOnDemand", LoadStrVecOnDemandTy);
 
 
-
-  
-  //
-  FunctionType *StoreStrOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("StoreStrOnDemand", StoreStrOnDemandTy);
-
-  
-
-
-  //
-  FunctionType *StoreStrVecOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("StoreStrVecOnDemand", StoreStrVecOnDemandTy);
   
   
   //
-  FunctionType *StoreFloatVecOnDemandTy = FunctionType::get(
+  FunctionType *float_vec_StoreTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
-  TheModule->getOrInsertFunction("StoreFloatVecOnDemand", StoreFloatVecOnDemandTy);
+  TheModule->getOrInsertFunction("float_vec_Store", float_vec_StoreTy);
 
-  FunctionType *StoreFloatVecOnDemandOnIdxTy = FunctionType::get(
+  FunctionType *float_vec_Store_IdxTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
       false
   );
-  TheModule->getOrInsertFunction("StoreFloatVecOnDemandOnIdx", StoreFloatVecOnDemandOnIdxTy);
+  TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
 
 
   //
@@ -4554,13 +4534,26 @@ static void InitializeModule() {
 
   
   // 
-  FunctionType *StoreOnDemandTy = FunctionType::get(
+  FunctionType *float_StoreTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
       false //
   );
-  TheModule->getOrInsertFunction("StoreOnDemand", StoreOnDemandTy);
+  TheModule->getOrInsertFunction("float_Store", float_StoreTy);
 
+  FunctionType *str_StoreTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false //
+  );
+  TheModule->getOrInsertFunction("str_Store", str_StoreTy);
+
+  FunctionType *str_vec_StoreTy = FunctionType::get(
+      Type::getVoidTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false //
+  );
+  TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
   
   // 
   FunctionType *StoreOnDemandNoFreeTy = FunctionType::get(
@@ -4583,35 +4576,35 @@ static void InitializeModule() {
   //
   FunctionType *float_LoadTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("float_Load", float_LoadTy);
 
   FunctionType *float_vec_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("float_vec_Load", float_vec_LoadTy);
 
   FunctionType *str_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("str_Load", str_LoadTy);
 
   FunctionType *str_vec_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
   
   FunctionType *tensor_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("tensor_Load", tensor_LoadTy);

@@ -32,7 +32,7 @@ extern "C" float float_Create(char *name, char *scopeless_name, float init_val, 
   NamedClassValues[name] = init_val;
   pthread_mutex_unlock(&clean_scope_mutex);
   
-  // move_to_char_pool(strlen(name)+1, name, "StoreOnDemand");
+  // move_to_char_pool(strlen(name)+1, name, "float_Store");
 
   delete[] name;
   delete[] scopeless_name;
@@ -52,12 +52,12 @@ extern "C" float float_Load(char *object_var_name, int thread_id) {
 }
 
 
-extern "C" void StoreOnDemand(char *name, float value){
-  
+extern "C" void float_Store(char *name, float value, int thread_id){
+  // std::cout << "Float store: " << name << " on thread id: " << thread_id << ".\n";
   pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = value;
   pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "StoreOnDemand");
+  move_to_char_pool(strlen(name)+1, name, "float_Store");
   //delete[] name;
 }
 
