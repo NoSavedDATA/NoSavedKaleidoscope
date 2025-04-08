@@ -1,3 +1,3 @@
 #pragma once
 
-#include "scope_mangler.h"
+#include "scope_struct.h"

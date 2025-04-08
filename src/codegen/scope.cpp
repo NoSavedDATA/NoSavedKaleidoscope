@@ -298,12 +298,12 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 }
 
 
-extern "C" float print_scope(char *scope, char *previous_scope, int thread_id)
-{
+// extern "C" float print_scope(char *scope, char *previous_scope, int thread_id)
+// {
 
-  std::cout << "\n- Scope is: " << scope << ";\n";
-  std::cout << "- Previous scope was: " << previous_scope << ";\n";
-  std::cout << "- Thread id: " << thread_id << ".\n\n";
+//   std::cout << "\n- Scope is: " << scope << ";\n";
+//   std::cout << "- Previous scope was: " << previous_scope << ";\n";
+//   std::cout << "- Thread id: " << thread_id << ".\n\n";
 
-  return 0;
-}
+//   return 0;
+// }

@@ -28,5 +28,4 @@ extern "C" void CleanScopeVars(char *scope, int thread_id);
 extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_tensorc, char *previous_scope, int thread_id);
 
 
-extern "C" float print_scope(char *scope, char *previous_scope, int thread_id);
 

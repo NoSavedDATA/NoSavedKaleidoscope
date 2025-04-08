@@ -2370,7 +2370,7 @@ Function *FunctionAST::codegen() {
 
   
   // Record the function arguments in the NamedValues map.
-  Value *first_arg, *scope_str, *previous_scope, *thread_id, *has_grad;
+  Value *first_arg, *scope_str, *previous_scope, *thread_id, *has_grad, *scope_struct;
   /*
   first_arg = Builder->CreateAlloca(int8PtrTy);
   scope_str = Builder->CreateAlloca(int8PtrTy);
@@ -2387,8 +2387,22 @@ Function *FunctionAST::codegen() {
     first_arg = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     previous_scope = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+
+    scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Create"), {});
+
+    // Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {scope_struct, first_arg});
+    // Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {scope_struct, scope_str});
+    // Builder->CreateCall(TheModule->getFunction("set_scope_previous_scope"), {scope_struct, previous_scope});
+
+    // Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
+    // Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, has_grad});
+
+    // Builder->CreateCall(TheModule->getFunction("print_scope_struct"), {scope_struct});
   }
   
+
+
+
 
 
   std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
@@ -2398,6 +2412,7 @@ Function *FunctionAST::codegen() {
   bool has_self = false; 
   bool has_scope = false;
   bool has_previous_scope = false;
+  bool has_scope_struct = false;
   
 
   float val;
@@ -2413,22 +2428,24 @@ Function *FunctionAST::codegen() {
 
 
     // Default args
+    if (arg_name == "scope_struct")
+    {
+      scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {&Arg});      
+      has_scope_struct = true;
+    }
     if (arg_name == "self")
     {
-      first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
-      
+      first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});      
       has_self = true;
     }
     if (arg_name == "scope_str")
     {
-      scope_str = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
-      
+      scope_str = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg}); 
       has_scope = true;
     }
     if (arg_name == "previous_scope")
     {
-      previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});
-      
+      previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg}); 
       has_previous_scope = true;
     }
     if (arg_name == "thread_id")
@@ -3840,13 +3857,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("PrintFloatVec", PrintFloatVecTy);
 
 
-  //
-  FunctionType *print_scopeTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
-      false
-  );
-  TheModule->getOrInsertFunction("print_scope", print_scopeTy);
 
 
   //
@@ -4366,14 +4376,66 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_Create);
 
 
-  FunctionType *Scope_Mangler_CreateTy = FunctionType::get(
+  FunctionType *scope_struct_CreateTy = FunctionType::get(
       int8PtrTy,
       {},
       false 
   );
-  TheModule->getOrInsertFunction("scope_mangler_Create", Scope_Mangler_CreateTy);
+  TheModule->getOrInsertFunction("scope_struct_Create", scope_struct_CreateTy);
 
 
+  FunctionType *set_scope_first_argTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("set_scope_first_arg", set_scope_first_argTy);
+
+  FunctionType *set_scope_scopeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("set_scope_scope", set_scope_scopeTy);
+  
+  FunctionType *set_scope_previous_scopeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("set_scope_previous_scope", set_scope_previous_scopeTy);
+
+
+  FunctionType *set_scope_thread_idTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("set_scope_thread_id", set_scope_thread_idTy);
+
+  FunctionType *set_scope_has_gradTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("set_scope_has_grad", set_scope_has_gradTy);
+  
+  FunctionType *print_scopeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("print_scope_struct", print_scopeTy);
+
+  FunctionType *scope_struct_CopyTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);
+
+
+  
   //
   FunctionType *print_randomsTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
