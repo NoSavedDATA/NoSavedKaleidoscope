@@ -1366,7 +1366,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
   
 
   int thread = 0;
-  Value *scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Create"), {}); 
+  // Value *scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Create"), {}); 
+  // Value *new_scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct}); 
   // Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
   
 
@@ -1594,8 +1595,8 @@ Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
     //std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
     if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
     {
-      //if (starts_with(functionName.c_str(), "__async_"))
-      //  Builder->CreateStore(Builder->CreateGlobalString("threaded_"), _scope);
+
+      
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope, thread_id, has_grad);
 
