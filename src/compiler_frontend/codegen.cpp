@@ -1331,3 +1331,350 @@ Value *BinaryTensorTensorExprAST::codegen(Value *first_arg, Value *scope_str, Va
   Value *Ops[] = {LtensorName, RtensorName};
   return Builder->CreateCall(F, Ops, "binop");
 }
+
+
+
+
+Value *CallExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // Look up the name in the global module table.
+  std::string tgt_function = Callee;
+  
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  std::string functionName = TheFunction->getName().str();
+  std::string tgt_function_name;
+
+  //std::cout << "\n\nFunction: " << tgt_function << "\n";
+
+  int nested_function;
+  if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
+  {
+    nested_function=0;
+  }
+  else
+    nested_function=1;
+
+
+  bool has_scope = false;
+  bool changed_first_arg = false;
+  bool has_first_arg_copy = false;
+  bool must_free_arg0 = false;
+
+  Value *name;
+  
+
+  int thread = 0;
+
+  //TODO: Solve scope_str discontinuity on async functions
+  if (starts_with(functionName.c_str(), "__async_"))
+  {
+    std::cout << "\n\n\n\n\nASYNC" << "\n\n\n\n\n";
+    scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+
+    std::string copy = functionName;
+    std::string prefix = "__async_";
+
+    size_t pos = copy.find(prefix);
+    copy.erase(pos, prefix.length());
+    thread = std::stoi(copy);
+    thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
+    has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
+
+
+  }
+  
+
+  // Value *scope_mangler = Builder->CreateCall(TheModule->getFunction("scope_mangler_Create"), {});
+
+
+  //std::cout << "\n\n\nFunction name: " << functionName << "\n";
+  //std::cout << "THREAD IS: " << thread << "\n\n\n\n";
+
+
+
+  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+  previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                        {scope_str});
+
+
+  Value *_pre_dot_str = Builder->CreateGlobalString(_pre_dot);
+  Value *first_arg_copy;
+
+
+
+
+  if (isAttribute && !isSelf && !in_str(tgt_function, native_methods))
+  { // e.g: model.forward()
+    if (nested_function)
+    {
+      first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"),
+                                                    {first_arg});
+      has_first_arg_copy = true;
+    }
+    
+    
+    first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                {previous_scope, _pre_dot_str});
+
+    changed_first_arg = true;
+  }
+  
+  
+  
+
+  int target_args_size = Args.size();
+  std::vector<Value *> ArgsV;
+
+
+  if (in_str(Callee, threaded_tensor_functions))
+  {
+    std::cout << "\n\n\n\n\nCALLEE " << Callee <<" IS IN A THREAD" << "\n\n\n\n\n";
+
+    ArgsV.push_back(thread_id);
+
+    target_args_size+=1;
+  }
+  
+
+
+
+  bool is_self_of_nested_function = (nested_function==1 && isSelf);
+  
+  // Handle self or object attribute expressions
+  if(isSelf || isAttribute)
+  {
+    bool not_coding_language_method = (!in_str(tgt_function, native_methods));    
+
+    
+
+    if (not_coding_language_method)
+      tgt_function = Class+tgt_function;
+
+    if (!is_self_of_nested_function && not_coding_language_method)
+    {
+
+      _pre_dot_str = Builder->CreateCall(TheModule->getFunction("ConcatScopeAtCallExpr"),
+                {scope_str, _pre_dot_str});
+
+      first_arg = Builder->CreateCall(TheModule->getFunction("FirstArgOnDemand"),
+                                                    {first_arg,
+                                                     _pre_dot_str,
+                                                     Builder->CreateGlobalString(Class),
+                                                     Builder->CreateGlobalString(Callee),
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), nested_function),
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), isSelf),
+                                                     ConstantInt::get(Type::getInt32Ty(*TheContext), isAttribute)});
+      
+    }
+    if (is_self_of_nested_function && not_coding_language_method)
+    { // object method inside object method
+      first_arg_copy = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
+
+      //first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {first_arg});
+      first_arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                    {first_arg_copy,
+                                                     _pre_dot_str});
+      has_first_arg_copy = true;
+    }
+    changed_first_arg = not_coding_language_method;
+    
+
+    //name = NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    
+    if (CalleeOverride!="none"||in_str(Callee, native_methods))
+    { // e.g: x.view()
+    
+      if (isSelf&&!isAttribute)
+        ArgsV.push_back(first_arg);
+      if (!isSelf&&isAttribute)
+      {
+        Value *arg = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                        {previous_scope, _pre_dot_str});
+        ArgsV.push_back(arg);
+        //must_free_arg0 = true; //TODO: break?
+      }
+      
+      if (isSelf && isAttribute)
+      { // e.g: self.can_load_.first_nonzero()
+        // Extend first arg
+        ArgsV.push_back(first_arg);
+        ArgsV[0] = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                        {ArgsV[0], _pre_dot_str});
+        //must_free_arg0 = true; //TODO: break?
+        
+      }
+
+      if (in_str(Callee, return_tensor_methods))
+      {
+        ArgsV[1] = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {ArgsV[1]});
+        must_free_arg0 = false;
+      }
+
+    }
+    else // Pass first_arg's reference for the derived AST nodes.
+      ArgsV.push_back(first_arg);
+    
+    target_args_size+=1;
+  }
+
+  
+
+  if (!(CalleeOverride!="none" || in_str(Callee, native_fn))||Callee=="print_scope") // user defined functions
+  {
+    has_scope = true;
+    
+    if(Callee!="print_scope")
+      scope_str = Builder->CreateCall(TheModule->getFunction("RandomStrOnDemand"), {});
+    
+    
+    ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
+    ArgsV.push_back(previous_scope);
+    ArgsV.push_back(thread_id);
+    ArgsV.push_back(has_grad);
+    
+    target_args_size+=4;
+  }
+
+  if(in_str(tgt_function, require_scope_functions))
+  {
+    ArgsV.push_back(scope_str); // Pass scope's reference for the derived AST nodes.
+    target_args_size+=1;
+  }
+
+  
+
+  
+  
+
+  // Detect function errors
+  Function *CalleeF;
+  if (!IsVarForward)
+  {
+    CalleeF = getFunction(tgt_function);
+    if (!CalleeF)
+    {
+      std::string _error = "The referenced function "+ tgt_function +" was not yet declared.";
+      return LogErrorV(_error);
+    }
+
+    tgt_function_name = CalleeF->getName().str();
+
+    // If argument mismatch error.
+    if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
+    {
+      //std::cout << "CalleeF->arg_size() " << CalleeF->arg_size() << " target_args_size " << target_args_size << "\n";
+      std::string _error = "Incorrect parameters used on function " + tgt_function + " call.";
+      return LogErrorV(_error);
+    }
+  }
+  //std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
+
+
+
+
+
+  // Get Arguments
+  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
+    //std::cout << "\nCall codegen for argument n°: " << i << ".\n";
+
+    // deal with firstarg on self.mcts(self.actions)
+    Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
+    //Value *fa = first_arg;
+
+    //deal with scope on model.forward()
+    Value *_scope = (!in_str(tgt_function, native_methods)) ? previous_scope : scope_str;
+    
+
+    Value * arg;
+    //std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
+    if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
+    {
+      //if (starts_with(functionName.c_str(), "__async_"))
+      //  Builder->CreateStore(Builder->CreateGlobalString("threaded_"), _scope);
+      VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
+      arg = Arg->NameSolver->codegen(first_arg, _scope, previous_scope, thread_id, has_grad);
+
+      arg = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {arg});
+    }
+    else
+      arg = Args[i]->codegen(fa, _scope, previous_scope, thread_id, has_grad);
+
+  
+    ArgsV.push_back(arg);
+
+
+    if (!ArgsV.back())
+      return nullptr;
+  }
+
+
+
+  
+  Value *ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  //std::cout << "\n\nCreate call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << "\n\n";
+
+  if (CalleeOverride=="none")
+    ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  else
+  {
+    if(in_str(CalleeOverride, threaded_tensor_functions))
+      ArgsV.push_back(thread_id);
+    
+    //std::cout << "Override: " << CalleeOverride << "\n";
+    if (in_str(CalleeOverride, native_modules))
+    {
+      CalleeF = getFunction(CalleeOverride);
+      Value *conv_name = Builder->CreateGlobalString(tgt_function);
+      Value *is_attr = ConstantInt::get(Type::getInt32Ty(*TheContext), (int)(isSelf));
+      ArgsV.push_back(conv_name);
+      ArgsV.push_back(is_attr);
+      
+      if (CalleeF->arg_size() != ArgsV.size())
+      {
+        std::string _error = "Incorrect parameters used on function " + tgt_function + " call.";
+        return LogErrorV(_error);
+      }
+      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+
+    }
+    else if (CalleeOverride=="SplitString")
+    {
+      Value *V = Builder->CreateCall(TheModule->getFunction("str_Load"), 
+                                     {Builder->CreateGlobalString(PreDot)});
+      
+      ret = Builder->CreateCall(getFunction("SplitString"), 
+                          {V, ArgsV[1]});
+
+    }
+    else if (CalleeOverride=="ToFloat")
+    {
+      //std::cout << "\n\nTO FLOAT HAS TYPE " << Args[0]->GetType() << "\n";
+      if (Args[0]->GetType()=="str")
+        ret = Builder->CreateCall(getFunction("StrToFloat"), 
+                          {ArgsV[0]});
+
+    } else
+      ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
+  }
+
+  
+  
+  
+  Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+  
+  if (changed_first_arg)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
+  
+  if (has_first_arg_copy)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg_copy});
+
+  if (has_scope)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str});
+
+  if (must_free_arg0)
+    Builder->CreateCall(TheModule->getFunction("FreeChar"), {ArgsV[0]});
+  
+  return ret;
+}

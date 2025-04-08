@@ -9,6 +9,7 @@
 #include"cuda_threads/include.h"
 #include"data_types/include.h"
 #include"math/include.h"
+#include"mangler/include.h"
 #include"mma/include.h"
 #include"networks/include.h"
 #include"notators/include.h"
