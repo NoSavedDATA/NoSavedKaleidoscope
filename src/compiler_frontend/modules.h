@@ -24,3 +24,12 @@ extern std::unique_ptr<LLVMContext> GlobalContext;
 extern std::unique_ptr<IRBuilder<>> Builder;
 extern std::unique_ptr<Module> TheModule;
 extern std::unique_ptr<Module> GlobalModule;
+
+
+
+inline void call(std::string fn, std::vector<Value *> args) {
+    Builder->CreateCall(TheModule->getFunction(fn), args);
+}
+inline Value *callret(std::string fn, std::vector<Value *> args) {
+    return Builder->CreateCall(TheModule->getFunction(fn), args);
+}

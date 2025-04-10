@@ -2,14 +2,15 @@
 
 #include <cuda_runtime.h>
 
-#include "../tensor/include.h"
 #include "../char_pool/include.h"
+#include "../mangler/scope_struct.h"
+#include "../tensor/include.h"
 
 
-extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
+extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *);
 extern "C" void *tensor_Load(char *, int);
 
-extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int thread_id, int has_grad);
+extern "C" float AttrTensor(char *, Tensor *, Scope_Struct *);
 
 
 

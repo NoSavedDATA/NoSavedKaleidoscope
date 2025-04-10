@@ -7,9 +7,10 @@
 #include "../common/extension_functions.h"
 #include "../data_types/include.h"
 #include "expressions.h"
+#include "logging.h"
 #include "modules.h"
 
-Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *NameSolverAST::codegen(Value *scope_struct) {
   // std::cout << "\n\n\nName solver type: " << Type << "\n\n\n\n";
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -40,12 +41,12 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       {
         if (type==type_self)
           var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
-                                                          {var_name, first_arg});
+                                                          {var_name, Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct})});
         else
         {
           if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name||Type=="str")&&include_scope)
             var_name = Builder->CreateCall(TheModule->getFunction("ConcatScopeStr"),
-                                                          {var_name, scope_str});
+                                                          {var_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct})});
         }
       }
 
@@ -64,7 +65,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (type==type_vec)
       {
-        Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        Value *_idx = idx[0]->codegen(scope_struct);
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, name});
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
@@ -80,7 +81,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     if(Names.size()==1)// Concat scope only
       if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str")&&include_scope)
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatScopeStr"),
-                                                          {var_name, scope_str});
+                                                          {var_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct})});
 
 
 
@@ -94,7 +95,7 @@ Value *NameSolverAST::codegen(Value *first_arg, Value *scope_str, Value *previou
                                                       {var_name, name});
     if (Type=="object_vec")
     {
-      Value *_idx = idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+      Value *_idx = idx[0]->codegen(scope_struct);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatNumToStrFree"),
                                                         {var_name, _idx});
     }

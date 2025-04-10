@@ -899,7 +899,7 @@ extern "C" float train()
 
 
 
-Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *BinaryTensorPinnedExprAST::codegen(Value *scope_struct) {
   std::cout << "Binary Tensor Pinned codegen" << "\n";
 
   if (not ShallCodegen)
@@ -917,29 +917,28 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
   
     seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    Value *RtensorPtr = RHS->codegen(scope_struct);
     
 
     if (!LHS->GetIsVec())
     {
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+      LtensorName = LHSE->NameSolver->codegen(scope_struct);
 
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
       std::cout << "1 2 attr\n";
       
-      
 
       Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-                          {LtensorName, RtensorPtr, thread_id});
+                          {LtensorName, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
       std::cout << "Post attr call\n";
     } else
     {
       std::cout << "1 2 INDEXED attr\n";
 
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+      LtensorName = LHSE->NameSolver->codegen(scope_struct);
       if (!LHSE)
         return LogErrorV("'=' left side expression must be a var.");
 
@@ -947,14 +946,14 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(LtensorName);
       for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
+        idx_calc_args.push_back(LHSE->Idx[i]->codegen(scope_struct));
       Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                             idx_calc_args);
 
       
       Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
                           {LtensorName, RtensorPtr,
-                           idx_at, thread_id});
+                           idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
       
     }
     seen_var_attr=false;
@@ -967,7 +966,7 @@ Value *BinaryTensorPinnedExprAST::codegen(Value *first_arg, Value *scope_str, Va
 
 
 
-Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *BinaryObjExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -991,19 +990,19 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+      LName = LHSE->NameSolver->codegen(scope_struct);
       
       if (RHS->GetIsVec())
       {
         std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
         VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        RName = RHSE->NameSolver->codegen(scope_struct);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
                                                         {LName, RName});
       } else {
         VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        RName = RHSE->NameSolver->codegen(scope_struct);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
                                                         {LName, RName});
@@ -1015,7 +1014,7 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
       if (!LHSE)
         return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+      LName = LHSE->NameSolver->codegen(scope_struct);
 
 
       std::cout << "ok" << "\n";
@@ -1024,14 +1023,14 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
       {
         std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
         VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        RName = RHSE->NameSolver->codegen(scope_struct);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
                                                         {LName, RName});
       } else {
         std::cout << "3 3 VEC FROM VAR" << "\n";
         VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        RName = RHSE->NameSolver->codegen(scope_struct);
         
         Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
                                                         {LName, RName});
@@ -1049,7 +1048,7 @@ Value *BinaryObjExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
 
 
-Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *ConcatStringsExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Special case '=' because we don't want to emit the LHS as an expression.
@@ -1066,7 +1065,7 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
     // default.  If you build LLVM with RTTI this can be changed to a
     // dynamic_cast for automatic error checking.
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
 
 
     NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
@@ -1078,7 +1077,7 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
       return LogErrorV("'=' destiny must be a variable.");
     // Codegen the RHS.
     
-    Value *Val = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    Value *Val = RHS->codegen(scope_struct);
 
     if (!Val)
     {
@@ -1090,14 +1089,14 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
     if (LType=="float") {
       Builder->CreateCall(TheModule->getFunction("float_Store"),
                                                   {Lvar_name,
-                                                   Val, thread_id});
+                                                   Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
 
     } else if (LType=="str") {
 
 
       Builder->CreateCall(TheModule->getFunction("str_Store"),
                                                   {Lvar_name,
-                                                   Val, thread_id});
+                                                   Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
                                                    
 
     } else if (LType=="str_vec") {
@@ -1117,8 +1116,8 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
         Builder->CreateCall(TheModule->getFunction("float_vec_Store_Idx"),
                                                 {Lvar_name,
-                                                  LHSV->Idx[0]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                                  Val, thread_id});
+                                                  LHSV->Idx[0]->codegen(scope_struct),
+                                                  Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
 
       } else
         Builder->CreateCall(TheModule->getFunction("float_vec_Store"),
@@ -1133,7 +1132,7 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
       
       Builder->CreateCall(TheModule->getFunction("float_Store"),
                                                   {Lvar_name,
-                                                   Val, thread_id});
+                                                   Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
       
 
       //std::string _error = "Could not find variable " + Lname + ".";
@@ -1147,8 +1146,8 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
   
 
-  Value *L = LHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
-  Value *R = RHS->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *L = LHS->codegen(scope_struct);
+  Value *R = RHS->codegen(scope_struct);
   
   if (!L || !R)
     return nullptr;
@@ -1186,10 +1185,10 @@ Value *ConcatStringsExprAST::codegen(Value *first_arg, Value *scope_str, Value *
 
 
 
-Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *UnaryExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *OperandV = Operand->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Value *OperandV = Operand->codegen(scope_struct);
   if (!OperandV)
     return nullptr;
   
@@ -1215,10 +1214,10 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
       }
       if (is_self)
         tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {first_arg, tensor_name});
+                                                          {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), tensor_name});
       if (!(is_self||is_attr))
         tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                {scope_str, tensor_name});
+                                                {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), tensor_name});
         
 
       Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("tensor_Load"),
@@ -1226,7 +1225,7 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
 
       return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                                {tensorPtr, R, thread_id}, "cudascalarmult");
+                                {tensorPtr, R, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})}, "cudascalarmult");
     }
     return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
                               OperandV, "multmp");
@@ -1254,7 +1253,7 @@ Value *UnaryExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct) {
   
 
   // find existing unique function name (_async_1, _async_2, _async_3 etc)
@@ -1280,26 +1279,39 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
                              functionName,
                              TheModule.get());
 
-
   
+  Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName)}); 
+
+
+
   // emit EntryBB value
   std::cout << "\n\nfunction * get basic block for function: " << functionName << "\n";
   BasicBlock *BB = BasicBlock::Create(*TheContext, "async_bb", asyncFun);
   Builder->SetInsertPoint(BB);
   
 
+
+  Value *scope_struct_copy = Builder->CreateCall(TheModule->getFunction("scope_struct_Load_for_Async"), {Builder->CreateGlobalString(functionName)}); 
+
   // define body of function
   Value *V;
 
+
+
   for (auto &body : asyncBody)
-    V = body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  {
+    std::string pre = std::string("codegenAsyncFunction Body codegen pre of: ") + typeid(*body).name();
+    p2t(pre);
+    V = body->codegen(scope_struct_copy);
+    p2t("codegenAsyncFunction body post");
+  }
 
 
 
   if (V)
   {
     
-    std::cout << "create return" << "\n";
+    p2t("codegenAsyncFunction create return");
     Builder->CreateRet(Constant::getNullValue(int8PtrTy));
     
 
@@ -1308,7 +1320,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 
     if (verifyFunction(*asyncFun, &functionErrorStream)) {
       functionErrorStream.flush();
-      llvm::errs() << "Function verification failed:\n" << functionError << "\n";
+      llvm::errs() << "codegenAsyncFunction: Function verification failed:\n" << functionError << "\n";
     } 
 
     verifyModule(*TheModule);
@@ -1325,13 +1337,11 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 //int pthread_create(pthread_t *thread, pthread_attr_t *attr,
 //                   void *(*start_routine) (void *arg), void *arg);
 
-
-
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
-                   void *(*start_routine) (void *arg), void *arg)
+                   void *(*function_ptr) (void *arg), void *arg)
 {
   std::cout << "Creating thread" << "\n";
-  pthread_create(thread, attr, start_routine, arg);
+  pthread_create(thread, attr, function_ptr, arg);
   std::cout << "Created" << "\n";
 }
 
@@ -1351,12 +1361,15 @@ extern "C" void pthread_join_aux(pthread_t thread)
 std::vector<Value *> thread_pointers;
 
 
-Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *AsyncExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
   
   // Create/Spawn Threads
+
+  
+  // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct}); 
 
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
@@ -1366,7 +1379,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
 
-  Function *asyncFun = codegenAsyncFunction(std::ref(Body), first_arg, scope_str, previous_scope, thread_id, has_grad);
+  Function *asyncFun = codegenAsyncFunction(std::ref(Body), scope_struct);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1392,8 +1405,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
      voidPtrNull}
   );
   
-  std::cout << "Created join call" << "\n";
-
+  p2t("AsyncExpr Created join call");
 
 
   thread_pointers.push_back(pthreadPtr);
@@ -1403,7 +1415,7 @@ Value *AsyncExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous
 
 
 
-Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *FinishExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   
@@ -1412,7 +1424,7 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
   for (int i=0; i < Bodies.size(); i++)
-    Bodies[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    Bodies[i]->codegen(scope_struct);
   
 
   PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
@@ -1438,12 +1450,12 @@ Value *FinishExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad){
+Value *LockExprAST::codegen(Value *scope_struct){
   
   Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
 
   for (auto &body : Bodies)
-    body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    body->codegen(scope_struct);
 
   Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
 
@@ -1451,11 +1463,11 @@ Value *LockExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 }
 
 
-Value *NoGradExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad){
+Value *NoGradExprAST::codegen(Value *scope_struct){
   
-  has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
+  Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, ConstantInt::get(Type::getInt32Ty(*TheContext), 0)});
   for (auto &body : Bodies)
-    body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    body->codegen(scope_struct);
 
   
   return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -1465,7 +1477,7 @@ Value *NoGradExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *ReturnExprAST::codegen(Value *scope_struct) {
 
   for (int i=0; i<Destiny.size(); i++)
   {
@@ -1488,12 +1500,12 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
       {
         VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        _name = destiny->NameSolver->codegen(scope_struct);
 
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                            {_name, scope_str,
-                                             _name, previous_scope,
-                                             thread_id});
+                                            {_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
+                                             _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
+                                             Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
       }
     } else {
       l_name   = Vars[i]->GetName();
@@ -1509,22 +1521,23 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
         VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        _name = destiny->NameSolver->codegen(scope_struct);
 
 
         VariableExprAST *var = static_cast<VariableExprAST *>(Vars[i].get());
         var->NameSolver->SetSolverIncludeScope(false);
-        Value *_l_name = var->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        Value *_l_name = var->NameSolver->codegen(scope_struct);
 
+        
         
         
 
         if (l_type=="tensor"||type=="tensor")
         {
           Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                              {_l_name, scope_str,
-                                               _name,   previous_scope,
-                                               thread_id});
+                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
+                                               _name,   Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
+                                               Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
         }
       } else {
 
@@ -1532,23 +1545,24 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
         if (!destiny)
           return LogErrorV("Could not deal with return expression");
         destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+        _name = destiny->NameSolver->codegen(scope_struct);
         
 
         std::vector<Value *> idx_calc_args;
         idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {previous_scope, _name}));
+                                                      {Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}), _name}));
         for (int i=0; i<destiny->Idx.size(); i++)
-          idx_calc_args.push_back(destiny->Idx[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
+          idx_calc_args.push_back(destiny->Idx[i]->codegen(scope_struct));
         Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                               idx_calc_args);
 
         
+        
         Value *_l_name = Builder->CreateGlobalString(l_name);
         Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
-                                              {_l_name, scope_str,
-                                               _name, previous_scope,
-                                               idx_at, thread_id});
+                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
+                                               _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
+                                               idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
       }
     }
   }
@@ -1558,6 +1572,11 @@ Value *ReturnExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
+
+extern "C" void print_codegen(char *msg)
+{
+  std::cout << "-- print_codegen: " << msg << ".\n";
+}
 
 
 
@@ -1585,15 +1604,15 @@ extern "C" float is_null(char *name)
   return 0;
 }
 
-Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *NewVecExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
   std::vector<Value *> values;
 
-  values.push_back(thread_id);
+  values.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}));
   for (int i=0; i<Values.size(); i++)
-    values.push_back(Values[i]->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad));
+    values.push_back(Values[i]->codegen(scope_struct));
 
 
 
@@ -1601,7 +1620,7 @@ Value *NewVecExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 }
 
 
-Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *ObjectExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1610,7 +1629,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
   Value *init;
   if (Init)
-    init = Init->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+    init = Init->codegen(scope_struct);
 
   // Register all variables and emit their initializer.
 
@@ -1630,9 +1649,9 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (is_self||is_attr) 
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                              {first_arg, var_name});
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
       Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
-                                              {scope_str, var_name});
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     }
     else if (Init) // init of vec[size]
     {
@@ -1641,10 +1660,10 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
       if (is_self||is_attr) 
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
-                                              {first_arg, var_name});
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
       if (!(is_self||is_attr))
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
-                                              {scope_str, var_name});
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
 
       //var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
       //                                        {object_hash, var_name});
@@ -1670,7 +1689,7 @@ Value *ObjectExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *Conv2dExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1690,13 +1709,15 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
     bool is_self = GetSelf();
     bool is_attr = GetIsAttribute();
 
+    
+
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
     
 
@@ -1705,15 +1726,16 @@ Value *Conv2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), Ks->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), Stride->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+                                               C->codegen(scope_struct), OC->codegen(scope_struct), Ks->codegen(scope_struct), Stride->codegen(scope_struct),
+                                               Padding->codegen(scope_struct)});
+    std::cout << "Called Create Conv 2d" << ".\n";
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *MaxPool2dExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1734,28 +1756,28 @@ Value *MaxPool2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
 
     
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+    std::cout << "Parsing MaxPool2d var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateMaxPool2dOnDemand"),
                                               {var_name, type,
-                                               Ks->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               Stride->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               Padding->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+                                               Ks->codegen(scope_struct),
+                                               Stride->codegen(scope_struct),
+                                               Padding->codegen(scope_struct)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *BatchNorm2dExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1775,19 +1797,19 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
 
     
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+    std::cout << "Parsing BatchNorm2d var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
                                               {var_name, 
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+                                               C->codegen(scope_struct)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -1795,7 +1817,7 @@ Value *BatchNorm2dExprAST::codegen(Value *first_arg, Value *scope_str, Value *pr
 
 
 
-Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *BN2dReluExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1815,24 +1837,24 @@ Value *BN2dReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previ
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
 
     
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+    std::cout << "Parsing BN2dRelu var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateBN2dReluOnDemand"),
-                                              {var_name, C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+                                              {var_name, C->codegen(scope_struct)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
-Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *LSTMExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1854,27 +1876,27 @@ Value *LSTMExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
     
 
 
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+    std::cout << "Parsing LSTM var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateLSTMOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
 
-Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *EmbeddingExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1896,11 +1918,11 @@ Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
     
 
@@ -1909,7 +1931,7 @@ Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
     Builder->CreateCall(TheModule->getFunction("CreateEmbeddingOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad), OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad)});
+                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
@@ -1917,7 +1939,7 @@ Value *EmbeddingExprAST::codegen(Value *first_arg, Value *scope_str, Value *prev
 
 
 
-Value *LinearExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *LinearExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1939,11 +1961,11 @@ Value *LinearExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
     
     int_vec *notators = SetNotators(Notators);
@@ -1954,8 +1976,8 @@ Value *LinearExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
     Builder->CreateCall(TheModule->getFunction("CreateLinearOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               OC->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               C->codegen(scope_struct),
+                                               OC->codegen(scope_struct),
                                                VoidPtr_toValue(notators)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
@@ -1964,7 +1986,7 @@ Value *LinearExprAST::codegen(Value *first_arg, Value *scope_str, Value *previou
 
 
 
-Value *MHSAExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *MHSAExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -1986,11 +2008,11 @@ Value *MHSAExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
     int_vec *notators = SetNotators(Notators);
 
@@ -1999,16 +2021,16 @@ Value *MHSAExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     Builder->CreateCall(TheModule->getFunction("CreateMHSAOnDemand"),
                                               {var_name, Builder->CreateGlobalString(TensorInit),
-                                               nh->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               C->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
-                                               T->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad),
+                                               nh->codegen(scope_struct),
+                                               C->codegen(scope_struct),
+                                               T->codegen(scope_struct),
                                                VoidPtr_toValue(notators)});
   }
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
 
-Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) {
+Value *ReluExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -2028,15 +2050,15 @@ Value *ReluExprAST::codegen(Value *first_arg, Value *scope_str, Value *previous_
 
     if (is_self||is_attr)
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {first_arg, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
                                             
     if (!(is_self||is_attr))
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {scope_str, var_name});
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
     
 
     
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+    std::cout << "Parsing Relu var for: " << VarName << "\n";
 
     Builder->CreateCall(TheModule->getFunction("CreateReluOnDemand"),
                                               {var_name});
@@ -2179,12 +2201,14 @@ extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)
 
 extern "C" char * IndexClassStrVec(char *vec_name, float _idx)
 {
-  int idx = (int) _idx;
 
+  // std::cout << "IndexClassStrVec: " << vec_name << ".\n";
+
+  int idx = (int) _idx;
 
   std::vector<char*> vec = ClassStrVecs[vec_name];
 
-  //std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
+  // std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
   delete[] vec_name;
 
   return vec[idx];
@@ -2370,14 +2394,10 @@ Function *FunctionAST::codegen() {
 
   
   // Record the function arguments in the NamedValues map.
-  Value *first_arg, *scope_str, *previous_scope, *thread_id, *has_grad, *scope_struct;
-  /*
-  first_arg = Builder->CreateAlloca(int8PtrTy);
-  scope_str = Builder->CreateAlloca(int8PtrTy);
-  previous_scope = Builder->CreateAlloca(int8PtrTy);
-  */
+  Value *first_arg, *scope_string, *previous_scope, *thread_id, *has_grad, *scope_struct;
 
   
+  scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Create"), {});
 
 
   thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
@@ -2385,21 +2405,19 @@ Function *FunctionAST::codegen() {
   if (function_name=="__anon_expr")
   {
     first_arg = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-    scope_str = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    scope_string = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     previous_scope = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
 
-    scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Create"), {});
 
-    // Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {scope_struct, first_arg});
-    // Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {scope_struct, scope_str});
-    // Builder->CreateCall(TheModule->getFunction("set_scope_previous_scope"), {scope_struct, previous_scope});
-
-    // Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
-    // Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, has_grad});
-
-    // Builder->CreateCall(TheModule->getFunction("print_scope_struct"), {scope_struct});
+    Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {scope_struct, first_arg});
+    Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {scope_struct, scope_string});
+    Builder->CreateCall(TheModule->getFunction("set_scope_previous_scope"), {scope_struct, previous_scope});  
   }
   
+  Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
+  Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, has_grad});
+  
+  // Builder->CreateCall(TheModule->getFunction("print_scope_struct"), {scope_struct});
 
 
 
@@ -2415,6 +2433,9 @@ Function *FunctionAST::codegen() {
   bool has_scope_struct = false;
   
 
+
+  p2t("FuncionAST start function args.");
+
   float val;
   int i = 0;
   for (auto &Arg : TheFunction->args()) {
@@ -2426,26 +2447,44 @@ Function *FunctionAST::codegen() {
 
     std::string __print = "FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " ";
 
+    p2t(__print);
+    __print = "At " + function_name;
+    p2t(__print);
+
 
     // Default args
     if (arg_name == "scope_struct")
     {
+      p2t("-------------------------------------------=============-----------------===========--------COPY SCOPE STRUCT");
+
+
       scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {&Arg});      
       has_scope_struct = true;
+
+
+      first_arg = Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}); 
+      scope_string = Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}); 
+      previous_scope = Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}); 
+      thread_id = Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}); 
+      has_grad = Builder->CreateCall(TheModule->getFunction("get_scope_has_grad"), {scope_struct}); 
+      
     }
     if (arg_name == "self")
     {
       first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});      
+      Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {scope_struct, first_arg});
       has_self = true;
     }
-    if (arg_name == "scope_str")
+    if (arg_name == "scope_string")
     {
-      scope_str = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg}); 
+      scope_string = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg}); 
+      Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {scope_struct, &Arg});
       has_scope = true;
     }
     if (arg_name == "previous_scope")
     {
       previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg}); 
+      Builder->CreateCall(TheModule->getFunction("set_scope_previous_scope"), {scope_struct, &Arg});
       has_previous_scope = true;
     }
     if (arg_name == "thread_id")
@@ -2462,15 +2501,15 @@ Function *FunctionAST::codegen() {
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                    {scope_str, var_name});
+                                    {scope_string, var_name});
 
       Builder->CreateCall(TheModule->getFunction("StoreArgOnDemand"),
-                                                  {scope_str, var_name, &Arg});
+                                                  {scope_string, var_name, &Arg});
     } else if (type=="str")
     {
       Value *var_name = Builder->CreateGlobalString(arg_name);
       var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Store scope vars to clean for this too
-                                    {scope_str, var_name});
+                                    {scope_string, var_name});
 
 
       Builder->CreateCall(TheModule->getFunction("str_Store"),
@@ -2498,7 +2537,7 @@ Function *FunctionAST::codegen() {
                           {&Arg,
                            Builder->CreateGlobalString(arg_name),
                            previous_scope,
-                           scope_str,
+                           scope_string,
                            thread_id});
       }
     }
@@ -2506,9 +2545,16 @@ Function *FunctionAST::codegen() {
   
 
 
+  // Builder->CreateCall(TheModule->getFunction("print_codegen"), {Builder->CreateGlobalString("FunctionAST finish func args")});
+
   Value *RetVal;
   for (auto &body : Body)
-    RetVal = body->codegen(first_arg, scope_str, previous_scope, thread_id, has_grad);
+  {
+    std::string pre = "\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n" + std::string("FunctionAST Body codegen pre of: ") + typeid(*body).name();
+    p2t(pre);
+    RetVal = body->codegen(scope_struct);
+    p2t("FunctionAST Body codegen post");
+  }
 
 
   
@@ -2520,37 +2566,46 @@ Function *FunctionAST::codegen() {
   
 
 
-  
-  if(has_self)
-    Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
 
-  if(has_scope)
-  {
-    Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_str, thread_id});
-    Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_str}); 
-  }
-
+  std::cout << "Function AST " << function_name << " clean scope" << ".\n";
   
-  if(has_previous_scope)
-    Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+  // if(has_self)
+  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
+
+  // if(has_scope)
+  // {
+  //   Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_string, thread_id});
+  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_string}); 
+  // }
 
   
+  // if(has_previous_scope)
+  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
+
   
+  
+  std::cout << "Function AST return" << ".\n";
 
   if (RetVal) {
     // Finish off the function.
     
     
+    std::cout << "Function AST CreateRet" << ".\n";
     Builder->CreateRet(RetVal);
     
 
+    std::cout << "Function AST verify" << ".\n";
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
 
 
+    std::cout << "Function AST verified" << ".\n";
+    // Validate the generated code, checking for consistency.
+
     return TheFunction;
   }
 
+  std::cout << "Function AST returned" << ".\n";
 
   // Error reading body, remove function.
   TheFunction->eraseFromParent();
@@ -4044,6 +4099,8 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
   
 
+
+
   // 
   FunctionType *objHashTy = FunctionType::get(
       int8PtrTy,
@@ -4334,14 +4391,14 @@ static void InitializeModule() {
 
   FunctionType *str_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("str_Create", str_Create);
 
   FunctionType *float_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("float_Create", float_Create);
@@ -4349,31 +4406,38 @@ static void InitializeModule() {
 
   FunctionType *str_vec_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("str_vec_Create", str_vec_Create);
 
   FunctionType *float_vec_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("float_vec_Create", float_vec_Create);
   
-  FunctionType *tensor_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+  FunctionType *print_codegenTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
       false 
   );
-  TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
+  TheModule->getOrInsertFunction("print_codegen", print_codegenTy);
 
   FunctionType *pinned_tensor_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_Create);
+
+  FunctionType *tensor_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
 
 
   FunctionType *scope_struct_CreateTy = FunctionType::get(
@@ -4419,6 +4483,42 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("set_scope_has_grad", set_scope_has_gradTy);
+
+  FunctionType *get_scope_first_argTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("get_scope_first_arg", get_scope_first_argTy);
+
+  FunctionType *get_scope_scopeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("get_scope_scope", get_scope_scopeTy);
+
+  FunctionType *get_scope_previous_scopeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("get_scope_previous_scope", get_scope_previous_scopeTy);
+
+  FunctionType *get_scope_thread_idTy = FunctionType::get(
+      Type::getInt32Ty(*TheContext),
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("get_scope_thread_id", get_scope_thread_idTy);
+
+  FunctionType *get_scope_has_gradTy = FunctionType::get(
+      Type::getInt32Ty(*TheContext),
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
+
   
   FunctionType *print_scopeTy = FunctionType::get(
       int8PtrTy,
@@ -4444,6 +4544,21 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
   
+
+  FunctionType *scope_struct_Save_for_AsyncTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Save_for_Async", scope_struct_Save_for_AsyncTy);
+
+
+  FunctionType *scope_struct_Load_for_AsyncTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Load_for_Async", scope_struct_Load_for_AsyncTy);
 
   // 
   FunctionType *randintTy = FunctionType::get(
@@ -4595,7 +4710,7 @@ static void InitializeModule() {
   //
   FunctionType *AttrTensorTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("AttrTensor", AttrTensorTy);
