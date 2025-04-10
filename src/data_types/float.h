@@ -1,8 +1,8 @@
 #pragma once
 
+#include "../mangler/scope_struct.h"
 
-
-extern "C" float float_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
+extern "C" float float_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *);
 extern "C" float float_Load(char *, int);
 extern "C" void float_Store(char *, float, int);
 

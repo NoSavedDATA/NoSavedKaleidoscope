@@ -4,8 +4,10 @@
 #include <vector>
 
 
+#include "../mangler/scope_struct.h"
 
-extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope);
+
+extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *);
 extern "C" void *float_vec_Load(char *, int);
 
 

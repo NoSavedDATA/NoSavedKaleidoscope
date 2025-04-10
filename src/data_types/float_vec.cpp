@@ -5,11 +5,13 @@
 #include "../codegen/random.h"
 #include "include.h"
 
+#include "../mangler/scope_struct.h"
+
 std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
 
 
-extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope)
+extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
 
   delete[] name;

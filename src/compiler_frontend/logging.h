@@ -25,3 +25,6 @@ std::unique_ptr<PrototypeAST> LogErrorP(const char *Str);
 std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str); 
 
 Value *LogErrorV(std::string Str); 
+
+
+void p2t(std::string msg);

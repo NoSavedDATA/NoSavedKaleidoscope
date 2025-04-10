@@ -63,7 +63,8 @@ extern "C" void FreeCharFromFunc(char *_char, char *func) {
 
 
 extern "C" void FreeChar(char *_char) {
-  //std::cout << "FREEING " << _char << "\n";
+  std::cout << "free" << ".\n";
+  std::cout << "FREEING " << _char << "\n";
 
   move_to_char_pool(strlen(_char)+1, _char, "free");
   //delete[] _char;
@@ -88,6 +89,8 @@ extern "C" char *CopyString(char *in_str)
 
 extern "C" char * ConcatStr(char *lc, char *rc)
 {
+  // std::cout << "Concat fn" << ".\n";
+  // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
   size_t length_lc = strlen(lc);
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
   char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat");

@@ -36,8 +36,8 @@
 #include <omp.h>
 
 
-#include "include.h"
 #include "../common/include.h"
+#include "include.h"
 
 
 
@@ -124,11 +124,26 @@ std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str) {
     std::cout << "LogErrorP: " << IdentifierStr << "\n";
     
     getNextToken();
-    }
+  }
   return nullptr;
 }
 
 Value *LogErrorV(std::string Str) {
   LogError(Str);
   return nullptr;
+}
+
+
+
+void p2t(std::string msg)
+{
+  return;
+
+  if (!((msg.find("FunctionAST") != std::string::npos)) && !((msg.find("DataExpr") != std::string::npos)))
+  // if (!(msg.find("CallExpr") != std::string::npos) && !((msg.find("FunctionAST") != std::string::npos)))
+  // if (!((msg.find("FunctionAST") != std::string::npos)))
+  {
+    call("print_codegen", {Builder->CreateGlobalString(msg)});
+    std::cout << msg << ".\n";
+  }
 }

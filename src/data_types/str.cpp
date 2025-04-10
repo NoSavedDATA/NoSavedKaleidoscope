@@ -3,6 +3,7 @@
 #include <string>
 
 #include "../common/extension_functions.h"
+#include "../mangler/scope_struct.h"
 #include "include.h"
 
 std::map<std::string, std::string> AuxRandomStrs;
@@ -10,7 +11,7 @@ std::map<std::string, std::string> AuxRandomStrs;
 
 
   
-extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, AnyVector *notes_vector, int thread_id, char *scope) {
+extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct) {
 
   // std::cout << "Creating string"  << ".\n";
   // std::cout << "Val: " << init_val << ".\n";

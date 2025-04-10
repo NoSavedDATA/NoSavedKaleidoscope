@@ -19,7 +19,7 @@
 
 extern "C" void *onehot(int thread_id, Tensor *tensor, float num_classes)
 {
-  //std::cout << "ONEHOT OF " << tensor.name << "\n";
+  std::cout << "ONEHOT OF " << tensor->name << "\n";
 
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims, new_dims;

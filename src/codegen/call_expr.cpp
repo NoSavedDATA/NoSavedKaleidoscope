@@ -2,13 +2,17 @@
 #include <iostream>
 
 #include "../common/extension_functions.h"
+#include "../mangler/scope_struct.h"
 #include "../data_types/include.h"
 
 
-extern "C" char * FirstArgOnDemand(char *first_arg, char *pre_dotc, char *_class, char *method, int nested_function, int isSelf, int isAttribute)
+extern "C" char * FirstArgOnDemand(Scope_Struct *scope_struct, char *pre_dotc, char *_class, char *method, int nested_function, int isSelf, int isAttribute)
 {
 
-  std::string _first_arg = first_arg;
+  std::cout << "FirstArgOnDemand" << ".\n";
+  std::cout << "first_arg: " << scope_struct->first_arg << ".\n";
+
+  std::string _first_arg = scope_struct->first_arg;
   std::string pre_dot = pre_dotc;
 
   delete[] pre_dotc;

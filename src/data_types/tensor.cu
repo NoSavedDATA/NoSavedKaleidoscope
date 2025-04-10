@@ -12,15 +12,18 @@
 #include "../compiler_frontend/logging.h"
 #include "../cuda_kernels/calculate_grids.h"
 #include "../cuda_kernels/elementwise_kernels_inline.cu"
+#include "../mangler/scope_struct.h"
 #include "../tensor/include.h"
 #include "include.h"
 
 
 
 
-extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope)
+extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
-  // std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
+ // std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
+
+ int thread_id = scope_struct->thread_id;
 
   Tensor *tensor;
 
@@ -124,8 +127,11 @@ extern "C" void *tensor_Load(char *tensor_name, int thread_id){
 
 
 
-extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, char *scope, int thread_id, int has_grad)
+extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, Scope_Struct *scope_struct)
 {
+  char *scope = scope_struct->scope;
+  int thread_id= scope_struct->thread_id;
+  int has_grad = scope_struct->has_grad;
   //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
 
   //std::cout << "ATTRIBUTE TENSOR AT THREAD " << thread_id << "\n";

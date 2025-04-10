@@ -1,5 +1,8 @@
 #pragma once
 
+#include <map>
+#include <string>
+
 
 struct Scope_Struct { 
     char *first_arg = nullptr;
@@ -23,6 +26,7 @@ struct Scope_Struct {
 };
 
 
+extern std::map<std::string, Scope_Struct *> NamedScopeStructs;
 
 extern "C" Scope_Struct *scope_struct_Create();
 
@@ -33,6 +37,18 @@ extern "C" void set_scope_scope(Scope_Struct *, char *);
 extern "C" void set_scope_previous_scope(Scope_Struct *, char *);
 extern "C" void set_scope_thread_id(Scope_Struct *, int);
 extern "C" void set_scope_has_grad(Scope_Struct *, int);
+
+
+extern "C" char *get_scope_first_arg(Scope_Struct *);
+extern "C" char *get_scope_scope(Scope_Struct *);
+extern "C" char *get_scope_previous_scope(Scope_Struct *);
+
+extern "C" int get_scope_thread_id(Scope_Struct *scope_struct);
+extern "C" int get_scope_has_grad(Scope_Struct *scope_struct);
+
+
+extern "C" void scope_struct_Save_for_Async(Scope_Struct *, char *);
+extern "C" Scope_Struct *scope_struct_Load_for_Async(char *);
 
 extern "C" void print_scope_Copy(Scope_Struct *);
 

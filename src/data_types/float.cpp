@@ -3,6 +3,7 @@
 #include <string>
 
 #include "../common/extension_functions.h"
+#include "../mangler/scope_struct.h"
 #include "include.h"
 
 
@@ -26,7 +27,7 @@ extern "C" float UnbugFloat(float value){
 
 
 
-extern "C" float float_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope)
+extern "C" float float_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
   pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = init_val;
@@ -42,10 +43,13 @@ extern "C" float float_Create(char *name, char *scopeless_name, float init_val, 
 
 extern "C" float float_Load(char *object_var_name, int thread_id) {
   
+  // std::cout << "Loading float " << object_var_name << ".\n";
+
   pthread_mutex_lock(&clean_scope_mutex);
   float ret = NamedClassValues[object_var_name];
   pthread_mutex_unlock(&clean_scope_mutex);
   
+
   move_to_char_pool(strlen(object_var_name)+1, object_var_name, "free");
   //delete[] object_var_name;
   return ret;

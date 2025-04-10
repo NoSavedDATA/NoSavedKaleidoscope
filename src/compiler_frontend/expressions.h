@@ -28,7 +28,7 @@ class ExprAST {
     Value *TensorPtr;
   
   
-    virtual Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) = 0;
+    virtual Value *codegen(Value *scope_struct) = 0;
     virtual void SetType(std::string Type);
     virtual std::string GetType();
     virtual void SetReturnType(std::string ReturnType);
@@ -75,7 +75,7 @@ class ExprAST {
       NameSolverAST(std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names);
     
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -86,7 +86,7 @@ class ExprAST {
     public:
       NumberExprAST(float Val); 
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -97,7 +97,7 @@ class ExprAST {
     public:
       StringExprAST(std::string Val); 
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -109,7 +109,7 @@ class ExprAST {
       std::unique_ptr<ExprAST> NameSolver;
       VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type); 
   
-      Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+      Value *codegen(Value *scope_struct) override;
       const std::string &getName() const; 
       std::string GetName() override; 
   };
@@ -123,7 +123,7 @@ class ExprAST {
   
       VecIdxExprAST(std::unique_ptr<ExprAST> NameSolver, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type);
   
-      Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+      Value *codegen(Value *scope_struct) override;
       const std::string &getName() const;
       std::string GetName() override;
   };
@@ -138,7 +138,7 @@ class ExprAST {
   
       ObjectVecIdxExprAST(std::unique_ptr<ExprAST> Vec, std::string _post_dot, std::unique_ptr<ExprAST> Idx);
   
-      Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+      Value *codegen(Value *scope_struct) override;
   };
   
   /// VarExprAST - Expression class for var/in
@@ -152,7 +152,7 @@ class ExprAST {
           std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
           std::string Type);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -167,7 +167,7 @@ class ExprAST {
           std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
           std::string Type);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -181,7 +181,7 @@ class ExprAST {
           std::vector<std::unique_ptr<ExprAST>> Values,
           std::string Type);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -195,7 +195,7 @@ class ExprAST {
         std::string Type,
         std::unique_ptr<ExprAST> Init);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -212,7 +212,7 @@ class ExprAST {
         std::string Type,
         std::vector<std::unique_ptr<ExprAST>> Notes);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
 
 
@@ -229,7 +229,7 @@ class ExprAST {
         std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding,
         const std::string &TensorInit);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -244,7 +244,7 @@ class ExprAST {
         std::unique_ptr<ExprAST> Ks,
         std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -257,7 +257,7 @@ class ExprAST {
         std::string Type,
         std::unique_ptr<ExprAST> C);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -270,7 +270,7 @@ class ExprAST {
         std::string Type,
         std::unique_ptr<ExprAST> C);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -286,7 +286,7 @@ class ExprAST {
         std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
         const std::string &TensorInit);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -301,7 +301,7 @@ class ExprAST {
         std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
         const std::string &TensorInit);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -319,7 +319,7 @@ class ExprAST {
         std::vector<int> Notators,
         const std::string &TensorInit);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -337,7 +337,7 @@ class ExprAST {
         std::vector<int> Notators,
         const std::string &TensorInit);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -349,7 +349,7 @@ class ExprAST {
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
         std::string Type);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -361,7 +361,7 @@ class ExprAST {
   public:
     UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -375,7 +375,7 @@ class ExprAST {
     BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -387,7 +387,7 @@ class ExprAST {
     BinaryTensorScalarExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -399,7 +399,7 @@ class ExprAST {
     BinaryTensorTensorExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -411,7 +411,7 @@ class ExprAST {
     BinaryPinnedScalarExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   class BinaryPinnedAndTensorExprAST : public ExprAST {
     char Op;
@@ -421,7 +421,7 @@ class ExprAST {
     BinaryPinnedAndTensorExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   class BinaryTensorPinnedExprAST : public ExprAST {
@@ -432,7 +432,7 @@ class ExprAST {
     BinaryTensorPinnedExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -444,7 +444,7 @@ class ExprAST {
     BinaryObjExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -456,7 +456,7 @@ class ExprAST {
     ConcatStringsExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                   std::unique_ptr<ExprAST> RHS);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -480,7 +480,7 @@ class ExprAST {
                   bool IsVarForward,
                   const std::string &CalleeOverride);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   class ReturnExprAST : public ExprAST {
@@ -493,7 +493,7 @@ class ExprAST {
       ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
                     std::vector<std::unique_ptr<ExprAST>> Destiny);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   
@@ -507,7 +507,7 @@ class ExprAST {
                 std::vector<std::unique_ptr<ExprAST>> Then,
                 std::vector<std::unique_ptr<ExprAST>> Else);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   /// ForExprAST - Expression class for for.
@@ -521,7 +521,7 @@ class ExprAST {
                 std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
                 std::vector<std::unique_ptr<ExprAST>> Body);
   
-    Value *codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value *codegen(Value *scope_struct) override;
   };
   
   /// WhileExprAST - Expression class for while.
@@ -532,7 +532,7 @@ class ExprAST {
     public:
       WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body);
   
-    Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value* codegen(Value *scope_struct) override;
   };
   
   
@@ -543,7 +543,7 @@ class ExprAST {
     public:
       AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body);
   
-    Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value* codegen(Value *scope_struct) override;
   };
   
   
@@ -557,7 +557,7 @@ class ExprAST {
                     std::vector<bool> IsAsync);
   
   
-    Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value* codegen(Value *scope_struct) override;
   };
   
   
@@ -571,7 +571,7 @@ class ExprAST {
                   std::string Name);
   
   
-    Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value* codegen(Value *scope_struct) override;
   };
   /// NoGradExprAST
   class NoGradExprAST : public ExprAST {
@@ -581,7 +581,7 @@ class ExprAST {
       NoGradExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies);
   
   
-    Value* codegen(Value *first_arg, Value *scope_str, Value *previous_scope, Value *thread_id, Value *has_grad) override;
+    Value* codegen(Value *scope_struct) override;
   };
   
   

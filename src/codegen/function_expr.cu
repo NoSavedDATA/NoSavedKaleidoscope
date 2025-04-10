@@ -7,7 +7,7 @@
 
 
 extern "C" void StoreArgOnDemand(char *scope, char *name, float value){
-  //std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
+  // std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
   
   pthread_mutex_lock(&clean_scope_mutex);
   

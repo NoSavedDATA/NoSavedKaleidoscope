@@ -9,11 +9,12 @@
 #include "../common/include.h"
 #include "../codegen/random.h"
 #include "../compiler_frontend/logging.h"
+#include "../mangler/scope_struct.h"
 #include "include.h"
 
 
 
-extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, int thread_id, char *scope)
+extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
 
   delete[] name;
