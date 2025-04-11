@@ -135,13 +135,26 @@ Value *LogErrorV(std::string Str) {
 
 
 
+extern "C" void print_codegen(char *msg)
+{
+  std::cout << "-- print_codegen: " << msg << ".\n";
+}
+
 void p2t(std::string msg)
 {
-  return;
+  // return;
 
-  if (!((msg.find("FunctionAST") != std::string::npos)) && !((msg.find("DataExpr") != std::string::npos)))
-  // if (!(msg.find("CallExpr") != std::string::npos) && !((msg.find("FunctionAST") != std::string::npos)))
-  // if (!((msg.find("FunctionAST") != std::string::npos)))
+  
+  bool shall_log = true;
+  std::vector<std::string> ignore_expresions = {"DataExpr", "FunctionAST", "CallExpr", "p2t", "VariableExpr", "NumberExpr", "VecIdxExpr", "codegenAsyncFunction", "AsyncExpr"};
+
+  for (int i=0; i<ignore_expresions.size(); ++i)
+  {
+    if ((msg.find(ignore_expresions[i]) != std::string::npos))
+      shall_log = false;
+  }
+
+  if (shall_log)
   {
     call("print_codegen", {Builder->CreateGlobalString(msg)});
     std::cout << msg << ".\n";

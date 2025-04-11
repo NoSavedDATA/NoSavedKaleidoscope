@@ -3,9 +3,9 @@
 #include <map>
 
 #include "../codegen/random.h"
+#include "../mangler/scope_struct.h"
 #include "include.h"
 
-#include "../mangler/scope_struct.h"
 
 std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
@@ -20,7 +20,7 @@ extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_v
   return 0;
 }
 
-extern "C" void *float_vec_Load(char *object_var_name, int thread_id) {
+extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
   std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   void *ret = &ClassFloatVecs[object_var_name];
@@ -28,7 +28,7 @@ extern "C" void *float_vec_Load(char *object_var_name, int thread_id) {
   return ret;
 }
 
-extern "C" float float_vec_Store(char *name, std::vector<float> value, int thread_id){
+extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Struct *scope_struct){
   std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
@@ -37,7 +37,7 @@ extern "C" float float_vec_Store(char *name, std::vector<float> value, int threa
   return 0;
 }
 
-extern "C" float float_vec_Store_Idx(char *name, float idx, float value, int thread_id){
+extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_Struct *scope_struct){
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name][(int)idx] = value;

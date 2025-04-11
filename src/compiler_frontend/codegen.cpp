@@ -155,8 +155,12 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       }
 
     }
+    
 
 
+
+    // if (Type=="tensor")
+    //   call("scope_struct_Print", {scope_struct});
 
     
     p2t("DataExpr Call create");
@@ -466,7 +470,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
   std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
   
-  std::string msg = "Variable " + Name + " load for type: " + type;
+  std::string msg = "VariableExpr Variable " + Name + " load for type: " + type;
   p2t(msg);
 
 
@@ -492,7 +496,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   std::string load_fn = type + "_Load";
   // std::cout << "Load fn: " << load_fn << ".\n";
   V = Builder->CreateCall(TheModule->getFunction(load_fn),
-                                                  {var_name, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+                                                  {var_name, scope_struct});
   return V;
 }
 
@@ -1127,10 +1131,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       Builder->CreateCall(TheModule->getFunction(store_op),
                                               {Lvar_name,
                                                 LHSV->Idx[0]->codegen(scope_struct),
-                                                Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+                                                Val, scope_struct});
 
     } else { 
-        Builder->CreateCall(TheModule->getFunction(store_op), {Lvar_name, Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+        Builder->CreateCall(TheModule->getFunction(store_op), {Lvar_name, Val, scope_struct});
     }
     
 
@@ -1407,7 +1411,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   // std::cout << "----------------------Current function: " << functionName << ", codegen for: " << Callee <<  "\n";
 
   scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct}); 
-  // Builder->CreateCall(TheModule->getFunction("print_scope_struct"), {scope_struct});
 
 
   
@@ -1440,6 +1443,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
 
 
+
+  // call("scope_struct_Print", {scope_struct});
 
   msg = "\n\n\nCallExpr Function name: " + functionName;
   p2t(msg);
@@ -1493,11 +1498,11 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
   if (in_str(Callee, threaded_tensor_functions))
   {
-    msg = "\n\n\n\n\nCALLEE " + Callee + " IS IN A THREAD" + "\n\n\n\n\n";
+    msg = "\n\n\n\n\nCallExpr CALLEE " + Callee + " IS IN A THREAD" + "\n\n\n\n\n";
     p2t(msg);
 
 
-    ArgsV.push_back(Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct}));
+    ArgsV.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}));
 
     target_args_size+=1;
   }
@@ -1513,7 +1518,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
   
 
-  msg = "Call name mangle";
+  msg = "CallExpr Call name mangle";
   p2t(msg);
 
   // Handle self or object attribute expressions
@@ -1587,7 +1592,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
       if (in_str(Callee, return_tensor_methods))
       {
-        ArgsV[1] = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {ArgsV[1]});
+        ArgsV[1] = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {ArgsV[1], scope_struct});
         must_free_arg0 = false;
       }
 
@@ -1599,7 +1604,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   }
 
 
-  p2t("Finish mangle, get scope info.");
+  p2t("CallExpr Finish mangle, get scope info.");
   
 
   if (!(CalleeOverride!="none" || in_str(Callee, native_fn))||Callee=="print_scope") // user defined functions
@@ -1667,7 +1672,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     }
   }
   // std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
-  msg = "Calling function: " + tgt_function;
+  msg = "CallExpr Calling function: " + tgt_function;
   p2t(msg);
 
 
@@ -1676,7 +1681,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
-    std::cout << "\nCall codegen for argument n°: " << i << ".\n";
+
+    // msg = "CallExpr Call codegen for argument n°: " + i;
+    // p2t(msg);
 
     //std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
 
@@ -1710,7 +1717,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       arg = Arg->NameSolver->codegen(arg_scope);
       std::cout << "name solver done" << ".\n";
 
-      arg = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {arg});
+      arg = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {arg, scope_struct});
     }
     else
     {
@@ -1718,7 +1725,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
       Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {arg_scope, fa});
 
-      p2t("Non-tensor arg codegen");
+      p2t("CallExpr Non-tensor arg codegen");
       arg = Args[i]->codegen(arg_scope);
     }
 
@@ -1737,10 +1744,11 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
 
   Value *ret = ConstantFP::get(*TheContext, APFloat(0.0f));
-  std::cout << "\n\nCallExpr Create call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << " and " << ArgsV.size() << " args." << "\n\n";
+  // std::cout << "\n\nCallExpr Create call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << " and " << ArgsV.size() << " args." << "\n\n";
 
 
   p2t("CallExpr Execute call");
+
 
 
   if (CalleeOverride=="none")
@@ -1770,7 +1778,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     else if (CalleeOverride=="SplitString")
     {
       Value *V = Builder->CreateCall(TheModule->getFunction("str_Load"), 
-                                     {Builder->CreateGlobalString(PreDot)});
+                                     {Builder->CreateGlobalString(PreDot), scope_struct});
       
       ret = Builder->CreateCall(getFunction("SplitString"), 
                           {V, ArgsV[1]});
@@ -1788,7 +1796,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   }
 
   p2t("CallExpr clean scope"); 
-  p2t("\n\n");
   
   // Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   

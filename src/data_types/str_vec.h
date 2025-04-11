@@ -6,8 +6,8 @@
 
 
 extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *);
-extern "C" void *str_vec_Load(char *, int);
-extern "C" void str_vec_Store(char *, std::vector<char *>, int);
+extern "C" void *str_vec_Load(char *, Scope_Struct *);
+extern "C" void str_vec_Store(char *, std::vector<char *>, Scope_Struct *);
 
 
 
