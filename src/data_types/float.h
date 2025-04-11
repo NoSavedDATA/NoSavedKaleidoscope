@@ -3,8 +3,8 @@
 #include "../mangler/scope_struct.h"
 
 extern "C" float float_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *);
-extern "C" float float_Load(char *, int);
-extern "C" void float_Store(char *, float, int);
+extern "C" float float_Load(char *, Scope_Struct *);
+extern "C" void float_Store(char *, float, Scope_Struct *);
 
 extern "C" void StoreOnDemandNoFree(char *name, float value);
 

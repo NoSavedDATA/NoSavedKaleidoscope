@@ -27,7 +27,7 @@ extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, An
   return 0;
 }
 
-extern "C" void *str_Load(char *name, int thread_id){
+extern "C" void *str_Load(char *name, Scope_Struct *scope_struct){
   // std::cout << "Load str " << name << ".\n";
   //char *ret = CopyString(NamedStrs[name]);
   
@@ -41,7 +41,7 @@ extern "C" void *str_Load(char *name, int thread_id){
 }
 
 
-extern "C" float str_Store(char *name, char *value, int thread_id){
+extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct){
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   

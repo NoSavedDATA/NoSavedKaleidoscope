@@ -63,14 +63,12 @@ extern "C" void FreeCharFromFunc(char *_char, char *func) {
 
 
 extern "C" void FreeChar(char *_char) {
-  std::cout << "free" << ".\n";
-  std::cout << "FREEING " << _char << "\n";
+  // std::cout << "free" << ".\n";
+  // std::cout << "FREEING " << _char << "\n";
 
   move_to_char_pool(strlen(_char)+1, _char, "free");
   //delete[] _char;
 }
-
-
 
 
 

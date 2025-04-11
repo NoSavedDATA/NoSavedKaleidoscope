@@ -27,4 +27,6 @@ std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str);
 Value *LogErrorV(std::string Str); 
 
 
+extern "C" void print_codegen(char *msg);
+
 void p2t(std::string msg);

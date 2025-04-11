@@ -21,9 +21,9 @@
 
 extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
- // std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
-
- int thread_id = scope_struct->thread_id;
+  
+  int thread_id = scope_struct->thread_id;
+  // std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
 
   Tensor *tensor;
 
@@ -116,7 +116,7 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float in
 
 
 
-extern "C" void *tensor_Load(char *tensor_name, int thread_id){
+extern "C" void *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
   //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   Tensor *ret = NamedTensorsT[tensor_name];
   move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");

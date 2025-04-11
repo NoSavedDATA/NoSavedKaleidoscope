@@ -121,7 +121,7 @@ extern "C" Scope_Struct *scope_struct_Load_for_Async(char *fn_name)
 }
 
 
-extern "C" void print_scope_struct(Scope_Struct *scope_struct) {
+extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
     std::cout << "Printing scope:" << ".\n";
     scope_struct->Print();
 }

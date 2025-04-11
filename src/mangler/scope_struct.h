@@ -52,4 +52,4 @@ extern "C" Scope_Struct *scope_struct_Load_for_Async(char *);
 
 extern "C" void print_scope_Copy(Scope_Struct *);
 
-extern "C" void print_scope_struct(Scope_Struct *);
+extern "C" void scope_struct_Print(Scope_Struct *);

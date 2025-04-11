@@ -41,7 +41,7 @@ extern "C" float float_Create(char *name, char *scopeless_name, float init_val, 
   return 0;
 }
 
-extern "C" float float_Load(char *object_var_name, int thread_id) {
+extern "C" float float_Load(char *object_var_name, Scope_Struct *scope_struct) {
   
   // std::cout << "Loading float " << object_var_name << ".\n";
 
@@ -56,7 +56,7 @@ extern "C" float float_Load(char *object_var_name, int thread_id) {
 }
 
 
-extern "C" void float_Store(char *name, float value, int thread_id){
+extern "C" void float_Store(char *name, float value, Scope_Struct *scope_struct){
   // std::cout << "Float store: " << name << " on thread id: " << thread_id << ".\n";
   pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = value;

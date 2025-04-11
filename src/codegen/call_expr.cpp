@@ -9,8 +9,8 @@
 extern "C" char * FirstArgOnDemand(Scope_Struct *scope_struct, char *pre_dotc, char *_class, char *method, int nested_function, int isSelf, int isAttribute)
 {
 
-  std::cout << "FirstArgOnDemand" << ".\n";
-  std::cout << "first_arg: " << scope_struct->first_arg << ".\n";
+  // std::cout << "FirstArgOnDemand" << ".\n";
+  // std::cout << "first_arg: " << scope_struct->first_arg << ".\n";
 
   std::string _first_arg = scope_struct->first_arg;
   std::string pre_dot = pre_dotc;

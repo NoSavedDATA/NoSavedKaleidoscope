@@ -1088,15 +1088,13 @@ Value *ConcatStringsExprAST::codegen(Value *scope_struct) {
     // Look up the name.
     if (LType=="float") {
       Builder->CreateCall(TheModule->getFunction("float_Store"),
-                                                  {Lvar_name,
-                                                   Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+                                                  {Lvar_name, Val, scope_struct});
 
     } else if (LType=="str") {
 
 
       Builder->CreateCall(TheModule->getFunction("str_Store"),
-                                                  {Lvar_name,
-                                                   Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+                                                  {Lvar_name, Val, scope_struct});
                                                    
 
     } else if (LType=="str_vec") {
@@ -1117,12 +1115,11 @@ Value *ConcatStringsExprAST::codegen(Value *scope_struct) {
         Builder->CreateCall(TheModule->getFunction("float_vec_Store_Idx"),
                                                 {Lvar_name,
                                                   LHSV->Idx[0]->codegen(scope_struct),
-                                                  Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+                                                  Val, scope_struct});
 
       } else
         Builder->CreateCall(TheModule->getFunction("float_vec_Store"),
-                                                {Lvar_name,
-                                                  Val});
+                                                {Lvar_name, Val, scope_struct});
         
 
     } else {
@@ -1131,8 +1128,7 @@ Value *ConcatStringsExprAST::codegen(Value *scope_struct) {
       
       
       Builder->CreateCall(TheModule->getFunction("float_Store"),
-                                                  {Lvar_name,
-                                                   Val, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+                                                  {Lvar_name, Val, scope_struct});
       
 
       //std::string _error = "Could not find variable " + Lname + ".";
@@ -1221,7 +1217,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
         
 
       Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("tensor_Load"),
-                                              {tensor_name});
+                                              {tensor_name, scope_struct});
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
 
       return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
@@ -1280,6 +1276,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
                              TheModule.get());
 
   
+  //Dive scope_struct
   Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName)}); 
 
 
@@ -1291,6 +1288,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   
 
 
+  // Recover scope_struct Value * on the new function
   Value *scope_struct_copy = Builder->CreateCall(TheModule->getFunction("scope_struct_Load_for_Async"), {Builder->CreateGlobalString(functionName)}); 
 
   // define body of function
@@ -1573,10 +1571,6 @@ Value *ReturnExprAST::codegen(Value *scope_struct) {
 
 
 
-extern "C" void print_codegen(char *msg)
-{
-  std::cout << "-- print_codegen: " << msg << ".\n";
-}
 
 
 
@@ -2417,7 +2411,6 @@ Function *FunctionAST::codegen() {
   Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
   Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, has_grad});
   
-  // Builder->CreateCall(TheModule->getFunction("print_scope_struct"), {scope_struct});
 
 
 
@@ -2434,7 +2427,7 @@ Function *FunctionAST::codegen() {
   
 
 
-  p2t("FuncionAST start function args.");
+  p2t("FunctionAST start function args.");
 
   float val;
   int i = 0;
@@ -2445,17 +2438,15 @@ Function *FunctionAST::codegen() {
     std::string arg_name = Arg.getName().str();
     //std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
 
-    std::string __print = "FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " ";
+    std::string __print = "FunctionAST FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " ";
 
-    p2t(__print);
-    __print = "At " + function_name;
     p2t(__print);
 
 
     // Default args
     if (arg_name == "scope_struct")
     {
-      p2t("-------------------------------------------=============-----------------===========--------COPY SCOPE STRUCT");
+      p2t("-------------------------------------------=============-----------------===========--------FunctionAST COPY SCOPE STRUCT");
 
 
       scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {&Arg});      
@@ -2513,7 +2504,7 @@ Function *FunctionAST::codegen() {
 
 
       Builder->CreateCall(TheModule->getFunction("str_Store"),
-                                                  {var_name, &Arg, thread_id});
+                                                  {var_name, &Arg, scope_struct});
     }
     else if (type!="tensor")
     {
@@ -2544,6 +2535,9 @@ Function *FunctionAST::codegen() {
   }
   
 
+  p2t("FunctionAST");
+  // call("scope_struct_Print", {scope_struct});
+
 
   // Builder->CreateCall(TheModule->getFunction("print_codegen"), {Builder->CreateGlobalString("FunctionAST finish func args")});
 
@@ -2567,7 +2561,7 @@ Function *FunctionAST::codegen() {
 
 
 
-  std::cout << "Function AST " << function_name << " clean scope" << ".\n";
+  std::cout << "FunctionAST " << function_name << " clean scope" << ".\n";
   
   // if(has_self)
   //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
@@ -2584,28 +2578,28 @@ Function *FunctionAST::codegen() {
 
   
   
-  std::cout << "Function AST return" << ".\n";
+  std::cout << "FunctionAST return" << ".\n";
 
   if (RetVal) {
     // Finish off the function.
     
     
-    std::cout << "Function AST CreateRet" << ".\n";
+    std::cout << "FunctionAST CreateRet" << ".\n";
     Builder->CreateRet(RetVal);
     
 
-    std::cout << "Function AST verify" << ".\n";
+    std::cout << "FunctionAST verify" << ".\n";
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
 
 
-    std::cout << "Function AST verified" << ".\n";
+    std::cout << "FunctionAST verified" << ".\n";
     // Validate the generated code, checking for consistency.
 
     return TheFunction;
   }
 
-  std::cout << "Function AST returned" << ".\n";
+  std::cout << "FunctionAST returned" << ".\n";
 
   // Error reading body, remove function.
   TheFunction->eraseFromParent();
@@ -3937,14 +3931,14 @@ static void InitializeModule() {
   //
   FunctionType *float_vec_StoreTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("float_vec_Store", float_vec_StoreTy);
 
   FunctionType *float_vec_Store_IdxTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
@@ -4266,21 +4260,21 @@ static void InitializeModule() {
   // 
   FunctionType *float_StoreTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
       false //
   );
   TheModule->getOrInsertFunction("float_Store", float_StoreTy);
 
   FunctionType *str_StoreTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false //
   );
   TheModule->getOrInsertFunction("str_Store", str_StoreTy);
 
   FunctionType *str_vec_StoreTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false //
   );
   TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
@@ -4306,35 +4300,35 @@ static void InitializeModule() {
   //
   FunctionType *float_LoadTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("float_Load", float_LoadTy);
 
   FunctionType *float_vec_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("float_vec_Load", float_vec_LoadTy);
 
   FunctionType *str_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("str_Load", str_LoadTy);
 
   FunctionType *str_vec_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
   
   FunctionType *tensor_LoadTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("tensor_Load", tensor_LoadTy);
@@ -4525,7 +4519,7 @@ static void InitializeModule() {
       {int8PtrTy},
       false 
   );
-  TheModule->getOrInsertFunction("print_scope_struct", print_scopeTy);
+  TheModule->getOrInsertFunction("scope_struct_Print", print_scopeTy);
 
   FunctionType *scope_struct_CopyTy = FunctionType::get(
       int8PtrTy,

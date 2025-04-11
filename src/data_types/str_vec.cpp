@@ -23,7 +23,7 @@ extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val
   return 0;
 }
 
-extern "C" void *str_vec_Load(char *object_var_name, int thread_id) {
+extern "C" void *str_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
   std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   void *ret = &ClassStrVecs[object_var_name];
@@ -32,7 +32,7 @@ extern "C" void *str_vec_Load(char *object_var_name, int thread_id) {
 }
 
 
-extern "C" void str_vec_Store(char *name, std::vector<char *> value, int thread_id){
+extern "C" void str_vec_Store(char *name, std::vector<char *> value, Scope_Struct *scope_struct){
   std::cout << "STORING " << name << " on demand as StrVec type.\n";
   ClassStrVecs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");
