@@ -1223,7 +1223,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       }
   } else {
     std::string msg = "Codegen for operation: " + Operation;
-    // p2t(msg);
+    p2t(msg);
 
     return callret(Operation, {L, R, scope_struct}); 
   }
