@@ -1,5 +1,10 @@
 #pragma once
 
+
+#include <map>
+#include <string>
+#include <vector>
+
 #include "codegen.h"
 #include "expressions.h"
 #include "logging.h"
@@ -16,6 +21,8 @@ extern std::vector<std::string> return_tensor_functions, return_tensor_methods, 
 return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,
 return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str;
 
+
+extern std::map<std::string, std::string> functions_return_type, reverse_ops;
 
 
 

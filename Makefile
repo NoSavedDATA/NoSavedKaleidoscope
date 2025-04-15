@@ -56,7 +56,10 @@ SRC := toy.cu
 
 .PHONY: directories
 
-all: $(OBJ)
+BUILD_FLAG := .build_flag
+
+
+all: $(OBJ) check_done
 
 $(info var is: ${OBJ_DIRS})
 $(foreach dir, $(OBJ_DIRS), \
@@ -70,8 +73,6 @@ $(info objects: $(CU_OBJ) sources: $(CU_SRC))
 
 
 
-
-
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 	
@@ -81,11 +82,16 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 $(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
+	@touch $(BUILD_FLAG)
 
 # $(OBJ): $(SRC)
 # 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 
-
+check_done:
+	@if [ ! -f $(BUILD_FLAG) ]; then \
+		echo -e "\n\n\033[1;33mNo changes found [ ]\n\033[0m"; \
+	fi
+	@rm -f $(BUILD_FLAG)
 
 clean:
 	rm -rf $(BIN_DIR) $(OBJ_DIR)

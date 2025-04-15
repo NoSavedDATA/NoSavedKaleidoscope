@@ -17,3 +17,13 @@ extern "C" float *split_str_to_float(char *in_string, int gather_position);
 
 
 extern "C" void *cat_str_float(char *c, float v);
+
+
+
+
+extern "C" void *SplitString(char *self, char *pattern);
+
+extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx);
+
+
+extern "C" float StrToFloat(char *in_str);

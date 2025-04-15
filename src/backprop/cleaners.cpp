@@ -1,6 +1,7 @@
 
 #include "../codegen/scope.h"
 #include "../common/include.h"
+#include "../mangler/scope_struct.h"
 #include "cleaners.h"
 
 
@@ -179,7 +180,7 @@ void CleanScopeTensors(std::string scope)
   forward_tensors_sent_to_pool.erase(scope);
 }
 
-extern "C" float clean_forward(char *scope, char *previous_scope, int thread_id, int has_grad)
+extern "C" float clean_forward(Scope_Struct *scope_struct)
 {//TODO: break? clears threaded tensors
   for(std::string _scope : scopes)
     CleanScopeTensors(_scope);

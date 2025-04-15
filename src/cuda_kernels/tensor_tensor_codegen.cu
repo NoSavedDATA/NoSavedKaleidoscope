@@ -6,12 +6,15 @@
 #include "../common/cu_commons.h"
 #include "../compiler_frontend/logging.h"
 #include "../cuda_threads/include.h"
+#include "../mangler/scope_struct.h"
 #include "../mma/general.h"
 #include "../tensor/include.h"
 #include "include.h"
 
-extern "C" Tensor *CudaMult(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
+extern "C" Tensor *tensor_tensor_mma(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+
+  int thread_id = scope_struct->thread_id;
 
   std::vector<float> Ldims, Rdims;
   Ldims = tensor_x->dims;
@@ -54,11 +57,13 @@ extern "C" Tensor *CudaMult(int is_forward_func,
 }
 
 
-extern "C" Tensor *CudaAdd(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
+extern "C" Tensor *tensor_tensor_add(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
+  int thread_id = scope_struct->thread_id;
+
   std::vector<float> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
@@ -129,8 +134,10 @@ extern "C" Tensor *CudaAdd(int is_forward_func,
 }
 
 
-extern "C" Tensor *CudaSub(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
+extern "C" Tensor *tensor_tensor_sub(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+
+  int thread_id = scope_struct->thread_id;
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -166,9 +173,11 @@ extern "C" Tensor *CudaSub(int is_forward_func,
 }
 
 
-extern "C" Tensor *CudaEqual(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
+extern "C" Tensor *tensor_tensor_equal(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
 
+  int thread_id = scope_struct->thread_id;
+                            
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
   std::vector<float> Ldims, Rdims;
@@ -202,8 +211,10 @@ extern "C" Tensor *CudaEqual(int is_forward_func,
 }
 
 
-extern "C" Tensor *CudaHadamard(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
+extern "C" Tensor *tensor_tensor_mult(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+
+  int thread_id = scope_struct->thread_id;
 
   //std::cout << "      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -293,8 +304,10 @@ extern "C" Tensor *CudaHadamard(int is_forward_func,
 
 
 
-extern "C" void *CudaDiv(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id) {
+extern "C" void *tensor_tensor_div(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+                            
+  int thread_id = scope_struct->thread_id;
   
   //std::cout << "TENSOR TENSOR DIV" << "\n";
   

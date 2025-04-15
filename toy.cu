@@ -161,6 +161,7 @@ return_pinned_methods, vararg_methods, string_methods, native_methods, native_fu
 return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str;
 
 
+std::map<std::string, std::string> functions_return_type, reverse_ops;
 
 
 
@@ -190,8 +191,6 @@ std::map<size_t, std::vector<char *>> CharPool;
 
 
 
-static std::map<std::string, std::string> objectVecs;
-static std::map<std::string, int> objectVecsLastId;
 
 
 
@@ -239,24 +238,6 @@ std::vector<char *> glob_str_files;
 
 
 
-Value * VoidPtr_toValue(void *vec)
-{
-  auto void_ptr_ty = Type::getInt8Ty(*TheContext)->getPointerTo();
-  Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
-  return Builder->CreateIntToPtr(LLVMValue, void_ptr_ty);
-}
-
-Value* FloatPtr_toValue(float* vec)
-{
-    // Get the type for float*
-    auto float_ptr_ty = Type::getFloatTy(*TheContext)->getPointerTo();
-    
-    // Convert the float* to uint64_t and create a constant integer value
-    Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
-    
-    // Cast the integer value to float*
-    return Builder->CreateIntToPtr(LLVMValue, float_ptr_ty);
-}
 
 
 
@@ -465,360 +446,21 @@ extern "C" void *self_attn(int thread_id, Tensor *tensor)
 
 
 
-class SGD_optim : public Optimizer {
-  float lr, momentum, weight_decay, grad_clip;
 
-  public:
-    SGD_optim(float lr, float momentum, float weight_decay, float grad_clip)
-      : lr(lr), momentum(momentum), weight_decay(weight_decay), grad_clip(grad_clip) {}
-    
-  void init_states(std::string param_name, float params_count) override;
-  void step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
-  void sparse_step(float *, float *, float *, std::vector<float>, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
-};
 
-class AdamW_optim : public Optimizer {
-  float lr, beta1, beta2, weight_decay, grad_clip;
 
-  public:
-    AdamW_optim(float lr, float beta1, float beta2, float weight_decay, float grad_clip)
-      : lr(lr), beta1(beta1), beta2(beta2), weight_decay(weight_decay), grad_clip(grad_clip) {}
-    
-  void init_states(std::string param_name, float params_count) override;
-  void step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
-  void sparse_step(float *, float *, float *, std::vector<float>, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
-};
 
 
 
-__device__ inline float lerp(float start, float end, float weight) {
-    return fma(weight, end, fma(-weight, start, start));
-}
 
-__global__ void sgd_kernel(float* params_memory, const float* grads_memory, float* m_memory, long num_parameters,
-                              float learning_rate, float momentum,
-                              const float weight_decay, const float grad_clip) {
 
-   int i = blockIdx.x * blockDim.x + threadIdx.x;
-   if (i >= num_parameters) return;  // guard
-   
-  //  float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip) + weight_decay * params_memory[i];
-   float grad = grads_memory[i];
-   float m = m_memory[i];
-   
-   // update the first moment (momentum)
-   m = m*momentum + grad;
-   m_memory[i] = m;
-  
-   params_memory[i] -= learning_rate * m;
-}
 
-__global__ void adamw_kernel(float* params_memory, const float* grads_memory, float* m_memory, float* v_memory, long num_parameters,
-                              float learning_rate, float beta1, float beta2, float beta1_correction, float beta2_correction,
-                              const float eps, const float weight_decay, const float grad_clip) {
 
-   int i = blockIdx.x * blockDim.x + threadIdx.x;
-   if (i >= num_parameters) return;  // guard
-   
-  //  float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
-   float grad = grads_memory[i];
-   float m = m_memory[i];
-   float v = v_memory[i];
-   // update the first moment (momentum)
-   m = lerp(grad, m, beta1);
-   m_memory[i] = m;
-   // update the second moment (RMSprop)
-   v = lerp(grad * grad, v, beta2);
-   v_memory[i] = v;
-   m /= beta1_correction;  // m_hat
-   v /= beta2_correction;  // v_hat
-   params_memory[i] -= learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i]);
-}
 
 
-void SGD_optim::init_states(std::string param_name, float params_count)
-{
-  
 
-  if (NamedM[param_name]==nullptr)
-  {
-    std::cout << "init_states for param " << param_name << " with params count: " << params_count << "\n";
 
-    float *m, *device_m;
 
-    m = new float[params_count];
-    m = make_zeros_float(params_count);
-
-    cudaMalloc(&device_m, params_count*sizeof(float));
-    cudaMemcpy(device_m, m, params_count*sizeof(float), cudaMemcpyHostToDevice);
-
-    delete[] m;
-
-    NamedM[param_name] = device_m;
-  }
-}
-
-void SGD_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream)
-{
-  float *m = NamedM[param_name];
-
- 
-  int params_count = DimsProd(dims);
-  int grid_size, block_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-
-  sgd_kernel<<<grid_size, block_size, 0, stream>>>(param, grad, m, params_count,
-                                           lr, momentum, weight_decay, grad_clip);
-}
-
-void SGD_optim::sparse_step(float *param, float *grad, float *idx, std::vector<float> idx_dims, std::vector<float> dims, std::string param_name, cudaStream_t stream)
-{
-  float *m = NamedM[param_name];
-}
-
-void AdamW_optim::init_states(std::string param_name, float params_count)
-{
-  if (NamedV[param_name]==nullptr)
-  {
-    std::cout << "init_states for param " << param_name << " with params count: " << params_count << "\n";
-
-    float *v, *m, *device_v, *device_m;
-    v = new float[params_count];
-    m = new float[params_count];
-
-    v = make_zeros_float(params_count);
-    m = make_zeros_float(params_count);
-
-
-    cudaMalloc(&device_v, params_count*sizeof(float));
-    cudaMalloc(&device_m, params_count*sizeof(float));
-    cudaMemcpy(device_v, v, params_count*sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_m, m, params_count*sizeof(float), cudaMemcpyHostToDevice);
-
-    delete[] v;
-    delete[] m;
-
-    NamedV[param_name] = device_v; 
-    NamedM[param_name] = device_m;
-  }
-}
-
-void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream)
-{
-  float *v = NamedV[param_name];
-  float *m = NamedM[param_name];
-
-  float beta1_correction = 1.0f - powf(beta1, timestep);
-  float beta2_correction = 1.0f - powf(beta2, timestep);
-
-
-  int params_count = DimsProd(dims);
-  
-  int grid_size, block_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-
-  adamw_kernel<<<grid_size, block_size, 0, stream>>>(param, grad, m, v, params_count,
-                                           lr, beta1, beta2, beta1_correction, beta2_correction,
-                                           eps, weight_decay, grad_clip);
-}
-
-
-__global__ void sparse_adamw_kernel(float* params_memory, const float* grads_memory, const float *idx_tensor,
-                              float* m_memory, float* v_memory, long num_parameters, const int C,
-                              const float learning_rate, const float beta1, const float beta2, const float beta1_correction, const float beta2_correction,
-                              const float eps, const float weight_decay, const float grad_clip) {
-
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i >= num_parameters) return;  // guard
-
-  int b = i / C;
-  int c = i % C;
-
-
-  int idx = (int)idx_tensor[b]; 
-
-
-  float grad = std::clamp(grads_memory[i], -grad_clip, grad_clip);
-  float m = m_memory[idx*C + c];
-  float v = v_memory[idx*C + c];
-  // update the first moment (momentum)
-  m = lerp(grad, m, beta1);
-  // update the second moment (RMSprop)
-  v = lerp(grad * grad, v, beta2);
-  
-  m /= beta1_correction;  // m_hat
-  v /= beta2_correction;  // v_hat
-
-  //float *param = params_memory + idx*C + c;
-  float p = params_memory[idx*C + c];
-
-  p = p - learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i]);
-  //atomicAdd(param, -1*(learning_rate * (m / (sqrtf(v) + eps) + weight_decay * params_memory[i])));
-  __threadfence();
-  m_memory[idx*C + c] = m;
-  v_memory[idx*C + c] = v;
-  params_memory[idx*C + c] = p;
-}
-
-void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector<float> idx_dims, std::vector<float> dims, std::string param_name, cudaStream_t stream)
-{
-  float *v = NamedV[param_name];
-  float *m = NamedM[param_name];
-
-  float beta1_correction = 1.0f - powf(beta1, timestep);
-  float beta2_correction = 1.0f - powf(beta2, timestep);
-
-
-  int leading_dim = dims[dims.size()-1];
-
-  int params_count = DimsProd(idx_dims)*leading_dim;
-
-  
-  int grid_size, block_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-
-  //std::cout << "Sparse step " << "\n";
-  //PrintDims(idx_dims);
-  //PrintDims(dims);
-  sparse_adamw_kernel<<<grid_size, block_size, 0, stream>>>(param, grad, idx, m, v, params_count, leading_dim,
-                                           lr, beta1, beta2, beta1_correction, beta2_correction,
-                                           eps, weight_decay, grad_clip);
-}
-
-
-
-std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
-{
-  int num_streams = NamedParamGrads.size();
-
-  std::vector<cudaStream_t> streams(num_streams);
-
-  for (int i = 0; i < num_streams; ++i)
-  {
-
-    cudaStreamCreate(&streams[i]);
-    //StreamAwaitStreamB(streams[i], main_stream->stream);
-  }
-
-  cudaStreamSynchronize(main_stream->stream);
-
-  int i=0;
-  for (auto& pair : NamedParamGrads)
-  {
-    std::string param_name = pair.first;
-    //std::cout << "Optimizing " << param_name << "\n";
-
-    if (param_name!="none")
-    {
-      float *grad = pair.second;
-      Tensor *tensor = NamedTensorsT[param_name];
-      
-      //std::cout << "param dims: "  << "\n";
-      //PrintDims(tensor->dims);
-      optimizer->init_states(param_name, tensor->dims_prod);
-
-      if (tensor->Sparse_Idx_Tensor!=nullptr)
-      {
-        //std::cout << "Tensor " << param_name << " has a sparse gradient "<< "\n";
-        Tensor *idx_tensor = tensor->Sparse_Idx_Tensor;
-
-        optimizer->sparse_step(tensor->tensor_ptr, grad, idx_tensor->tensor_ptr,
-                               idx_tensor->dims, tensor->dims, param_name, streams[i]);
-
-        move_to_pool(0, idx_tensor->dims_prod, idx_tensor->tensor_ptr, "sparse grad idxs");
-        delete idx_tensor;
-      } else
-        optimizer->step(tensor->tensor_ptr, grad, tensor->dims, param_name, streams[i]);
-
-      int grid_size, block_size; 
-      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
-      grid_size = grid_block_mem_sizes[0];
-      block_size = grid_block_mem_sizes[1];
-
-      set_to_zero_kernel<<<grid_size, block_size, 0, streams[i]>>>(grad, tensor->dims_prod);
-    }
-    i+=1;
-  }
-  optimizer->count_step();
-
-  
-  for (int i = 0; i < num_streams; ++i)
-  {
-    cudaStreamSynchronize(streams[i]);
-    //StreamAwaitStreamB(main_stream->stream, streams[i]);
-  }
-  for (int i = 0; i < num_streams; ++i)
-    cudaStreamDestroy(streams[i]);
-
-  cudaStreamSynchronize(main_stream->stream);
-
-  return std::move(optimizer);
-}
-
-
-
-std::unique_ptr<Optimizer> optimizer = nullptr;
-extern "C" float SGD(float lr, float momentum, float weight_decay, float grad_clip)
-{
-
-  if (optimizer==nullptr)
-    optimizer = std::make_unique<SGD_optim>(lr, momentum, weight_decay, grad_clip);
-
-  optimizer = optimize(std::move(optimizer));
-
-  return 0;
-}
-extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay, float grad_clip)
-{
-
-  if (optimizer==nullptr)
-    optimizer = std::make_unique<AdamW_optim>(lr, beta1, beta2, weight_decay, grad_clip);
-
-  optimizer = optimize(std::move(optimizer));
-
-  return 0;
-}
-
-
-
-
-
-extern "C" float OneCycleLR(float base_lr, float step, float max_steps)
-{
-  // Possibly wrong.
-  float pct_start, final_div_factor, max_momentum, min_momentum, cycle_length, down_phase_steps, min_lr;
-  pct_start=0.3;
-  final_div_factor=1000;
-  max_momentum=0.95;
-  min_momentum=0.85;
-
-  cycle_length = int(max_steps*pct_start);
-  down_phase_steps = max_steps - cycle_length;
-
-  min_lr = base_lr/final_div_factor;
-
-  
-  if(step<cycle_length)
-    return base_lr * step/cycle_length;
-  if(step<max_steps)
-    return base_lr * (1 + std::cos(M_PI * (step - cycle_length) / (max_steps - cycle_length))) / 2;
-  return min_lr;
-}
-
-extern "C" float CosineLR(float base_lr, float min_lr, float step, float max_steps)
-{
-  //float min_lr = base_lr*0.05;
-
-  if(step<max_steps)
-    return min_lr + (base_lr-min_lr) * (1 + std::cos(M_PI * (step/max_steps))) / 2;
-  return min_lr;
-}
 
 
 
@@ -838,7 +480,7 @@ extern "C" float eval()
   }
   TensorPool.clear();
   */
-  
+   
   for (auto& pair : NamedParamGrads)
   {
     std::cout << "Erasing gradient memory of: " << pair.first << "\n";
@@ -899,1456 +541,14 @@ extern "C" float train()
 
 
 
-Value *BinaryTensorPinnedExprAST::codegen(Value *scope_struct) {
-  std::cout << "Binary Tensor Pinned codegen" << "\n";
 
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
 
-  std::cout << "Binary Tensor Pinned codegen" << "\n";
 
-  Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
-  Value *object_name;
 
 
 
-  // if is attribution
-  if (Op == '=') {
-  
-    seen_var_attr=true;
 
-    Value *RtensorPtr = RHS->codegen(scope_struct);
-    
 
-    if (!LHS->GetIsVec())
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(scope_struct);
-
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-      std::cout << "1 2 attr\n";
-      
-
-      Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-                          {LtensorName, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      std::cout << "Post attr call\n";
-    } else
-    {
-      std::cout << "1 2 INDEXED attr\n";
-
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(scope_struct);
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-
-
-      std::vector<Value *> idx_calc_args;
-      idx_calc_args.push_back(LtensorName);
-      for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(scope_struct));
-      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                            idx_calc_args);
-
-      
-      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-                          {LtensorName, RtensorPtr,
-                           idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      
-    }
-    seen_var_attr=false;
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
-  
-}
-
-
-
-
-
-Value *BinaryObjExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Value *LName = Builder->CreateGlobalString(LHS->GetName());
-  Value *RName = Builder->CreateGlobalString(RHS->GetName());
-  Value *object_name;
-
-  
-
-
-  // if is attribution
-  if (Op == '=') {
-  
-    seen_var_attr=true;
-
-
-    if (!LHS->GetIsVec())
-    {
-      std::cout << "\n\n3 3 attr\n";
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(scope_struct);
-      
-      if (RHS->GetIsVec())
-      {
-        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
-        VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
-        
-        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
-                                                        {LName, RName});
-      } else {
-        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
-        
-        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
-                                                        {LName, RName});
-
-      }
-    
-    } else {
-      std::cout << "\n\n3 3 other INDEXED attr\n";
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(scope_struct);
-
-
-      std::cout << "ok" << "\n";
-      
-      if (RHS->GetIsVec())
-      {
-        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
-        VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
-        
-        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
-                                                        {LName, RName});
-      } else {
-        std::cout << "3 3 VEC FROM VAR" << "\n";
-        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
-        
-        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
-                                                        {LName, RName});
-
-      }
-
-
-    }
-    seen_var_attr=false;
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
-  
-}
-
-
-
-
-Value *ConcatStringsExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // Special case '=' because we don't want to emit the LHS as an expression.
-
-  
-
-  if (Op == '=') {
-
-    //std::cout << "\n0 0 ATTRIBUTION" << "\n\n\n";
-
-    seen_var_attr=true;
-    // Assignment requires the LHS to be an identifier.
-    // This assume we're building without RTTI because LLVM builds that way by
-    // default.  If you build LLVM with RTTI this can be changed to a
-    // dynamic_cast for automatic error checking.
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-
-
-    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
-    std::string Lname = std::get<0>(name_solver->Names[0]);
-    std::string LType = LHS->GetType();
-
-
-    if (!LHSE)
-      return LogErrorV("'=' destiny must be a variable.");
-    // Codegen the RHS.
-    
-    Value *Val = RHS->codegen(scope_struct);
-
-    if (!Val)
-    {
-      seen_var_attr=false;
-      return nullptr;
-    }
-
-    // Look up the name.
-    if (LType=="float") {
-      Builder->CreateCall(TheModule->getFunction("float_Store"),
-                                                  {Lvar_name, Val, scope_struct});
-
-    } else if (LType=="str") {
-
-
-      Builder->CreateCall(TheModule->getFunction("str_Store"),
-                                                  {Lvar_name, Val, scope_struct});
-                                                   
-
-    } else if (LType=="str_vec") {
-
-      std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
-
-    } else if (LType=="float_vec") {
-
-      //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
-
-      
-
-      if(LHS->GetIsVec())
-      {
-        VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
-        
-
-        Builder->CreateCall(TheModule->getFunction("float_vec_Store_Idx"),
-                                                {Lvar_name,
-                                                  LHSV->Idx[0]->codegen(scope_struct),
-                                                  Val, scope_struct});
-
-      } else
-        Builder->CreateCall(TheModule->getFunction("float_vec_Store"),
-                                                {Lvar_name, Val, scope_struct});
-        
-
-    } else {
-      
-      seen_var_attr=false;
-      
-      
-      Builder->CreateCall(TheModule->getFunction("float_Store"),
-                                                  {Lvar_name, Val, scope_struct});
-      
-
-      //std::string _error = "Could not find variable " + Lname + ".";
-      //return LogErrorV(_error);
-    }
-
-    seen_var_attr=false;
-    return Val;
-  }
-
-
-  
-
-  Value *L = LHS->codegen(scope_struct);
-  Value *R = RHS->codegen(scope_struct);
-  
-  if (!L || !R)
-    return nullptr;
-
-
-    switch (Op) {
-    case '+':
-      return Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {L, R});
-    default:
-      LogErrorS("The only string operations supported are '+' and '='.");
-      break;
-    }
-  
-
-  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
-  // a call to it.
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {L, R};
-  return Builder->CreateCall(F, Ops, "binop");
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Value *UnaryExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *OperandV = Operand->codegen(scope_struct);
-  if (!OperandV)
-    return nullptr;
-  
-  
-  
-  //std::cout << "Operand type: " << Operand->GetType();
-  if (Opcode=='-')
-  {
-    //std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
-    if (Operand->GetType()=="tensor")
-    {
-      Value *tensor_name = Builder->CreateGlobalString(Operand->GetName());
-
-      std::string pre_dot = Operand->GetPreDot();
-      bool is_self = Operand->GetSelf();
-      bool is_attr = Operand->GetIsAttribute();
-
-      if (is_attr) { // Gets from pre_dot if it is a class attribute
-        Value * object_name = Builder->CreateGlobalString(pre_dot);
-
-        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {object_name, tensor_name});
-      }
-      if (is_self)
-        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), tensor_name});
-      if (!(is_self||is_attr))
-        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), tensor_name});
-        
-
-      Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("tensor_Load"),
-                                              {tensor_name, scope_struct});
-      Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
-
-      return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                                {tensorPtr, R, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})}, "cudascalarmult");
-    }
-    return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
-                              OperandV, "multmp");
-  }
-
-  //std::cout << "Opcode: " << Opcode << "\n";
-
-
-  if (Opcode='!')
-  {
-    return Builder->CreateCall(TheModule->getFunction("logical_not"), {OperandV});
-  }
-  if (Opcode=';')
-    return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
-  
-
-  Function *F = getFunction(std::string("unary") + Opcode);
-  if (!F)
-    return LogErrorV("Operador unário desconhecido.");
-
-  return Builder->CreateCall(F, OperandV, "unop");
-}
-
-
-
-
-
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct) {
-  
-
-  // find existing unique function name (_async_1, _async_2, _async_3 etc)
-  int fnIndex = 1;
-  while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
-    fnIndex++;
-  
-  CudaStreams *thread_stream = AllocateStream(0);
-  ThreadsStream[fnIndex] = thread_stream->stream;
-
-  // Create function for this async function
-  llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-
-  FunctionType *asyncFunTy = FunctionType::get(
-                                            int8PtrTy,
-                                            {int8PtrTy},
-                                            false);
-                                            
-  std::string functionName = "__async_" + std::to_string(fnIndex);
-  Function *asyncFun =
-      Function::Create(asyncFunTy,
-                             Function::ExternalLinkage,
-                             functionName,
-                             TheModule.get());
-
-  
-  //Dive scope_struct
-  Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName)}); 
-
-
-
-  // emit EntryBB value
-  std::cout << "\n\nfunction * get basic block for function: " << functionName << "\n";
-  BasicBlock *BB = BasicBlock::Create(*TheContext, "async_bb", asyncFun);
-  Builder->SetInsertPoint(BB);
-  
-
-
-  // Recover scope_struct Value * on the new function
-  Value *scope_struct_copy = Builder->CreateCall(TheModule->getFunction("scope_struct_Load_for_Async"), {Builder->CreateGlobalString(functionName)}); 
-
-  // define body of function
-  Value *V;
-
-
-
-  for (auto &body : asyncBody)
-  {
-    std::string pre = std::string("codegenAsyncFunction Body codegen pre of: ") + typeid(*body).name();
-    p2t(pre);
-    V = body->codegen(scope_struct_copy);
-    p2t("codegenAsyncFunction body post");
-  }
-
-
-
-  if (V)
-  {
-    
-    p2t("codegenAsyncFunction create return");
-    Builder->CreateRet(Constant::getNullValue(int8PtrTy));
-    
-
-    std::string functionError;
-    llvm::raw_string_ostream functionErrorStream(functionError);
-
-    if (verifyFunction(*asyncFun, &functionErrorStream)) {
-      functionErrorStream.flush();
-      llvm::errs() << "codegenAsyncFunction: Function verification failed:\n" << functionError << "\n";
-    } 
-
-    verifyModule(*TheModule);
-    return asyncFun;
-  }
-  
-  std::cout << "ERASING ASYNC FROM PARENT" << "\n";
-  asyncFun->eraseFromParent();
-
-  return nullptr;
-}
-
-
-//int pthread_create(pthread_t *thread, pthread_attr_t *attr,
-//                   void *(*start_routine) (void *arg), void *arg);
-
-extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
-                   void *(*function_ptr) (void *arg), void *arg)
-{
-  std::cout << "Creating thread" << "\n";
-  pthread_create(thread, attr, function_ptr, arg);
-  std::cout << "Created" << "\n";
-}
-
-
-extern "C" void pthread_join_aux(pthread_t thread)
-{
-  std::cout << "Joining " << thread <<  "\n";
-  void **value_ptr;
-  value_ptr = nullptr;
-
-  pthread_join(thread, value_ptr);
-  std::cout << "Joined: " << thread << "\n";
-}
-
-
-
-std::vector<Value *> thread_pointers;
-
-
-Value *AsyncExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  
-  // Create/Spawn Threads
-
-  
-  // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct}); 
-
-  BasicBlock *CurrentBB = Builder->GetInsertBlock();
-
-
-  
-  
-  //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
-
-
-  Function *asyncFun = codegenAsyncFunction(std::ref(Body), scope_struct);
-
-
-  Builder->SetInsertPoint(CurrentBB);
-
-  
-  Function *pthread_create = TheModule->getFunction("pthread_create_aux");
-
-
-  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
-  Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
-  
-  
-
-  Value *voidPtrNull = Constant::getNullValue(
-      Type::getInt8Ty(*TheContext)->getPointerTo());
-
-
-  
-  Builder->CreateCall(pthread_create,
-    {pthreadPtr,
-     voidPtrNull,
-     asyncFun,
-     voidPtrNull}
-  );
-  
-  p2t("AsyncExpr Created join call");
-
-
-  thread_pointers.push_back(pthreadPtr);
-
-  return pthreadPtr;
-}
-
-
-
-Value *FinishExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-  std::string functionName = TheFunction->getName().str();
-
-
-  for (int i=0; i < Bodies.size(); i++)
-    Bodies[i]->codegen(scope_struct);
-  
-
-  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
-
-  Function *pthread_join = TheModule->getFunction("pthread_join_aux");
-
-
-  //std::cout << "\n\n\n\nFINISH HAS " << thread_pointers.size() << " ASYNC EXPRESSIONS "  << "\n\n\n\n\n";
-
-
-  for (Value *pthreadPtr : thread_pointers)
-  {
-    Value *pthread = Builder->CreateLoad(pthreadTy, pthreadPtr);
-
-    Builder->CreateCall(pthread_join,
-                        {pthread});
-    
-  }
-  
-  thread_pointers.clear();
-  
-  return ConstantFP::get(*TheContext, APFloat(0.0f));
-}
-
-
-Value *LockExprAST::codegen(Value *scope_struct){
-  
-  Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
-
-  for (auto &body : Bodies)
-    body->codegen(scope_struct);
-
-  Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
-
-  return ConstantFP::get(*TheContext, APFloat(0.0f));
-}
-
-
-Value *NoGradExprAST::codegen(Value *scope_struct){
-  
-  Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, ConstantInt::get(Type::getInt32Ty(*TheContext), 0)});
-  for (auto &body : Bodies)
-    body->codegen(scope_struct);
-
-  
-  return ConstantFP::get(*TheContext, APFloat(0.0f));
-}
-
-
-
-
-
-Value *ReturnExprAST::codegen(Value *scope_struct) {
-
-  for (int i=0; i<Destiny.size(); i++)
-  {
-    //TODO: add self and attr to return
-    
-    std::string name, type, l_name, l_type;
-    bool is_vec, l_is_vec;
-
-    name   = Destiny[i]->GetName();
-    type   = Destiny[i]->GetType();
-    is_vec = Destiny[i]->GetIsVec();
-
-    Value *_name = Builder->CreateGlobalString(name);
-
-    std::cout << "\nRETURNING: " << name << ", type: " << type << ", is vec: " << is_vec <<  "\n\n";
-
-    if (!IsAs[i])
-    {
-      if(type=="tensor")
-      {
-        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
-        destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(scope_struct);
-
-        Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                            {_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
-                                             _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
-                                             Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      }
-    } else {
-      l_name   = Vars[i]->GetName();
-      l_type   = Vars[i]->GetType();
-      l_is_vec = Vars[i]->GetIsVec();
-
-      std::cout << "l_name: " << l_name << " l_type: " << l_type << ", l_is_vec: " << l_is_vec << "\n";
-
-      if (!is_vec)
-      {
-        
-
-
-        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
-        destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(scope_struct);
-
-
-        VariableExprAST *var = static_cast<VariableExprAST *>(Vars[i].get());
-        var->NameSolver->SetSolverIncludeScope(false);
-        Value *_l_name = var->NameSolver->codegen(scope_struct);
-
-        
-        
-        
-
-        if (l_type=="tensor"||type=="tensor")
-        {
-          Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
-                                               _name,   Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
-                                               Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-        }
-      } else {
-
-        VecIdxExprAST *destiny = static_cast<VecIdxExprAST *>(Destiny[i].get());
-        if (!destiny)
-          return LogErrorV("Could not deal with return expression");
-        destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(scope_struct);
-        
-
-        std::vector<Value *> idx_calc_args;
-        idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}), _name}));
-        for (int i=0; i<destiny->Idx.size(); i++)
-          idx_calc_args.push_back(destiny->Idx[i]->codegen(scope_struct));
-        Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                              idx_calc_args);
-
-        
-        
-        Value *_l_name = Builder->CreateGlobalString(l_name);
-        Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
-                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
-                                               _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
-                                               idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      }
-    }
-  }
-
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-
-
-
-
-
-extern "C" float InitObjectVecWithNull(char *name, float vec_size) 
-{
-  std::cout << "InitObjectVecWithNull of " << name << " with vec_size " << vec_size << "\n\n\n\n";
-
-  for (int i=0; i<vec_size; i++)
-  {
-    std::string indexed_name = name + std::to_string(i);
-    objectVecs[indexed_name] = "nullptr";
-  }
-  
-  delete[] name; //TODO: Break?
-  return 0;
-}
-
-extern "C" float is_null(char *name)
-{
-  //std::cout << "\n\nIS NULL OF: " << name << "\n\n\n";
-
-  if (objectVecs[name]=="nullptr")
-    return 1;
-  return 0;
-}
-
-Value *NewVecExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  std::vector<Value *> values;
-
-  values.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}));
-  for (int i=0; i<Values.size(); i++)
-    values.push_back(Values[i]->codegen(scope_struct));
-
-
-
-  return Builder->CreateCall(TheModule->getFunction("NewVecToTensor"), values);
-}
-
-
-Value *ObjectExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  Value *init;
-  if (Init)
-    init = Init->codegen(scope_struct);
-
-  // Register all variables and emit their initializer.
-
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
-  {
-    const std::string &VarName = VarNames[i].first;
-
-    Value *var_name;// = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-    
-    std::string pre_dot = GetPreDot();
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-    
-    if (!GetIsVec())
-    {
-      var_name = Builder->CreateGlobalString(VarName);
-
-      if (is_self||is_attr) 
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-      Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    }
-    else if (Init) // init of vec[size]
-    {
-      //var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-      var_name = Builder->CreateGlobalString(VarName);
-
-      if (is_self||is_attr) 
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-      if (!(is_self||is_attr))
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-
-      //var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-      //                                        {object_hash, var_name});
-
-
-      Builder->CreateCall(TheModule->getFunction("InitObjectVecWithNull"),
-                                                {var_name, init});
-    } else
-    {}
-  }
-
-
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-
-
-
-
-
-
-
-
-Value *Conv2dExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-
-
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct), OC->codegen(scope_struct), Ks->codegen(scope_struct), Stride->codegen(scope_struct),
-                                               Padding->codegen(scope_struct)});
-    std::cout << "Called Create Conv 2d" << ".\n";
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-Value *MaxPool2dExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing MaxPool2d var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateMaxPool2dOnDemand"),
-                                              {var_name, type,
-                                               Ks->codegen(scope_struct),
-                                               Stride->codegen(scope_struct),
-                                               Padding->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-Value *BatchNorm2dExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing BatchNorm2d var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
-                                              {var_name, 
-                                               C->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-
-Value *BN2dReluExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing BN2dRelu var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateBN2dReluOnDemand"),
-                                              {var_name, C->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-Value *LSTMExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-
-
-    std::cout << "Parsing LSTM var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateLSTMOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-Value *EmbeddingExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-
-
-    std::cout << "Parsing Embedding var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateEmbeddingOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-
-Value *LinearExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-    int_vec *notators = SetNotators(Notators);
-
-    
-
-    std::cout << "Parsing MHSA var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateLinearOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct),
-                                               OC->codegen(scope_struct),
-                                               VoidPtr_toValue(notators)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-
-Value *MHSAExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    int_vec *notators = SetNotators(Notators);
-
-
-    std::cout << "Parsing MHSA var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateMHSAOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               nh->codegen(scope_struct),
-                                               C->codegen(scope_struct),
-                                               T->codegen(scope_struct),
-                                               VoidPtr_toValue(notators)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-Value *ReluExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing Relu var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateReluOnDemand"),
-                                              {var_name});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-
-
-
-
-
-
-Function *PrototypeAST::codegen() {
-  if (not ShallCodegen)
-    return nullptr;
-  // Make the function type:  float(float,float) etc.
-
-  std::vector<Type *> types;
-
-
-  for (auto &type : Types)
-  {
-    if (type=="s"||type=="t"||type=="c")
-      types.push_back(int8PtrTy);
-    else if(type=="i")
-      types.push_back(Type::getInt32Ty(*TheContext));
-    else
-      types.push_back(Type::getFloatTy(*TheContext));
-  }
-
-
-  FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
-  
-
-  Function *F =
-      Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
-
-  // Set names for all arguments.
-  unsigned Idx = 0;
-  for (auto &Arg : F->args())
-    Arg.setName(Args[Idx++]);
-  
-
-  return F;
-}
-
-
-
-extern "C" void *SplitString(char *self, char *pattern)
-{
-
-  //std::cout << "\n\nSPLITTING: " << self << ", with pattern: " << pattern << "\n";
-
-
-  std::vector<char *> result;
-  char *input = strdup(self); // Duplicate the input string to avoid modifying the original
-  char *token = strtok(input, pattern); // Get the first token
-
-  while (token != nullptr) {
-    result.push_back(token);
-    token = strtok(nullptr, pattern); // Get the next token
-  }
-
-  std::string random_str = RandomString(15);
-  StrVecAuxHash[random_str] = result;
-  AuxRandomStrs[random_str] = "str_vec";
-    
-  return &StrVecAuxHash[random_str];
-    
-}
-
-
-
-
-// INDEX METHODS
-
-extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
-{
-  pthread_mutex_lock(&clean_scope_mutex);
-  char *self = NamedStrs[name];
-  pthread_mutex_unlock(&clean_scope_mutex);
-  //std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
-
-  
-  std::vector<char *> splits;
-  char *input = (char*)malloc(strlen(self) + 1);
-  memcpy(input, self, strlen(self) + 1);
-  //strcpy(input, self);
-
-  char *saveptr;
-  char *token = strtok_r(input, pattern, &saveptr); // Get the first token
-
-  while (token != nullptr) {
-    splits.push_back(token);
-    token = strtok_r(nullptr, pattern, &saveptr); // Get the next token
-  }
-
-
-  //std::cout << "splitting " << name << "\n";
-
-  if(splits.size()<=1)
-  {
-    std::string _err = "\nFailed to split.";
-    LogErrorS(_err);
-    std::cout << "" << name << "\n";
-    return nullptr;
-  }
-
-  if (idx < 0)
-    idx = splits.size() + idx;
-  
-  //std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
- 
-  // Convert the retained token to a std::string
-  char *result = splits[idx];
-
-  delete[] name;
-  delete[] input;
-
-  return result;
-}
-
-
-
-
-extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)
-{
-
-  int idx = (int) _idx;
-
-  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
-  
-  
-  return vec[idx];
-}
-
-
-extern "C" char * IndexClassStrVec(char *vec_name, float _idx)
-{
-
-  // std::cout << "IndexClassStrVec: " << vec_name << ".\n";
-
-  int idx = (int) _idx;
-
-  std::vector<char*> vec = ClassStrVecs[vec_name];
-
-  // std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
-  delete[] vec_name;
-
-  return vec[idx];
-}
-
-
-extern "C" float IndexClassFloatVec(char *vec_name, float _idx)
-{
-  int idx = (int) _idx;
-
-  float ret = ClassFloatVecs[vec_name][idx];
-  delete[] vec_name;
-  return ret;
-}
-
-
-
-extern "C" float StrToFloat(char *in_str)
-{
-  //std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
-
-  char *copied = (char*)malloc(strlen(in_str) + 1);
-  strcpy(copied, in_str);
-  char *end;
-
-  float ret = std::strtof(copied, &end);
-  delete[] copied;
-  return ret;
-}
-
-
-
-
-extern "C" void objAttr_var_from_var(char *LName, char *RName)
-{
-  //std::cout << "objAttr_var_from_var of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
-  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
-
-  NamedObjects[LName] = NamedObjects[RName];
-  
-  
-}
-
-extern "C" void objAttr_var_from_vec(char *LName, char *RName)
-{
-  //std::cout << "objAttr_var_from_vec of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << objectVecs[RName] << "\n";
-  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
-
-  NamedObjects[LName] = objectVecs[RName];
-
-  
-}
-
-extern "C" void objAttr_vec_from_var(char *LName, char *RName)
-{
-  //std::cout << "objAttr_vec_from_var of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
-  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
-
-  objectVecs[LName] = NamedObjects[RName];
-
-  
-}
-
-
-extern "C" void objAttr_vec_from_vec(char *LName, char *RName)
-{
-  //std::cout << "objAttr_vec_from_vec of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << objectVecs[RName] << "\n";
-  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
-
-  objectVecs[LName] = objectVecs[RName];
-
-  
-}
-
-extern "C" float append(char *self, char *obj_name)
-{
-  //char* copied = (char*)malloc(strlen(in_str) + 1);
-  //strcpy(copied, in_str);
-
-  std::cout << "\n\nAPPEND OF " << obj_name << " into: " << self << "\n";
-  
-  std::string obj_name_str = obj_name;
-
-
-  
-
-
-  int obj_vec_last_id = 0;
-  if (objectVecsLastId.count(self)>0)
-  {
-    obj_vec_last_id = objectVecsLastId[self];
-    obj_vec_last_id+=1;
-  }
-  objectVecsLastId[self] = obj_vec_last_id;
-
-  std::string indexed_self = self + std::to_string(obj_vec_last_id);
-  objectVecs[indexed_self] = NamedObjects[obj_name];
-
-  
-  
-
-  return 0;
-}
-
-extern "C" char *LoadObjectScopeName(char *self)
-{
-  if (objectVecs.count(self)==0)
-  {
-    std::string _self = self;
-    std::string _error = "Object "+_self+" does not exist";
-    LogErrorS(_error);
-    return "";
-  }
-
-  /*
-  for (auto &pair : objectVecs)
-  {
-    std::cout <<  pair.first << ": " << pair.second << "\n";
-  }
-  */
-  std::string ret = objectVecs[self];
-  if(ret.length()==0)
-  {
-    for (auto &pair : objectVecs)
-      std::cout <<  pair.first << ": " << pair.second << "\n";
-
-    std::string _self = self;
-    std::string _error = "Loaded object "+_self+" has zero length.";
-    LogErrorS(_error);
-  }
-
-
-  //std::cout << "LoadObjectScopeName is: " << ret << ", from self: " << self << "\n";
-
-  delete[] self;
-
-  return str_to_char(ret);
-}
 
 
 
@@ -2722,100 +922,100 @@ static void InitializeModule() {
   //
   FunctionType *CudaScalarMultTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false 
   );
-  TheModule->getOrInsertFunction("CudaScalarMult", CudaScalarMultTy);
+  TheModule->getOrInsertFunction("tensor_float_mult", CudaScalarMultTy);
 
 
   //
   FunctionType *CudaScalarDivTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarDiv", CudaScalarDivTy);
+  TheModule->getOrInsertFunction("tensor_float_div", CudaScalarDivTy);
 
 
-  //
-  FunctionType *CudaReverseScalarDivTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
-      false
-  );
-  TheModule->getOrInsertFunction("CudaReverseScalarDiv", CudaReverseScalarDivTy);
+//   //
+//   FunctionType *CudaReverseScalarDivTy = FunctionType::get(
+//       int8PtrTy,
+//       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+//       false
+//   );
+//   TheModule->getOrInsertFunction("CudaReverseScalarDiv", CudaReverseScalarDivTy);
 
 
   //
   FunctionType *CudaScalarAddTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarAdd", CudaScalarAddTy);
+  TheModule->getOrInsertFunction("tensor_float_add", CudaScalarAddTy);
 
 
   //
   FunctionType *CudaScalarSubTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarSub", CudaScalarSubTy);
+  TheModule->getOrInsertFunction("tensor_float_sub", CudaScalarSubTy);
 
 
   //
   FunctionType *CudaScalarEqualTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarEqual", CudaScalarEqualTy);
+  TheModule->getOrInsertFunction("tensor_float_equal", CudaScalarEqualTy);
 
 
   //
   FunctionType *CudaScalarDiffTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarDiff", CudaScalarDiffTy);
+  TheModule->getOrInsertFunction("tensor_float_diff", CudaScalarDiffTy);
 
 
   //
   FunctionType *CudaScalarMinorTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarMinor", CudaScalarMinorTy);
+  TheModule->getOrInsertFunction("tensor_float_minor", CudaScalarMinorTy);
 
 
   //
   FunctionType *CudaScalarHigherTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarHigher", CudaScalarHigherTy);
+  TheModule->getOrInsertFunction("tensor_float_higher", CudaScalarHigherTy);
 
   
   //
   FunctionType *CudaScalarHigherEqTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarHigherEq", CudaScalarHigherEqTy);
+  TheModule->getOrInsertFunction("tensor_float_higher_eq", CudaScalarHigherEqTy);
 
 
   //
   FunctionType *CudaScalarMinorEqTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy}, 
       false
   );
-  TheModule->getOrInsertFunction("CudaScalarMinorEq", CudaScalarMinorEqTy);
+  TheModule->getOrInsertFunction("tensor_float_minor_eq", CudaScalarMinorEqTy);
 
   
 
@@ -2826,68 +1026,55 @@ static void InitializeModule() {
   //
   FunctionType *CudaMultTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext),
-       int8PtrTy,
-       int8PtrTy,
-       Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("CudaMult", CudaMultTy);
+  TheModule->getOrInsertFunction("tensor_tensor_mma", CudaMultTy);
 
 
   //
   FunctionType *CudaAddTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext),
-       int8PtrTy,
-       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("CudaAdd", CudaAddTy);
+  TheModule->getOrInsertFunction("tensor_tensor_add", CudaAddTy);
 
 
   //
   FunctionType *CudaSubTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext),
-       int8PtrTy,
-       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("CudaSub", CudaSubTy);
+  TheModule->getOrInsertFunction("tensor_tensor_sub", CudaSubTy);
 
 
   //
   FunctionType *CudaEqualTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext),
-       int8PtrTy,
-       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("CudaEqual", CudaEqualTy);
+  TheModule->getOrInsertFunction("tensor_tensor_equal", CudaEqualTy);
 
 
   //
   FunctionType *CudaHadamardTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext),
-       int8PtrTy,
-       int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("CudaHadamard", CudaHadamardTy);
+  TheModule->getOrInsertFunction("tensor_tensor_mult", CudaHadamardTy);
 
 
   //
   FunctionType *CudaDivTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext),
-       int8PtrTy,
-       int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("CudaDiv", CudaDivTy);
+  TheModule->getOrInsertFunction("tensor_tensor_div", CudaDivTy);
 
 
 
@@ -2993,7 +1180,7 @@ static void InitializeModule() {
   //
   FunctionType *clean_forwardTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)}, 
+      {int8PtrTy}, 
       false
   );
   TheModule->getOrInsertFunction("clean_forward", clean_forwardTy);
@@ -4702,12 +2889,12 @@ static void InitializeModule() {
 
 
   //
-  FunctionType *AttrTensorTy = FunctionType::get(
+  FunctionType *tensor_StoreTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy, int8PtrTy}, 
       false 
   );
-  TheModule->getOrInsertFunction("AttrTensor", AttrTensorTy);
+  TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
 
   FunctionType *AttrTensorNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -5082,6 +3269,21 @@ int main() {
 
 
 
+
+  functions_return_type = {{"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"relu", "tensor"}, {"softmax", "tensor"},
+                           {"log", "tensor"}, {"randu_like", "tensor"}, {"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"},
+                           {"dropout", "tensor"}, {"rl_discounted_return", "tensor"}, {"self_attn", "tensor"}, {"Jitter", "tensor"}, {"mse_with_priorities", "tensor"},
+                           {"btc_mult", "tensor"}, {"btc_multT", "tensor"}, {"view", "tensor"}, {"clip", "tensor"}, {"argmax", "tensor"}, {"tmax", "tensor"},
+                           {"onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
+                           {"prod", "tensor"}, {"mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
+                           {"save_img", "tensor"}, {"gpu", "tensor"}, {"gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
+                           {"to_string", "str"}, {"cat_str_float", "str"}};
+
+
+                           
+
+
+
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights",
                              "rl_discounted_return", "self_attn", "Jitter", "mse_with_priorities",
@@ -5131,12 +3333,14 @@ int main() {
 
 
 
+  reverse_ops = {{"float_tensor", "tensor_float"}};
+
   ops_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"}};
 
-  op_map = {{'*', "mult"}, {'+', "sum"}, {'-', "subtract"}, {'/', "divide"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
+  op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
             {tok_diff, "different"}, {'/', "divide"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"},
             {77, "error"}};
 

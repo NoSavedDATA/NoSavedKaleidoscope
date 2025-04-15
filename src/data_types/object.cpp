@@ -1,6 +1,13 @@
 
 #include "../codegen/string.h"
+#include "../compiler_frontend/logging.h"
 #include "include.h"
+
+
+
+std::map<std::string, std::string> objectVecs;
+std::map<std::string, int> objectVecsLastId;
+
 
 
 extern "C" void InstantiateObject(char *scope, char *obj_name)
@@ -27,5 +34,147 @@ extern "C" char *LoadObject(char *obj_name)
   std::string ret = NamedObjects[obj_name];
   delete[] obj_name;
   //std::cout << "Load object of: " << ret << "\n";
+  return str_to_char(ret);
+}
+
+
+extern "C" float InitObjectVecWithNull(char *name, float vec_size) 
+{
+  std::cout << "InitObjectVecWithNull of " << name << " with vec_size " << vec_size << "\n\n\n\n";
+
+  for (int i=0; i<vec_size; i++)
+  {
+    std::string indexed_name = name + std::to_string(i);
+    objectVecs[indexed_name] = "nullptr";
+  }
+  
+  delete[] name; //TODO: Break?
+  return 0;
+}
+
+
+extern "C" float is_null(char *name)
+{
+  //std::cout << "\n\nIS NULL OF: " << name << "\n\n\n";
+
+  if (objectVecs[name]=="nullptr")
+    return 1;
+  return 0;
+}
+
+
+
+
+extern "C" void objAttr_var_from_var(char *LName, char *RName)
+{
+  //std::cout << "objAttr_var_from_var of " << LName << " from " << RName << "\n";
+
+  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
+  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
+
+  NamedObjects[LName] = NamedObjects[RName];
+  
+  
+}
+
+extern "C" void objAttr_var_from_vec(char *LName, char *RName)
+{
+  //std::cout << "objAttr_var_from_vec of " << LName << " from " << RName << "\n";
+
+  //std::cout << "Loading: " << objectVecs[RName] << "\n";
+  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
+
+  NamedObjects[LName] = objectVecs[RName];
+
+  
+}
+
+extern "C" void objAttr_vec_from_var(char *LName, char *RName)
+{
+  //std::cout << "objAttr_vec_from_var of " << LName << " from " << RName << "\n";
+
+  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
+  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
+
+  objectVecs[LName] = NamedObjects[RName];
+
+  
+}
+
+
+extern "C" void objAttr_vec_from_vec(char *LName, char *RName)
+{
+  //std::cout << "objAttr_vec_from_vec of " << LName << " from " << RName << "\n";
+
+  //std::cout << "Loading: " << objectVecs[RName] << "\n";
+  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
+
+  objectVecs[LName] = objectVecs[RName];
+
+  
+}
+
+extern "C" float append(char *self, char *obj_name)
+{
+  //char* copied = (char*)malloc(strlen(in_str) + 1);
+  //strcpy(copied, in_str);
+
+  std::cout << "\n\nAPPEND OF " << obj_name << " into: " << self << "\n";
+  
+  std::string obj_name_str = obj_name;
+
+
+  
+
+
+  int obj_vec_last_id = 0;
+  if (objectVecsLastId.count(self)>0)
+  {
+    obj_vec_last_id = objectVecsLastId[self];
+    obj_vec_last_id+=1;
+  }
+  objectVecsLastId[self] = obj_vec_last_id;
+
+  std::string indexed_self = self + std::to_string(obj_vec_last_id);
+  objectVecs[indexed_self] = NamedObjects[obj_name];
+
+  
+  
+
+  return 0;
+}
+
+extern "C" char *LoadObjectScopeName(char *self)
+{
+  if (objectVecs.count(self)==0)
+  {
+    std::string _self = self;
+    std::string _error = "Object "+_self+" does not exist";
+    LogErrorS(_error);
+    return "";
+  }
+
+  /*
+  for (auto &pair : objectVecs)
+  {
+    std::cout <<  pair.first << ": " << pair.second << "\n";
+  }
+  */
+  std::string ret = objectVecs[self];
+  if(ret.length()==0)
+  {
+    for (auto &pair : objectVecs)
+      std::cout <<  pair.first << ": " << pair.second << "\n";
+
+    std::string _self = self;
+    std::string _error = "Loaded object "+_self+" has zero length.";
+    LogErrorS(_error);
+  }
+
+
+  //std::cout << "LoadObjectScopeName is: " << ret << ", from self: " << self << "\n";
+
+  delete[] self;
+
   return str_to_char(ret);
 }
