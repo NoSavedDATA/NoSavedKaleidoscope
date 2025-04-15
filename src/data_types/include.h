@@ -31,6 +31,9 @@ extern std::map<std::string, std::string> AuxRandomStrs;
 extern std::map<std::string, std::vector<char *>> StrVecAuxHash;
 extern std::map<std::string, std::vector<float>>  FloatVecAuxHash;
 
+extern std::map<std::string, std::string> objectVecs;
+extern std::map<std::string, int> objectVecsLastId;
+
 
 enum Types {
   type_float = 0,

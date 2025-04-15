@@ -3,10 +3,12 @@
 
 #include "../tensor/include.h"
 #include "../cuda_threads/include.h"
+#include "../mangler/scope_struct.h"
 #include "include.h"
 
-extern "C" void *CudaScalarMult(Tensor *tensor, float R, int thread_id) {
+extern "C" void *tensor_float_mult(Tensor *tensor, float R, Scope_Struct *scope_struct) {
   //std::cout << "CudaScalarMult by " << R << "\n";
+  int thread_id = scope_struct->thread_id;
   
   int kDataLen = tensor->dims_prod;
 
@@ -30,7 +32,8 @@ extern "C" void *CudaScalarMult(Tensor *tensor, float R, int thread_id) {
 }
 
 
-extern "C" void *CudaScalarDiv(Tensor tensor, float R, int thread_id) {
+extern "C" void *tensor_float_div(Tensor tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
 
@@ -53,29 +56,31 @@ extern "C" void *CudaScalarDiv(Tensor tensor, float R, int thread_id) {
   return new_tensor;
 }
 
-extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R, int thread_id) {
+// extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R, Scope_Struct *scope_struct) {
+//   int thread_id = scope_struct->thread_id;
 
-  int kDataLen = tensor.dims_prod;
+//   int kDataLen = tensor.dims_prod;
 
 
   
-  float* device_y = get_from_pool(thread_id, kDataLen, "reverse scalar div");
+//   float* device_y = get_from_pool(thread_id, kDataLen, "reverse scalar div");
 
 
-  int grid_size, block_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+//   int grid_size, block_size;
+//   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
+//   grid_size = grid_block_mem_sizes[0];
+//   block_size = grid_block_mem_sizes[1];
   
-  tensor.Sync();
-  cudaStream_t stream = ThreadsStream[thread_id];
-  vec_reverse_div<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
+//   tensor.Sync();
+//   cudaStream_t stream = ThreadsStream[thread_id];
+//   vec_reverse_div<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-  Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
-  return new_tensor;
-}
+//   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+//   return new_tensor;
+// }
 
-extern "C" void *CudaScalarAdd(Tensor *tensor, float R, int thread_id) {
+extern "C" void *tensor_float_add(Tensor *tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
   
   int dims_prod = tensor->dims_prod;
 
@@ -97,7 +102,8 @@ extern "C" void *CudaScalarAdd(Tensor *tensor, float R, int thread_id) {
   return new_tensor;
 }
 
-extern "C" void *CudaScalarSub(Tensor *tensor, float R, int thread_id) {
+extern "C" void *tensor_float_sub(Tensor *tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor->dims_prod;
 
@@ -119,7 +125,8 @@ extern "C" void *CudaScalarSub(Tensor *tensor, float R, int thread_id) {
   return new_tensor;
 }
 
-extern "C" void *CudaScalarEqual(Tensor tensor, float R, int thread_id) {
+extern "C" void *tensor_float_equal(Tensor tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
 
@@ -139,7 +146,9 @@ extern "C" void *CudaScalarEqual(Tensor tensor, float R, int thread_id) {
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarDiff(Tensor tensor, float R, int thread_id) {
+
+extern "C" void *tensor_float_diff(Tensor tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
 
@@ -159,7 +168,8 @@ extern "C" void *CudaScalarDiff(Tensor tensor, float R, int thread_id) {
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarMinor(Tensor tensor, float R, int thread_id) {
+extern "C" void *tensor_float_minor(Tensor tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
 
@@ -179,7 +189,8 @@ extern "C" void *CudaScalarMinor(Tensor tensor, float R, int thread_id) {
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarMinorEq(Tensor tensor, float R, int thread_id) {
+extern "C" void *tensor_float_minor_eq(Tensor tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
 
@@ -199,7 +210,8 @@ extern "C" void *CudaScalarMinorEq(Tensor tensor, float R, int thread_id) {
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarHigher(Tensor tensor, float R, int thread_id) {
+extern "C" void *tensor_float_higher(Tensor tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
 
@@ -219,7 +231,8 @@ extern "C" void *CudaScalarHigher(Tensor tensor, float R, int thread_id) {
   Tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" void *CudaScalarHigherEq(Tensor tensor, float R, int thread_id) {
+extern "C" void *tensor_float_higher_eq(Tensor tensor, float R, Scope_Struct *scope_struct) {
+  int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
 

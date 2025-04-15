@@ -3,6 +3,9 @@
 #include <string>
 
 #include "../common/extension_functions.h"
+#include "../codegen/random.h"
+#include "../codegen/string.h"
+#include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
@@ -91,4 +94,98 @@ extern "C" void *cat_str_float(char *c, float v)
   s = s + c;
 
   return str_to_char(s);
+}
+
+
+
+
+
+
+
+extern "C" void *SplitString(char *self, char *pattern)
+{
+
+  //std::cout << "\n\nSPLITTING: " << self << ", with pattern: " << pattern << "\n";
+
+
+  std::vector<char *> result;
+  char *input = strdup(self); // Duplicate the input string to avoid modifying the original
+  char *token = strtok(input, pattern); // Get the first token
+
+  while (token != nullptr) {
+    result.push_back(token);
+    token = strtok(nullptr, pattern); // Get the next token
+  }
+
+  std::string random_str = RandomString(15);
+  StrVecAuxHash[random_str] = result;
+  AuxRandomStrs[random_str] = "str_vec";
+    
+  return &StrVecAuxHash[random_str];
+    
+}
+
+
+
+
+// INDEX METHODS
+
+extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
+{
+  pthread_mutex_lock(&clean_scope_mutex);
+  char *self = NamedStrs[name];
+  pthread_mutex_unlock(&clean_scope_mutex);
+  //std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
+
+  
+  std::vector<char *> splits;
+  char *input = (char*)malloc(strlen(self) + 1);
+  memcpy(input, self, strlen(self) + 1);
+  //strcpy(input, self);
+
+  char *saveptr;
+  char *token = strtok_r(input, pattern, &saveptr); // Get the first token
+
+  while (token != nullptr) {
+    splits.push_back(token);
+    token = strtok_r(nullptr, pattern, &saveptr); // Get the next token
+  }
+
+
+  //std::cout << "splitting " << name << "\n";
+
+  if(splits.size()<=1)
+  {
+    std::string _err = "\nFailed to split.";
+    LogErrorS(_err);
+    std::cout << "" << name << "\n";
+    return nullptr;
+  }
+
+  if (idx < 0)
+    idx = splits.size() + idx;
+  
+  //std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
+ 
+  // Convert the retained token to a std::string
+  char *result = splits[idx];
+
+  delete[] name;
+  delete[] input;
+
+  return result;
+}
+
+
+extern "C" float StrToFloat(char *in_str)
+{
+  //std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
+
+  char *copied = (char*)malloc(strlen(in_str) + 1);
+  strcpy(copied, in_str);
+  char *end;
+
+  float ret = std::strtof(copied, &end);
+  delete[] copied;
+  return ret;
 }

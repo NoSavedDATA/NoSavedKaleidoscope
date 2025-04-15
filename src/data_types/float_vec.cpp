@@ -89,3 +89,13 @@ extern "C" void * ones_vec(float size) {
     
   return &FloatVecAuxHash[random_str];
 }
+
+
+extern "C" float IndexClassFloatVec(char *vec_name, float _idx)
+{
+  int idx = (int) _idx;
+
+  float ret = ClassFloatVecs[vec_name][idx];
+  delete[] vec_name;
+  return ret;
+}

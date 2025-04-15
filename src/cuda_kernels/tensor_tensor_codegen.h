@@ -7,27 +7,26 @@
 
 
 
-extern "C" Tensor *CudaMult(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id); 
+extern "C" Tensor *tensor_tensor_mma(Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct); 
 
 
-extern "C" Tensor *CudaAdd(int is_forward_func,
-            Tensor *tensor_x, Tensor *tensor_w, int thread_id); 
+extern "C" Tensor *tensor_tensor_add(
+            Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct); 
 
 
-extern "C" Tensor *CudaSub(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id); 
+extern "C" Tensor *tensor_tensor_sub(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct); 
 
 
-extern "C" Tensor *CudaEqual(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id);
+extern "C" Tensor *tensor_tensor_equal(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct);
                         
-extern "C" Tensor *CudaHadamard(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id); 
+extern "C" Tensor *tensor_tensor_mult(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct); 
 
 
 
-extern "C" void *CudaDiv(int is_forward_func,
-                          Tensor *tensor_x, Tensor *tensor_w, int thread_id); 
+extern "C" void *tensor_tensor_div(
+                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct); 
 
 void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod);

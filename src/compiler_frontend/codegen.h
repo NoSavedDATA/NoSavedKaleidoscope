@@ -18,11 +18,17 @@ using namespace llvm;
 
 
 
+extern std::vector<Value *> thread_pointers;
+
+
+
 extern bool seen_var_attr;
 
 
-Function *getFunction(std::string Name);
+Value * VoidPtr_toValue(void *vec);
+Value* FloatPtr_toValue(float* vec);
 
+Function *getFunction(std::string Name);
 
 
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of

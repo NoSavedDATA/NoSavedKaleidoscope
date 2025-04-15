@@ -2,10 +2,13 @@
 
 
 #include "llvm/IR/Value.h"
+#include "llvm/IR/Verifier.h"
 
 #include <string>
 #include <map>
 #include <vector>
+
+
 
 #include "../data_types/include.h"
 #include "../notators/include.h"
@@ -18,7 +21,30 @@
 using namespace llvm;
 
 
+
+std::vector<Value *> thread_pointers;
+
 PointerType *floatPtrTy, *int8PtrTy;
+
+Value * VoidPtr_toValue(void *vec)
+{
+  auto void_ptr_ty = Type::getInt8Ty(*TheContext)->getPointerTo();
+  Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
+  return Builder->CreateIntToPtr(LLVMValue, void_ptr_ty);
+}
+
+Value* FloatPtr_toValue(float* vec)
+{
+    // Get the type for float*
+    auto float_ptr_ty = Type::getFloatTy(*TheContext)->getPointerTo();
+    
+    // Convert the float* to uint64_t and create a constant integer value
+    Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
+    
+    // Cast the integer value to float*
+    return Builder->CreateIntToPtr(LLVMValue, float_ptr_ty);
+}
+
 
 
 Function *getFunction(std::string Name) {
@@ -1121,6 +1147,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     std::string store_op = LType + "_Store";
 
 
+    std::cout << "ATTRIBUTION: " << LType << " for " << LHSE->Name << ".\n";
+
 
     if(LHS->GetIsVec())
     {
@@ -1152,8 +1180,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     return nullptr;
 
 
-  // if (Elements=="float_float")
-  // {
+  
+
+  if (Elements=="float_float")
+  {
 
     switch (Op) {
       case '+':
@@ -1191,13 +1221,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       default:
         break;
       }
-  // } else {
-    // std::cout << "Codegen for operation: " << Operation << ".\n";
+  } else {
+    std::string msg = "Codegen for operation: " + Operation;
+    // p2t(msg);
 
-    
-
-    // return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // }
+    return callret(Operation, {L, R, scope_struct}); 
+  }
 
 
 
@@ -1243,7 +1272,7 @@ Value *BinaryTensorTensorExprAST::codegen(Value *scope_struct) {
       //std::cout << "1 1 attr\n";
 
 
-      Builder->CreateCall(TheModule->getFunction("AttrTensor"),
+      Builder->CreateCall(TheModule->getFunction("tensor_Store"),
                           {LtensorName, RtensorPtr, scope_struct});
       //std::cout << "Post attr call\n\n";
     } else
@@ -1361,6 +1390,1182 @@ Value *BinaryTensorTensorExprAST::codegen(Value *scope_struct) {
   Value *Ops[] = {LtensorName, RtensorName};
   return Builder->CreateCall(F, Ops, "binop");
 }
+
+
+
+
+
+
+
+Value *BinaryTensorPinnedExprAST::codegen(Value *scope_struct) {
+  std::cout << "Binary Tensor Pinned codegen" << "\n";
+
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  std::cout << "Binary Tensor Pinned codegen" << "\n";
+
+  Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
+  Value *object_name;
+
+
+
+  // if is attribution
+  if (Op == '=') {
+  
+    seen_var_attr=true;
+
+    Value *RtensorPtr = RHS->codegen(scope_struct);
+    
+
+    if (!LHS->GetIsVec())
+    {
+      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      LtensorName = LHSE->NameSolver->codegen(scope_struct);
+
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
+      std::cout << "1 2 attr\n";
+      
+
+      Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
+                          {LtensorName, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+      std::cout << "Post attr call\n";
+    } else
+    {
+      std::cout << "1 2 INDEXED attr\n";
+
+      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      LtensorName = LHSE->NameSolver->codegen(scope_struct);
+      if (!LHSE)
+        return LogErrorV("'=' left side expression must be a var.");
+
+
+      std::vector<Value *> idx_calc_args;
+      idx_calc_args.push_back(LtensorName);
+      for (int i=0; i<LHSE->Idx.size(); i++)
+        idx_calc_args.push_back(LHSE->Idx[i]->codegen(scope_struct));
+      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                            idx_calc_args);
+
+      
+      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
+                          {LtensorName, RtensorPtr,
+                           idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+      
+    }
+    seen_var_attr=false;
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  }
+  
+}
+
+
+
+
+
+Value *BinaryObjExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Value *LName = Builder->CreateGlobalString(LHS->GetName());
+  Value *RName = Builder->CreateGlobalString(RHS->GetName());
+  Value *object_name;
+
+  
+
+
+  // if is attribution
+  if (Op == '=') {
+  
+    seen_var_attr=true;
+
+
+    if (!LHS->GetIsVec())
+    {
+      std::cout << "\n\n3 3 attr\n";
+      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' object attribution destiny must be an object variable.");
+      LName = LHSE->NameSolver->codegen(scope_struct);
+      
+      if (RHS->GetIsVec())
+      {
+        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
+        VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
+        RName = RHSE->NameSolver->codegen(scope_struct);
+        
+        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
+                                                        {LName, RName});
+      } else {
+        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
+        RName = RHSE->NameSolver->codegen(scope_struct);
+        
+        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
+                                                        {LName, RName});
+
+      }
+    
+    } else {
+      std::cout << "\n\n3 3 other INDEXED attr\n";
+      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      if (!LHSE)
+        return LogErrorV("'=' object attribution destiny must be an object variable.");
+      LName = LHSE->NameSolver->codegen(scope_struct);
+
+
+      std::cout << "ok" << "\n";
+      
+      if (RHS->GetIsVec())
+      {
+        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
+        VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
+        RName = RHSE->NameSolver->codegen(scope_struct);
+        
+        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
+                                                        {LName, RName});
+      } else {
+        std::cout << "3 3 VEC FROM VAR" << "\n";
+        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
+        RName = RHSE->NameSolver->codegen(scope_struct);
+        
+        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
+                                                        {LName, RName});
+
+      }
+
+
+    }
+    seen_var_attr=false;
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  }
+  
+}
+
+
+
+
+Value *ConcatStringsExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // Special case '=' because we don't want to emit the LHS as an expression.
+
+  
+
+  if (Op == '=') {
+
+    //std::cout << "\n0 0 ATTRIBUTION" << "\n\n\n";
+
+    seen_var_attr=true;
+    // Assignment requires the LHS to be an identifier.
+    // This assume we're building without RTTI because LLVM builds that way by
+    // default.  If you build LLVM with RTTI this can be changed to a
+    // dynamic_cast for automatic error checking.
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+
+
+    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+    std::string Lname = std::get<0>(name_solver->Names[0]);
+    std::string LType = LHS->GetType();
+
+
+    if (!LHSE)
+      return LogErrorV("'=' destiny must be a variable.");
+    // Codegen the RHS.
+    
+    Value *Val = RHS->codegen(scope_struct);
+
+    if (!Val)
+    {
+      seen_var_attr=false;
+      return nullptr;
+    }
+
+    // Look up the name.
+    if (LType=="float") {
+      Builder->CreateCall(TheModule->getFunction("float_Store"),
+                                                  {Lvar_name, Val, scope_struct});
+
+    } else if (LType=="str") {
+
+
+      Builder->CreateCall(TheModule->getFunction("str_Store"),
+                                                  {Lvar_name, Val, scope_struct});
+                                                   
+
+    } else if (LType=="str_vec") {
+
+      std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
+
+    } else if (LType=="float_vec") {
+
+      //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
+
+      
+
+      if(LHS->GetIsVec())
+      {
+        VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+        
+
+        Builder->CreateCall(TheModule->getFunction("float_vec_Store_Idx"),
+                                                {Lvar_name,
+                                                  LHSV->Idx[0]->codegen(scope_struct),
+                                                  Val, scope_struct});
+
+      } else
+        Builder->CreateCall(TheModule->getFunction("float_vec_Store"),
+                                                {Lvar_name, Val, scope_struct});
+        
+
+    } else {
+      
+      seen_var_attr=false;
+      
+      
+      Builder->CreateCall(TheModule->getFunction("float_Store"),
+                                                  {Lvar_name, Val, scope_struct});
+      
+
+      //std::string _error = "Could not find variable " + Lname + ".";
+      //return LogErrorV(_error);
+    }
+
+    seen_var_attr=false;
+    return Val;
+  }
+
+
+  
+
+  Value *L = LHS->codegen(scope_struct);
+  Value *R = RHS->codegen(scope_struct);
+  
+  if (!L || !R)
+    return nullptr;
+
+
+    switch (Op) {
+    case '+':
+      return Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {L, R});
+    default:
+      LogErrorS("The only string operations supported are '+' and '='.");
+      break;
+    }
+  
+
+  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
+  // a call to it.
+  Function *F = getFunction(std::string("binary") + Op);
+  assert(F && "Operator not found.");
+
+  Value *Ops[] = {L, R};
+  return Builder->CreateCall(F, Ops, "binop");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Value *UnaryExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  Value *OperandV = Operand->codegen(scope_struct);
+  if (!OperandV)
+    return nullptr;
+  
+  
+  
+  //std::cout << "Operand type: " << Operand->GetType();
+  if (Opcode=='-')
+  {
+    //std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
+    if (Operand->GetType()=="tensor")
+    {
+      Value *tensor_name = Builder->CreateGlobalString(Operand->GetName());
+
+      std::string pre_dot = Operand->GetPreDot();
+      bool is_self = Operand->GetSelf();
+      bool is_attr = Operand->GetIsAttribute();
+
+      if (is_attr) { // Gets from pre_dot if it is a class attribute
+        Value * object_name = Builder->CreateGlobalString(pre_dot);
+
+        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {object_name, tensor_name});
+      }
+      if (is_self)
+        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                          {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), tensor_name});
+      if (!(is_self||is_attr))
+        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), tensor_name});
+        
+
+      Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("tensor_Load"),
+                                              {tensor_name, scope_struct});
+      Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
+
+      return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
+                                {tensorPtr, R, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})}, "cudascalarmult");
+    }
+    return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
+                              OperandV, "multmp");
+  }
+
+  //std::cout << "Opcode: " << Opcode << "\n";
+
+
+  if (Opcode='!')
+  {
+    return Builder->CreateCall(TheModule->getFunction("logical_not"), {OperandV});
+  }
+  if (Opcode=';')
+    return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
+  
+
+  Function *F = getFunction(std::string("unary") + Opcode);
+  if (!F)
+    return LogErrorV("Operador unário desconhecido.");
+
+  return Builder->CreateCall(F, OperandV, "unop");
+}
+
+
+
+
+
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct) {
+  
+
+  // find existing unique function name (_async_1, _async_2, _async_3 etc)
+  int fnIndex = 1;
+  while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
+    fnIndex++;
+  
+  CudaStreams *thread_stream = AllocateStream(0);
+  ThreadsStream[fnIndex] = thread_stream->stream;
+
+  // Create function for this async function
+  llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+
+  FunctionType *asyncFunTy = FunctionType::get(
+                                            int8PtrTy,
+                                            {int8PtrTy},
+                                            false);
+                                            
+  std::string functionName = "__async_" + std::to_string(fnIndex);
+  Function *asyncFun =
+      Function::Create(asyncFunTy,
+                             Function::ExternalLinkage,
+                             functionName,
+                             TheModule.get());
+
+  
+  //Dive scope_struct
+  Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName)}); 
+
+
+
+  // emit EntryBB value
+  std::cout << "\n\nfunction * get basic block for function: " << functionName << "\n";
+  BasicBlock *BB = BasicBlock::Create(*TheContext, "async_bb", asyncFun);
+  Builder->SetInsertPoint(BB);
+  
+
+
+  // Recover scope_struct Value * on the new function
+  Value *scope_struct_copy = Builder->CreateCall(TheModule->getFunction("scope_struct_Load_for_Async"), {Builder->CreateGlobalString(functionName)}); 
+
+  // define body of function
+  Value *V;
+
+
+
+  for (auto &body : asyncBody)
+  {
+    std::string pre = std::string("codegenAsyncFunction Body codegen pre of: ") + typeid(*body).name();
+    p2t(pre);
+    V = body->codegen(scope_struct_copy);
+    p2t("codegenAsyncFunction body post");
+  }
+
+
+
+  if (V)
+  {
+    
+    p2t("codegenAsyncFunction create return");
+    Builder->CreateRet(Constant::getNullValue(int8PtrTy));
+    
+
+    std::string functionError;
+    llvm::raw_string_ostream functionErrorStream(functionError);
+
+    if (verifyFunction(*asyncFun, &functionErrorStream)) {
+      functionErrorStream.flush();
+      llvm::errs() << "codegenAsyncFunction: Function verification failed:\n" << functionError << "\n";
+    } 
+
+    verifyModule(*TheModule);
+    return asyncFun;
+  }
+  
+  std::cout << "ERASING ASYNC FROM PARENT" << "\n";
+  asyncFun->eraseFromParent();
+
+  return nullptr;
+}
+
+
+//int pthread_create(pthread_t *thread, pthread_attr_t *attr,
+//                   void *(*start_routine) (void *arg), void *arg);
+
+extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
+                   void *(*function_ptr) (void *arg), void *arg)
+{
+  std::cout << "Creating thread" << "\n";
+  pthread_create(thread, attr, function_ptr, arg);
+  std::cout << "Created" << "\n";
+}
+
+
+extern "C" void pthread_join_aux(pthread_t thread)
+{
+  std::cout << "Joining " << thread <<  "\n";
+  void **value_ptr;
+  value_ptr = nullptr;
+
+  pthread_join(thread, value_ptr);
+  std::cout << "Joined: " << thread << "\n";
+}
+
+
+
+
+
+Value *AsyncExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  
+  // Create/Spawn Threads
+
+  
+  // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct}); 
+
+  BasicBlock *CurrentBB = Builder->GetInsertBlock();
+
+
+  
+  
+  //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
+
+
+  Function *asyncFun = codegenAsyncFunction(std::ref(Body), scope_struct);
+
+
+  Builder->SetInsertPoint(CurrentBB);
+
+  
+  Function *pthread_create = TheModule->getFunction("pthread_create_aux");
+
+
+  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
+  
+  
+
+  Value *voidPtrNull = Constant::getNullValue(
+      Type::getInt8Ty(*TheContext)->getPointerTo());
+
+
+  
+  Builder->CreateCall(pthread_create,
+    {pthreadPtr,
+     voidPtrNull,
+     asyncFun,
+     voidPtrNull}
+  );
+  
+  p2t("AsyncExpr Created join call");
+
+
+  thread_pointers.push_back(pthreadPtr);
+
+  return pthreadPtr;
+}
+
+
+
+Value *FinishExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  std::string functionName = TheFunction->getName().str();
+
+
+  for (int i=0; i < Bodies.size(); i++)
+    Bodies[i]->codegen(scope_struct);
+  
+
+  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+
+  Function *pthread_join = TheModule->getFunction("pthread_join_aux");
+
+
+  //std::cout << "\n\n\n\nFINISH HAS " << thread_pointers.size() << " ASYNC EXPRESSIONS "  << "\n\n\n\n\n";
+
+
+  for (Value *pthreadPtr : thread_pointers)
+  {
+    Value *pthread = Builder->CreateLoad(pthreadTy, pthreadPtr);
+
+    Builder->CreateCall(pthread_join,
+                        {pthread});
+    
+  }
+  
+  thread_pointers.clear();
+  
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+Value *LockExprAST::codegen(Value *scope_struct){
+  
+  Builder->CreateCall(TheModule->getFunction("LockMutex"), {Builder->CreateGlobalString(Name)});
+
+  for (auto &body : Bodies)
+    body->codegen(scope_struct);
+
+  Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
+
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+Value *NoGradExprAST::codegen(Value *scope_struct){
+  
+  Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, ConstantInt::get(Type::getInt32Ty(*TheContext), 0)});
+  for (auto &body : Bodies)
+    body->codegen(scope_struct);
+
+  
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+
+
+
+Value *ReturnExprAST::codegen(Value *scope_struct) {
+
+  for (int i=0; i<Destiny.size(); i++)
+  {
+    //TODO: add self and attr to return
+    
+    std::string name, type, l_name, l_type;
+    bool is_vec, l_is_vec;
+
+    name   = Destiny[i]->GetName();
+    type   = Destiny[i]->GetType();
+    is_vec = Destiny[i]->GetIsVec();
+
+    Value *_name = Builder->CreateGlobalString(name);
+
+    std::cout << "\nRETURNING: " << name << ", type: " << type << ", is vec: " << is_vec <<  "\n\n";
+
+    if (!IsAs[i])
+    {
+      if(type=="tensor")
+      {
+        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
+        destiny->NameSolver->SetSolverIncludeScope(false);
+        _name = destiny->NameSolver->codegen(scope_struct);
+
+        Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
+                                            {_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
+                                             _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
+                                             Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+      }
+    } else {
+      l_name   = Vars[i]->GetName();
+      l_type   = Vars[i]->GetType();
+      l_is_vec = Vars[i]->GetIsVec();
+
+      std::cout << "l_name: " << l_name << " l_type: " << l_type << ", l_is_vec: " << l_is_vec << "\n";
+
+      if (!is_vec)
+      {
+        
+
+
+        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
+        destiny->NameSolver->SetSolverIncludeScope(false);
+        _name = destiny->NameSolver->codegen(scope_struct);
+
+
+        VariableExprAST *var = static_cast<VariableExprAST *>(Vars[i].get());
+        var->NameSolver->SetSolverIncludeScope(false);
+        Value *_l_name = var->NameSolver->codegen(scope_struct);
+
+        
+        
+        
+
+        if (l_type=="tensor"||type=="tensor")
+        {
+          Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
+                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
+                                               _name,   Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
+                                               Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+        }
+      } else {
+
+        VecIdxExprAST *destiny = static_cast<VecIdxExprAST *>(Destiny[i].get());
+        if (!destiny)
+          return LogErrorV("Could not deal with return expression");
+        destiny->NameSolver->SetSolverIncludeScope(false);
+        _name = destiny->NameSolver->codegen(scope_struct);
+        
+
+        std::vector<Value *> idx_calc_args;
+        idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                                      {Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}), _name}));
+        for (int i=0; i<destiny->Idx.size(); i++)
+          idx_calc_args.push_back(destiny->Idx[i]->codegen(scope_struct));
+        Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+                              idx_calc_args);
+
+        
+        
+        Value *_l_name = Builder->CreateGlobalString(l_name);
+        Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
+                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
+                                               _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
+                                               idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
+      }
+    }
+  }
+
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
+Value *NewVecExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  std::vector<Value *> values;
+
+  values.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}));
+  for (int i=0; i<Values.size(); i++)
+    values.push_back(Values[i]->codegen(scope_struct));
+
+
+
+  return Builder->CreateCall(TheModule->getFunction("NewVecToTensor"), values);
+}
+
+
+Value *ObjectExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  Value *init;
+  if (Init)
+    init = Init->codegen(scope_struct);
+
+  // Register all variables and emit their initializer.
+
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
+  {
+    const std::string &VarName = VarNames[i].first;
+
+    Value *var_name;// = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    
+    std::string pre_dot = GetPreDot();
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+    
+    if (!GetIsVec())
+    {
+      var_name = Builder->CreateGlobalString(VarName);
+
+      if (is_self||is_attr) 
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+      Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    }
+    else if (Init) // init of vec[size]
+    {
+      //var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+      var_name = Builder->CreateGlobalString(VarName);
+
+      if (is_self||is_attr) 
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+      if (!(is_self||is_attr))
+        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
+                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+
+      //var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+      //                                        {object_hash, var_name});
+
+
+      Builder->CreateCall(TheModule->getFunction("InitObjectVecWithNull"),
+                                                {var_name, init});
+    } else
+    {}
+  }
+
+
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
+
+
+
+
+
+
+
+Value *Conv2dExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+
+    Value *var_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+    
+
+
+    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
+                                               C->codegen(scope_struct), OC->codegen(scope_struct), Ks->codegen(scope_struct), Stride->codegen(scope_struct),
+                                               Padding->codegen(scope_struct)});
+    std::cout << "Called Create Conv 2d" << ".\n";
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+Value *MaxPool2dExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+
+    
+    std::cout << "Parsing MaxPool2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateMaxPool2dOnDemand"),
+                                              {var_name, type,
+                                               Ks->codegen(scope_struct),
+                                               Stride->codegen(scope_struct),
+                                               Padding->codegen(scope_struct)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+Value *BatchNorm2dExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+
+    
+    std::cout << "Parsing BatchNorm2d var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
+                                              {var_name, 
+                                               C->codegen(scope_struct)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
+Value *BN2dReluExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+
+    
+    std::cout << "Parsing BN2dRelu var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateBN2dReluOnDemand"),
+                                              {var_name, C->codegen(scope_struct)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+Value *LSTMExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+
+    Value *var_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+    
+
+
+    std::cout << "Parsing LSTM var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateLSTMOnDemand"),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
+                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+Value *EmbeddingExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+
+    Value *var_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+    
+
+
+    std::cout << "Parsing Embedding var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateEmbeddingOnDemand"),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
+                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
+Value *LinearExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+
+    Value *var_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+    
+    int_vec *notators = SetNotators(Notators);
+
+    
+
+    std::cout << "Parsing MHSA var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateLinearOnDemand"),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
+                                               C->codegen(scope_struct),
+                                               OC->codegen(scope_struct),
+                                               VoidPtr_toValue(notators)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+
+
+Value *MHSAExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
+
+    Value *var_name;
+    var_name = Builder->CreateGlobalString(VarName);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+    int_vec *notators = SetNotators(Notators);
+
+
+    std::cout << "Parsing MHSA var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateMHSAOnDemand"),
+                                              {var_name, Builder->CreateGlobalString(TensorInit),
+                                               nh->codegen(scope_struct),
+                                               C->codegen(scope_struct),
+                                               T->codegen(scope_struct),
+                                               VoidPtr_toValue(notators)});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+Value *ReluExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first;
+    
+    Value *var_name, *type;
+    var_name = Builder->CreateGlobalString(VarName);
+    type = Builder->CreateGlobalString(Type);
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    if (is_self||is_attr)
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+                                            
+    if (!(is_self||is_attr))
+      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+    
+
+    
+    std::cout << "Parsing Relu var for: " << VarName << "\n";
+
+    Builder->CreateCall(TheModule->getFunction("CreateReluOnDemand"),
+                                              {var_name});
+  }
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
+
+
+Function *PrototypeAST::codegen() {
+  if (not ShallCodegen)
+    return nullptr;
+  // Make the function type:  float(float,float) etc.
+
+  std::vector<Type *> types;
+
+
+  for (auto &type : Types)
+  {
+    if (type=="s"||type=="t"||type=="c")
+      types.push_back(int8PtrTy);
+    else if(type=="i")
+      types.push_back(Type::getInt32Ty(*TheContext));
+    else
+      types.push_back(Type::getFloatTy(*TheContext));
+  }
+
+
+  FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
+  
+
+  Function *F =
+      Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
+
+  // Set names for all arguments.
+  unsigned Idx = 0;
+  for (auto &Arg : F->args())
+    Arg.setName(Args[Idx++]);
+  
+
+  return F;
+}
+
+
 
 
 

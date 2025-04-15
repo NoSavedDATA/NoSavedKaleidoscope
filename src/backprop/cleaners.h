@@ -4,6 +4,7 @@
 #include <map>
 #include <vector>
 
+#include "../mangler/scope_struct.h"
 #include "../tensor/include.h"
 
 
@@ -60,4 +61,4 @@ void CleanThreadTensors(std::string scope, int thread_id);
 void CleanScopeTensors(std::string scope);
 
 
-extern "C" float clean_forward(char *scope, char *previous_scope, int thread_id, int has_grad);
+extern "C" float clean_forward(Scope_Struct *scope_struct);

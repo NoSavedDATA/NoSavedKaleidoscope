@@ -2,26 +2,27 @@
 
 #include <vector>
 
+#include "../mangler/scope_struct.h"
 #include "../tensor/tensor_struct.h"
 #include "calculate_grids.h"
 
-extern "C" void *CudaScalarMult(Tensor *tensor, float R, int thread_id);
+extern "C" void *tensor_scalar_mult(Tensor *tensor, float R, Scope_Struct *scope_struct);
   
   
-extern "C" void *CudaScalarDiv(Tensor tensor, float R, int thread_id);
+extern "C" void *tensor_scalar_div(Tensor tensor, float R, Scope_Struct *scope_struct);
   
-extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R, int thread_id);
+// extern "C" void *CudaReverseScalarDiv(Tensor tensor, float R, Scope_Struct *scope_struct);
 
-extern "C" void *CudaScalarAdd(Tensor *tensor, float R, int thread_id); 
+extern "C" void *tensor_scalar_add(Tensor *tensor, float R, Scope_Struct *scope_struct); 
 
-extern "C" void *CudaScalarSub(Tensor *tensor, float R, int thread_id); 
+extern "C" void *tensor_scalar_sub(Tensor *tensor, float R, Scope_Struct *scope_struct); 
 
-extern "C" void *CudaScalarEqual(Tensor tensor, float R, int thread_id); 
-extern "C" void *CudaScalarDiff(Tensor tensor, float R, int thread_id);
-extern "C" void *CudaScalarMinor(Tensor tensor, float R, int thread_id); 
-extern "C" void *CudaScalarMinorEq(Tensor tensor, float R, int thread_id);
-extern "C" void *CudaScalarHigher(Tensor tensor, float R, int thread_id);
-extern "C" void *CudaScalarHigherEq(Tensor tensor, float R, int thread_id);
+extern "C" void *tensor_scalar_equal(Tensor tensor, float R, Scope_Struct *scope_struct); 
+extern "C" void *tensor_scalar_diff(Tensor tensor, float R, Scope_Struct *scope_struct);
+extern "C" void *tensor_scalar_minor(Tensor tensor, float R, Scope_Struct *scope_struct); 
+extern "C" void *tensor_scalar_minor_eq(Tensor tensor, float R, Scope_Struct *scope_struct);
+extern "C" void *tensor_scalar_higher(Tensor tensor, float R, Scope_Struct *scope_struct);
+extern "C" void *tensor_scalar_higher_eq(Tensor tensor, float R, Scope_Struct *scope_struct);
 
 
 void scalarmult_backward(float *dx, float *dy, float scalar, float dims_prod);

@@ -122,3 +122,31 @@ extern "C" void * _glob_b_(char *pattern) {
     
   return &StrVecAuxHash[random_str];
 }
+
+
+extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)
+{
+
+  int idx = (int) _idx;
+
+  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
+  
+  
+  return vec[idx];
+}
+
+
+extern "C" char * IndexClassStrVec(char *vec_name, float _idx)
+{
+
+  // std::cout << "IndexClassStrVec: " << vec_name << ".\n";
+
+  int idx = (int) _idx;
+
+  std::vector<char*> vec = ClassStrVecs[vec_name];
+
+  // std::cout << "Class object Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
+  delete[] vec_name;
+
+  return vec[idx];
+}

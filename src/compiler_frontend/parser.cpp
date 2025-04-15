@@ -277,14 +277,11 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, std::move(Args),
                                                 "None", "None", is_var_forward, callee_override);
 
-  
-  
-  if (in_str(IdName, return_tensor_fn) || return_tensor)
+ 
+  if (functions_return_type.count(IdName)>0)
+    aux->SetType(functions_return_type[IdName]);  
+  if (return_tensor)
     aux->SetType("tensor");
-  if (in_str(IdName, return_pinned_methods))
-    aux->SetType("pinned_tensor");
-  if (in_str(IdName, return_string_fn))
-    aux->SetType("str");
 
   return aux;
 }
@@ -852,10 +849,12 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, std::move(Args),
                                         object_class, pre_dot, is_var_forward, callee_override);
 
-  if (in_str(IdName, return_tensor_fn) || return_tensor)
-    aux->SetType("tensor");
-  
-  if (return_string||in_str(IdName, return_string_fn))
+
+  if (functions_return_type.count(IdName)>0)
+    aux->SetType(functions_return_type[IdName]);
+  if (return_tensor)
+    aux->SetType("tensor");  
+  if (return_string)
     aux->SetType("str");
 
   if (CurTok==tok_space)
@@ -2219,7 +2218,15 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name) {
   //std::cout << "Unary expr\n";
   getNextToken();
   if (auto Operand = ParseUnary(class_name))
-    return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
+  {
+
+
+    std::string operand_type = Operand->GetType();
+    auto expr = std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
+    expr->SetType(operand_type);
+
+    return expr;
+  }
   return nullptr;
 }
 
@@ -2364,13 +2371,53 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
     
     std::string op_elements = L_type + "_";
     op_elements = op_elements + R_type;
+
     std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
     std::cout << "op type: " << op_elements << ".\n";
+
+    bool shall_reverse_operands = false;
+    if (reverse_ops.count(op_elements)>0)
+    {
+      op_elements = reverse_ops[op_elements];
+      shall_reverse_operands = true;
+    }
+
     std::string return_type = ops_type_return[op_elements];
     std::cout << "return type: " << return_type << "...\n";
 
 
+    // if (RHS->GetType()=="None")
+    // {
+    //   std::string pre = std::string("Binary Expr type is: ") + typeid(*RHS).name();
+    //   std::cout << pre << ".\n";
+    //   return std::make_tuple(nullptr,0,"float");
+    // }
 
+
+    if(shall_reverse_operands)
+    {
+      if (BinOp=='-') // inversion of 1 - tensor
+      {
+
+        
+
+        RHS = std::make_unique<BinaryTensorScalarExprAST>('*',
+                                                    std::move(RHS),
+                                                    std::move(std::make_unique<NumberExprAST>(-1.0f)));
+                                                    //std::move(LHS)
+                                                    
+        LHS = std::make_unique<BinaryTensorScalarExprAST>('+',
+                                                    std::move(RHS), std::move(LHS));
+      } else {
+        
+                                                  
+        std::string operation = op_map[BinOp];
+        std::string op_type = op_elements + "_" + operation;
+
+        LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(RHS), std::move(LHS));
+        LHS->SetType(return_type);
+      }
+    }
 
 
     if (L_cuda==type_string||R_cuda==type_string)
@@ -2402,12 +2449,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
                                                       std::move(LHS), std::move(RHS));
       LHS->SetType(return_type);
     }
-    else if (L_cuda==type_tensor && R_cuda==type_float)
-    {
-      LHS = std::make_unique<BinaryTensorScalarExprAST>(BinOp,
-                                                      std::move(LHS), std::move(RHS));
-      LHS->SetType(return_type);  
-    }
     else if (L_cuda==type_float && R_cuda==type_tensor)
     {
       std::cout << "Reverse LHS and RHS\n";
@@ -2434,12 +2475,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
       // L_cuda=type_tensor;
       // R_cuda=type_float;
     }
-    else if (L_cuda==type_tensor && R_cuda==type_tensor)
-    { 
-      LHS = std::make_unique<BinaryTensorTensorExprAST>(BinOp,
-                                                      std::move(LHS), std::move(RHS));
-      LHS->SetType(return_type);
-    }
     else
     {
 
@@ -2450,7 +2485,10 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
       std::cout << "op: " << BinOp << ".\n";
 
       LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(LHS), std::move(RHS));
+      LHS->SetType(return_type);
     }
+    std::string msg = "LHS type: " + LHS->GetType();
+    std::cout << msg << "\n";
      
 
     LhsTok = RhsTok;    

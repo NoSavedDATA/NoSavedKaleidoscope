@@ -127,12 +127,15 @@ extern "C" void *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
 
 
 
-extern "C" float AttrTensor(char *tensor_name, Tensor *tensor, Scope_Struct *scope_struct)
+extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *scope_struct)
 {
+
+  // std::cout << "tensor_Store execution" << ".\n";
+
   char *scope = scope_struct->scope;
   int thread_id= scope_struct->thread_id;
   int has_grad = scope_struct->has_grad;
-  //std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
+  // std::cout << "Attributing to tensor: " << tensor_name << " from " << tensor->name << "\n\n";
 
   //std::cout << "ATTRIBUTE TENSOR AT THREAD " << thread_id << "\n";
 
