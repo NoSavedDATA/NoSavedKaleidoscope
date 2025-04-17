@@ -26,6 +26,11 @@ extern "C" float UnbugFloat(float value){
 
 
 
+extern "C" float print_float(float value){
+  std::cout << "print_float: " << std::to_string(value) << ".\n";
+  return value;
+}
+
 
 extern "C" float float_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {

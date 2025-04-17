@@ -1,6 +1,3 @@
-#pragma once
-
-
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
 
@@ -877,29 +874,11 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *scope_struct) {
     Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
                           idx_calc_args);
 
-    Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
-                          {tensor_name, Val, idx_at});
+    
+    Builder->CreateCall(TheModule->getFunction("pinned_tensor_Store_Idx"),
+                          {tensor_name, Val, idx_at, scope_struct});
 
 
-    /*
-    if (LHS->GetIsVec())
-    {
-      VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' destiny must be a variable.");
-      std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
-
-      Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
-                          {tensor_name, LHSE->Idx->codegen(scope_struct), Val});
-    }
-      
-    else
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' destiny must be a variable.");
-    }
-    */
 
     
 
@@ -979,133 +958,24 @@ Value *BinaryPinnedScalarExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *BinaryPinnedAndTensorExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  Value *tensor_name;
 
 
+inline Value *Idx_Calc_Codegen(std::string type, Value *name, const std::vector<std::unique_ptr<ExprAST>> &idxs, Value *scope_struct)
+{
+  std::vector<Value *> idxs_values;
 
-  
+  idxs_values.push_back(name);
 
-  if (Op == '=') {
-    seen_var_attr=true;
-
-    
-    Value *RtensorPtr = RHS->codegen(scope_struct);
-    if (!RtensorPtr)
-      return nullptr;
-    
-    std::cout << "2 0 attr\n";
-    std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
-
-
-    
-
-
-    VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-    tensor_name = LHSE->NameSolver->codegen(scope_struct);
-
-    if (!LHSE)
-      return LogErrorV("'=' destiny must be a variable.");
-
-    
-
-    std::vector<Value *> idx_calc_args;
-
-    idx_calc_args.push_back(tensor_name);
-    idx_calc_args.push_back(RtensorPtr);
-    idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}));
-
-
-    
-    for (int i=0; i<LHSE->Idx.size(); i++)
-      idx_calc_args.push_back(LHSE->Idx[i]->codegen(scope_struct));
-
-
-    Builder->CreateCall(TheModule->getFunction("AttrPinnedFromTensorOnIdx"),
-                         idx_calc_args);
-
-
-    /*
-    if (LHS->GetIsVec())
-    {
-      VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' destiny must be a variable.");
-      std::cout << "is vec: " << LHS->GetIsVec()  << "\n";
-
-      Builder->CreateCall(TheModule->getFunction("AttrPinnedFromTensorOnIdx"),
-                          {tensor_name, LHSE->Idx->codegen(scope_struct), Val});
-    }
-      
-    else
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' destiny must be a variable.");
-    }
-    */
-
-      
-    
-    seen_var_attr=false;
-    return RtensorPtr;
-  }
-
+  for (int i=0; i<idxs.size(); i++)
+    idxs_values.push_back(idxs[i]->codegen(scope_struct));
 
   
-  Value *LtensorPtr = LHS->codegen(scope_struct);
-  Value *R = RHS->codegen(scope_struct);
-  
+  std::string fn = type+"_CalculateIdx";
+  // p2t(fn);
 
-
-
-  
-  
-  if (!LtensorPtr || !R)
-    return nullptr;
-
-
-
-
-  switch (Op)
-  {
-  case '*':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarmult");
-  case '/':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
-                               {LtensorPtr, R, scope_struct}, "cudascalardiv");
-  case 77:
-    return Builder->CreateCall(TheModule->getFunction("CudaReverseScalarDiv"),
-                               {LtensorPtr, R, scope_struct}, "cudareversescalardiv");
-  case '+':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
-                               {LtensorPtr, R, scope_struct}, "cudascalaradd");
-  case '-':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarsub");
-  case ':':
-    return LtensorPtr;
-  case tok_space:
-    return R;
-  default:
-    break;
-  }
-  
-
-  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
-  // a call to it.
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {LtensorPtr, R};
-  return Builder->CreateCall(F, Ops, "binop");
+  return callret(fn, idxs_values);
+  // return ret_idx;
 }
-
-
 
 
 
@@ -1152,17 +1022,42 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if(LHS->GetIsVec())
     {
+
+
+      // VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+      // tensor_name = LHSE->NameSolver->codegen(scope_struct);
+  
+  
+      
+  
+
+  
+      // Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
+      //                       idx_calc_args);
+  
+      // Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
+      //                       {tensor_name, Val, idx_at});
+
+
+
+
+
+
       VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+
+
+
+      // p2t("Calculate idx");
+      Value *idx = Idx_Calc_Codegen(LHS->GetType(), Lvar_name, std::move(LHSV->Idx), scope_struct);
+      // call("print_float", {idx});
 
       store_op = store_op + "_Idx";
       
-      Builder->CreateCall(TheModule->getFunction(store_op),
-                                              {Lvar_name,
-                                                LHSV->Idx[0]->codegen(scope_struct),
-                                                Val, scope_struct});
+      // p2t("Store at " + store_op);
+      call(store_op, {Lvar_name, idx, Val, scope_struct});
 
     } else { 
-        Builder->CreateCall(TheModule->getFunction(store_op), {Lvar_name, Val, scope_struct});
+      call(store_op, {Lvar_name, Val, scope_struct});
     }
     
 
@@ -1223,7 +1118,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       }
   } else {
     std::string msg = "Codegen for operation: " + Operation;
-    p2t(msg);
+    // p2t(msg);
 
     return callret(Operation, {L, R, scope_struct}); 
   }
@@ -1397,68 +1292,6 @@ Value *BinaryTensorTensorExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *BinaryTensorPinnedExprAST::codegen(Value *scope_struct) {
-  std::cout << "Binary Tensor Pinned codegen" << "\n";
-
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  std::cout << "Binary Tensor Pinned codegen" << "\n";
-
-  Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
-  Value *object_name;
-
-
-
-  // if is attribution
-  if (Op == '=') {
-  
-    seen_var_attr=true;
-
-    Value *RtensorPtr = RHS->codegen(scope_struct);
-    
-
-    if (!LHS->GetIsVec())
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(scope_struct);
-
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-      std::cout << "1 2 attr\n";
-      
-
-      Builder->CreateCall(TheModule->getFunction("AttrTensorNoFree"),
-                          {LtensorName, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      std::cout << "Post attr call\n";
-    } else
-    {
-      std::cout << "1 2 INDEXED attr\n";
-
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(scope_struct);
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-
-
-      std::vector<Value *> idx_calc_args;
-      idx_calc_args.push_back(LtensorName);
-      for (int i=0; i<LHSE->Idx.size(); i++)
-        idx_calc_args.push_back(LHSE->Idx[i]->codegen(scope_struct));
-      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                            idx_calc_args);
-
-      
-      Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-                          {LtensorName, RtensorPtr,
-                           idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      
-    }
-    seen_var_attr=false;
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
-  
-}
 
 
 
@@ -1546,125 +1379,6 @@ Value *BinaryObjExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *ConcatStringsExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // Special case '=' because we don't want to emit the LHS as an expression.
-
-  
-
-  if (Op == '=') {
-
-    //std::cout << "\n0 0 ATTRIBUTION" << "\n\n\n";
-
-    seen_var_attr=true;
-    // Assignment requires the LHS to be an identifier.
-    // This assume we're building without RTTI because LLVM builds that way by
-    // default.  If you build LLVM with RTTI this can be changed to a
-    // dynamic_cast for automatic error checking.
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-
-
-    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
-    std::string Lname = std::get<0>(name_solver->Names[0]);
-    std::string LType = LHS->GetType();
-
-
-    if (!LHSE)
-      return LogErrorV("'=' destiny must be a variable.");
-    // Codegen the RHS.
-    
-    Value *Val = RHS->codegen(scope_struct);
-
-    if (!Val)
-    {
-      seen_var_attr=false;
-      return nullptr;
-    }
-
-    // Look up the name.
-    if (LType=="float") {
-      Builder->CreateCall(TheModule->getFunction("float_Store"),
-                                                  {Lvar_name, Val, scope_struct});
-
-    } else if (LType=="str") {
-
-
-      Builder->CreateCall(TheModule->getFunction("str_Store"),
-                                                  {Lvar_name, Val, scope_struct});
-                                                   
-
-    } else if (LType=="str_vec") {
-
-      std::cout << "ATTRIBUTING TO STRING VEC: " << Lname << "\n";
-
-    } else if (LType=="float_vec") {
-
-      //std::cout << "ATTRIBUTING TO FLOAT VEC: " << Lname << ", type: " << Type << ", is vec: " << LHS->GetIsVec() << "\n";
-
-      
-
-      if(LHS->GetIsVec())
-      {
-        VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
-        
-
-        Builder->CreateCall(TheModule->getFunction("float_vec_Store_Idx"),
-                                                {Lvar_name,
-                                                  LHSV->Idx[0]->codegen(scope_struct),
-                                                  Val, scope_struct});
-
-      } else
-        Builder->CreateCall(TheModule->getFunction("float_vec_Store"),
-                                                {Lvar_name, Val, scope_struct});
-        
-
-    } else {
-      
-      seen_var_attr=false;
-      
-      
-      Builder->CreateCall(TheModule->getFunction("float_Store"),
-                                                  {Lvar_name, Val, scope_struct});
-      
-
-      //std::string _error = "Could not find variable " + Lname + ".";
-      //return LogErrorV(_error);
-    }
-
-    seen_var_attr=false;
-    return Val;
-  }
-
-
-  
-
-  Value *L = LHS->codegen(scope_struct);
-  Value *R = RHS->codegen(scope_struct);
-  
-  if (!L || !R)
-    return nullptr;
-
-
-    switch (Op) {
-    case '+':
-      return Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {L, R});
-    default:
-      LogErrorS("The only string operations supported are '+' and '='.");
-      break;
-    }
-  
-
-  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
-  // a call to it.
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {L, R};
-  return Builder->CreateCall(F, Ops, "binop");
-}
 
 
 

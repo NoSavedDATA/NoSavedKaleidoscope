@@ -150,3 +150,9 @@ extern "C" char * IndexClassStrVec(char *vec_name, float _idx)
 
   return vec[idx];
 }
+
+
+
+extern "C" float str_vec_CalculateIdx(char *data_name, float first_idx, ...) {
+  return first_idx;
+}

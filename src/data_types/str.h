@@ -15,6 +15,9 @@ extern "C" float PrintStr(char* value);
 extern "C" float *split_str_to_float(char *in_string, int gather_position);
 
 
+extern "C" char *str_str_add(char *, char *, Scope_Struct *);
+extern "C" char *float_str_add(float, char *, Scope_Struct *);
+extern "C" char *str_float_add(char *, float, Scope_Struct *);
 
 extern "C" void *cat_str_float(char *c, float v);
 

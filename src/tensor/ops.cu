@@ -205,35 +205,6 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
 }
 
 
-extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at) {
-  Tensor *tensor = NamedTensorsT[tensor_name];
-  //std::cout << "AttrPinnedOnIdx for " << tensor->name << " at index " << idx_at << "\n";
-  //std::cout << "Value: " << val <<"\n";
-
-  std::vector<float> dims = tensor->dims;
-  int dims_prod = DimsProd(dims);
-  if (idx_at>(dims_prod-1))
-  {
-    std::string _error = "\n\t- Idexating at pos: \033[32m"+std::to_string((int)idx_at);
-    _error = _error + "\033[0m on pinned_tensor \033[95m"+std::string(tensor_name);
-    _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
-
-    LogErrorS(_error);
-    std::cout << "Dimensions:" << "\n";
-    PrintDims(dims);
-    std::cout << "\n";
-  }
-
-  float *base_address = tensor->cpu_tensor_ptr;
-  
-  
-  //std::cout << "idx " << idx_at << ", val " << val << "\n";
-
-  float *device_x = base_address + static_cast<int>(idx_at);
-
-  *device_x = val;
-  move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
-}
 
 
 

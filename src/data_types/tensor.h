@@ -36,3 +36,5 @@ extern "C" void *view(int thread_id, Tensor *tensor, float first_dim, ...);
 
 extern "C" void *NewVecToTensor(int thread_id, float first_dim, ...);
 
+
+extern "C" float tensor_CalculateIdx(char *tensor_name, float first_idx, ...);
