@@ -29,3 +29,7 @@ extern "C" void * ones_vec(float size);
 
 
 extern "C" float IndexClassFloatVec(char *vec_name, float _idx);
+
+
+
+extern "C" float float_vec_CalculateIdx(char *, float, ...); 

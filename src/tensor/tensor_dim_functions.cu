@@ -185,9 +185,12 @@ extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
 
 extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   
-  //std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
+  std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
 
   Tensor *tensor = NamedTensorsT[tensor_name];
+
+
+  // PrintDims(tensor->dims);
 
   std::vector<float> idxs, new_dims_no_minus, dims;
   int current_dims_prod;
@@ -212,11 +215,14 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   
   current_dims_prod = DimsProd(dims);
 
+
+
+  // std::cout << "---idx: " << first_idx << "|cur_dims_prod: " << std::to_string(current_dims_prod) << "|adding: " << std::to_string(current_dims_prod*first_idx) << ".\n";
+
   idx_at += (int)(current_dims_prod*first_idx);
 
 
 
-  //std::cout << "Get idx of " << tensor_name << "\nCalculateIdxOffset pushing dim: " << first_idx << "\n";
 
   for (int i=0; i<10; i++)
   {
@@ -236,9 +242,10 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
     
     current_dims_prod = DimsProd(dims);
 
+    // std::cout << "---idx: " << idx << "|cur_dims_prod: " << std::to_string(current_dims_prod) << "|adding: " << std::to_string(current_dims_prod*idx) << ".\n";
+
     idx_at += (int)(current_dims_prod*idx);
 
-    //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
     
 
     if (idx!=-1)

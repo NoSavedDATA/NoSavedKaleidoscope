@@ -403,37 +403,7 @@ class ExprAST {
   };
   
   
-  class BinaryPinnedScalarExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
   
-  public:
-    BinaryPinnedScalarExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  class BinaryPinnedAndTensorExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-  
-  public:
-    BinaryPinnedAndTensorExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  class BinaryTensorPinnedExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-  
-  public:
-    BinaryTensorPinnedExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
   
   
   class BinaryObjExprAST : public ExprAST {
@@ -448,16 +418,6 @@ class ExprAST {
   };
   
   
-  class ConcatStringsExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-  
-  public:
-    ConcatStringsExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
   
   
   

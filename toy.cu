@@ -1017,7 +1017,27 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("tensor_float_minor_eq", CudaScalarMinorEqTy);
 
+
+  FunctionType *str_str_addTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("str_str_add", str_str_addTy);
   
+  FunctionType *float_str_addTy = FunctionType::get(
+      int8PtrTy,
+      {Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("float_str_add", float_str_addTy);
+
+  FunctionType *str_float_addTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("str_float_add", str_float_addTy);
 
   //===----------------------------------------------------------------------===//
   // Tensor Tensor CUDA Ops
@@ -1634,6 +1654,13 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("view", viewTy);
 
+  FunctionType *print_floatTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("print_float", print_floatTy);
+  
 
   //
   FunctionType *CalculateIdxOffsetTy = FunctionType::get(
@@ -1643,6 +1670,34 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("CalculateIdxOffset", CalculateIdxOffsetTy);
 
+
+  FunctionType *tensor_CalculateIdxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("tensor_CalculateIdx", tensor_CalculateIdxTy);
+
+  FunctionType *pinned_tensor_CalculateIdxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("pinned_tensor_CalculateIdx", pinned_tensor_CalculateIdxTy);
+
+  FunctionType *float_vec_CalculateIdxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("float_vec_CalculateIdx", float_vec_CalculateIdxTy);
+
+  FunctionType *str_vec_CalculateIdxTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("str_vec_CalculateIdx", str_vec_CalculateIdxTy);
 
   //
   FunctionType *NewVecToTensorTy = FunctionType::get(
@@ -1801,12 +1856,12 @@ static void InitializeModule() {
   
 
   //
-  FunctionType *AttrPinnedOnIdxTy = FunctionType::get(
+  FunctionType *pinned_tensor_Store_IdxTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
       {int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
-  TheModule->getOrInsertFunction("AttrPinnedOnIdx", AttrPinnedOnIdxTy);
+  TheModule->getOrInsertFunction("pinned_tensor_Store_Idx", pinned_tensor_Store_IdxTy);
 
 
   //
@@ -2965,7 +3020,7 @@ static void InitializeModule() {
   //
   FunctionType *printTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("print", printTy);
@@ -3336,9 +3391,11 @@ int main() {
   reverse_ops = {{"float_tensor", "tensor_float"}};
 
   ops_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
+                     {"float_str", "str"},
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"}};
+                     
 
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
             {tok_diff, "different"}, {'/', "divide"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},

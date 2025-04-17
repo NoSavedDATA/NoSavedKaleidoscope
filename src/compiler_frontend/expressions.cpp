@@ -319,18 +319,9 @@ BinaryTensorTensorExprAST::BinaryTensorTensorExprAST(char Op, std::unique_ptr<Ex
 
 
   
-BinaryPinnedScalarExprAST::BinaryPinnedScalarExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-  
-BinaryPinnedAndTensorExprAST::BinaryPinnedAndTensorExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
   
   
-BinaryTensorPinnedExprAST::BinaryTensorPinnedExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+  
   
   
   
@@ -340,9 +331,6 @@ BinaryObjExprAST::BinaryObjExprAST(char Op, std::unique_ptr<ExprAST> LHS,
   
   
   
-ConcatStringsExprAST::ConcatStringsExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
   
   
   

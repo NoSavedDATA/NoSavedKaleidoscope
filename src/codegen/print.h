@@ -1,3 +1,3 @@
 #pragma once
 
-extern "C" float print(char* str, float x);
+extern "C" float print(char* str);

@@ -11,7 +11,6 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at
 
 extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name, Tensor *R_tensor, int thread_id);
 
-extern "C" void AttrPinnedOnIdx(char *tensor_name, float val, float idx_at);
 
 extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, Tensor *Rtensor, int thread_id, float first_idx, ...);
 

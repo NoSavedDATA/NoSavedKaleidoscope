@@ -6,11 +6,13 @@
 
 
 
-#include "include.h"
 #include "../data_types/include.h"
 #include "../notators/include.h"
 #include "../tensor/include.h"
 #include "../KaleidoscopeJIT.h"
+#include "include.h"
+#include "modules.h"
+#include "expressions.h"
 
 
 
@@ -35,3 +37,6 @@ Function *getFunction(std::string Name);
 /// the function.  This is used for mutable variables etc.
 AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
                                           StringRef VarName);
+
+
+

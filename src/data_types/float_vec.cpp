@@ -38,6 +38,7 @@ extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Str
 }
 
 extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_Struct *scope_struct){
+  // std::cout << "float_vec_Store_Idx" << ".\n";
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name][(int)idx] = value;
@@ -98,4 +99,10 @@ extern "C" float IndexClassFloatVec(char *vec_name, float _idx)
   float ret = ClassFloatVecs[vec_name][idx];
   delete[] vec_name;
   return ret;
+}
+
+
+
+extern "C" float float_vec_CalculateIdx(char *data_name, float first_idx, ...) {
+  return first_idx;
 }

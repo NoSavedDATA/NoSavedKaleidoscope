@@ -2,6 +2,9 @@
 #include <map>
 #include <string>
 
+#include <sstream>
+#include <iomanip>
+
 #include "../common/extension_functions.h"
 #include "../codegen/random.h"
 #include "../codegen/string.h"
@@ -56,6 +59,69 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct){
   //delete[] name;
 
   return 0;
+}
+
+
+extern "C" char * str_str_add(char *lc, char *rc, Scope_Struct *scope_struct)
+{
+  // std::cout << "Concat fn" << ".\n";
+  // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
+  size_t length_lc = strlen(lc);
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat");
+  //char* result_cstr = new char[length_lc+length_rc]; 
+  
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
+
+  //std::cout << "ConcatStr " << result_cstr << "\n";
+
+  return result_cstr;
+}
+
+
+
+extern "C" char * str_float_add(char *lc, float rc, Scope_Struct *scope_struct)
+{
+  // std::cout << "Concat string and float fn" << ".\n";
+  // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
+
+  size_t length_lc = strlen(lc);
+
+  // Convert the float to a string
+  std::stringstream ss;
+  ss << std::fixed << std::setprecision(2) << rc; // Adjust precision as needed
+  std::string rc_str = ss.str();
+  size_t length_rc = rc_str.length() + 1; // +1 for null terminator
+
+  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc_str.c_str(), length_rc);
+
+
+  return result_cstr;
+}
+
+extern "C" char * float_str_add(float lc, char *rc, Scope_Struct *scope_struct)
+{  
+  std::stringstream ss;
+  ss << std::fixed << std::setprecision(2) << lc; // Adjust precision as needed
+  std::string lc_str = ss.str();
+  size_t length_lc = lc_str.length();
+ 
+  
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  
+
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "float_str_add");
+
+  
+  memcpy(result_cstr, lc_str.c_str(), length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
+
+
+  return result_cstr;
 }
 
 
