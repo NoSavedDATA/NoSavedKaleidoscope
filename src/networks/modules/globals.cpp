@@ -17,7 +17,7 @@
 
 std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
 std::map<std::string, std::unique_ptr<BN2dRelu>> NamedBN2dRelu;
-std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
+std::map<std::string, std::unique_ptr<Conv2dCPP>> NamedConv2d;
 std::map<std::string, std::unique_ptr<Embedding>> NamedEmbedding;
 std::map<std::string, std::unique_ptr<LinearCPP>> NamedLinear;
 std::map<std::string, std::unique_ptr<LSTM>> NamedLSTM;

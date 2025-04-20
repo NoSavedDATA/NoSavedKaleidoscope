@@ -834,6 +834,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
   std::string callee_override = "none";
   bool name_solve_to_last = false;
+
+
   if(typeVars.count(IdName)>0)
   {
     name_solve_to_last = true;
@@ -871,7 +873,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   }
 
   
-  //std::cout << "\nCalling method: " << IdName << " for pre-dot: " << pre_dot << "\n\n";
+  std::cout << "\nCalling method: " << IdName << " for pre-dot: " << pre_dot << "\n\n";
 
   //if (IdName == "len")
 
@@ -979,6 +981,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
 
   while (true) {
     std::string Name = IdentifierStr;
+
     typeVars[IdentifierStr] = data_type;
     getNextToken(); // eat identifier.
 
@@ -2203,7 +2206,7 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_pinned_tensor:
     return ParseDataExpr(class_name);
   case tok_conv2d:
-    return ParseConv2dExpr();
+    return ParseDataExpr(class_name);
   case tok_global:
     return ParseGlobalExpr();
   case tok_lstm:

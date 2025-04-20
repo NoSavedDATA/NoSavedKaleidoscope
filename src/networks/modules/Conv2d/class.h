@@ -8,10 +8,11 @@
 #include <cudnn.h>
 #include <mma.h>
 
+
 #include "../../../tensor/tensor_struct.h"
 
 
-class Conv2d
+class Conv2dCPP
 {
   public:
     // Forward
@@ -36,8 +37,9 @@ class Conv2d
     int H = 0;
     int W = 0;
     std::string Init, Name;
+    std::vector<std::string> Notes;
 
-    Conv2d(int C, int OC, int ks, int stride, int padding, std::string Init, std::string Name); 
+    Conv2dCPP(int C, int OC, int ks, int stride, int padding, std::string Init, std::vector<std::string> Notes, std::string Name); 
 
 
   void SetDescriptors(int, int, int, Tensor *tensor);

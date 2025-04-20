@@ -8,6 +8,7 @@
 #include <cudnn.h>
 #include <mma.h>
 
+#include "../../../data_types/codegen_notes.h"
 #include "../../../mangler/scope_struct.h"
 
 
@@ -21,3 +22,8 @@ extern "C" void *ConvForward2d(Scope_Struct *, Tensor *tensor);
 
 extern "C" float CreateConv2dOnDemand(char *tensor_name, char *init,
                                       float C, float OC, float ks, float stride, float padding);
+
+
+extern "C" float Conv2d_Create(char *, char *, float, AnyVector *, Scope_Struct *);
+
+extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor);

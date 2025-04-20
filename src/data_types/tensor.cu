@@ -313,7 +313,7 @@ extern "C" float gpuw(Scope_Struct *scope_struct, Tensor *pinned_tensor, float i
  
   Tensor *tensor = NamedTensorsT[scope_struct->first_arg];
   
-  std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
+  // std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
   
   int thread_id = scope_struct->thread_id;
 

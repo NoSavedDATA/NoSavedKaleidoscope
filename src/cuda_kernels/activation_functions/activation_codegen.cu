@@ -17,7 +17,7 @@
 extern "C" void *relu(Scope_Struct *scope_struct, Tensor *tensor)
 {
   //std::cout << "RELU THREAD IS: " << thread_id << "\n";
-  int thread_id = thread_id;
+  int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);

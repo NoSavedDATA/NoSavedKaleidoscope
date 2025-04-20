@@ -40,56 +40,56 @@ void linear_backward(float *x, float *dx, float *dy, std::string name)
 
 extern "C" void *LinearForward(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
-  //TODO: remove self arg and concatenate it instead during the function call
+  // //TODO: remove self arg and concatenate it instead during the function call
   
   
-  std::string _self = self;
-  std::string conv_name = conv_namec;
-  if (is_obj_attr_or_self)
-    conv_name = _self + conv_name;
+  // std::string _self = self;
+  // std::string conv_name = conv_namec;
+  // if (is_obj_attr_or_self)
+  //   conv_name = _self + conv_name;
 
-  //std::cout << "\nLinear of " << conv_name << " with input " << tensor->name  << "\n";
-  //std::cout << "thread id: " << thread_id << "\n\n";
+  // //std::cout << "\nLinear of " << conv_name << " with input " << tensor->name  << "\n";
+  // //std::cout << "thread id: " << thread_id << "\n\n";
 
   
 
-  float *output;
+  // float *output;
   
-  std::vector<float> dims = tensor->dims;
+  // std::vector<float> dims = tensor->dims;
   
-  int C = dims[dims.size()-1];
+  // int C = dims[dims.size()-1];
 
 
 
-  std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[conv_name]);
+  // std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[conv_name]);
 
-  if ((int)C!=(int)linear->C)
-  {
-    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the Linear are: " + std::to_string(linear->C);
-    LogError(error);
+  // if ((int)C!=(int)linear->C)
+  // {
+  //   std::string error = "Input tensor  are: " + std::to_string((int)C) + ", while the expected input channels of the Linear are: " + std::to_string(linear->C);
+  //   LogError(error);
     
-    NamedLinear[conv_name] = std::move(linear);
-    return nullptr;
-  }
+  //   NamedLinear[conv_name] = std::move(linear);
+  //   return nullptr;
+  // }
     
-  std::vector<float> new_dims = RemoveLastDim(dims);
-  new_dims.push_back(linear->OC);
+  // std::vector<float> new_dims = RemoveLastDim(dims);
+  // new_dims.push_back(linear->OC);
   
 
 
 
-  tensor->Sync();
-  output = linear->Forward(tensor, thread_id);
+  // tensor->Sync();
+  // output = linear->Forward(tensor, thread_id);
 
 
-  NamedLinear[conv_name] = std::move(linear);
+  // NamedLinear[conv_name] = std::move(linear);
 
   
 
-  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->AttrLNode(tensor, linear_op);
-  new_tensor->scopeless_name = conv_name;
-  return new_tensor;
+  // Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  // new_tensor->AttrLNode(tensor, linear_op);
+  // new_tensor->scopeless_name = conv_name;
+  // return new_tensor;
 }
 
 
@@ -99,7 +99,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, Tensor *tensor)
 {
   //TODO: remove self arg and concatenate it instead during the function call
 
-  // std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
+  std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
 
   int thread_id = scope_struct->thread_id;
   
@@ -125,7 +125,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, Tensor *tensor)
 
   if ((int)C!=(int)linear->C)
   {
-    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the Linear are: " + std::to_string(linear->C);
+    std::string error = "Input tensor last dim is: " + std::to_string((int)C) + ", while the expected input dim of the Linear layer is: " + std::to_string(linear->C);
     LogError(error);
     
     NamedLinear[conv_name] = std::move(linear);
