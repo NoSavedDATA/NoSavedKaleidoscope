@@ -17,11 +17,8 @@ void conv2d_backward(float *inp,  float *weight,
                      float *dout, std::string conv_name);
 
 
-extern "C" void *ConvForward2d(Scope_Struct *, Tensor *tensor);
 
 
-extern "C" float CreateConv2dOnDemand(char *tensor_name, char *init,
-                                      float C, float OC, float ks, float stride, float padding);
 
 
 extern "C" float Conv2d_Create(char *, char *, float, AnyVector *, Scope_Struct *);

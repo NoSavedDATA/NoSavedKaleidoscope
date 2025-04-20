@@ -101,7 +101,6 @@ std::unique_ptr<ExprAST> ParsePinnedTensorExpr();
 std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name=""); 
 
 
-std::unique_ptr<ExprAST> ParseConv2dExpr(); 
     
   
   //

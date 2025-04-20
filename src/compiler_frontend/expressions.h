@@ -217,20 +217,6 @@ class ExprAST {
 
 
   
-  class Conv2dExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> C, OC, Ks, Stride, Padding;
-      std::string TensorInit;
-  
-      Conv2dExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC, std::unique_ptr<ExprAST> Ks,
-        std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding,
-        const std::string &TensorInit);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
   
   
   
