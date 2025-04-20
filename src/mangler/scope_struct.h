@@ -53,3 +53,8 @@ extern "C" Scope_Struct *scope_struct_Load_for_Async(char *);
 extern "C" void print_scope_Copy(Scope_Struct *);
 
 extern "C" void scope_struct_Print(Scope_Struct *);
+
+extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thread_id, int has_grad);
+
+
+extern "C" void scope_struct_New_Anon_Expr(Scope_Struct *scope_struct);

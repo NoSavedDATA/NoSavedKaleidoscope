@@ -14,6 +14,7 @@
 
 
 #include "../../../compiler_frontend/logging.h"
+#include "../../../mangler/scope_struct.h"
 #include "../../../tensor/include.h"
 #include "../globals.h"
 #include "class.h"
@@ -39,17 +40,18 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-extern "C" void *ConvForward2d(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *ConvForward2d(Scope_Struct *scope_struct, Tensor *tensor)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
-  std::string _self = self;
-  std::string conv_name = conv_namec;
-  if (is_obj_attr_or_self)
-    conv_name = _self + conv_name;
+  
 
-  //std::cout << "Conv forward of " << conv_name << " and tensor " << tensor->name << "\n";
-  //std::cout << "Conv forward for  conv: " << conv_name <<"\n";
+  std::string conv_name = scope_struct->first_arg;
+  int thread_id = scope_struct->thread_id;
+
+
+  std::cout << "Conv forward of " << conv_name << " and tensor " << tensor->name << "\n";
+  // std::cout << "Conv forward for conv: " << conv_name <<"\n";
   
 
   float *tensor_ptr, *output, *d_filter;

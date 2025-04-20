@@ -1,14 +1,15 @@
 #include <vector>
 
 #include "../data_types/include.h"
+#include "../mangler/scope_struct.h"
 #include "include.h"
 
 
 
-extern "C" float first_nonzero(char *self)
+extern "C" float first_nonzero(Scope_Struct *scope_struct)
 {
-  //std::cout << "first_nonzero call of: " << self <<"\n";
-
+  
+  std::string self = scope_struct->first_arg;
   std::vector<float> vec;
   vec = ClassFloatVecs[self];
   
@@ -28,6 +29,5 @@ extern "C" float first_nonzero(char *self)
       break;
     }
 
-  delete[] self;
   return idx;
 }

@@ -4,13 +4,14 @@
 #include <chrono>
 #include <map>
 
+#include "../mangler/scope_struct.h"
 #include"include.h"
 
 
 
 
 
-extern "C" void __slee_p_(float id)
+extern "C" void __slee_p_(Scope_Struct *scope_struct, float id)
 {
   std::cout << "\n\nSleep " << id << " begin" << "\n";
   std::random_device rd;
@@ -28,7 +29,7 @@ extern "C" void __slee_p_(float id)
 }
 
 
-extern "C" float silent_sleep(float id)
+extern "C" float silent_sleep(Scope_Struct *scope_struct, float id)
 {
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -46,14 +47,14 @@ extern "C" float silent_sleep(float id)
 
 std::chrono::high_resolution_clock::time_point START_TIME;
 
-extern "C" float start_timer(float id)
+extern "C" float start_timer(Scope_Struct *scope_struct, float id)
 {
   START_TIME = std::chrono::high_resolution_clock::now();
  
   return 0;
 }
 
-extern "C" float end_timer(float id)
+extern "C" float end_timer(Scope_Struct *scope_struct, float id)
 {
   std::chrono::high_resolution_clock::time_point endTime = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsedTime = endTime - START_TIME;

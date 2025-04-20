@@ -5,6 +5,7 @@
 #include <vector>
 #include <iostream>
 
+#include "../../mangler/scope_struct.h"
 #include "../../tensor/include.h"
 #include "../elementwise_kernels_inline.cu"
 #include "../calculate_grids.h"
@@ -13,9 +14,10 @@
 
 
 
-extern "C" void *relu(int thread_id, Tensor *tensor)
+extern "C" void *relu(Scope_Struct *scope_struct, Tensor *tensor)
 {
   //std::cout << "RELU THREAD IS: " << thread_id << "\n";
+  int thread_id = thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
   std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
@@ -67,8 +69,9 @@ void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* 
   
 }
 
-extern "C" void *gelu(int thread_id, Tensor *tensor)
+extern "C" void *gelu(Scope_Struct *scope_struct, Tensor *tensor)
 {
+  int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
 
@@ -113,8 +116,9 @@ void sigmoid_backward(const float* out, float dims_prod, float* dinp, const floa
   
 }
 
-extern "C" void *sigmoid(int thread_id, Tensor *tensor)
+extern "C" void *sigmoid(Scope_Struct *scope_struct, Tensor *tensor)
 {
+  int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
   
@@ -158,8 +162,9 @@ void tanh_backward(const float* out, float dims_prod, float* dinp, const float* 
   
 }
 
-extern "C" void *_tanh(int thread_id, Tensor *tensor)
+extern "C" void *_tanh(Scope_Struct *scope_struct, Tensor *tensor)
 {
+  int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
   
@@ -192,8 +197,9 @@ extern "C" void *_tanh(int thread_id, Tensor *tensor)
 
 
 
-extern "C" void *softmax(int thread_id, Tensor *tensor)
+extern "C" void *softmax(Scope_Struct *scope_struct, Tensor *tensor)
 {
+  int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
   

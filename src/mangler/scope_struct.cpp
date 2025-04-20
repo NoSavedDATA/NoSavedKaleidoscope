@@ -90,6 +90,7 @@ extern "C" char *get_scope_first_arg(Scope_Struct *scope_struct) {
     return scope_struct->first_arg;
 }
 extern "C" char *get_scope_scope(Scope_Struct *scope_struct) {
+    // std::cout << "get scope scope" << ".\n";
     // std::cout << "get_scope_scope: " << scope_struct->scope << ".\n";
     return scope_struct->scope;
 }
@@ -124,4 +125,20 @@ extern "C" Scope_Struct *scope_struct_Load_for_Async(char *fn_name)
 extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
     std::cout << "Printing scope:" << ".\n";
     scope_struct->Print();
+}
+
+
+extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thread_id, int has_grad) {
+    // std::cout << "SET ASYNC SCOPE" << ".\n";
+    scope_struct->scope = GetEmptyChar();
+    scope_struct->thread_id = thread_id;
+    scope_struct->has_grad = has_grad;
+    // std::cout << "ASYNC SCOPE SET" << ".\n";
+}
+
+
+extern "C" void scope_struct_New_Anon_Expr(Scope_Struct *scope_struct) {
+    scope_struct->first_arg = GetEmptyChar();
+    scope_struct->scope = GetEmptyChar();
+    scope_struct->previous_scope = GetEmptyChar();
 }

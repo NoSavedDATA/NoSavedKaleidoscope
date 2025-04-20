@@ -24,7 +24,7 @@ extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val
 }
 
 extern "C" void *str_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
-  std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+  // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   void *ret = &ClassStrVecs[object_var_name];
   delete[] object_var_name;
@@ -33,7 +33,7 @@ extern "C" void *str_vec_Load(char *object_var_name, Scope_Struct *scope_struct)
 
 
 extern "C" void str_vec_Store(char *name, std::vector<char *> value, Scope_Struct *scope_struct){
-  std::cout << "STORING " << name << " on demand as StrVec type.\n";
+  // std::cout << "STORING " << name << " on demand as StrVec type.\n";
   ClassStrVecs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
@@ -51,13 +51,13 @@ extern "C" float PrintStrVec(std::vector<char*> vec)
 }
 
 
-extern "C" float LenStrVec(std::vector<char*> vec)
+extern "C" float LenStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
 {
   return (float) vec.size();
 }
 
 
-extern "C" void * ShuffleStrVec(std::vector<char*> vec)
+extern "C" void * ShuffleStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
 {
   std::random_device rd;
   std::mt19937 g(rd()^get_millisecond_time());
@@ -98,7 +98,7 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
-extern "C" void * _glob_b_(char *pattern) {
+extern "C" void * _glob_b_(Scope_Struct *scope_struct, char *pattern) {
   glob_t glob_result;
 
   std::vector<char *> ret;

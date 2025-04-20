@@ -33,3 +33,8 @@ inline void call(std::string fn, std::vector<Value *> args) {
 inline Value *callret(std::string fn, std::vector<Value *> args) {
     return Builder->CreateCall(TheModule->getFunction(fn), args);
 }
+
+
+inline Value *global_str(std::string _string) {
+    return Builder->CreateGlobalString(_string);
+}

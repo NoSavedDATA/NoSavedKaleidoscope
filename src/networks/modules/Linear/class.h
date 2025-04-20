@@ -7,13 +7,16 @@
 #include <cuda_fp16.h>
 #include <cudnn.h>
 #include <mma.h>
+#include <string>
+#include <vector>
+
 
 #include "../../../notators/notators.h"
 #include "../../../tensor/tensor_struct.h"
 
 
 
-class Linear
+class LinearCPP
 {
   public:
     
@@ -22,10 +25,10 @@ class Linear
     float *W, *dW;
     bool first_backward, changed_descriptors;
 
-    int_vec *Notators;
+    std::vector<std::string> Notes;
     bool _fp32;
 
-    Linear(int C, int OC, std::string Init, int_vec *Notators, std::string Name);
+    LinearCPP(int C, int OC, std::string Init, std::vector<std::string> Notes, std::string Name);
   
   float *Forward(Tensor *, int);
   void SetDescriptors(int, int);

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "../../mangler/scope_struct.h"
 #include "../interface.h"
 
 class SGD_optim : public Optimizer {
@@ -17,4 +18,4 @@ class SGD_optim : public Optimizer {
 };
 
 
-extern "C" float SGD(float lr, float momentum, float weight_decay, float grad_clip);
+extern "C" float SGD(Scope_Struct *, float lr, float momentum, float weight_decay, float grad_clip);

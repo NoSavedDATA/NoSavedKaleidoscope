@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../backprop/include.h"
+#include "../../mangler/scope_struct.h"
 #include "../../tensor/include.h"
 #include "../activation_functions/include.h"
 #include "../calculate_grids.h"
@@ -72,7 +73,7 @@ void CrossEntropyBackward(float *y_hat,
 
 
 
-extern "C" float cross_entropy(Tensor *y_hat, Tensor *y, float scale)
+extern "C" float cross_entropy(Scope_Struct *scope_struct, Tensor *y_hat, Tensor *y, float scale)
 {
   
   Tensor *loss_tensor = new Tensor();
@@ -138,7 +139,7 @@ void CrossEntropyIdxBackward(float *y_hat,
 
 
 
-extern "C" float cross_entropy_idx(Tensor *y_hat, Tensor *y, float scale)
+extern "C" float cross_entropy_idx(Scope_Struct *scope_struct, Tensor *y_hat, Tensor *y, float scale)
 {
   
   Tensor *loss_tensor = new Tensor();

@@ -12,6 +12,7 @@
 
 extern "C" char * ConcatScopeStr(char *lc, char *rc)
 {
+  // std::cout << "ConcatScopeStr: " << lc << " and " << rc << ".\n";
   std::string lstr = lc;
 
 
@@ -53,14 +54,6 @@ extern "C" char * ConcatScopeAtCallExpr(char *lc, char *rc)
   //  std::cout << "" << a << "\n";
 
   
-  if (in_str(rstr, globalVars))
-  {
-    //std::cout << "it's a global" << "\n";
-    size_t length_rc = strlen(rc) + 1; // +1 for null terminator
-    char *result_cstr = get_from_char_pool(length_rc, "ConcatScopeAtCallExpr");
-    memcpy(result_cstr, rc, length_rc);
-    return result_cstr;
-  }
   
 
   size_t length_lc = strlen(lc);

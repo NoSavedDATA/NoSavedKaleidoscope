@@ -8,6 +8,7 @@
 #include <cudnn.h>
 #include <mma.h>
 
+#include "../../../mangler/scope_struct.h"
 
 
 void conv2d_backward(float *inp,  float *weight,
@@ -15,7 +16,7 @@ void conv2d_backward(float *inp,  float *weight,
                      float *dout, std::string conv_name);
 
 
-extern "C" void *ConvForward2d(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self);
+extern "C" void *ConvForward2d(Scope_Struct *, Tensor *tensor);
 
 
 extern "C" float CreateConv2dOnDemand(char *tensor_name, char *init,

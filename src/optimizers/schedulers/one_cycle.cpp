@@ -1,8 +1,9 @@
 
 #include <cmath>
 
+#include "../../mangler/scope_struct.h"
 
-extern "C" float OneCycleLR(float base_lr, float step, float max_steps)
+extern "C" float OneCycleLR(Scope_Struct *scope_struct, float base_lr, float step, float max_steps)
 {
   // Possibly wrong.
   float pct_start, final_div_factor, max_momentum, min_momentum, cycle_length, down_phase_steps, min_lr;

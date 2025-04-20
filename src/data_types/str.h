@@ -24,9 +24,9 @@ extern "C" void *cat_str_float(char *c, float v);
 
 
 
-extern "C" void *SplitString(char *self, char *pattern);
+extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *pattern);
 
-extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx);
+extern "C" char *SplitStringIndexate(Scope_Struct *scope_struct, char *pattern, float idx);
 
 
-extern "C" float StrToFloat(char *in_str);
+extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str);

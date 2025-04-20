@@ -158,7 +158,7 @@ pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_s
 // Tensor related
 std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn, native_modules,
 return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,
-return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str;
+return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str, user_cpp_functions;
 
 
 std::map<std::string, std::string> functions_return_type, reverse_ops;
@@ -466,7 +466,7 @@ extern "C" void *self_attn(int thread_id, Tensor *tensor)
 
 
 
-extern "C" float eval()
+extern "C" float eval(Scope_Struct *scope_struct)
 {
   std::cout << "\n\n\nSETTING NN MODE TO EVAL" << "\n\n";
   
@@ -527,7 +527,7 @@ extern "C" float eval()
   return 0;
 }
 
-extern "C" float train()
+extern "C" float train(Scope_Struct *scope_struct)
 {
   std::cout << "SETTING NN MODE TO TRAIN" << "\n\n";
   nn_mode = training_mode;
@@ -591,25 +591,18 @@ Function *FunctionAST::codegen() {
   Value *first_arg, *scope_string, *previous_scope, *thread_id, *has_grad, *scope_struct;
 
   
-  scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Create"), {});
+  scope_struct = callret("scope_struct_Create", {});
 
 
   thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
   has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
+
   if (function_name=="__anon_expr")
-  {
-    first_arg = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-    scope_string = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-    previous_scope = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-
-
-    Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {scope_struct, first_arg});
-    Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {scope_struct, scope_string});
-    Builder->CreateCall(TheModule->getFunction("set_scope_previous_scope"), {scope_struct, previous_scope});  
-  }
+    call("scope_struct_New_Anon_Expr", {scope_struct}); // New empty char for first_arg, scope and previous_scope
+ 
   
-  Builder->CreateCall(TheModule->getFunction("set_scope_thread_id"), {scope_struct, thread_id});
-  Builder->CreateCall(TheModule->getFunction("set_scope_has_grad"), {scope_struct, has_grad});
+  call("set_scope_thread_id", {scope_struct, thread_id});
+  call("set_scope_has_grad", {scope_struct, has_grad});
   
 
 
@@ -660,28 +653,6 @@ Function *FunctionAST::codegen() {
       has_grad = Builder->CreateCall(TheModule->getFunction("get_scope_has_grad"), {scope_struct}); 
       
     }
-    if (arg_name == "self")
-    {
-      first_arg = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg});      
-      Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {scope_struct, first_arg});
-      has_self = true;
-    }
-    if (arg_name == "scope_string")
-    {
-      scope_string = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg}); 
-      Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {scope_struct, &Arg});
-      has_scope = true;
-    }
-    if (arg_name == "previous_scope")
-    {
-      previous_scope = Builder->CreateCall(TheModule->getFunction("CopyString"), {&Arg}); 
-      Builder->CreateCall(TheModule->getFunction("set_scope_previous_scope"), {scope_struct, &Arg});
-      has_previous_scope = true;
-    }
-    if (arg_name == "thread_id")
-      thread_id = &Arg;
-    if (arg_name == "has_grad")
-      has_grad = &Arg;
     
     std::string type = "";
     if (typeVars.find(arg_name) != typeVars.end())
@@ -761,7 +732,7 @@ Function *FunctionAST::codegen() {
 
 
 
-  std::cout << "FunctionAST " << function_name << " clean scope" << ".\n";
+  p2t("FunctionAST " + function_name + " clean scope");
   
   // if(has_self)
   //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
@@ -778,28 +749,28 @@ Function *FunctionAST::codegen() {
 
   
   
-  std::cout << "FunctionAST return" << ".\n";
+  p2t("FunctionAST return");
 
   if (RetVal) {
     // Finish off the function.
     
     
-    std::cout << "FunctionAST CreateRet" << ".\n";
+    p2t("FunctionAST CreateRet");
     Builder->CreateRet(RetVal);
     
 
-    std::cout << "FunctionAST verify" << ".\n";
+    p2t("FunctionAST verify");
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
 
 
-    std::cout << "FunctionAST verified" << ".\n";
+    p2t("FunctionAST verified");
     // Validate the generated code, checking for consistency.
 
     return TheFunction;
   }
 
-  std::cout << "FunctionAST returned" << ".\n";
+  p2t("FunctionAST returned");
 
   // Error reading body, remove function.
   TheFunction->eraseFromParent();
@@ -1191,7 +1162,7 @@ static void InitializeModule() {
   //
   FunctionType *BackpropagationTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {}, 
+      {int8PtrTy}, 
       false
   );
   TheModule->getOrInsertFunction("backprop", BackpropagationTy);
@@ -1221,7 +1192,7 @@ static void InitializeModule() {
   //
   FunctionType *AdamWTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
@@ -1234,7 +1205,7 @@ static void InitializeModule() {
   //
   FunctionType *OneCycleLRTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext)}, 
       false
@@ -1245,7 +1216,7 @@ static void InitializeModule() {
   //
   FunctionType *CosineLRTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext),
+      {int8PtrTy, Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext)}, 
@@ -1298,7 +1269,7 @@ static void InitializeModule() {
   // 
   FunctionType *softmaxTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("softmax", softmaxTy);
@@ -1352,7 +1323,7 @@ static void InitializeModule() {
   //
   FunctionType *reluTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("relu", reluTy);
@@ -1379,7 +1350,7 @@ static void InitializeModule() {
   //
   FunctionType *geluTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("gelu", geluTy);
@@ -1388,7 +1359,7 @@ static void InitializeModule() {
   //
   FunctionType *sigmoidTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("sigmoid", sigmoidTy);
@@ -1406,7 +1377,7 @@ static void InitializeModule() {
   //
   FunctionType *tanhTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("_tanh", tanhTy);
@@ -1415,7 +1386,7 @@ static void InitializeModule() {
   //
   FunctionType *conv2dForwardTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("ConvForward2d", conv2dForwardTy);
@@ -1447,6 +1418,13 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("LinearForward", LinearForwardTy);
 
+
+  FunctionType *LinearTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("Linear", LinearTy);
 
   //
   FunctionType *EmbeddingForwardTy = FunctionType::get(
@@ -1541,7 +1519,7 @@ static void InitializeModule() {
   //
   FunctionType *onehotTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("onehot", onehotTy);
@@ -1568,7 +1546,7 @@ static void InitializeModule() {
   //
   FunctionType *evalTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {},
+      {int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("eval", evalTy);
@@ -1577,7 +1555,7 @@ static void InitializeModule() {
   //
   FunctionType *trainTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {},
+      {int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("train", trainTy);
@@ -1599,7 +1577,7 @@ static void InitializeModule() {
       true // vararg
   );
   TheModule->getOrInsertFunction("sum", sumTy);
-  
+
 
   // 
   FunctionType *prodTy = FunctionType::get(
@@ -1649,7 +1627,7 @@ static void InitializeModule() {
   //
   FunctionType *viewTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext),int8PtrTy,int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("view", viewTy);
@@ -1702,7 +1680,7 @@ static void InitializeModule() {
   //
   FunctionType *NewVecToTensorTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // vararg
   );
   TheModule->getOrInsertFunction("NewVecToTensor", NewVecToTensorTy);
@@ -1715,7 +1693,7 @@ static void InitializeModule() {
   //
   FunctionType *cross_entropyTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("cross_entropy", cross_entropyTy);
@@ -1724,7 +1702,7 @@ static void InitializeModule() {
   //
   FunctionType *cross_entropy_idxTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false
   );
   TheModule->getOrInsertFunction("cross_entropy_idx", cross_entropy_idxTy);
@@ -1755,7 +1733,7 @@ static void InitializeModule() {
   //
   FunctionType *load_imgTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("load_img", load_imgTy);
@@ -1764,7 +1742,7 @@ static void InitializeModule() {
   //
   FunctionType *load_preprocess_imgTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("load_preprocess_img", load_preprocess_imgTy);
@@ -1777,7 +1755,7 @@ static void InitializeModule() {
   //
   FunctionType *gload_imgTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("gload_img", gload_imgTy);
@@ -1786,7 +1764,7 @@ static void InitializeModule() {
   //
   FunctionType *wload_imgTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("wload_img", wload_imgTy);
@@ -1840,7 +1818,7 @@ static void InitializeModule() {
   //
   FunctionType *wload_img_resizeTy = FunctionType::get(
       floatPtrTy,
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("wload_img_resize", wload_img_resizeTy);
@@ -1849,7 +1827,7 @@ static void InitializeModule() {
   //
   FunctionType *save_imgTy = FunctionType::get(
       floatPtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+      {int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("save_img", save_imgTy);
@@ -1867,7 +1845,7 @@ static void InitializeModule() {
   //
   FunctionType *gpuTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("gpu", gpuTy);
@@ -1876,7 +1854,7 @@ static void InitializeModule() {
   //  
   FunctionType *gpuwTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false 
   );
   TheModule->getOrInsertFunction("gpuw", gpuwTy);
@@ -1889,7 +1867,7 @@ static void InitializeModule() {
   //  
   FunctionType *sleepTy = FunctionType::get(
       Type::getVoidTy(*TheContext),
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("__slee_p_", sleepTy);
@@ -1897,7 +1875,7 @@ static void InitializeModule() {
   
   FunctionType *silent_sleepTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("silent_sleep", silent_sleepTy);
@@ -1906,7 +1884,7 @@ static void InitializeModule() {
   //  
   FunctionType *start_timerTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("start_timer", start_timerTy);
@@ -1915,7 +1893,7 @@ static void InitializeModule() {
   //  
   FunctionType *end_timerTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("end_timer", end_timerTy);
@@ -1973,7 +1951,7 @@ static void InitializeModule() {
   // char *
   FunctionType *globTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("_glob_b_", globTy);
@@ -1982,7 +1960,7 @@ static void InitializeModule() {
   //
   FunctionType *zeros_vecTy = FunctionType::get(
       int8PtrTy,
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("zeros_vec", zeros_vecTy);
@@ -2009,7 +1987,7 @@ static void InitializeModule() {
   //
   FunctionType *ones_vecTy = FunctionType::get(
       int8PtrTy,
-      {Type::getFloatTy(*TheContext)},
+      {int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
   TheModule->getOrInsertFunction("ones_vec", ones_vecTy);
@@ -2033,7 +2011,7 @@ static void InitializeModule() {
   
   FunctionType *SplitStringTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("SplitString", SplitStringTy);
@@ -2051,7 +2029,7 @@ static void InitializeModule() {
   //
   FunctionType *StrToFloatTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
@@ -2189,7 +2167,7 @@ static void InitializeModule() {
   //
   FunctionType *LenStrVecTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("LenStrVec", LenStrVecTy);
@@ -2198,7 +2176,7 @@ static void InitializeModule() {
   //
   FunctionType *ShuffleStrVecTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("ShuffleStrVec", ShuffleStrVecTy);
@@ -2676,6 +2654,14 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
 
 
+  FunctionType *Linear_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("Linear_Create", Linear_Create);
+
+
   FunctionType *scope_struct_CreateTy = FunctionType::get(
       int8PtrTy,
       {},
@@ -2781,6 +2767,14 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
   
 
+
+  FunctionType *scope_struct_New_Anon_ExprTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_New_Anon_Expr", scope_struct_New_Anon_ExprTy);
+
   FunctionType *scope_struct_Save_for_AsyncTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy},
@@ -2804,6 +2798,12 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("randint", randintTy);
 
+  FunctionType *scope_struct_Get_Async_Scope = FunctionType::get(
+    int8PtrTy,
+    {int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+    false
+);
+TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_Async_Scope);
 
   //
   FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
@@ -2983,7 +2983,7 @@ static void InitializeModule() {
   //
   FunctionType *cpuTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("cpu", cpuTy);
@@ -2992,8 +2992,7 @@ static void InitializeModule() {
   //
   FunctionType *cpu_idxTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false 
   );
   TheModule->getOrInsertFunction("cpu_idx", cpu_idxTy);
@@ -3011,7 +3010,7 @@ static void InitializeModule() {
   //
   FunctionType *randu_likeTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("randu_like", randu_likeTy);
@@ -3020,7 +3019,7 @@ static void InitializeModule() {
   //
   FunctionType *printTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy}, 
+      {int8PtrTy, int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("print", printTy);
@@ -3332,17 +3331,20 @@ int main() {
                            {"onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
                            {"prod", "tensor"}, {"mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
                            {"save_img", "tensor"}, {"gpu", "tensor"}, {"gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
-                           {"to_string", "str"}, {"cat_str_float", "str"}};
+                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}};
+
 
 
                            
+
+  user_cpp_functions = {"Linear", "shape"};
 
 
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like",
                              "RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "dropout", "sigmoid_add2weights",
                              "rl_discounted_return", "self_attn", "Jitter", "mse_with_priorities",
-                             "btc_mult", "btc_multT"};
+                             "btc_mult", "btc_multT", "Linear"};
 
   return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
                             "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
@@ -3364,6 +3366,7 @@ int main() {
   // e.g: x.view(), str.split()
   native_methods = {"split", "split_idx", "first_nonzero", "append"};
   native_methods = concat_str_vec(native_methods, return_tensor_methods);
+  native_methods = concat_str_vec(native_methods, user_cpp_functions);
   //native_methods = concat_str_vec(native_methods, return_pinned_methods);
 
   return_string_fn = {"to_string", "cat_str_float"};
