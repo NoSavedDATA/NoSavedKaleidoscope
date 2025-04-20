@@ -16,8 +16,9 @@
 #include "../../../tensor/include.h"
 #include "class.h"
 
-Conv2d::Conv2d(int C, int OC, int ks, int stride, int padding, std::string Init, std::string Name) 
-    : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Name(Name) {
+
+Conv2dCPP::Conv2dCPP(int C, int OC, int ks, int stride, int padding, std::string Init, std::vector<std::string> Notes, std::string Name)
+    : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Notes(Notes), Name(Name) {
     NamedTensorsT[Name] = new Tensor();
     d_filter=nullptr;
     d_workspace=nullptr;
@@ -29,7 +30,7 @@ Conv2d::Conv2d(int C, int OC, int ks, int stride, int padding, std::string Init,
 }
 
 
-void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
+void Conv2dCPP::SetDescriptors(int H, int W, int B, Tensor *tensor)
 {
   this->H = H;
   this->W = W;
@@ -207,7 +208,7 @@ void Conv2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
 
 
 
-void Conv2d::InitFilters()
+void Conv2dCPP::InitFilters()
 {
   std::vector<float> h_filter;
   float *filter;
@@ -252,7 +253,7 @@ void Conv2d::InitFilters()
 
 
 
-float *Conv2d::Forward(Tensor *tensor, int H, int W, int B, int thread_id)
+float *Conv2dCPP::Forward(Tensor *tensor, int H, int W, int B, int thread_id)
 {
   // Initialize descriptors.
   //std::cout << "\nConv2d Forward with H: " << H << " W: " << W << "\n";
@@ -298,7 +299,7 @@ float *Conv2d::Forward(Tensor *tensor, int H, int W, int B, int thread_id)
 }
 
 
-void Conv2d::Backward(float *tensor, float *dx, float *d_filter_g, float *dy)
+void Conv2dCPP::Backward(float *tensor, float *dx, float *d_filter_g, float *dy)
 {
   //std::cout << "\nConv2d Backward with H: " << H << " W: " << W << "\n";
 

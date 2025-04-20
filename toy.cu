@@ -1389,7 +1389,7 @@ static void InitializeModule() {
       {int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("ConvForward2d", conv2dForwardTy);
+  TheModule->getOrInsertFunction("Conv2d", conv2dForwardTy);
 
 
   //
@@ -2662,6 +2662,13 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("Linear_Create", Linear_Create);
 
 
+  FunctionType *Conv2d_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("Conv2d_Create", Conv2d_Create);
+
   FunctionType *scope_struct_CreateTy = FunctionType::get(
       int8PtrTy,
       {},
@@ -3331,13 +3338,13 @@ int main() {
                            {"onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
                            {"prod", "tensor"}, {"mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
                            {"save_img", "tensor"}, {"gpu", "tensor"}, {"gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
-                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}};
+                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}};
 
 
 
                            
 
-  user_cpp_functions = {"Linear", "shape"};
+  user_cpp_functions = {"Linear", "shape", "Conv2d"};
 
 
 
