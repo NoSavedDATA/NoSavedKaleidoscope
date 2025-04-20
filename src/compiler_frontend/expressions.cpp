@@ -192,16 +192,6 @@ DataExprAST::DataExprAST(
 
   
   
-Conv2dExprAST::Conv2dExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC, std::unique_ptr<ExprAST> Ks,
-  std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding,
-  const std::string &TensorInit)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                C(std::move(C)), OC(std::move(OC)), Ks(std::move(Ks)),
-                Stride(std::move(Stride)), Padding(std::move(Padding)),
-                TensorInit(TensorInit) {}
   
   
   

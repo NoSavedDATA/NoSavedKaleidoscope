@@ -1749,49 +1749,6 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *Conv2dExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-
-
-    std::cout << "Parsing Conv2d var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateConv2dOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct), OC->codegen(scope_struct), Ks->codegen(scope_struct), Stride->codegen(scope_struct),
-                                               Padding->codegen(scope_struct)});
-    std::cout << "Called Create Conv 2d" << ".\n";
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
 
 
 
