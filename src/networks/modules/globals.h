@@ -20,7 +20,7 @@ extern std::map<std::string, std::unique_ptr<BatchNorm2d>> NamedBatchNorm2d;
 extern std::map<std::string, std::unique_ptr<BN2dRelu>> NamedBN2dRelu;
 extern std::map<std::string, std::unique_ptr<Conv2d>> NamedConv2d;
 extern std::map<std::string, std::unique_ptr<Embedding>> NamedEmbedding;
-extern std::map<std::string, std::unique_ptr<Linear>> NamedLinear;
+extern std::map<std::string, std::unique_ptr<LinearCPP>> NamedLinear;
 extern std::map<std::string, std::unique_ptr<LSTM>> NamedLSTM;
 extern std::map<std::string, std::unique_ptr<MaxPool2d>> NamedMaxPool2d;
 extern std::map<std::string, std::unique_ptr<MHSA>> NamedMHSA;

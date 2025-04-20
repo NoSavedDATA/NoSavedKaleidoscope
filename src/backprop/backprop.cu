@@ -2,6 +2,7 @@
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
 #include "../cuda_kernels/include.h"
+#include "../mangler/scope_struct.h"
 #include "../mma/general.h"
 #include "../networks/modules/include.h"
 #include "../tensor/tensor_struct.h"
@@ -359,7 +360,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
 }
 
 
-extern "C" float backprop()
+extern "C" float backprop(Scope_Struct *scope_struct)
 {
 
   int op;

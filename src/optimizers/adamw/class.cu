@@ -5,6 +5,7 @@
 
 #include "../../common/cu_commons.h"
 #include "../../cuda_kernels/calculate_grids.h"
+#include "../../mangler/scope_struct.h"
 #include "../../tensor/tensor_dim_functions.h"
 
 #include "../common.h"
@@ -94,7 +95,7 @@ void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector
 
 
 
-extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay, float grad_clip)
+extern "C" float AdamW(Scope_Struct *scope_struct, float lr, float beta1, float beta2, float weight_decay, float grad_clip)
 {
 
   if (optimizer==nullptr)

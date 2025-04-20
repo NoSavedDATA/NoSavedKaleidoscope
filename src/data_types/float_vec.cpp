@@ -21,7 +21,7 @@ extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_v
 }
 
 extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
-  std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+  // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   void *ret = &ClassFloatVecs[object_var_name];
   delete[] object_var_name;
@@ -29,7 +29,7 @@ extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struc
 }
 
 extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Struct *scope_struct){
-  std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
+  // std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");
@@ -63,7 +63,7 @@ extern "C" float PrintFloatVec(std::vector<float> vec)
 }
 
 
-extern "C" void * zeros_vec(float size) {
+extern "C" void * zeros_vec(Scope_Struct *scope_struct, float size) {
   // TODO: turn into python like expression [0]*size
 
   std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 0.0f);
@@ -77,7 +77,7 @@ extern "C" void * zeros_vec(float size) {
   return &FloatVecAuxHash[random_str];
 }
 
-extern "C" void * ones_vec(float size) {
+extern "C" void * ones_vec(Scope_Struct *scope_struct, float size) {
   // TODO: turn into python like expression [0]*size
 
   std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 1.0f);

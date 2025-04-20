@@ -23,13 +23,16 @@
 
 
 
-Linear::Linear(int C, int OC, std::string Init, int_vec *Notators, std::string Name)
-    : C(C), OC(OC), Init(Init), Notators(Notators), Name(Name) {
+LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> Notes, std::string Name)
+    : C(C), OC(OC), Init(Init), Notes(Notes), Name(Name) {
     B = 0;
 
     _fp32 = true;
-    if (in_int_ptr(fp16, Notators->vec, Notators->size))
-    _fp32 = false;
+    // if (in_int_ptr(fp16, Notators->vec, Notators->size))
+    //   _fp32 = false;
+
+    if (in_str("fp16", Notes))
+      _fp32 = false;
 
 
 
@@ -39,27 +42,27 @@ Linear::Linear(int C, int OC, std::string Init, int_vec *Notators, std::string N
 
 
     if (Init=="randu")
-    W_cpu = make_random_float_uniform(product);
+      W_cpu = make_random_float_uniform(product);
     if (Init=="zeros")
-    W_cpu = make_zeros_float(product);
+      W_cpu = make_zeros_float(product);
     if (Init=="ones")
-    W_cpu = make_ones_float(product);
+      W_cpu = make_ones_float(product);
     if (Init=="normal")
-    W_cpu = make_normal(product);
+      W_cpu = make_normal(product);
     if (Init=="xavu")
-    W_cpu = make_xavier_uniform_float(product, C, OC);
+      W_cpu = make_xavier_uniform_float(product, C, OC);
     if (Init=="xavu_relu")
-    W_cpu = make_xavier_uniform_float_relu(product, C, OC);
+      W_cpu = make_xavier_uniform_float_relu(product, C, OC);
     if (Init=="xavu_tanh")
-    W_cpu = make_xavier_uniform_float_tanh(product, C, OC);
+      W_cpu = make_xavier_uniform_float_tanh(product, C, OC);
     if (Init=="he_normal_relu")
-    W_cpu = make_he_normal_float_relu(product, C);
+      W_cpu = make_he_normal_float_relu(product, C);
     if (Init=="init_gpt")
-    W_cpu = make_gpt_init(product);
+      W_cpu = make_gpt_init(product);
     if (Init=="int")
-    W_cpu = make_random_int(product, 10);
+      W_cpu = make_random_int(product, 10);
     if (Init=="binary")
-    W_cpu = make_random_int(product, 1);
+      W_cpu = make_random_int(product, 1);
 
 
     cudaMalloc(&W,       product * sizeof(float));
@@ -71,7 +74,6 @@ Linear::Linear(int C, int OC, std::string Init, int_vec *Notators, std::string N
     NamedTensorsT[Name+"W"] = tensor_W;
 
     delete[] W_cpu;
-    delete[] Notators;
 
 
     first_backward = true;
@@ -79,7 +81,7 @@ Linear::Linear(int C, int OC, std::string Init, int_vec *Notators, std::string N
 }
 
 
-void Linear::SetDescriptors(int B, int thread_id)
+void LinearCPP::SetDescriptors(int B, int thread_id)
 {
   this->B=B;
   changed_descriptors=true;
@@ -87,7 +89,7 @@ void Linear::SetDescriptors(int B, int thread_id)
 
 
 
-float *Linear::Forward(Tensor *x, int thread_id)
+float *LinearCPP::Forward(Tensor *x, int thread_id)
 {
 
   std::vector<float> dims = format_LinearLayer_Dims(x->dims);
@@ -166,12 +168,12 @@ float *Linear::Forward(Tensor *x, int thread_id)
 
 
 
-void Linear::SetBackwardDescriptors()
+void LinearCPP::SetBackwardDescriptors()
 {
   changed_descriptors=false;
 }
 
-void Linear::FirstBackward()
+void LinearCPP::FirstBackward()
 {
   dW = get_from_pool(0, OC*C, "MHSA dW");
 
@@ -183,7 +185,7 @@ void Linear::FirstBackward()
 }
 
 
-void Linear::Backward(float *x, float *dx, float *dy)
+void LinearCPP::Backward(float *x, float *dx, float *dy)
 {
   float one = 1.0f, zero = 0.0f;
   
@@ -236,3 +238,7 @@ void Linear::Backward(float *x, float *dx, float *dy)
     */
   }
 }
+
+
+
+

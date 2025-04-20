@@ -252,10 +252,10 @@ extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *s
 
 
 
-extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
+extern "C" void *gpu(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_tensor)
 {
   //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
-  
+  int thread_id = scope_struct->thread_id; 
   float *tensor_ptr, *tensor_cpu;
 
   
@@ -308,10 +308,15 @@ extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
 
 
 
-extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, float idx)
+extern "C" float gpuw(Scope_Struct *scope_struct, Tensor *pinned_tensor, float idx)
 {
-  //std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
+ 
+  Tensor *tensor = NamedTensorsT[scope_struct->first_arg];
   
+  std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
+  
+  int thread_id = scope_struct->thread_id;
+
   float *tensor_ptr, *tensor_cpu;
 
   
@@ -381,8 +386,10 @@ extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, floa
 }
 
 
-extern "C" float cpu(int thread_id, Tensor *tensor)
+extern "C" float cpu(Scope_Struct *scope_struct, Tensor *tensor)
 {
+
+  int thread_id = scope_struct->thread_id; 
 
   float *tensor_ptr, *tensor_cpu;
   tensor_ptr = tensor->tensor_ptr;
@@ -410,7 +417,7 @@ extern "C" float cpu(int thread_id, Tensor *tensor)
   return 0;
 }
 
-extern "C" float cpu_idx(Tensor *tensor, float idx)
+extern "C" float cpu_idx(Scope_Struct *scope_struct, Tensor *tensor, float idx)
 {
 
   float *tensor_cpu;
@@ -430,8 +437,10 @@ extern "C" float cpu_idx(Tensor *tensor, float idx)
 }
 
 
-extern "C" void *randu_like(int thread_id, Tensor tensor)
+extern "C" void *randu_like(Scope_Struct *scope_struct, Tensor tensor)
 {
+  int thread_id = scope_struct->thread_id;
+
   float dims_prod = tensor.dims_prod;
 
   float *tensor_ptr, *tensor_cpu;
@@ -471,8 +480,10 @@ extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
 }
 
 
-extern "C" void *view(int thread_id, Tensor *tensor, float first_dim, ...)
+extern "C" void *view(Scope_Struct *scope_struct, float first_dim, ...)
 {
+  Tensor *tensor = NamedTensorsT[scope_struct->first_arg];
+
   //std::cout << "Executing: " << tensor.name << "." << "view" << "\n";
    
   std::vector<float> new_dims, new_dims_no_minus, current_dims;
@@ -559,10 +570,11 @@ extern "C" void *view(int thread_id, Tensor *tensor, float first_dim, ...)
 
 
 
-extern "C" void *NewVecToTensor(int thread_id, float first_dim, ...)
+extern "C" void *NewVecToTensor(Scope_Struct *scope_struct, float first_dim, ...)
 {
   std::vector<float> values;
 
+  int thread_id = scope_struct->thread_id;
   
   va_list args;
   va_start(args, first_dim);

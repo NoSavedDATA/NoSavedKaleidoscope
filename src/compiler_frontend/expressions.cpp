@@ -336,13 +336,13 @@ BinaryObjExprAST::BinaryObjExprAST(char Op, std::unique_ptr<ExprAST> LHS,
   
   
 CallExprAST::CallExprAST(std::unique_ptr<ExprAST> NameSolver,
-            const std::string &Callee,
+            const std::string &Callee, const std::string &Name,
             std::vector<std::unique_ptr<ExprAST>> Args,
             const std::string &Class,
             const std::string &PreDot,
             bool IsVarForward,
             const std::string &CalleeOverride)
-    : NameSolver(std::move(NameSolver)), Callee(Callee), Args(std::move(Args)), Class(Class),
+    : NameSolver(std::move(NameSolver)), Callee(Callee), Name(Name), Args(std::move(Args)), Class(Class),
       PreDot(PreDot), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {
   SetType("float");
 }

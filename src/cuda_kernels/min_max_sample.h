@@ -8,7 +8,7 @@
 #include "../tensor/tensor_struct.h"
 
 
-extern "C" void *onehot(int thread_id, Tensor *tensor, float num_classes);
+extern "C" void *onehot(Scope_Struct *scope_struct, float num_classes);
 
 
 extern "C" float priority_sample(int thread_id, Tensor *tensor, float max_idx, float seed);

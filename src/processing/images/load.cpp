@@ -1,15 +1,15 @@
 #include <iostream>
 
-
 #include "../../common/cu_commons.h"
 #include "../../compiler_frontend/logging.h"
+#include "../../mangler/scope_struct.h"
 #include "../../tensor/tensor_dim_functions.h"
 #include "stb_lib.h"
 #include "load.h"
 #include "interpolate.h"
 
 
-extern "C" float *load_img(char *img_name)
+extern "C" float *load_img(Scope_Struct *scope_struct, char *img_name)
 {
   int width, height, channels;
   
@@ -46,7 +46,7 @@ extern "C" float *load_img(char *img_name)
 }
 
 
-extern "C" float * gload_img(Tensor tensor, char *img_name, float batch_idx)
+extern "C" float * gload_img(Scope_Struct *scope_struct, Tensor tensor, char *img_name, float batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor.name <<  "\nImage: " << img_name << "\n";
   
@@ -122,7 +122,7 @@ extern "C" float * gload_img(Tensor tensor, char *img_name, float batch_idx)
 
 
 
-extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, float batch_idx)
+extern "C" float * wload_img(Scope_Struct *scope_struct, Tensor *tensor, char *img_name, float worker_idx, float batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
@@ -202,7 +202,7 @@ extern "C" float * wload_img(Tensor *tensor, char *img_name, float worker_idx, f
 
 
 
-extern "C" float * wload_img_resize(Tensor *tensor, char *img_name, float worker_idx, float batch_idx, float c, float h, float w)
+extern "C" float * wload_img_resize(Scope_Struct *scope_struct, Tensor *tensor, char *img_name, float worker_idx, float batch_idx, float c, float h, float w)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
@@ -292,10 +292,10 @@ extern "C" float * wload_img_resize(Tensor *tensor, char *img_name, float worker
 
 
 float *current_data;
-extern "C" float load_preprocess_img(Tensor tensor, char *img_name)
+extern "C" float load_preprocess_img(Scope_Struct *scope_struct,Tensor tensor, char *img_name)
 {
   float *img;
-  img = load_img(img_name); 
+  img = load_img(scope_struct, img_name); 
   
   std::vector<float> dims = tensor.dims;
 

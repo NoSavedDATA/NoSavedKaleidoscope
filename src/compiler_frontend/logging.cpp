@@ -143,10 +143,10 @@ extern "C" void print_codegen(char *msg)
 void p2t(std::string msg)
 {
   // return;
+ 
 
-  
   bool shall_log = true;
-  std::vector<std::string> ignore_expresions = {"DataExpr", "FunctionAST", "CallExpr", "p2t", "VariableExpr", "NumberExpr", "VecIdxExpr", "codegenAsyncFunction", "AsyncExpr"};
+  std::vector<std::string> ignore_expresions = {"FunctionAST", "CallExpr", "DataExpr", "p2t", "VariableExpr", "NumberExpr", "VecIdxExpr", "codegenAsyncFunction", "AsyncExpr"};
 
   for (int i=0; i<ignore_expresions.size(); ++i)
   {
@@ -156,7 +156,7 @@ void p2t(std::string msg)
 
   if (shall_log)
   {
-    call("print_codegen", {Builder->CreateGlobalString(msg)});
     std::cout << msg << ".\n";
+    call("print_codegen", {Builder->CreateGlobalString(msg)});
   }
 }

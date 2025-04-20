@@ -1,7 +1,9 @@
 #include <string>
 #include <iostream>
 
-extern "C" float print(char* str){
+#include "../mangler/scope_struct.h"
+
+extern "C" float print(Scope_Struct *scope_struct, char* str){
   // std::string _str = str;
   // std::cout << "\n" << str  << "\n";
   std::cout << str  << "\n";

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "../../mangler/scope_struct.h"
 #include "../interface.h"
 
 class AdamW_optim : public Optimizer {
@@ -19,4 +20,4 @@ class AdamW_optim : public Optimizer {
 
 
 
-extern "C" float AdamW(float lr, float beta1, float beta2, float weight_decay, float grad_clip);
+extern "C" float AdamW(Scope_Struct *, float lr, float beta1, float beta2, float weight_decay, float grad_clip);

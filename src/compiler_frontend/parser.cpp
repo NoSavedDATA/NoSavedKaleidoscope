@@ -44,7 +44,10 @@ std::unique_ptr<ExprAST> ParseStringExpr() {
 
 /// parenexpr ::= '(' expression ')'
 std::unique_ptr<ExprAST> ParseParenExpr(std::string class_name) {
+
+  
   getNextToken(); // eat (.
+
   auto V = ParseExpression(class_name);
   if (!V)
     return nullptr;
@@ -252,13 +255,23 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   // Eat the ')'.
   getNextToken();
 
+  
+  std::string callee_override = "none";
+  bool name_solve_to_last = false;
+  if(typeVars.count(IdName)>0)
+  {
+    name_solve_to_last = true;
+    callee_override = typeVars[IdName];
+  }
+  
+
   bool is_var_forward = false;
   bool return_tensor = false;
-  std::string callee_override = "none";
   if (functionVars.find(IdName) != functionVars.end()) // if found
   {
     is_var_forward = true;
     return_tensor = true;
+    name_solve_to_last = true;
     callee_override = functionVars[IdName];
   }
   if (floatFunctions.find(IdName) != floatFunctions.end()) // if found
@@ -268,18 +281,26 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   }
   if (IdName=="to_float")
   {
-    callee_override = "ToFloat";
+    callee_override = "StrToFloat";
     is_var_forward = true;
   }
   
   auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-  name_solver_expr->SetNameSolveToLast(false);
-  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, std::move(Args),
+  name_solver_expr->SetNameSolveToLast(name_solve_to_last);
+  // if ()
+  // name_solver_expr->SetType;
+  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, IdName, std::move(Args),
                                                 "None", "None", is_var_forward, callee_override);
 
  
-  if (functions_return_type.count(IdName)>0)
-    aux->SetType(functions_return_type[IdName]);  
+
+  std::string fname = (callee_override!="none") ? callee_override : IdName;
+
+  if (functions_return_type.count(fname)>0)
+  {
+    // std::cout << "----RETURN OF " << fname << " IS: " << functions_return_type[fname] << ".\n";
+    aux->SetType(functions_return_type[fname]);  
+  }
   if (return_tensor)
     aux->SetType("tensor");
 
@@ -811,15 +832,24 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
 
 
+  std::string callee_override = "none";
+  bool name_solve_to_last = false;
+  if(typeVars.count(IdName)>0)
+  {
+    name_solve_to_last = true;
+    callee_override = typeVars[IdName];
+  }
   // Override function calls: e.g: conv1 -> Conv2d
+
+  std::string callee = IdName;
   bool is_var_forward = false;
   bool return_tensor = false;
   bool return_string = false;
-  std::string callee_override = "none";
   if (functionVars.count(IdName) > 0)
   {
     is_var_forward = true;
     return_tensor = true;
+    name_solve_to_last = true;
     callee_override = functionVars[IdName];
 
   } else if (floatFunctions.find(IdName) != floatFunctions.end())
@@ -835,7 +865,9 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
   } else {
     if (is_self && !is_class_attr)
-      IdName = class_name + IdName;
+    {
+      callee = class_name + IdName;
+    }
   }
 
   
@@ -845,8 +877,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
 
   auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-  name_solver_expr->SetNameSolveToLast(false);
-  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, std::move(Args),
+  name_solver_expr->SetNameSolveToLast(name_solve_to_last);
+  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), callee, IdName, std::move(Args),
                                         object_class, pre_dot, is_var_forward, callee_override);
 
 
@@ -877,7 +909,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
 std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
 
-  std::cout << "Parsing data with data type: " << IdentifierStr << ".\n";
+  // std::cout << "Parsing data with data type: " << IdentifierStr << ".\n";
 
   std::string data_type = IdentifierStr;
 
@@ -924,6 +956,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
 
 
 
+
   std::string pre_dot="";
   bool is_self = false;
   bool is_attr = false;
@@ -942,12 +975,15 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
   if (CurTok != tok_identifier)
     return LogError("Expected tensor identifier name.");
 
+
+
   while (true) {
     std::string Name = IdentifierStr;
     typeVars[IdentifierStr] = data_type;
     getNextToken(); // eat identifier.
 
     
+
     // std::unique_ptr<ExprAST> Init = nullptr;
     // VarNames.push_back(std::make_pair(Name, std::move(Init))); 
 
@@ -987,6 +1023,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
   if (CurTok==tok_space)
     getNextToken();
   
+
   return aux;
 }
 
@@ -2164,7 +2201,7 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_tensor:
     return ParseDataExpr(class_name);
   case tok_pinned_tensor:
-    return ParseDataExpr();
+    return ParseDataExpr(class_name);
   case tok_conv2d:
     return ParseConv2dExpr();
   case tok_global:
@@ -2176,7 +2213,7 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_mhsa:
     return ParseMHSAExpr();
   case tok_linear:
-    return ParseLinearExpr();
+    return ParseDataExpr(class_name);
   case tok_maxpool2d:
     return ParseMaxPool2dExpr();
   case tok_avgpool2d:
@@ -2342,7 +2379,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
       R_cuda = type_string;
     
     R_type = RHS->GetType();
-    std::cout << "--Rtype is: " << R_type << ".\n";
+    // std::cout << "--Rtype is: " << R_type << ".\n";
     
     
     
@@ -2361,7 +2398,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
       R_cuda = std::get<1>(tuple);
       R_type = std::get<2>(tuple);
 
-      std::cout << "--Updated type is: " << R_type << ".\n";
+      // std::cout << "--Updated type is: " << R_type << ".\n";
 
 
       if (!RHS)
@@ -2376,9 +2413,9 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
     std::string op_elements = L_type + "_";
     op_elements = op_elements + R_type;
 
-    std::cout << "\n\n===============" << ".\n";
-    std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
-    std::cout << "op type: " << op_elements << ".\n";
+    // std::cout << "\n\n===============" << ".\n";
+    // std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
+    // std::cout << "op type: " << op_elements << ".\n";
 
     bool shall_reverse_operands = false;
     if (reverse_ops.count(op_elements)>0)
@@ -2388,7 +2425,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
     }
 
     std::string return_type = ops_type_return[op_elements];
-    std::cout << "return type: " << return_type << "...\n";
+    // std::cout << "return type: " << return_type << "...\n";
 
 
     // if (RHS->GetType()=="None")
@@ -2404,7 +2441,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
       if (BinOp=='-') // inversion of 1 - tensor
       {
 
-        std::cout << "---REVERSING" << ".\n";
+        // std::cout << "---REVERSING" << ".\n";
 
 
         // RHS = std::make_unique<BinaryTensorScalarExprAST>('*',
@@ -2421,14 +2458,14 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
         op_type = op_elements + "_add";
         LHS = std::make_unique<BinaryExprAST>('+', op_elements, op_type, std::move(RHS), std::move(LHS));
 
-        std::cout << "---Setting type as " << return_type << ".\n";
+        // std::cout << "---Setting type as " << return_type << ".\n";
         LHS->SetType(return_type);
 
         // LHS = std::make_unique<BinaryTensorScalarExprAST>('+',
         //                                             std::move(RHS), std::move(LHS));
       } else {
 
-        std::cout << "Reverse 2" << ".\n";
+        // std::cout << "Reverse 2" << ".\n";
                                                   
         std::string operation = op_map[BinOp];
         std::string op_type = op_elements + "_" + operation;
@@ -2439,7 +2476,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
 
       }
     } else {
-      std::cout << "No reverse" << ".\n";
+      // std::cout << "No reverse" << ".\n";
 
 
       if (R_cuda==type_object)
@@ -2450,23 +2487,22 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
       else
       {
 
-        std::cout << "Elements type: " << op_elements << ".\n";
+        // std::cout << "Elements type: " << op_elements << ".\n";
         std::string operation = op_map[BinOp];
         std::string op_type = op_elements + "_" + operation;
-        std::cout << "Operation: " << op_type << ".\n";
-        std::cout << "op: " << BinOp << ".\n";
+        // std::cout << "Operation: " << op_type << ".\n";
+        // std::cout << "op: " << BinOp << ".\n";
 
         LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(LHS), std::move(RHS));
         LHS->SetType(return_type);
       }
     }
 
-    std::string msg = "LHS type: " + LHS->GetType();
-    std::cout << msg << "\n";
-    std::cout << "====================================================================="  << ".\n";
+    // std::string msg = "LHS type: " + LHS->GetType();
+    // std::cout << msg << "\n";
+    // std::cout << "====================================================================="  << ".\n";
 
-    LhsTok = RhsTok;    
-  
+    LhsTok = RhsTok;
   }
 }
 
@@ -2546,11 +2582,12 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
   std::vector<std::string> ArgNames, Types;
 
 
-  if (class_name!="") // If it is a class method, add self
-  {
-    Types.push_back("s");
-    ArgNames.push_back("self");
-  }
+  // if (class_name!="") // If it is a class method, add self
+  // {
+  //   Types.push_back("s");
+  //   ArgNames.push_back("self");
+  // }
+  
   // Types.push_back("s");
   // ArgNames.push_back("scope_string");
   // Types.push_back("s");

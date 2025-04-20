@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../mangler/scope_struct.h"
 #include "../../tensor/tensor_struct.h"
 
 
@@ -9,7 +10,7 @@ void CrossEntropyBackward(float *y_hat,
                           float *dloss,
                           float scale);
 
-extern "C" float cross_entropy(Tensor *y_hat, Tensor *y, float scale);
+extern "C" float cross_entropy(Scope_Struct *, Tensor *y_hat, Tensor *y, float scale);
 
 
 void CrossEntropyIdxBackward(float *y_hat,
@@ -19,4 +20,4 @@ void CrossEntropyIdxBackward(float *y_hat,
                           float scale);
 
 
-extern "C" float cross_entropy_idx(Tensor *y_hat, Tensor *y, float scale);
+extern "C" float cross_entropy_idx(Scope_Struct *, Tensor *y_hat, Tensor *y, float scale);

@@ -168,7 +168,7 @@ extern "C" void *cat_str_float(char *c, float v)
 
 
 
-extern "C" void *SplitString(char *self, char *pattern)
+extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *pattern)
 {
 
   //std::cout << "\n\nSPLITTING: " << self << ", with pattern: " << pattern << "\n";
@@ -196,12 +196,17 @@ extern "C" void *SplitString(char *self, char *pattern)
 
 // INDEX METHODS
 
-extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
+extern "C" char *SplitStringIndexate(Scope_Struct *scope_struct, char *pattern, float idx)
 {
+
+  std::string name = scope_struct->first_arg;
+  
+  // std::cout << "splitting " << name << "\n";
   pthread_mutex_lock(&clean_scope_mutex);
   char *self = NamedStrs[name];
   pthread_mutex_unlock(&clean_scope_mutex);
-  //std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
+  // std::cout << name << " is " << self << ".\n";
+  // std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
 
   
   std::vector<char *> splits;
@@ -218,7 +223,6 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
   }
 
 
-  //std::cout << "splitting " << name << "\n";
 
   if(splits.size()<=1)
   {
@@ -231,21 +235,21 @@ extern "C" char *SplitStringIndexate(char *name, char *pattern, float idx)
   if (idx < 0)
     idx = splits.size() + idx;
   
-  //std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
+  // std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
  
   // Convert the retained token to a std::string
-  char *result = splits[idx];
+  char *result = CopyString(splits[idx]);
 
-  delete[] name;
   delete[] input;
 
   return result;
 }
 
 
-extern "C" float StrToFloat(char *in_str)
+extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str)
 {
-  //std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
+  // std::cout << "Execution: StrToFloat" << ".\n";
+  // std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
 
   char *copied = (char*)malloc(strlen(in_str) + 1);
   strcpy(copied, in_str);
