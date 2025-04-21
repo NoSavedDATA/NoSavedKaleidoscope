@@ -15,7 +15,7 @@ extern "C" float tensor_Store(char *, Tensor *, Scope_Struct *);
 
 
 extern "C" void *gpu(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_tensor);
-extern "C" float gpuw(Scope_Struct *, Tensor *, float);
+extern "C" float tensor_gpuw(Scope_Struct *, Tensor *, Tensor *, float);
 
 extern "C" float cpu(Scope_Struct *scope_struct, Tensor *tensor);
 
@@ -31,7 +31,7 @@ void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaS
 extern "C" float write_zerosw(Tensor *tensor, float worker_idx);
 
 
-extern "C" void *view(Scope_Struct *scope_struct, float first_dim, ...);
+extern "C" void *view(Scope_Struct *scope_struct, Tensor *, float first_dim, ...);
 
 
 extern "C" void *NewVecToTensor(Scope_Struct *scope_struct, float first_dim, ...);

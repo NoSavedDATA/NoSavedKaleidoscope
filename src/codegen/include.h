@@ -12,7 +12,6 @@
 #include"scope.h"
 #include"string.h"
 #include"time.h"
-#include"vec.h"
 
 using uint32 = uint32_t;
 

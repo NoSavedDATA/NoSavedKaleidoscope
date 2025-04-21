@@ -32,3 +32,6 @@ extern "C" float IndexClassFloatVec(char *vec_name, float _idx);
 
 
 extern "C" float float_vec_CalculateIdx(char *, float, ...); 
+
+
+extern "C" float float_vec_first_nonzero(Scope_Struct *, std::vector<float>);

@@ -91,6 +91,9 @@ std::unique_ptr<ExprAST> ParseStrVecExpr();
 
 
 std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name=""); 
+
+
+std::unique_ptr<ExprAST> ParseChainCallExpr(std::unique_ptr<ExprAST>, std::string class_name); 
   
   
 
@@ -103,7 +106,6 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name="");
 
     
   
-  //
 std::unique_ptr<ExprAST> ParseLSTMExpr(); 
   
   

@@ -26,7 +26,7 @@ extern "C" void *cat_str_float(char *c, float v);
 
 extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *pattern);
 
-extern "C" char *SplitStringIndexate(Scope_Struct *scope_struct, char *pattern, float idx);
+extern "C" char *str_split_idx(Scope_Struct *, char *, char *, float);
 
 
 extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str);

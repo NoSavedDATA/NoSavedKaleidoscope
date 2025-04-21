@@ -414,6 +414,7 @@ class ExprAST {
     std::string Class;
     std::string Name;
     std::string PreDot;
+    std::string Load_Type="none";
     bool IsVarForward;
     std::string CalleeOverride;
     std::unique_ptr<ExprAST> NameSolver;
@@ -424,6 +425,7 @@ class ExprAST {
                   std::vector<std::unique_ptr<ExprAST>> Args,
                   const std::string &Class,
                   const std::string &PreDot,
+                  const std::string &Load_Type,
                   bool IsVarForward,
                   const std::string &CalleeOverride);
   

@@ -196,15 +196,18 @@ extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *patter
 
 // INDEX METHODS
 
-extern "C" char *SplitStringIndexate(Scope_Struct *scope_struct, char *pattern, float idx)
+extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pattern, float idx)
 {
 
-  std::string name = scope_struct->first_arg;
+  // std::cout << "str_split_idx for " << self << ".\n";
+  // std::string name = scope_struct->first_arg;
   
   // std::cout << "splitting " << name << "\n";
-  pthread_mutex_lock(&clean_scope_mutex);
-  char *self = NamedStrs[name];
-  pthread_mutex_unlock(&clean_scope_mutex);
+
+  // pthread_mutex_lock(&clean_scope_mutex);
+  // char *self = NamedStrs[name];
+  // pthread_mutex_unlock(&clean_scope_mutex);
+
   // std::cout << name << " is " << self << ".\n";
   // std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
 
@@ -228,7 +231,7 @@ extern "C" char *SplitStringIndexate(Scope_Struct *scope_struct, char *pattern, 
   {
     std::string _err = "\nFailed to split.";
     LogErrorS(_err);
-    std::cout << "" << name << "\n";
+    std::cout << "" << self << "\n";
     return nullptr;
   }
 
