@@ -890,9 +890,11 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     }
   }
 
+
+  std::string call_of = (callee_override!="none") ? callee_override : IdName;
   
   // varargs
-  if (in_str((callee_override!="none") ? callee_override : IdName, vararg_methods))
+  if (in_str(call_of, vararg_methods))
     Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
 
   std::cout << "\nCalling method: " << IdName << "/" << callee << " for pre-dot: " << pre_dot << "\n\n";
@@ -907,8 +909,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
                                         object_class, pre_dot, load_type, is_var_forward, callee_override);
 
 
-  if (functions_return_type.count(IdName)>0)
-    aux->SetType(functions_return_type[IdName]);
+  if (functions_return_type.count(call_of)>0)
+    aux->SetType(functions_return_type[call_of]);
   if (return_tensor)
     aux->SetType("tensor");  
   if (return_string)
@@ -938,49 +940,28 @@ std::unique_ptr<ExprAST> ParseChainCallExpr(std::unique_ptr<ExprAST> previous_ca
   std::string IdName = IdentifierStr;
   getNextToken();
 
-  if(CurTok!='(')
-    return LogError("Expected ( afther the method name of the Chain Function Call Expression.");
-  getNextToken();
 
 
-  std::cout << "Chain Call Expression of " << IdName << ".\n";
+  std::vector<std::unique_ptr<ExprAST>> Args = Parse_Argument_List(class_name, "Chain Function Call");
+    
   
-  getNextToken(); // eat (
-  std::vector<std::unique_ptr<ExprAST>> Args;
-  if (CurTok != ')') {
-    while (true) {
-      if (auto Arg = ParseExpression(class_name))
-      {
-        //std::cout << "Parsed arg " << Arg->GetName() << "\n";
-        Args.push_back(std::move(Arg));
-      }
-        
-      else
-        return nullptr;
-
-      if (CurTok == ')')
-        break;
-
-      if (CurTok != ',')
-        return LogError("Expected ')' or ',' on the Function Call arguments list.");
-      getNextToken();
-    }
-  }
-
+  std::string type = previous_call_expr->Type;
+  std::string call_of = type + "_" + IdName;
   
   // varargs
-  if (in_str(IdName, vararg_methods))
+  if (in_str(call_of, vararg_methods))
     Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
   
   
+  
 
-  // Eat the ')'.
-  getNextToken();
-    
+  auto aux = std::make_unique<ChainCallExprAST>(call_of, std::move(Args), std::move(previous_call_expr));
+  if (functions_return_type.count(call_of)>0)
+    aux->SetType(functions_return_type[call_of]);
   
 
 
-  return std::move(previous_call_expr);
+  return std::move(aux);
 }
 
 

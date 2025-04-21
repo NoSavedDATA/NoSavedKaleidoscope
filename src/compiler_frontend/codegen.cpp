@@ -2121,6 +2121,52 @@ Function *PrototypeAST::codegen() {
 
 
 
+inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name)
+{
+
+  // Get Arguments
+  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
+    Value *arg; 
+    if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
+    {      
+      VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
+      arg = Arg->NameSolver->codegen(scope_struct);
+      arg = callret("tensor_Load", {arg, scope_struct});
+    }
+    else
+      arg = Args[i]->codegen(scope_struct);
+
+    ArgsV.push_back(arg);
+
+    if (!ArgsV.back())
+    {
+      LogError("Failed to codegen argument of function " + fn_name);
+      return {};
+    }
+  }
+
+  return std::move(ArgsV);
+}
+
+
+Value *ChainCallExprAST::codegen(Value *scope_struct) {
+  Value *inner_return = Inner_Call->codegen(scope_struct);
+
+  std::vector<Value *> ArgsV; 
+
+  ArgsV.push_back(inner_return);
+  
+
+  ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, Call_Of);
+
+
+  ArgsV.insert(ArgsV.begin(), scope_struct);
+  std::string call_fn = Call_Of;
+  Value *ret = callret(call_fn, ArgsV);
+
+
+  return ret;
+}
 
 
 Value *CallExprAST::codegen(Value *scope_struct) {
@@ -2339,7 +2385,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       // std::cout << "Codegen tensor name solver" << ".\n";
       arg = Arg->NameSolver->codegen(arg_scope);
       // std::cout << "name solver done" << ".\n";
-      arg = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {arg, scope_struct});
+      arg = Builder->CreateCall(TheModule->getFunction("tensor_Load"), {arg, arg_scope});
     }
     else
     {

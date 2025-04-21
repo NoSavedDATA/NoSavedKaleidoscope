@@ -29,4 +29,6 @@ extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *patter
 extern "C" char *str_split_idx(Scope_Struct *, char *, char *, float);
 
 
+extern "C" float str_to_float(Scope_Struct *, char *);
+
 extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str);

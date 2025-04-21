@@ -338,6 +338,14 @@ CallExprAST::CallExprAST(std::unique_ptr<ExprAST> NameSolver,
   SetType("float");
 }
 
+
+
+ChainCallExprAST::ChainCallExprAST(const std::string &Call_Of,
+                    std::vector<std::unique_ptr<ExprAST>> Args,
+                    std::unique_ptr<ExprAST> Inner_Call)
+    : Call_Of(Call_Of), Args(std::move(Args)), Inner_Call(std::move(Inner_Call)) {
+  SetType("float");
+}
   
   
 ReturnExprAST::ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
