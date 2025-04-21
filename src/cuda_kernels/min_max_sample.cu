@@ -17,10 +17,9 @@
 
 
 
-extern "C" void *onehot(Scope_Struct *scope_struct, float num_classes)
+extern "C" void *tensor_onehot(Scope_Struct *scope_struct, Tensor *tensor, float num_classes)
 {
   int thread_id = scope_struct->thread_id;
-  Tensor *tensor = NamedTensorsT[scope_struct->first_arg];
   // std::cout << "ONEHOT OF " << tensor->name << "\n";
 
   float *tensor_ptr = tensor->tensor_ptr;

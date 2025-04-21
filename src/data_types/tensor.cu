@@ -308,10 +308,9 @@ extern "C" void *gpu(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_
 
 
 
-extern "C" float gpuw(Scope_Struct *scope_struct, Tensor *pinned_tensor, float idx)
+extern "C" float tensor_gpuw(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_tensor, float idx)
 {
  
-  Tensor *tensor = NamedTensorsT[scope_struct->first_arg];
   
   // std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
   
@@ -480,9 +479,8 @@ extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
 }
 
 
-extern "C" void *view(Scope_Struct *scope_struct, float first_dim, ...)
+extern "C" void *tensor_view(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...)
 {
-  Tensor *tensor = NamedTensorsT[scope_struct->first_arg];
 
   //std::cout << "Executing: " << tensor.name << "." << "view" << "\n";
    

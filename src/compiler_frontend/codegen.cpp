@@ -2138,7 +2138,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   std::string tgt_function_name;
   std::string msg;
 
-  //std::cout << "\n\nFunction: " << tgt_function << "\n";
+  std::cout << "\n\nFunction: " << tgt_function << "\n";
 
 
   int nested_function;
@@ -2221,6 +2221,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   Value *first_arg_copy;
 
 
+  int target_args_size = Args.size();
+  std::vector<Value *> ArgsV; 
   
 
   
@@ -2228,17 +2230,14 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   msg = "CallExpr Call name mangle";
   p2t(msg);
 
-  int target_args_size = Args.size();
-  std::vector<Value *> ArgsV; 
   
+
   bool is_self_of_nested_function = (nested_function==1 && isSelf);
   bool is_user_cpp_function = in_str(tgt_function, user_cpp_functions);
   // Handle self or object attribute expressions
   if(isSelf || isAttribute)
   {
-    bool not_coding_language_method = (!in_str(tgt_function, native_methods));    
-
-    
+    bool not_coding_language_method = (!in_str(tgt_function, native_methods));
     is_user_cpp_function = in_str(tgt_function, user_cpp_functions);
 
     if (not_coding_language_method)
@@ -2246,51 +2245,36 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       tgt_function = Class+tgt_function;  
     }
     
-
     first_arg = NameSolver->codegen(scope_struct);
     call("set_scope_first_arg", {scope_struct, first_arg});
-
 
     changed_first_arg = true;  
   }
 
-
   p2t("CallExpr Finish mangle, get scope info.\n---Function Name: " + tgt_function);
-
   
+
 
   if (!(CalleeOverride!="none" || in_str(Callee, native_fn)) || Callee=="print_scope" || is_user_cpp_function) // user defined functions
   {
     has_scope = true;
-    
     if(Callee!="print_scope" && !is_user_cpp_function)
     {
       scope_string = callret("RandomStrOnDemand", {});
       call("set_scope_scope", {scope_struct, scope_string});
     }
-
-
-    // std::cout << "Get scope" << ".\n";
-    // ArgsV.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct})); // Pass scope's reference for the derived AST nodes.
-    // std::cout << "Get previous" << ".\n";
-    // ArgsV.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}));
-    // std::cout << "Get thread id" << ".\n";
-    // ArgsV.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}));
-    // std::cout << "Get has grad" << ".\n";
-    // ArgsV.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_has_grad"), {scope_struct}));
-    // std::cout << "Got all " << ".\n";    
-    // target_args_size+=4;  
   }
   target_args_size+=1; //always add scope_struct
+
+  if (Load_Type!="none") // x.view -> tensor_Load
+    target_args_size += 1;
 
 
 
   // p2t("CallExpr require scope functions");
   // if(in_str(tgt_function, require_scope_functions))
 
-
-  
-  
+ 
 
   p2t("CallExpr " + tgt_function + " check for args");
 
@@ -2316,7 +2300,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
     {
       // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
-      std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " + std::to_string(CalleeF->arg_size()) + " arguments, got " + std::to_string(target_args_size);
+      std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " + std::to_string(target_args_size-1) + " arguments, got " + std::to_string(CalleeF->arg_size()-1);
       return LogErrorV(_error);
     }
   }
@@ -2324,6 +2308,18 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   msg = "CallExpr Calling function: " + tgt_function;
   p2t(msg);
 
+
+
+
+
+
+  
+  if (Load_Type!="none") // x.view() -> tensor_Load
+  {
+    std::string load_fn = Load_Type+"_Load";
+    Value *arg = callret(load_fn, {callret("get_scope_first_arg", {scope_struct}), scope_struct});  
+    ArgsV.push_back(arg);
+  }
 
 
 
@@ -2335,13 +2331,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     //std::cout << "ARG: " << Args[i]->GetName() << " has self: " << Args[i]->GetSelf() << " and type: " << Args[i]->GetType() <<  "\n\n";
 
-    
-      
-
-    Value *arg;
- 
+    Value *arg; 
     // Builder->CreateCall(TheModule->getFunction("set_scope_scope"), {arg_scope, _scope});
-
     if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
     {      
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
@@ -2352,7 +2343,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     }
     else
     {
-      Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
+      // Value *fa = (isAttribute && !isSelf && !in_str(tgt_function, native_methods) && nested_function) ? first_arg_copy : first_arg;
       // Builder->CreateCall(TheModule->getFunction("set_scope_first_arg"), {arg_scope, fa});
       // p2t("CallExpr Non-tensor arg codegen");
       arg = Args[i]->codegen(arg_scope);
@@ -2382,6 +2373,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   else
   {
     
+    std::cout << "Calling " << CalleeOverride << ".\n";
     if (in_str(CalleeOverride, native_modules))
     {
       CalleeF = getFunction(CalleeOverride);

@@ -290,7 +290,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   // if ()
   // name_solver_expr->SetType;
   auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, IdName, std::move(Args),
-                                                "None", "None", is_var_forward, callee_override);
+                                                "None", "None", "none", is_var_forward, callee_override);
 
  
 
@@ -304,6 +304,10 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   if (return_tensor)
     aux->SetType("tensor");
 
+  
+  if (CurTok == tok_post_class_attr_identifier)
+    return ParseChainCallExpr(std::move(aux), class_name);
+  
   return aux;
 }
 
@@ -639,7 +643,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   bool is_self=false;
   bool is_vec=false;
   std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
-  std::string IdName;
+  std::string Prev_IdName = "";
+  std::string IdName = "";
 
 
 
@@ -670,6 +675,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
       
     if (i==0&&CurTok==(tok_class_attr))
     {
+      Prev_IdName = IdentifierStr;
       Names.push_back(std::make_tuple(IdentifierStr, _type, std::vector<std::unique_ptr<ExprAST>>{}));
       _type = type_attr;
     }
@@ -679,13 +685,19 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
     if (CurTok!=tok_identifier&&CurTok!=tok_post_class_attr_identifier)
     {
+      Prev_IdName = IdentifierStr;
       object_class=IdentifierStr;
       pre_dot+=IdentifierStr;
     }
 
     is_vec=false;
     if (CurTok==tok_identifier||CurTok==tok_post_class_attr_identifier) // Need to handle vector
+    {
+      std::cout << "OVERWRITE PREV NAME WITH " << IdName << ".\n";
+      if(IdName!="")
+        Prev_IdName = IdName;
       IdName = IdentifierStr;
+    } 
 
     //std::cout << "\n\ntok pre vec: " << ReverseToken(CurTok) << "\n";
 
@@ -814,15 +826,12 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
         break;
 
       if (CurTok != ',')
-        return LogError("Esperado ')' ou ',' na lista de argumentos");
+        return LogError("Expected ')' or ',' on the Function Call arguments list.");
       getNextToken();
     }
   }
 
   
-  // varargs
-  if (in_str(IdName, vararg_methods))
-    Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
   
   
 
@@ -833,20 +842,29 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
 
   std::string callee_override = "none";
+  std::string load_type = "none";
   bool name_solve_to_last = false;
-
-
+  // x.view()
+  if(typeVars.count(Prev_IdName)>0)
+  {
+    name_solve_to_last = false;
+    callee_override = typeVars[Prev_IdName] + "_" + IdName;
+    load_type = typeVars[Prev_IdName];
+    std::cout << "Triggered from Prev_IdName, override as: " << callee_override << ".\n";
+  }
+  // model.linear_1(x)
   if(typeVars.count(IdName)>0)
   {
+    std::cout << "Triggered from IdName" << ".\n";
     name_solve_to_last = true;
     callee_override = typeVars[IdName];
   }
-  // Override function calls: e.g: conv1 -> Conv2d
-
+  std::cout << "typeVars.count(Prev_IdName)>0: " << Prev_IdName << " is " <<  std::to_string(typeVars.count(Prev_IdName)>0) << ".\n";
   std::string callee = IdName;
   bool is_var_forward = false;
   bool return_tensor = false;
   bool return_string = false;
+  // Override function calls: e.g: conv1 -> Conv2d
   if (functionVars.count(IdName) > 0)
   {
     is_var_forward = true;
@@ -873,15 +891,20 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   }
 
   
-  std::cout << "\nCalling method: " << IdName << " for pre-dot: " << pre_dot << "\n\n";
+  // varargs
+  if (in_str((callee_override!="none") ? callee_override : IdName, vararg_methods))
+    Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+
+  std::cout << "\nCalling method: " << IdName << "/" << callee << " for pre-dot: " << pre_dot << "\n\n";
 
   //if (IdName == "len")
 
+  std::cout << "LOAD TYPE IS: " << load_type << ".\n";
 
   auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
   name_solver_expr->SetNameSolveToLast(name_solve_to_last);
   auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), callee, IdName, std::move(Args),
-                                        object_class, pre_dot, is_var_forward, callee_override);
+                                        object_class, pre_dot, load_type, is_var_forward, callee_override);
 
 
   if (functions_return_type.count(IdName)>0)
@@ -899,9 +922,67 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   if (is_class_attr)
     aux->SetIsAttribute(true);
   aux->SetPreDot(pre_dot);
+
+  if (CurTok == tok_post_class_attr_identifier)
+  {
+    return ParseChainCallExpr(std::move(aux), class_name);
+  }
+
   
   return aux;
 }
+
+
+std::unique_ptr<ExprAST> ParseChainCallExpr(std::unique_ptr<ExprAST> previous_call_expr, std::string class_name) {
+
+  std::string IdName = IdentifierStr;
+  getNextToken();
+
+  if(CurTok!='(')
+    return LogError("Expected ( afther the method name of the Chain Function Call Expression.");
+  getNextToken();
+
+
+  std::cout << "Chain Call Expression of " << IdName << ".\n";
+  
+  getNextToken(); // eat (
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  if (CurTok != ')') {
+    while (true) {
+      if (auto Arg = ParseExpression(class_name))
+      {
+        //std::cout << "Parsed arg " << Arg->GetName() << "\n";
+        Args.push_back(std::move(Arg));
+      }
+        
+      else
+        return nullptr;
+
+      if (CurTok == ')')
+        break;
+
+      if (CurTok != ',')
+        return LogError("Expected ')' or ',' on the Function Call arguments list.");
+      getNextToken();
+    }
+  }
+
+  
+  // varargs
+  if (in_str(IdName, vararg_methods))
+    Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+  
+  
+
+  // Eat the ')'.
+  getNextToken();
+    
+  
+
+
+  return std::move(previous_call_expr);
+}
+
 
 
 
@@ -2051,6 +2132,7 @@ std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name) {
 ///   ::= forexpr
 ///   ::= varexpr
 std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
+  std::cout << "" << ReverseToken(CurTok) << ".\n";
   switch (CurTok) {
   default:
     //return std::move(std::make_unique<NumberExprAST>(0.0f));

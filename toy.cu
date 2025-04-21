@@ -1519,16 +1519,16 @@ static void InitializeModule() {
   //
   FunctionType *onehotTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false
   );
-  TheModule->getOrInsertFunction("onehot", onehotTy);
+  TheModule->getOrInsertFunction("tensor_onehot", onehotTy);
   
 
   //
   FunctionType *shapeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false
   );
   TheModule->getOrInsertFunction("shape", shapeTy);
@@ -1627,10 +1627,10 @@ static void InitializeModule() {
   //
   FunctionType *viewTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
+      {int8PtrTy,int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
       true // vararg
   );
-  TheModule->getOrInsertFunction("view", viewTy);
+  TheModule->getOrInsertFunction("tensor_view", viewTy);
 
   FunctionType *print_floatTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -1854,10 +1854,10 @@ static void InitializeModule() {
   //  
   FunctionType *gpuwTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false 
   );
-  TheModule->getOrInsertFunction("gpuw", gpuwTy);
+  TheModule->getOrInsertFunction("tensor_gpuw", gpuwTy);
 
 
   //===----------------------------------------------------------------------===//
@@ -2020,10 +2020,10 @@ static void InitializeModule() {
   //
   FunctionType *SplitStringIndexateTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
       false 
   );
-  TheModule->getOrInsertFunction("SplitStringIndexate", SplitStringIndexateTy);
+  TheModule->getOrInsertFunction("str_split_idx", SplitStringIndexateTy);
 
 
   //
@@ -2129,12 +2129,12 @@ static void InitializeModule() {
 
 
   //
-  FunctionType *first_nonzeroTy = FunctionType::get(
+  FunctionType *float_vec_first_nonzeroTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy}, 
+      {int8PtrTy, int8PtrTy}, 
       false 
   );
-  TheModule->getOrInsertFunction("first_nonzero", first_nonzeroTy);
+  TheModule->getOrInsertFunction("float_vec_first_nonzero", float_vec_first_nonzeroTy);
 
 
   //
@@ -3325,7 +3325,6 @@ int main() {
 
 
   stringMethods["split"] = "SplitString";
-  stringMethods["split_idx"] = "SplitStringIndexate";
 
 
 
@@ -3334,17 +3333,21 @@ int main() {
   functions_return_type = {{"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"relu", "tensor"}, {"softmax", "tensor"},
                            {"log", "tensor"}, {"randu_like", "tensor"}, {"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"},
                            {"dropout", "tensor"}, {"rl_discounted_return", "tensor"}, {"self_attn", "tensor"}, {"Jitter", "tensor"}, {"mse_with_priorities", "tensor"},
-                           {"btc_mult", "tensor"}, {"btc_multT", "tensor"}, {"view", "tensor"}, {"clip", "tensor"}, {"argmax", "tensor"}, {"tmax", "tensor"},
-                           {"onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
+                           {"btc_mult", "tensor"}, {"btc_multT", "tensor"}, {"tensor_view", "tensor"}, {"clip", "tensor"}, {"argmax", "tensor"}, {"tmax", "tensor"},
+                           {"tensor_onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
                            {"prod", "tensor"}, {"mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
-                           {"save_img", "tensor"}, {"gpu", "tensor"}, {"gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
-                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}};
+                           {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
+                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}};
+
 
 
 
                            
 
-  user_cpp_functions = {"Linear", "shape", "Conv2d"};
+  user_cpp_functions = {"Linear", "shape", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
+                        "tensor_sum", "tensor_prod", "tensor_mean", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
+                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx"};
+
 
 
 
@@ -3353,9 +3356,6 @@ int main() {
                              "rl_discounted_return", "self_attn", "Jitter", "mse_with_priorities",
                              "btc_mult", "btc_multT", "Linear"};
 
-  return_tensor_methods = {"view", "clip", "argmax", "tmax", "onehot", "shape", "permute", "cpu", "printtt",
-                            "sum", "prod", "mean", "tmin", "argmin", "topk", "repeat_interleave",
-                            "save_img", "gpu", "gpuw", "save_as_int", "save_as_bin", "gather"};
   
   
 
@@ -3365,13 +3365,13 @@ int main() {
 
 
   // Universal
-  vararg_methods = {"view", "sum", "mean", "prod", "tmax", "argmax", "load_bin_idx"};
+  vararg_methods = {"tensor_view", "tensor_sum", "tensor_mean", "tensor_prod", "tensor_tmax", "tensor_argmax", "tensor_load_bin_idx"};
   string_methods = {"split", "split_idx"};
 
 
   // tensor + string + ...
   // e.g: x.view(), str.split()
-  native_methods = {"split", "split_idx", "first_nonzero", "append"};
+  native_methods = {"split", "split_idx", "float_vec_first_nonzero", "append"};
   native_methods = concat_str_vec(native_methods, return_tensor_methods);
   native_methods = concat_str_vec(native_methods, user_cpp_functions);
   //native_methods = concat_str_vec(native_methods, return_pinned_methods);
