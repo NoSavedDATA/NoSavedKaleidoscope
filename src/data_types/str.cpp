@@ -249,6 +249,21 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
 }
 
 
+extern "C" float str_to_float(Scope_Struct *scope_struct, char *in_str)
+{
+  // std::cout << "Execution: StrToFloat" << ".\n";
+  // std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
+
+  char *copied = (char*)malloc(strlen(in_str) + 1);
+  strcpy(copied, in_str);
+  char *end;
+
+  float ret = std::strtof(copied, &end);
+  delete[] copied;
+  return ret;
+}
+
+
 extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str)
 {
   // std::cout << "Execution: StrToFloat" << ".\n";

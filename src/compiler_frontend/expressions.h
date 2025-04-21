@@ -407,30 +407,46 @@ class ExprAST {
   
   
   
-  /// CallExprAST - Expression class for function calls.
-  class CallExprAST : public ExprAST {
-    std::string Callee;
-    std::vector<std::unique_ptr<ExprAST>> Args;
-    std::string Class;
-    std::string Name;
-    std::string PreDot;
-    std::string Load_Type="none";
-    bool IsVarForward;
-    std::string CalleeOverride;
-    std::unique_ptr<ExprAST> NameSolver;
+/// CallExprAST - Expression class for function calls.
+class CallExprAST : public ExprAST {
+  std::string Callee;
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  std::string Class;
+  std::string Name;
+  std::string PreDot;
+  std::string Load_Type="none";
+  bool IsVarForward;
+  std::string CalleeOverride;
+  std::unique_ptr<ExprAST> NameSolver;
+
+  public:
+    CallExprAST(std::unique_ptr<ExprAST> NameSolver,
+                const std::string &Callee, const std::string &Name,
+                std::vector<std::unique_ptr<ExprAST>> Args,
+                const std::string &Class,
+                const std::string &PreDot,
+                const std::string &Load_Type,
+                bool IsVarForward,
+                const std::string &CalleeOverride);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+class ChainCallExprAST : public ExprAST {
+
+  std::string Call_Of;
   
-    public:
-      CallExprAST(std::unique_ptr<ExprAST> NameSolver,
-                  const std::string &Callee, const std::string &Name,
-                  std::vector<std::unique_ptr<ExprAST>> Args,
-                  const std::string &Class,
-                  const std::string &PreDot,
-                  const std::string &Load_Type,
-                  bool IsVarForward,
-                  const std::string &CalleeOverride);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  std::unique_ptr<ExprAST> Inner_Call;
+
+  public:
+    ChainCallExprAST(const std::string &Call_Of,
+                    std::vector<std::unique_ptr<ExprAST>> Args,
+                    std::unique_ptr<ExprAST> Inner_Call);
+
+  Value *codegen(Value *scope_struct) override;
+};
   
   class ReturnExprAST : public ExprAST {
   

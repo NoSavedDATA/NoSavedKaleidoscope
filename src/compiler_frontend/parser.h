@@ -7,11 +7,12 @@
 #include <string>
 #include <vector>
 
-#include "include.h"
 #include "../data_types/include.h"
 #include "../notators/include.h"
 #include "../tensor/include.h"
 #include "../KaleidoscopeJIT.h"
+#include "tokenizer.h"
+#include "include.h"
 
 
 
@@ -213,3 +214,42 @@ std::unique_ptr<PrototypeAST> ParseExtern();
   
 std::unique_ptr<ExprAST> ParseClass(); 
  
+
+
+inline std::vector<std::unique_ptr<ExprAST>> Parse_Argument_List(std::string class_name, std::string expression_name)
+{
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  if(CurTok!='(')
+  {
+    LogError("Expected ( afther the method name of the " + expression_name + " Expression.");
+    return std::move(Args);
+  }
+
+  
+  getNextToken(); // eat (
+  if (CurTok != ')') {
+    while (true) {
+      if (auto Arg = ParseExpression(class_name))
+      {
+        //std::cout << "Parsed arg " << Arg->GetName() << "\n";
+        Args.push_back(std::move(Arg));
+      } 
+      else
+        return std::move(Args);
+
+      if (CurTok == ')')
+        break;
+      if (CurTok != ',')
+      {
+        LogError("Expected ')' or ',' on the Function Call arguments list.");
+        return std::move(Args);
+      }
+      getNextToken();
+    }
+  } 
+  
+  // Eat the ')'.
+  getNextToken();
+
+  return std::move(Args);
+}

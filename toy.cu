@@ -2035,6 +2035,14 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
 
 
+  FunctionType *str_to_floatTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("str_to_float", str_to_floatTy);
+
+
   //
   FunctionType *CopyStringTy = FunctionType::get(
       int8PtrTy,
@@ -3337,7 +3345,7 @@ int main() {
                            {"tensor_onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
                            {"prod", "tensor"}, {"mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
                            {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
-                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}};
+                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"}};
 
 
 
@@ -3346,7 +3354,7 @@ int main() {
 
   user_cpp_functions = {"Linear", "shape", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
                         "tensor_sum", "tensor_prod", "tensor_mean", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
-                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx"};
+                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float"};
 
 
 
