@@ -5,6 +5,8 @@
 #include <any>
 #include <stdexcept>
 
+#include "../tensor/tensor_dim_functions.h"
+#include "../tensor/tensor_struct.h"
 #include "codegen_notes.h"
 
 
@@ -45,10 +47,16 @@ size_t AnyVector::size() const {
 void AnyVector::print() {
     for(int i=0; i<data->size(); i++)
     {
-        if (data_types->at(i)=="string")
-            std::cout << "Notes["<<i<<"]: " << get<char *>(i) << ".\n";
+        if (data_types->at(i)=="str")
+            std::cout << "Notes["<<i<<"]: " << static_cast<char *>(get<void *>(i)) << ".\n";
         if (data_types->at(i)=="float")
             std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
+        if (data_types->at(i)=="tensor")
+        {
+            Tensor *t = static_cast<Tensor *>(get<void *>(i));
+            std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
+            PrintDims(t->dims);
+        }
     }
 }
 
@@ -66,7 +74,7 @@ extern "C" float Dispose_NotesVector(AnyVector *notes_vector) {
 
     for (int i=0; i<notes_vector->size(); i++)
     {
-        if (notes_vector->data_types->at(i)=="string")
+        if (notes_vector->data_types->at(i)=="str")
         {
             char *val = notes_vector->get<char *>(i);
             delete[] val;
@@ -92,7 +100,7 @@ extern "C" AnyVector *Add_Float_To_NotesVector(AnyVector *notes_vector, float va
 
 extern "C" AnyVector *Add_String_To_NotesVector(AnyVector *notes_vector, char *value) {
 
-    notes_vector->append(value, "string");
+    notes_vector->append(value, "str");
 
     return notes_vector;
 }

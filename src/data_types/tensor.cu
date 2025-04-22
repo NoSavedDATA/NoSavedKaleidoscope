@@ -35,7 +35,7 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float in
   {
     if(notes_vector->data_types->at(i)=="float")
       dims.push_back(notes_vector->get<float>(i));
-    if(notes_vector->data_types->at(i)=="string")
+    if(notes_vector->data_types->at(i)=="str")
     {
       char *note = notes_vector->get<char *>(i);
       if (std::strcmp(note,"param") == 0)
@@ -117,7 +117,7 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float in
 
 
 extern "C" void *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
-  //std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
+  // std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   Tensor *ret = NamedTensorsT[tensor_name];
   move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
   //std::cout << "return load." << "\n";
