@@ -358,7 +358,7 @@ extern "C" float printtt(int thread_id, Tensor tensor)
 
   std::cout << "a" << ".\n";
 
-  PrintTensor(thread_id, tensorName);
+//   PrintTensor(thread_id, tensorName);
 
   delete[] tensorName;
   return 0;
@@ -2661,6 +2661,19 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
 
+  FunctionType *tuple_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("tuple_Create", tuple_Create);
+
+  FunctionType *tuple_NewTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+      true // vararg 
+  );
+  TheModule->getOrInsertFunction("tuple_New", tuple_NewTy);
 
   FunctionType *Linear_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -3016,7 +3029,7 @@ TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_
   //
   FunctionType *printTTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getInt32Ty(*TheContext), int8PtrTy},
+      {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("PrintTensor", printTTy);

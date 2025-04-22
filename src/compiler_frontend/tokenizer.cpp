@@ -70,6 +70,7 @@ std::map<int, std::string> token_to_string = {
   // var definition
   { tok_var, "float"},
   { tok_tensor, "tensor"},
+  { tok_tuple, "tuple"},
   { tok_var_str, "var str"},
   { tok_attr_var, "tok attr var"},
   { tok_attr_tensor, "tok attr tensor"},
@@ -275,6 +276,12 @@ static int get_token() {
         LastChar = getchar();
         if (!(isalnum(LastChar) || LastChar=='_'))
           return tok_data;
+      }
+      if (IdentifierStr == "tuple")
+      {
+        LastChar = getchar();
+        if (!(isalnum(LastChar) || LastChar=='_'))
+          return tok_tuple;
       }
       if (IdentifierStr == "tensor")
       {

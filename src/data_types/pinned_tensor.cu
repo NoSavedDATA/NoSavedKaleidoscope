@@ -30,7 +30,7 @@ extern "C" float pinned_tensor_Create(char *tensor_name, char *scopeless_name, f
   {
     if(notes_vector->data_types->at(i)=="float")
       dims.push_back(notes_vector->get<float>(i));
-    if(notes_vector->data_types->at(i)=="string")
+    if(notes_vector->data_types->at(i)=="str")
       char *note = notes_vector->get<char *>(i);
   }
 

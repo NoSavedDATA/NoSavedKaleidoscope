@@ -616,21 +616,98 @@ std::unique_ptr<ExprAST> ParseFinishExpr(std::string class_name) {
 
 std::unique_ptr<ExprAST> ParseNewVector(std::string class_name) {
   std::cout << "Parsing new vector" << ReverseToken(CurTok)  << "\n";
+
+  // getNextToken(); // [
+  // std::vector<std::unique_ptr<ExprAST>> Elements = ParseIdx(class_name);
+  // getNextToken(); // ]
+
   getNextToken(); // [
-  std::vector<std::unique_ptr<ExprAST>> values = ParseIdx(class_name);
+  std::vector<std::unique_ptr<ExprAST>> Elements;
+  if (CurTok != ']') {
+    while (true) {
+      std::cout << "CURRENT TOKEN: " << ReverseToken(CurTok) << ".\n";
+      std::string element_type;
+      if (CurTok==tok_number)
+        element_type = "float";
+      else
+      {
+        std::cout << "IDENTIFIER STR IS " << IdentifierStr << ".\n";
+        if (typeVars.count(IdentifierStr)>0)
+          element_type = typeVars[IdentifierStr];
+        else
+          LogError(IdentifierStr + " variable was not found on the Tuple definition scope.");
+      }
+      Elements.push_back(std::make_unique<StringExprAST>(element_type));
+
+      if (auto element = ParseExpression(class_name))
+      {
+        Elements.push_back(std::move(element));
+      } 
+      else
+        return nullptr;
+
+      if (CurTok == ']')
+        break;
+      if (CurTok != ',')
+      {
+        LogError("Expected ']' or ',' on the Tuple elements list.");
+      }
+      getNextToken();
+    }
+  }   
   getNextToken(); // ]
 
 
   if (CurTok==tok_space)
     getNextToken();
   
-  values.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+  Elements.push_back(std::make_unique<StringExprAST>("TERMINATE_VARARG"));
 
   //TODO: vector for other types
-  return std::make_unique<NewVecExprAST>(std::move(values), "tensor");
+  return std::make_unique<NewVecExprAST>(std::move(Elements), "tensor");
 }
 
 
+
+
+
+inline std::vector<std::unique_ptr<ExprAST>> Parse_Argument_List(std::string class_name, std::string expression_name)
+{
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  if(CurTok!='(')
+  {
+    LogError("Expected ( afther the method name of the " + expression_name + " Expression.");
+    return std::move(Args);
+  }
+
+  
+  getNextToken(); // eat (
+  if (CurTok != ')') {
+    while (true) {
+      if (auto Arg = ParseExpression(class_name))
+      {
+        //std::cout << "Parsed arg " << Arg->GetName() << "\n";
+        Args.push_back(std::move(Arg));
+      } 
+      else
+        return std::move(Args);
+
+      if (CurTok == ')')
+        break;
+      if (CurTok != ',')
+      {
+        LogError("Expected ')' or ',' on the Function Call arguments list.");
+        return std::move(Args);
+      }
+      getNextToken();
+    }
+  } 
+  
+  // Eat the ')'.
+  getNextToken();
+
+  return std::move(Args);
+}
 
 
 
@@ -2155,6 +2232,8 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
   case tok_var:
     return ParseDataExpr(class_name);
   case tok_data:
+    return ParseDataExpr(class_name);
+  case tok_tuple:
     return ParseDataExpr(class_name);
   case tok_tensor:
     return ParseDataExpr(class_name);

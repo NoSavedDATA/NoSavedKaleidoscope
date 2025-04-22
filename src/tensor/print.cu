@@ -10,10 +10,12 @@
 
 
 #include "../common/cu_commons.h"
+#include "../mangler/scope_struct.h"
 #include "include.h"
 
 
-extern "C" float PrintTensor(int thread_id, char* tensorName){
+extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
+  int thread_id = scope_struct->thread_id;
   std::cout << "Printing Tensor " << tensorName << " at stream " << thread_id << "\n";
 
 

@@ -173,7 +173,7 @@ extern "C" float Linear_Create(char *name, char *scopeless_name, float init_val,
 
   for (int i=2; i<notes_vector->data->size(); i++)
   {
-    if(notes_vector->data_types->at(i)=="string")
+    if(notes_vector->data_types->at(i)=="str")
     {
       char *note = notes_vector->get<char *>(i);
       std::string note_str = note;
