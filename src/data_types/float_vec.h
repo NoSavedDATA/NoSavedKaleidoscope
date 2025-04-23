@@ -7,7 +7,6 @@
 #include "../mangler/scope_struct.h"
 
 
-extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *);
 extern "C" void *float_vec_Load(char *, Scope_Struct *);
 
 
@@ -27,7 +26,6 @@ extern "C" void * ones_vec(Scope_Struct *, float size);
 
 
 
-extern "C" float IndexClassFloatVec(char *vec_name, float _idx);
 
 
 

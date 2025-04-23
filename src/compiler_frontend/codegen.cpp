@@ -86,9 +86,15 @@ Value *StringExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
-  return Builder->CreateGlobalString(Val);
+  return global_str(Val);
 }
 
+Value *NullPtrExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  
+  return callret("nullptr_get", {});
+}
 
 // Create Float Var
 Value *VarExprAST::codegen(Value *scope_struct) {
@@ -148,7 +154,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     p2t("DataExpr Create nodes vector");
 
-    Value *notes_vector = Builder->CreateCall(TheModule->getFunction("CreateNotesVector"), {});
+    Value *notes_vector = callret("CreateNotesVector", {});
 
 
     // --- Notes --- //
@@ -157,19 +163,14 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       ExprAST *note = Notes[j].get();
       if (NumberExprAST* numExpr = dynamic_cast<NumberExprAST*>(note)) {
         
-        notes_vector = Builder->CreateCall(TheModule->getFunction("Add_Float_To_NotesVector"),
-                                                {notes_vector, note->codegen(scope_struct)});
-                                                // {notes_vector});
+        notes_vector = callret("Add_Float_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
       }
       else if (StringExprAST* expr = dynamic_cast<StringExprAST*>(note)) {
-        Value *str_val = Builder->CreateCall(TheModule->getFunction("CopyString"),
-                                            {note->codegen(scope_struct)});
-        notes_vector = Builder->CreateCall(TheModule->getFunction("Add_String_To_NotesVector"),
-                                                {notes_vector, str_val});
+        Value *str_val = callret("CopyString", {note->codegen(scope_struct)});
+        notes_vector = callret("Add_String_To_NotesVector", {notes_vector, str_val});
       }
       else if (VariableExprAST* expr = dynamic_cast<VariableExprAST*>(note)) {
-        notes_vector = Builder->CreateCall(TheModule->getFunction("Add_Float_To_NotesVector"),
-                                                {notes_vector, note->codegen(scope_struct)});
+        notes_vector = callret("Add_Float_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
       }
       else {
         std::cout << "Could not find the data type\n";
@@ -185,14 +186,11 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     
     
-    std::string create_fn = Type + "_Create";
-    
+    std::string create_fn = Type + "_Create";    
     p2t("DataExpr Call create for " + create_fn);
 
-
-    Builder->CreateCall(TheModule->getFunction(create_fn),
-                                              {var_name, scopeless_name, Init->codegen(scope_struct), notes_vector,
-                                               scope_struct});
+    call(create_fn, {var_name, scopeless_name, Init->codegen(scope_struct),
+                      notes_vector, scope_struct});
     
     p2t("DataExpr Dispose notes vector");
 
@@ -556,29 +554,36 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
 
 
-  std::string pre_dot = GetPreDot();
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
-  std::cout << "is self: " << is_self << ", is_attr: " << is_attr << "\n";
 
-  if (is_self||is_attr)
+  std::cout << "INDEX " << Name << ", type: " << Type << ".\n";
+  if (Type!="tensor")
   {
-    
-    if (Type=="str_vec"){
-      
-      V = Builder->CreateCall(TheModule->getFunction("IndexClassStrVec"), {var_name, idx});
-      
-      return V;
-    }
-
-    if (Type=="float_vec"){
-      V = Builder->CreateCall(TheModule->getFunction("IndexClassFloatVec"), {var_name, idx});
-      return V;
-    }
-
-    if (Type=="object_vec")
-      return var_name;
+    std::string idx_fn = Type + "_Idx";
+    std::cout << "Calling: " << idx_fn << ".\n";
+    call("print", {scope_struct, var_name});
+    return callret(idx_fn, {scope_struct, var_name, idx});
   }
+
+  // if (is_self||is_attr)
+  // {
+    
+  //   if (Type=="str_vec"){
+      
+  //     V = Builder->CreateCall(TheModule->getFunction("IndexClassStrVec"), {var_name, idx});
+      
+  //     return V;
+  //   }
+
+  //   if (Type=="float_vec"){
+  //     V = Builder->CreateCall(TheModule->getFunction("IndexClassFloatVec"), {var_name, idx});
+  //     return V;
+  //   }
+
+  //   if (Type=="object_vec")
+  //     return var_name;
+  // }
 
 
   if (Type=="str_vec")
@@ -946,7 +951,9 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   
 
   Value *L = LHS->codegen(scope_struct);
+  std::cout << "BinaryExpr RHS"  << ".\n";
   Value *R = RHS->codegen(scope_struct);
+  std::cout << "BinaryExpr RHS done"  << ".\n";
   
   if (!L || !R)
     return nullptr;
@@ -1672,8 +1679,24 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
   values.push_back(scope_struct);
 
+  bool is_type=true;
   for (int i=0; i<Values.size(); i++)
-    values.push_back(Values[i]->codegen(scope_struct));
+  {
+    std::string type = Values[i]->GetType();
+    Value *value = Values[i]->codegen(scope_struct);
+    if (!is_type)
+    {
+      std::cout << "VALUE TYPE IS: " << type << ".\n";
+      if (type!="float")
+      {
+        std::string copy_fn = type + "_" + "Copy";
+        value = callret(copy_fn, {scope_struct, value});
+      }
+      is_type=true;
+    } else
+      is_type=false;
+    values.push_back(value);
+  }
 
 
   std::cout << "Call tuple_New" << ".\n";

@@ -91,15 +91,25 @@ class ExprAST {
   
   
   
-  class StringExprAST : public ExprAST {
-    std::string Val;
+class StringExprAST : public ExprAST {
+  std::string Val;
+
+  public:
+    StringExprAST(std::string Val); 
+
+  Value *codegen(Value *scope_struct) override;
+};
   
-    public:
-      StringExprAST(std::string Val); 
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
+
+
+class NullPtrExprAST : public ExprAST {
+
+  public:
+    NullPtrExprAST(); 
+
+  Value *codegen(Value *scope_struct) override;
+};
+
   
   
   /// VariableExprAST - Expression class for referencing a variable, like "a".

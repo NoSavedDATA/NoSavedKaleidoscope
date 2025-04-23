@@ -11,8 +11,15 @@ std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
 
 
-extern "C" float float_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" float float_vec_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
+  // std::cout << "float_vec_Create" << ".\n";
+
+  if (init_val!=nullptr)
+  {
+    std::vector<float> vec = *static_cast<std::vector<float>*>(init_val);
+    ClassFloatVecs[name] = vec;
+  }
 
   delete[] name;
   delete[] scopeless_name;
@@ -29,7 +36,7 @@ extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struc
 }
 
 extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Struct *scope_struct){
-  // std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
+  std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");
@@ -92,12 +99,17 @@ extern "C" void * ones_vec(Scope_Struct *scope_struct, float size) {
 }
 
 
-extern "C" float IndexClassFloatVec(char *vec_name, float _idx)
+extern "C" float float_vec_Idx(Scope_Struct *scope_struct, char *vec_name, float _idx)
 {
   int idx = (int) _idx;
+  // std::cout << "float_vec_Idx on idx " << idx << " for the vector " << vec_name << ".\n";
 
-  float ret = ClassFloatVecs[vec_name][idx];
+  std::vector<float> vec = ClassFloatVecs[vec_name];
+  // std::cout << "Loaded vec" << ".\n";
+  float ret = vec[idx];
+  // std::cout << "got: " << ret << ".\n";
   delete[] vec_name;
+  // std::cout << "returning" << ".\n"; 
   return ret;
 }
 

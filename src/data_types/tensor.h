@@ -7,7 +7,6 @@
 #include "../tensor/include.h"
 
 
-extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *);
 extern "C" void *tensor_Load(char *, Scope_Struct *);
 extern "C" float tensor_Store(char *, Tensor *, Scope_Struct *);
 

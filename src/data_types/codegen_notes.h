@@ -24,6 +24,7 @@ public:
 };
 
 
+extern std::map<std::string, AnyVector *> NamedVectors;
 
 
 extern "C" AnyVector *CreateNotesVector();

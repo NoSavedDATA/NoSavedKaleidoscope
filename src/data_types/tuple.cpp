@@ -18,21 +18,17 @@
 
 
 
-extern "C" float tuple_New(Scope_Struct *scope_struct, char *type, ...)
+extern "C" AnyVector *tuple_New(Scope_Struct *scope_struct, char *type, ...)
 {
-
-
+  // std::cout << "tuple_New. First type: " << type << ".\n";
   va_list args;
   va_start(args, type);
 
-
-  AnyVector *notes_vector = new AnyVector();
-  
+  AnyVector *notes_vector = new AnyVector();  
 
   bool is_type = false;
   for (int i=0; i<10; i++)
   {
-
     if (is_type)
     {
       type = va_arg(args, char *);
@@ -40,9 +36,7 @@ extern "C" float tuple_New(Scope_Struct *scope_struct, char *type, ...)
       is_type = false;
       if (strcmp(type, "TERMINATE_VARARG")==0)
         break;
-    } else 
-    {
-      
+    } else {   
       if (strcmp(type, "float")==0)
       {
         // std::cout << "appending float" << ".\n";
@@ -55,43 +49,71 @@ extern "C" float tuple_New(Scope_Struct *scope_struct, char *type, ...)
         notes_vector->append(std::any(value), type);
         // std::cout << "appended"  << ".\n";
       }
-
-
       is_type = true;
     }
   }
   va_end(args);
   
   // std::cout << "" << ".\n";
-  // std::cout << "Printing notes_vector" << ".\n";
-
-  notes_vector->print();
+  // notes_vector->print();
   
+  return notes_vector;
+}
+
+
+
+extern "C" float tuple_Store(char *name, AnyVector *vector, Scope_Struct *scope_struct)
+{
+  std::cout << "tuple_Store of " << name << ".\n";
+
+  NamedVectors[name] = vector;
 
   return 0;
 }
 
 
-extern "C" float tuple_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *tuple_Load(char *name, Scope_Struct *scope_struct){
+  std::cout << "tuple_Load"  << ".\n";
+  AnyVector *ret = NamedVectors[name];
+  move_to_char_pool(strlen(name)+1, name, "free");
+  //delete[] tensor_name;
+  return ret;
+}
+
+
+
+extern "C" float tuple_print(Scope_Struct *scope_struct, AnyVector *tuple) {
+  // std::cout << "\n";
+  tuple->print();
+  return 0;
+}
+
+
+extern "C" float tuple_Create(char *name, char *scopeless_name, AnyVector *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
   std::cout << "tuple_Create"  << ".\n";
 
-  std::string tuple_type = "";
-  for (int i=0; i<notes_vector->data->size(); i++)
-  {
-    if(notes_vector->data_types->at(i)=="float")
-    {}
-    if(notes_vector->data_types->at(i)=="string")
-    {
-      char *note = notes_vector->get<char *>(i);
-      if (i==0)
-        tuple_type = note;
-      else
-        tuple_type = tuple_type + "_" + note;
-    }
-  }
 
-  std::cout << "Building tuple from type: " << tuple_type << ".\n";
+  if (init_val!=nullptr)
+    NamedVectors[name] = init_val;
+
+
+  // std::string tuple_type = "";
+  // for (int i=0; i<notes_vector->data->size(); i++)
+  // {
+  //   if(notes_vector->data_types->at(i)=="float")
+  //   {}
+  //   if(notes_vector->data_types->at(i)=="string")
+  //   {
+  //     char *note = notes_vector->get<char *>(i);
+  //     if (i==0)
+  //       tuple_type = note;
+  //     else
+  //       tuple_type = tuple_type + "_" + note;
+  //   }
+  // }
+  // std::cout << "Building tuple from type: " << tuple_type << ".\n";
+
 
   // auto tuple = std::make_tuple(3.14f, (char *)"Hello", new Tensor());
   // using MyTuple = TupleFromString<"float_str_tensor">;
@@ -99,4 +121,31 @@ extern "C" float tuple_Create(char *name, char *scopeless_name, float init_val, 
 
 
   return 0;
+}
+
+
+
+
+extern "C" void *tuple_Idx(Scope_Struct *scope_struct, char *name, float _idx)
+{
+  int idx = (int)_idx;
+
+
+  
+  AnyVector *vec = NamedVectors[name];
+  move_to_char_pool(strlen(name)+1, name, "free");
+
+  
+  std::string type = vec->data_types->at(idx);
+
+  std::cout << "typle_Idx on index " << idx << " for data type " << type << ".\n";
+
+  if (type=="float")
+  {
+    float* float_ptr = new float(vec->get<float>(idx));
+    return (void*)float_ptr;
+    // return (void *)vec->get<float>(idx);
+  }
+
+  return std::any_cast<void *>((*vec->data)[idx]);
 }

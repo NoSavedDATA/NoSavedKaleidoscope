@@ -115,6 +115,10 @@ StringExprAST::StringExprAST(std::string Val) : Val(Val) {
   this->SetType("str");
 } 
   
+
+NullPtrExprAST::NullPtrExprAST() {
+  this->SetType("nullptr");
+} 
   
   
   

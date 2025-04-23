@@ -32,7 +32,6 @@ extern "C" void * _glob_b_(Scope_Struct *scope_struct, char *pattern);
 
 extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx);
 
-extern "C" char * IndexClassStrVec(char *vec_name, float _idx);
 
 
 extern "C" float float_vec_CalculateIdx(char *data_name, float first_idx, ...);
