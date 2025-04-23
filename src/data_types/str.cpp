@@ -47,6 +47,7 @@ extern "C" void *str_Load(char *name, Scope_Struct *scope_struct){
 }
 
 
+
 extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct){
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
@@ -61,6 +62,12 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct){
   return 0;
 }
 
+
+extern "C" void *str_Copy(Scope_Struct *scope_struct, char *str) {
+  // std::cout << "Load str " << name << ".\n";
+  char *ret = CopyString(str);
+  return ret;
+}
 
 extern "C" char * str_str_add(char *lc, char *rc, Scope_Struct *scope_struct)
 {

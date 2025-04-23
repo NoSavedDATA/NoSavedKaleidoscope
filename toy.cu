@@ -211,7 +211,6 @@ ExitOnError ExitOnErr;
 // Vars
 std::map<std::string, Value *> NamedValues;
 std::map<std::string, char *> NamedStrs;
-std::map<std::string, AllocaInst *> NamedStrVecs;
 std::map<std::string, std::vector<char *>> ClassStrVecs;
 std::map<std::string, std::vector<float>> ClassFloatVecs;
 std::map<std::string, float> NamedClassValues;
@@ -2202,19 +2201,34 @@ static void InitializeModule() {
   //
   FunctionType *IndexClassStrVecTy = FunctionType::get(
       int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false 
   );
-  TheModule->getOrInsertFunction("IndexClassStrVec", IndexClassStrVecTy);
+  TheModule->getOrInsertFunction("str_vec_Idx", IndexClassStrVecTy);
 
+  //
+  FunctionType *tuple_idxTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("tuple_Idx", tuple_idxTy);
+  
   //
   FunctionType *IndexClassFloatVecTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)}, 
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
       false 
   );
-  TheModule->getOrInsertFunction("IndexClassFloatVec", IndexClassFloatVecTy);
+  TheModule->getOrInsertFunction("float_vec_Idx", IndexClassFloatVecTy);
 
+
+  FunctionType *nullptr_getTy = FunctionType::get(
+      int8PtrTy,
+      {}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("nullptr_get", nullptr_getTy);
 
 
   // char *
@@ -2540,6 +2554,14 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("float_vec_Load", float_vec_LoadTy);
 
+
+  FunctionType *str_CopyTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("str_Copy", str_CopyTy);
+  
   FunctionType *str_LoadTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy},
@@ -2553,6 +2575,30 @@ static void InitializeModule() {
       false
   );
   TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
+
+
+  FunctionType *tensor_CopyTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("tensor_Copy", tensor_CopyTy);
+
+
+  FunctionType *tuple_LoadTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("tuple_Load", tuple_LoadTy);
+
+
+  FunctionType *tuple_printTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("tuple_print", tuple_printTy);
   
   FunctionType *tensor_LoadTy = FunctionType::get(
       int8PtrTy,
@@ -2635,7 +2681,7 @@ static void InitializeModule() {
 
   FunctionType *float_vec_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("float_vec_Create", float_vec_Create);
@@ -2649,21 +2695,21 @@ static void InitializeModule() {
 
   FunctionType *pinned_tensor_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_Create);
 
   FunctionType *tensor_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
 
   FunctionType *tuple_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("tuple_Create", tuple_Create);
@@ -2970,6 +3016,13 @@ TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_
   );
   TheModule->getOrInsertFunction("RemoveTensorScopeAttrOnIndex", RemoveTensorScopeAttrOnIndexTy);
 
+
+  FunctionType *tuple_StoreTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, int8PtrTy}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("tuple_Store", tuple_StoreTy);
 
   //
   FunctionType *tensor_StoreTy = FunctionType::get(
@@ -3358,7 +3411,9 @@ int main() {
                            {"tensor_onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
                            {"prod", "tensor"}, {"mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
                            {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
-                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"}};
+                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
+                           {"tuple_print", "float"}};
+
 
 
 
@@ -3367,7 +3422,7 @@ int main() {
 
   user_cpp_functions = {"Linear", "shape", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
                         "tensor_sum", "tensor_prod", "tensor_mean", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
-                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float"};
+                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "tuple_print"};
 
 
 

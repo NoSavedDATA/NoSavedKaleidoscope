@@ -1,5 +1,3 @@
-#pragma once
-
 #include <iostream>
 #include <vector>
 #include <any>
@@ -10,8 +8,16 @@
 #include "codegen_notes.h"
 
 
-template float AnyVector::get<float>(size_t);
+std::map<std::string, AnyVector *> NamedVectors;
+
+
+extern "C" AnyVector *CreateNotesVector();
+extern "C" float Dispose_NotesVector(AnyVector *);
+
+
+// template float AnyVector::get<float>(size_t);
 template char *AnyVector::get<char *>(size_t);
+template Tensor *AnyVector::get<Tensor *>(size_t);
 
 
 template <typename T>
@@ -20,7 +26,18 @@ T AnyVector::get(size_t index) {
         // throw std::out_of_range("Index out of range");
         std::cout << "Index out of range.";
     }
-    return std::any_cast<T>((*data)[index]);
+    // std::cout << "Get idx " << index << " from AnyVector" << ".\n";
+    return static_cast<T>(std::any_cast<void *>((*data)[index]));
+}
+
+template <>
+float AnyVector::get<float>(size_t index) {
+    if (index >= data->size()) {
+        // throw std::out_of_range("Index out of range");
+        std::cout << "Index out of range.";
+    }
+    // std::cout << "Get float at idx " << index << " from AnyVector" << ".\n";
+    return std::any_cast<float>((*data)[index]);
 }
 
 AnyVector::AnyVector() {
@@ -45,19 +62,21 @@ size_t AnyVector::size() const {
 
 
 void AnyVector::print() {
+    std::cout << "\n";
     for(int i=0; i<data->size(); i++)
     {
         if (data_types->at(i)=="str")
-            std::cout << "Notes["<<i<<"]: " << static_cast<char *>(get<void *>(i)) << ".\n";
+            std::cout << "Notes["<<i<<"]: " << get<char *>(i) << ".\n";
         if (data_types->at(i)=="float")
             std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
         if (data_types->at(i)=="tensor")
         {
-            Tensor *t = static_cast<Tensor *>(get<void *>(i));
+            Tensor *t = get<Tensor *>(i);
             std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
             PrintDims(t->dims);
         }
     }
+    std::cout << "\n";
 }
 
 
@@ -100,7 +119,8 @@ extern "C" AnyVector *Add_Float_To_NotesVector(AnyVector *notes_vector, float va
 
 extern "C" AnyVector *Add_String_To_NotesVector(AnyVector *notes_vector, char *value) {
 
-    notes_vector->append(value, "str");
+    // std::cout << "Add_String " << value << " to notes_vector" << ".\n";
+    notes_vector->append((void *)value, "str");
 
     return notes_vector;
 }

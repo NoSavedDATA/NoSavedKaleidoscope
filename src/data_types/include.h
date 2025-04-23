@@ -8,6 +8,7 @@
 #include "codegen_notes.h"
 #include "float.h"
 #include "float_vec.h"
+#include "nullptr.h"
 #include "str.h"
 #include "str_vec.h"
 #include "tensor.h"
@@ -16,8 +17,6 @@ using namespace llvm;
 
 extern std::map<std::string, Value *> NamedValues;
 extern std::map<std::string, char *> NamedStrs;
-extern std::map<std::string, AllocaInst *> NamedStrVecs;
-extern std::map<std::string, AllocaInst *> NamedFloatVecs;
 extern std::map<std::string, std::vector<char *>> ClassStrVecs;
 extern std::map<std::string, std::vector<float>> ClassFloatVecs;
 extern std::map<std::string, float> NamedClassValues;

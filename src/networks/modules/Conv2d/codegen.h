@@ -20,7 +20,3 @@ void conv2d_backward(float *inp,  float *weight,
 
 
 
-
-extern "C" float Conv2d_Create(char *, char *, float, AnyVector *, Scope_Struct *);
-
-extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor);

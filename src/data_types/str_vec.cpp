@@ -136,10 +136,10 @@ extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)
 }
 
 
-extern "C" char * IndexClassStrVec(char *vec_name, float _idx)
+extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, char *vec_name, float _idx)
 {
 
-  // std::cout << "IndexClassStrVec: " << vec_name << ".\n";
+  // std::cout << "str_vec_Idx: " << vec_name << ".\n";
 
   int idx = (int) _idx;
 

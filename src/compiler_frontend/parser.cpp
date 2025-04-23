@@ -625,7 +625,7 @@ std::unique_ptr<ExprAST> ParseNewVector(std::string class_name) {
   std::vector<std::unique_ptr<ExprAST>> Elements;
   if (CurTok != ']') {
     while (true) {
-      std::cout << "CURRENT TOKEN: " << ReverseToken(CurTok) << ".\n";
+      // std::cout << "CURRENT TOKEN: " << ReverseToken(CurTok) << ".\n";
       std::string element_type;
       if (CurTok==tok_number)
         element_type = "float";
@@ -1138,10 +1138,12 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
         return nullptr;
     } else
     {
-      if (data_type!="str")
+      if (data_type=="float")
         Init = std::make_unique<NumberExprAST>(0.0f);
-      else
+      else if (data_type=="str")
         Init = std::make_unique<StringExprAST>("");
+      else
+        Init = std::make_unique<NullPtrExprAST>();
     }
     VarNames.push_back(std::make_pair(Name, std::move(Init)));
 
@@ -2453,6 +2455,12 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
     // std::cout << "\n\n===============" << ".\n";
     // std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
     // std::cout << "op type: " << op_elements << ".\n";
+
+    if ((L_type=="tuple"||R_type=="tuple") && BinOp!='=')
+    {
+      LogError("Tuple elements type are unknow during parsing type. Please load the element into a static type variable first.");
+      return std::make_tuple(nullptr,0,"None");
+    }
 
     bool shall_reverse_operands = false;
     if (reverse_ops.count(op_elements)>0)
