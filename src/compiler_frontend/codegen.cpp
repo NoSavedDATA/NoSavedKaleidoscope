@@ -867,6 +867,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
   if (Op == '=') {
 
+    std::cout << "ATTRIBUTION CODEGEN" << ".\n";
 
     seen_var_attr=true;
     // Assignment requires the LHS to be an identifier.
@@ -875,17 +876,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     // dynamic_cast for automatic error checking.
 
 
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-
-
-    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
-    std::string Lname = std::get<0>(name_solver->Names[0]);
-    std::string LType = LHS->GetType();
-
-
-    if (!LHSE)
-      return LogErrorV("'=' destiny must be a variable.");
 
     // Codegen the RHS.
     Value *Val = RHS->codegen(scope_struct);
@@ -896,11 +886,49 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       
     }
 
-    std::string store_op = LType + "_Store";
+
+    if (LHS->GetIsList())
+    {
+      std::cout << "LIST ATTRIBUTION" << ".\n";
+      
+      VariableListExprAST *VarList = static_cast<VariableListExprAST *>(LHS.get());
+
+      for (int i=0; i<VarList->ExprList.size(); ++i)
+      {
+        std::cout << "Attributing: " << i << ".\n";
+        VariableExprAST *LHSE = static_cast<VariableExprAST *>(VarList->ExprList[i].get());
+        Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+
+        NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+        std::string Lname = std::get<0>(name_solver->Names[0]);
+        std::string LType = LHSE->GetType();
+
+        std::cout << "ATTRIBUTION: " << LType << " for " << i << ".\n";
+        
+        std::string store_op = LType + "_Store";
+        
+        call(store_op, {Lvar_name, callret("AnyVector_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)}), scope_struct});
+
+      }
+
+      return ConstantFP::get(*TheContext, APFloat(0.0f));
+    }
+
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+
+    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+    std::string Lname = std::get<0>(name_solver->Names[0]);
+    std::string LType = LHS->GetType();
 
 
+
+
+    
+    
     std::cout << "ATTRIBUTION: " << LType << " for " << LHSE->Name << ".\n";
-
+    
+    std::string store_op = LType + "_Store";
 
     if(LHS->GetIsVec())
     {
@@ -1573,6 +1601,12 @@ Value *NoGradExprAST::codegen(Value *scope_struct){
 
 
 
+Value *VariableListExprAST::codegen(Value *scope_struct) {
+  
+  std::cout << "Variable list expr" << ".\n";
+
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
 
 
 Value *ReturnExprAST::codegen(Value *scope_struct) {
@@ -2126,8 +2160,8 @@ Function *PrototypeAST::codegen() {
       types.push_back(Type::getFloatTy(*TheContext));
   }
 
-
-  FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
+  // FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
+  FunctionType *FT = FunctionType::get(Type::getInt8Ty(*TheContext)->getPointerTo(), types, false);
   
 
   Function *F =
@@ -2368,7 +2402,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
     {
       // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
-      std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " + std::to_string(target_args_size-1) + " arguments, got " + std::to_string(CalleeF->arg_size()-1);
+      std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
       return LogErrorV(_error);
     }
   }
@@ -2411,7 +2445,10 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   ArgsV.insert(ArgsV.begin(), scope_struct_copy);
 
   if (CalleeOverride=="none")
+  {
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+    std::cout << "GOT RETURN OF " << CalleeF << ".\n";
+  }
   else
   {
     

@@ -134,11 +134,11 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdx(std::string class_name) {
 
   std::vector<std::unique_ptr<ExprAST>> Idx;
     
-  Idx.push_back(ParseExpression(class_name));
+  Idx.push_back(ParseExpression(class_name, false));
   while(CurTok==',')
   {
     getNextToken(); // eat ,
-    Idx.push_back(ParseExpression(class_name));
+    Idx.push_back(ParseExpression(class_name, false));
   }
   Idx.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
 
@@ -147,10 +147,51 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdx(std::string class_name) {
 
 
 
+std::unique_ptr<ExprAST> ParseIdentifierListExpr(std::string class_name, bool can_be_string, std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names) {
+
+  std::string type;
+  std::vector<std::string> types;
+  std::string IdName = IdentifierStr;
+
+  std::vector<std::unique_ptr<ExprAST>> name_solvers;
+
+  
+
+  
+  if (typeVars.find(IdName) != typeVars.end())
+    type = typeVars[IdName];
+  else if (in_str(IdName, objectVars))
+    type = "object";
+
+  types.push_back(type);
+
+  auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+  name_solvers.push_back(std::move(name_solver_expr));
+  Names.clear();
+
+  
+
+  while(CurTok==',')
+  {
+    getNextToken();
+
+
+    
+
+    IdName = IdentifierStr;
+    std::cout << "NEW IDNAME " << IdName << ".\n";
+
+    getNextToken();
+  }
+
+}
+
+
+
 /// identifierexpr
 ///   ::= identifier
 ///   ::= identifier '(' expression* ')'
-std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be_string) {
+std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be_string, bool can_be_list) {
   
   for(int i=0; i<Classes.size(); i++)
     if(IdentifierStr==Classes[i])  // Object object
@@ -163,6 +204,66 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   getNextToken(); // eat identifier.
   
   Names.push_back(std::make_tuple(IdName, type_var, std::vector<std::unique_ptr<ExprAST>>{}));
+
+
+
+  std::unique_ptr<ExprAST> aux;
+
+  std::cout << "CAN BE LIST IS " << can_be_list << ".\n";
+  if (CurTok==',' && can_be_list)
+  {
+
+    std::vector<std::unique_ptr<ExprAST>> IdentifierList;
+    while(true)
+    {
+      IdName = IdentifierStr;
+
+      if (typeVars.find(IdName) != typeVars.end())
+        type = typeVars[IdName];
+      else if (in_str(IdName, objectVars))
+        type = "object";
+      else
+        type = "none";
+
+
+       
+      if (type!="none")
+      {
+        std::cout << "add variable of type " << type << ".\n";
+        auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+        aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
+      } else {
+        if(!can_be_string)
+        {
+          std::string _error = "Variable " + IdName + " was not found in scope.";
+          return LogError(_error);
+        }  
+
+        std::cout << "Returning ParseIdentifierExpr as a String Expression: " << IdName << "\n";
+        aux = std::make_unique<StringExprAST>(IdName);
+      }
+
+      IdentifierList.push_back(std::move(aux));
+
+      std::cout << "ADD " << IdName << " OF TYPE " << type << " TO LIST.\n";
+
+      if (CurTok!=',')
+        break;
+      getNextToken(); // get comma
+      getNextToken(); // get identifier
+      Names.push_back(std::make_tuple(IdentifierStr, type_var, std::vector<std::unique_ptr<ExprAST>>{}));
+    }
+
+    if(CurTok==tok_space)
+      getNextToken();
+
+    std::cout << "RETURNTING VARIABLE LIST" << ".\n";
+    aux = std::make_unique<VariableListExprAST>(std::move(IdentifierList));
+    return std::move(aux);
+  } 
+
+
+
   if (CurTok != '(' && CurTok != '[') // Simple variable ref.
   {
     if (typeVars.find(IdName) != typeVars.end())
@@ -178,7 +279,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
 
     // std::cout << "Var type is: " << type << ".\n";
 
-    std::unique_ptr<ExprAST> aux;
     if (type!="none")
     {
       auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
@@ -202,6 +302,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   }
 
 
+  
 
   if (CurTok=='[')
   {
@@ -215,7 +316,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
     
 
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-    auto aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
+    aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
     aux->SetIsVec(true);
     
     getNextToken(); // eat ]
@@ -224,91 +325,100 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
   }
   
 
-  // Call.
-  getNextToken(); // eat (
-  
-  std::vector<std::unique_ptr<ExprAST>> Args;
-  if (CurTok != ')') {
-    while (true) {
-      
-      if (auto Arg = ParseExpression(class_name))
-        Args.push_back(std::move(Arg));
-      else
-        return nullptr;
-      
+  if (CurTok=='(')
+  {
+    // Call.
+    getNextToken(); // eat (
+    
+    std::vector<std::unique_ptr<ExprAST>> Args;
+    if (CurTok != ')') {
+      while (true) {
+        
+        if (auto Arg = ParseExpression(class_name, false))
+          Args.push_back(std::move(Arg));
+        else
+          return nullptr;
+        
 
-      if (CurTok == ')')
-        break;
+        if (CurTok == ')')
+          break;
 
-      if (CurTok != ',')
-        return LogError("Esperado ')' ou ',' na lista de argumentos");
-      getNextToken();
+        if (CurTok != ',')
+          return LogError("Esperado ')' ou ',' na lista de argumentos");
+        getNextToken();
+      }
     }
+
+    // varargs
+    if (in_str(IdName, vararg_methods))
+      Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+    
+    
+
+    // Eat the ')'.
+    getNextToken();
+
+    
+    std::string callee_override = "none";
+    bool name_solve_to_last = false;
+    if(typeVars.count(IdName)>0)
+    {
+      name_solve_to_last = true;
+      callee_override = typeVars[IdName];
+    }
+    
+
+    bool is_var_forward = false;
+    bool return_tensor = false;
+    if (functionVars.find(IdName) != functionVars.end()) // if found
+    {
+      is_var_forward = true;
+      return_tensor = true;
+      name_solve_to_last = true;
+      callee_override = functionVars[IdName];
+    }
+    if (floatFunctions.find(IdName) != floatFunctions.end()) // if found
+    {
+      is_var_forward = true;
+      callee_override = floatFunctions[IdName];
+    }
+    if (IdName=="to_float")
+    {
+      callee_override = "StrToFloat";
+      is_var_forward = true;
+    }
+    
+    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+    name_solver_expr->SetNameSolveToLast(name_solve_to_last);
+    // if ()
+    // name_solver_expr->SetType;
+    aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, IdName, std::move(Args),
+                                                  "None", "None", "none", is_var_forward, callee_override);
+
+  
+
+    std::string fname = (callee_override!="none") ? callee_override : IdName;
+
+    if (functions_return_type.count(fname)>0)
+    {
+      // std::cout << "----RETURN OF " << fname << " IS: " << functions_return_type[fname] << ".\n";
+      aux->SetType(functions_return_type[fname]);  
+    }
+    if (return_tensor)
+      aux->SetType("tensor");
+
+    
+    if (CurTok == tok_post_class_attr_identifier)
+      return ParseChainCallExpr(std::move(aux), class_name);
+    
+    return aux;
   }
-
-  // varargs
-  if (in_str(IdName, vararg_methods))
-    Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
   
-  
-
-  // Eat the ')'.
-  getNextToken();
-
-  
-  std::string callee_override = "none";
-  bool name_solve_to_last = false;
-  if(typeVars.count(IdName)>0)
+  if (CurTok==',')
   {
-    name_solve_to_last = true;
-    callee_override = typeVars[IdName];
+    auto aux = ParseIdentifierListExpr(class_name, can_be_string, std::move(Names));
+    return aux;
   }
-  
-
-  bool is_var_forward = false;
-  bool return_tensor = false;
-  if (functionVars.find(IdName) != functionVars.end()) // if found
-  {
-    is_var_forward = true;
-    return_tensor = true;
-    name_solve_to_last = true;
-    callee_override = functionVars[IdName];
-  }
-  if (floatFunctions.find(IdName) != floatFunctions.end()) // if found
-  {
-    is_var_forward = true;
-    callee_override = floatFunctions[IdName];
-  }
-  if (IdName=="to_float")
-  {
-    callee_override = "StrToFloat";
-    is_var_forward = true;
-  }
-  
-  auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-  name_solver_expr->SetNameSolveToLast(name_solve_to_last);
-  // if ()
-  // name_solver_expr->SetType;
-  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, IdName, std::move(Args),
-                                                "None", "None", "none", is_var_forward, callee_override);
-
- 
-
-  std::string fname = (callee_override!="none") ? callee_override : IdName;
-
-  if (functions_return_type.count(fname)>0)
-  {
-    // std::cout << "----RETURN OF " << fname << " IS: " << functions_return_type[fname] << ".\n";
-    aux->SetType(functions_return_type[fname]);  
-  }
-  if (return_tensor)
-    aux->SetType("tensor");
-
-  
-  if (CurTok == tok_post_class_attr_identifier)
-    return ParseChainCallExpr(std::move(aux), class_name);
-  
-  return aux;
 }
 
 
@@ -639,7 +749,7 @@ std::unique_ptr<ExprAST> ParseNewVector(std::string class_name) {
       }
       Elements.push_back(std::make_unique<StringExprAST>(element_type));
 
-      if (auto element = ParseExpression(class_name))
+      if (auto element = ParseExpression(class_name, false))
       {
         Elements.push_back(std::move(element));
       } 
@@ -890,7 +1000,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
     while (true) {
-      if (auto Arg = ParseExpression(class_name))
+      if (auto Arg = ParseExpression(class_name, false))
       {
         //std::cout << "Parsed arg " << Arg->GetName() << "\n";
         Args.push_back(std::move(Arg));
@@ -1077,10 +1187,10 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
         notes.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
         getNextToken();
       } else if (CurTok==tok_identifier)
-        notes.push_back(std::move(ParseIdentifierExpr(class_name, true)));
+        notes.push_back(std::move(ParseIdentifierExpr(class_name, true, false)));
       else {
         //notes.push_back(std::move(ParseExpression(class_name)));
-        notes.push_back(std::move(ParsePrimary(class_name)));
+        notes.push_back(std::move(ParsePrimary(class_name, false)));
       }
 
       
@@ -2083,7 +2193,7 @@ std::unique_ptr<ExprAST> ParseMustBeVar(std::string class_name, std::string expr
   if (CurTok==tok_class_attr||CurTok==tok_self)
     expr = ParseSelfExpr(class_name);
   else if (CurTok==tok_identifier)
-    expr = ParseIdentifierExpr(class_name);
+    expr = ParseIdentifierExpr(class_name, false, false);
   else
   {
     std::string _error = expr_name + " expression expected a simple identifier, not another expression.";
@@ -2191,14 +2301,14 @@ std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name) {
 ///   ::= ifexpr
 ///   ::= forexpr
 ///   ::= varexpr
-std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
-  std::cout << "" << ReverseToken(CurTok) << ".\n";
+std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) {
+  // std::cout << "ParsePrimary: " << ReverseToken(CurTok) << "can be list: " << can_be_list << ".\n";
   switch (CurTok) {
   default:
     //return std::move(std::make_unique<NumberExprAST>(0.0f));
     return LogErrorT(CurTok);
   case tok_identifier:
-    return ParseIdentifierExpr();
+    return ParseIdentifierExpr(class_name, false, can_be_list);
   case tok_class_attr:
     return ParseSelfExpr(class_name);
   case tok_self:
@@ -2267,15 +2377,15 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name) {
     return ParseNewVector(class_name);
   case tok_space:
     getNextToken();
-    return ParsePrimary(class_name);
+    return ParsePrimary(class_name, can_be_list);
   }
 }
 
 /// unary
 ///   ::= primary
 ///   ::= '!' unary
-std::unique_ptr<ExprAST> ParseUnary(std::string class_name) {
-  //std::cout <<"Parse unary\n";
+std::unique_ptr<ExprAST> ParseUnary(std::string class_name, bool can_be_list) {
+  // std::cout <<"Parse unary got can_be_list: " << can_be_list <<  "\n";
   if(CurTok==tok_space)
     getNextToken();
   // If the current token is not an operator, it must be a primary expr.
@@ -2284,7 +2394,7 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name) {
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[')
   {
     //std::cout << "Returning, non-ascii found.\n";
-    return ParsePrimary(class_name);
+    return ParsePrimary(class_name, can_be_list);
   }
   
   
@@ -2293,7 +2403,7 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name) {
   
   //std::cout << "Unary expr\n";
   getNextToken();
-  if (auto Operand = ParseUnary(class_name))
+  if (auto Operand = ParseUnary(class_name, can_be_list))
   {
 
 
@@ -2403,7 +2513,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
     RhsTok = CurTok;
 
     
-    auto RHS = ParseUnary(class_name); // Returns an identifier, number or expression result
+    auto RHS = ParseUnary(class_name, false); // Returns an identifier, number or expression result
     if (!RHS)
       return std::make_tuple(nullptr,0,"None");
 
@@ -2555,11 +2665,11 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
 /// expression
 ///   ::= unary binoprhs
 ///
-std::unique_ptr<ExprAST> ParseExpression(std::string class_name) {
+std::unique_ptr<ExprAST> ParseExpression(std::string class_name, bool can_be_list) {
   
   //std::cout << "Parse Expression\n";
   
-  auto LHS = ParseUnary(class_name);
+  auto LHS = ParseUnary(class_name, can_be_list);
   if (!LHS)
     return nullptr;
 
@@ -2685,6 +2795,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
     }
     getNextToken();
   }
+
+  // std::cout << "CREATING PROTO WITH " << ArgNames.size() << " PARAMETERS.\n";
 
   // success.
   getNextToken(); // eat ')'.

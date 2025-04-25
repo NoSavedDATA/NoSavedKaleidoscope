@@ -137,8 +137,7 @@ extern "C" void *tuple_Idx(Scope_Struct *scope_struct, char *name, float _idx)
 
   
   std::string type = vec->data_types->at(idx);
-
-  std::cout << "typle_Idx on index " << idx << " for data type " << type << ".\n";
+  std::cout << "tuple_Idx on index " << idx << " for data type " << type << ".\n";
 
   if (type=="float")
   {
@@ -146,6 +145,21 @@ extern "C" void *tuple_Idx(Scope_Struct *scope_struct, char *name, float _idx)
     return (void*)float_ptr;
     // return (void *)vec->get<float>(idx);
   }
+  return std::any_cast<void *>((*vec->data)[idx]);
+}
 
+
+extern "C" void *AnyVector_Idx(AnyVector *vec, int idx)
+{
+ 
+  std::string type = vec->data_types->at(idx);
+  std::cout << "AnyVector_Idx on index " << idx << " for data type " << type << ".\n";
+
+  if (type=="float")
+  {
+    float* float_ptr = new float(vec->get<float>(idx));
+    return (void*)float_ptr;
+    // return (void *)vec->get<float>(idx);
+  }
   return std::any_cast<void *>((*vec->data)[idx]);
 }

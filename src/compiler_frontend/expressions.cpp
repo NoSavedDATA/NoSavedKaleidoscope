@@ -87,6 +87,15 @@ bool ExprAST::GetIsVec() {
   return isVec;
 }
 
+
+void ExprAST::SetIsList(bool isList) {
+  this->isList=isList;
+}
+bool ExprAST::GetIsList() {
+  return isList;
+}
+
+
 // Tensor related
 std::vector<float> ExprAST::GetDims() {
   return Dims;
@@ -119,8 +128,13 @@ StringExprAST::StringExprAST(std::string Val) : Val(Val) {
 NullPtrExprAST::NullPtrExprAST() {
   this->SetType("nullptr");
 } 
-  
-  
+
+
+VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<ExprAST>> ExprList)
+                      : ExprList(std::move(ExprList)) {
+  this->SetIsList(true);
+} 
+
   
   /// VariableExprAST - Expression class for referencing a variable, like "a".
 VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type) {

@@ -21,6 +21,7 @@ class ExprAST {
     bool isAttribute = false;
     std::string _pre_dot = "";
     bool isVec = false;
+    bool isList = false;
     bool isVarLoad = false;
     bool SolverIncludeScope = true;
     bool NameSolveToLast = true;
@@ -56,9 +57,12 @@ class ExprAST {
     virtual void SetName(std::string Name); 
   
     
-    virtual void SetIsVec(bool isVec); 
+    virtual void SetIsVec(bool); 
     virtual bool GetIsVec(); 
   
+    virtual void SetIsList(bool); 
+    virtual bool GetIsList(); 
+
     // Tensor related
     virtual std::vector<float> GetDims(); 
     virtual void SetDims(std::vector<float> Dims); 
@@ -110,33 +114,43 @@ class NullPtrExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
 };
 
+ 
+
+
+class VariableListExprAST : public ExprAST {
+  public:
+    std::vector<std::unique_ptr<ExprAST>> ExprList;
+    VariableListExprAST(std::vector<std::unique_ptr<ExprAST>> ExprList); 
+
+  Value *codegen(Value *scope_struct) override;
+};
+
   
+/// VariableExprAST - Expression class for referencing a variable, like "a".
+class VariableExprAST : public ExprAST {
+
+  public:
+    std::unique_ptr<ExprAST> NameSolver;
+    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type); 
+
+    Value *codegen(Value *scope_struct) override;
+    const std::string &getName() const; 
+    std::string GetName() override; 
+};
+
+
+class VecIdxExprAST : public ExprAST {
   
-  /// VariableExprAST - Expression class for referencing a variable, like "a".
-  class VariableExprAST : public ExprAST {
-  
-    public:
-      std::unique_ptr<ExprAST> NameSolver;
-      VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type); 
-  
-      Value *codegen(Value *scope_struct) override;
-      const std::string &getName() const; 
-      std::string GetName() override; 
-  };
-  
-  
-  class VecIdxExprAST : public ExprAST {
-    
-    public:
-      std::unique_ptr<ExprAST> NameSolver;
-      std::vector<std::unique_ptr<ExprAST>> Idx;
-  
-      VecIdxExprAST(std::unique_ptr<ExprAST> NameSolver, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type);
-  
-      Value *codegen(Value *scope_struct) override;
-      const std::string &getName() const;
-      std::string GetName() override;
-  };
+  public:
+    std::unique_ptr<ExprAST> NameSolver;
+    std::vector<std::unique_ptr<ExprAST>> Idx;
+
+    VecIdxExprAST(std::unique_ptr<ExprAST> NameSolver, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type);
+
+    Value *codegen(Value *scope_struct) override;
+    const std::string &getName() const;
+    std::string GetName() override;
+};
   
   
   
