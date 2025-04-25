@@ -24,8 +24,8 @@ extern std::map<std::string, std::string> ops_type_return;
 extern std::map<int, std::string> op_map;
 
 
-std::unique_ptr<ExprAST> ParseExpression(std::string class_name="");
-std::unique_ptr<ExprAST> ParsePrimary(std::string class_name);
+std::unique_ptr<ExprAST> ParseExpression(std::string class_name="", bool can_be_list=true);
+std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list=true);
 
 /// numberexpr ::= number
 std::unique_ptr<ExprAST> ParseNumberExpr();
@@ -49,7 +49,7 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdx(std::string class_name="");
 /// identifierexpr
 ///   ::= identifier
 ///   ::= identifier '(' expression* ')'
-std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="", bool can_be_string=false); 
+std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name="", bool can_be_string=false, bool can_be_list=true); 
 
 
 
@@ -162,19 +162,11 @@ std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name="");
   
   
   
-  /// primary
-  ///   ::= identifierexpr
-  ///   ::= numberexpr
-  ///   ::= parenexpr
-  ///   ::= ifexpr
-  ///   ::= forexpr
-  ///   ::= varexpr
-std::unique_ptr<ExprAST> ParsePrimary(std::string class_name=""); 
   
   /// unary
   ///   ::= primary
   ///   ::= '!' unary
-std::unique_ptr<ExprAST> ParseUnary(std::string class_name=""); 
+std::unique_ptr<ExprAST> ParseUnary(std::string class_name="", bool can_be_list=true); 
   
   
   /// binoprhs
@@ -183,11 +175,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
                                                 std::unique_ptr<ExprAST> LHS,
                                                 std::string class_name=""); 
   
-  
-  /// expression
-  ///   ::= unary binoprhs
-  ///
-std::unique_ptr<ExprAST> ParseExpression(std::string class_name); 
   
   /// prototype
   ///   ::= id '(' id* ')'

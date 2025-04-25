@@ -2214,6 +2214,13 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("tuple_Idx", tuple_idxTy);
   
+  FunctionType *AnyVector_idxTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, Type::getInt32Ty(*TheContext)}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("AnyVector_Idx", AnyVector_idxTy);
+
   //
   FunctionType *IndexClassFloatVecTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
