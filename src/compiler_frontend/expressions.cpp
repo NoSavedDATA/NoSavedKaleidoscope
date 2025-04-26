@@ -422,11 +422,11 @@ NoGradExprAST::NoGradExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
   
   
   
-PrototypeAST::PrototypeAST(const std::string &Name, const std::string &Class, const std::string &Method,
+PrototypeAST::PrototypeAST(const std::string &Name, const std::string &Return_Type, const std::string &Class, const std::string &Method,
               std::vector<std::string> Args,
               std::vector<std::string> Types,
               bool IsOperator, unsigned Prec)
-      : Name(Name), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
+      : Name(Name), Return_Type(Return_Type), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
         IsOperator(IsOperator), Precedence(Prec) {}
 
 const std::string &PrototypeAST::getName() const { return Name; }

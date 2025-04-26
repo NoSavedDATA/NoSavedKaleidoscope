@@ -209,7 +209,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
 
   std::unique_ptr<ExprAST> aux;
 
-  std::cout << "CAN BE LIST IS " << can_be_list << ".\n";
   if (CurTok==',' && can_be_list)
   {
 
@@ -225,8 +224,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
       else
         type = "none";
 
-
-       
+      
       if (type!="none")
       {
         std::cout << "add variable of type " << type << ".\n";
@@ -414,11 +412,11 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
     return aux;
   }
   
-  if (CurTok==',')
-  {
-    auto aux = ParseIdentifierListExpr(class_name, can_be_string, std::move(Names));
-    return aux;
-  }
+  // if (CurTok==',')
+  // {
+  //   auto aux = ParseIdentifierListExpr(class_name, can_be_string, std::move(Names));
+  //   return aux;
+  // }
 }
 
 
@@ -2404,9 +2402,7 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name, bool can_be_list) {
   //std::cout << "Unary expr\n";
   getNextToken();
   if (auto Operand = ParseUnary(class_name, can_be_list))
-  {
-
-
+  {    
     std::string operand_type = Operand->GetType();
     auto expr = std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
     expr->SetType(operand_type);
@@ -2686,12 +2682,25 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
   method = "";
   _class = class_name;
 
+  std::string return_type;
+
+  if (CurTok==tok_var)
+    return_type = "float";
+  else
+    return_type = "void*";
+
+  
+  // std::cout << "Token " << ReverseToken(CurTok) << ".\n";
+  getNextToken(); // eat return_type
+  // std::cout << "Token " << ReverseToken(CurTok) << ".\n"; 
+  // std::exit(0);
+
   unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary.
   unsigned BinaryPrecedence = 30;
 
   switch (CurTok) {
   default:
-    return LogErrorP("Esperado nome da função no protótipo");
+    return LogErrorP("Expected prototype function name");
   case tok_identifier:
     FnName += IdentifierStr;
     method = IdentifierStr;
@@ -2810,7 +2819,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
   getNextToken();
 
 
-  return std::make_unique<PrototypeAST>(FnName, _class, method, ArgNames, Types, Kind != 0,
+  return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
                                          BinaryPrecedence);
 }
 
@@ -2879,7 +2888,7 @@ std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   
 
   // Make an anonymous proto.
-  auto Proto = std::make_unique<PrototypeAST>("__anon_expr", "", "",
+  auto Proto = std::make_unique<PrototypeAST>("__anon_expr", "float", "", "",
                                                 std::vector<std::string>(),
                                                 std::vector<std::string>());
     

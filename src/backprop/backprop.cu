@@ -12,6 +12,16 @@ std::vector<Tensor *> todo_backward_tensors;
 std::map<std::string, float *> NamedParamGrads;
 
 
+void CleanTree(Tensor *back_node) {
+  if (back_node==nullptr)
+    return;
+  CleanTree(back_node->L_Node);
+  CleanTree(back_node->R_Node);
+
+  float dims_prod = back_node->dims_prod;
+  to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor"); 
+  to_free_tensor(back_node);
+}
 
 void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, bool from_custom, int parent_op)
 {
@@ -34,11 +44,13 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
     //std::cout << "\nTraversing: " << back_node->name << "/" << back_node->scopeless_name << ", op: " << back_node->op << ", parent_op: " << parent_op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
     if(device_dy==nullptr && !in_int(op, loss_ops) && !from_custom)
     {
-      std::string _err = "dy derivate is null at the backward mode with op "+std::to_string(op);
-      LogErrorS(_err);
+    
+      tensor_name = back_node->scopeless_name;
+      CleanTree(back_node);
+      std::string _err = "dy derivate is null at the backward mode with op "+std::to_string(op) + " for tensor " + tensor_name;
+      // LogError(_err);
       return;
     }
-
 
 
     if (back_node->weight) // dw is updated by pointer
@@ -53,8 +65,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         if(tensor_name!="")
         {
           if(var_to_grad.count(tensor_name)>0)
-          {
-            
+          {   
             float *acc_y = var_to_grad[tensor_name];
             
             int grid_size, block_size, shared_mem_size;
@@ -94,7 +105,6 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
     
 
     
-    //std::cout << "Acquire info"  << "\n";
 
     tensor_name = back_node->L_Node->scopeless_name;
 
@@ -103,10 +113,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
 
     out = back_node->tensor_ptr;
 
-    //std::cout << "Check null" << "\n";
     if(back_node->R_Node!=nullptr)
     {
-      //std::cout << "not null " << "\n";
       param_name  = back_node->R_Node->name;
       w = back_node->R_Node->tensor_ptr;
       w_size = back_node->R_Node->dims_prod;
@@ -165,14 +173,6 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       
         if(!in_int(op, weightless_ops) && !from_custom && back_node->R_Node->op != detach_op)
         {
-          /*
-          if (w_size==4)
-          {
-            std::cout << "ulululu of op " << std::to_string(op) << "\n";
-            std::cout << "" << param_name<< "\n";
-            std::cout << "" << tensor_name<< "\n";
-          }
-          */
           std::string from = "dw of " + std::to_string(op);
           device_dw = get_from_pool(0, w_size, from);
           set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
@@ -316,9 +316,6 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         LogErrorS(_error);
         break;
     }
-
-    //if (ends_with(tensor_name, "ht"))
-    //  PrintTensorF(device_dx, 4, 256);
   
   } else
   {
@@ -336,20 +333,15 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
   
 
 
-  // Garbage Collector on all lines below
+  // Garbage Collector
   TraversePreOrder(back_node->L_Node, device_dx, from_gradless, from_custom, op);
-  //from_gradless = (from_gradless || in_int(op, loss_ops));
   TraversePreOrder(back_node->R_Node, device_dw, from_gradless, from_custom, op);
   
-
-
   if (back_node->Sparse_Idx_Tensor!=nullptr)
     save_from_pool(back_node->Sparse_Idx_Tensor);
-
   
   if(!in_int(op, loss_ops) && back_node->tensor_ptr!=nullptr) //loss op has leaves only
     to_pool(dims_prod, back_node->tensor_ptr, "op tensor");
-
 
   std::string _op = "dy of operation " + std::to_string(op) + " from parent op " + std::to_string(parent_op) + " and parameter " + param_name;  
   if(device_dy!=nullptr)
@@ -358,6 +350,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
   if (!back_node->weight)
     to_free_tensor(back_node);
 }
+
 
 
 extern "C" float backprop(Scope_Struct *scope_struct)

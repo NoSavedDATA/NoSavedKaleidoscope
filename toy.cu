@@ -1633,8 +1633,8 @@ static void InitializeModule() {
 
   FunctionType *print_floatTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext)},
-      true // vararg
+      {int8PtrTy},
+      false
   );
   TheModule->getOrInsertFunction("print_float", print_floatTy);
   
@@ -3085,6 +3085,14 @@ TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_
   );
   TheModule->getOrInsertFunction("cpu_idx", cpu_idxTy);
 
+
+  //
+  FunctionType *exitTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {},
+      false 
+  );
+  TheModule->getOrInsertFunction("_exit", exitTy);
 
   //
   FunctionType *printTTy = FunctionType::get(

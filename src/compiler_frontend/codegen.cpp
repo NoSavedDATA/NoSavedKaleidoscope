@@ -173,7 +173,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         notes_vector = callret("Add_Float_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
       }
       else {
-        std::cout << "Could not find the data type\n";
+        std::cout << "Could not find the data type of a note in DataExpr of " << Name << " \n";
       }
 
     }
@@ -517,6 +517,9 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   // std::cout << "Load fn: " << load_fn << ".\n";
   V = Builder->CreateCall(TheModule->getFunction(load_fn),
                                                   {var_name, scope_struct});
+  // p2t("Return of " + load_fn);
+  // if (type=="float")
+  //   call("print_float", {V});
   return V;
 }
 
@@ -562,7 +565,7 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   {
     std::string idx_fn = Type + "_Idx";
     std::cout << "Calling: " << idx_fn << ".\n";
-    call("print", {scope_struct, var_name});
+    // call("print", {scope_struct, var_name});
     return callret(idx_fn, {scope_struct, var_name, idx});
   }
 
@@ -866,15 +869,11 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
   if (Op == '=') {
-
-    std::cout << "ATTRIBUTION CODEGEN" << ".\n";
-
     seen_var_attr=true;
     // Assignment requires the LHS to be an identifier.
     // This assume we're building without RTTI because LLVM builds that way by
     // default.  If you build LLVM with RTTI this can be changed to a
     // dynamic_cast for automatic error checking.
-
 
 
     // Codegen the RHS.
@@ -889,13 +888,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if (LHS->GetIsList())
     {
-      std::cout << "LIST ATTRIBUTION" << ".\n";
+      // std::cout << "LIST ATTRIBUTION" << ".\n";
       
       VariableListExprAST *VarList = static_cast<VariableListExprAST *>(LHS.get());
 
       for (int i=0; i<VarList->ExprList.size(); ++i)
       {
-        std::cout << "Attributing: " << i << ".\n";
+        // std::cout << "Attributing: " << i << ".\n";
         VariableExprAST *LHSE = static_cast<VariableExprAST *>(VarList->ExprList[i].get());
         Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
 
@@ -903,7 +902,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         std::string Lname = std::get<0>(name_solver->Names[0]);
         std::string LType = LHSE->GetType();
 
-        std::cout << "ATTRIBUTION: " << LType << " for " << i << ".\n";
+        // std::cout << "ATTRIBUTION: " << LType << " for " << i << ".\n";
         
         std::string store_op = LType + "_Store";
         
@@ -926,7 +925,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     
     
-    std::cout << "ATTRIBUTION: " << LType << " for " << LHSE->Name << ".\n";
+    // std::cout << "ATTRIBUTION: " << LType << " for " << LHSE->Name << ".\n";
     
     std::string store_op = LType + "_Store";
 
@@ -979,9 +978,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   
 
   Value *L = LHS->codegen(scope_struct);
-  std::cout << "BinaryExpr RHS"  << ".\n";
   Value *R = RHS->codegen(scope_struct);
-  std::cout << "BinaryExpr RHS done"  << ".\n";
   
   if (!L || !R)
     return nullptr;
@@ -1713,6 +1710,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
   values.push_back(scope_struct);
 
+  seen_var_attr = true;
   bool is_type=true;
   for (int i=0; i<Values.size(); i++)
   {
@@ -1720,7 +1718,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     Value *value = Values[i]->codegen(scope_struct);
     if (!is_type)
     {
-      std::cout << "VALUE TYPE IS: " << type << ".\n";
+      // std::cout << "VALUE TYPE IS: " << type << ".\n";
       if (type!="float")
       {
         std::string copy_fn = type + "_" + "Copy";
@@ -1732,8 +1730,9 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     values.push_back(value);
   }
 
+  seen_var_attr = false;
 
-  std::cout << "Call tuple_New" << ".\n";
+  // std::cout << "Call tuple_New" << ".\n";
   return callret("tuple_New", values);
 }
 
@@ -2159,9 +2158,12 @@ Function *PrototypeAST::codegen() {
     else
       types.push_back(Type::getFloatTy(*TheContext));
   }
-
-  // FunctionType *FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
-  FunctionType *FT = FunctionType::get(Type::getInt8Ty(*TheContext)->getPointerTo(), types, false);
+  
+  FunctionType *FT;
+  if (Return_Type=="float")
+    FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
+  else
+    FT = FunctionType::get(int8PtrTy, types, false); 
   
 
   Function *F =
@@ -2207,24 +2209,6 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
 }
 
 
-Value *ChainCallExprAST::codegen(Value *scope_struct) {
-  Value *inner_return = Inner_Call->codegen(scope_struct);
-
-  std::vector<Value *> ArgsV; 
-
-  ArgsV.push_back(inner_return);
-  
-
-  ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, Call_Of);
-
-
-  ArgsV.insert(ArgsV.begin(), scope_struct);
-  std::string call_fn = Call_Of;
-  Value *ret = callret(call_fn, ArgsV);
-
-
-  return ret;
-}
 
 
 Value *CallExprAST::codegen(Value *scope_struct) {
@@ -2242,7 +2226,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   std::string tgt_function_name;
   std::string msg;
 
-  std::cout << "\n\nFunction: " << tgt_function << "\n";
+  // std::cout << "\n\nFunction: " << tgt_function << "\n";
 
 
   int nested_function;
@@ -2269,11 +2253,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
 
-  Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct}); 
-
-
-  
-  
+  Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
   Value *first_arg, *scope_string, *previous_scope, *thread_id, *has_grad;
 
 
@@ -2294,7 +2274,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     p2t("New async pre");
     call("scope_struct_Get_Async_Scope", {scope_struct_copy, thread_id, has_grad}); // Also sets scope_string to empty.
     p2t("New async post");
-
     //todo: Solve scope_string discontinuity on async functions
   }
   
@@ -2384,7 +2363,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   Function *CalleeF;
   if (!IsVarForward)
   {
-    std::cout << "TGT_FUNCTION " <<  tgt_function << ".\n";
+    // std::cout << "TGT_FUNCTION " <<  tgt_function << ".\n";
     // p2t("TGT FUNCTION " + tgt_function);
 
     CalleeF = getFunction(tgt_function);
@@ -2395,7 +2374,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     }
 
     tgt_function_name = CalleeF->getName().str();
-    std::cout << "CALLEEF " << tgt_function_name << ".\n";
+    // std::cout << "CALLEEF " << tgt_function_name << ".\n";
     // p2t("CALLEEF " + tgt_function_name );
 
     // If argument mismatch error.
@@ -2415,7 +2394,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
 
-  
+ 
+  // --- Args --- //
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
     std::string load_fn = Load_Type+"_Load";
@@ -2423,31 +2403,35 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     ArgsV.push_back(arg);
   }
 
-
-
-
   // Sends the non-changed scope_struct to load/codegen the arguments from the argument list
   ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, tgt_function);
 
+  // Always include scope on the beggining
+  ArgsV.insert(ArgsV.begin(), scope_struct_copy);
+  // ArgsV.insert(ArgsV.begin(), scope_struct);
 
 
 
 
   
 
-  Value *ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   // std::cout << "\n\nCallExpr Create call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << " and " << ArgsV.size() << " args." << "\n\n";
-
-
-
-
-
-  ArgsV.insert(ArgsV.begin(), scope_struct_copy);
-
+  
+  
+  
+  
+  
+  
+  Value *ret;
   if (CalleeOverride=="none")
   {
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-    std::cout << "GOT RETURN OF " << CalleeF << ".\n";
+    // if (tgt_function=="Testincrement_yield_ptr")
+    // {
+    //   p2t("Function value is");
+    //   call("print_float", {ret});
+    // }
+    return ret;
   }
   else
   {
@@ -2479,6 +2463,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       // call("print", {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});
       ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
     }
+    return ret;
   }
 
   p2t("CallExpr clean scope"); 
@@ -2497,5 +2482,26 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   // if (must_free_arg0)
   //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {ArgsV[0]});
   
+  ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  return ret;
+}
+
+
+Value *ChainCallExprAST::codegen(Value *scope_struct) {
+  Value *inner_return = Inner_Call->codegen(scope_struct);
+
+  std::vector<Value *> ArgsV; 
+
+  ArgsV.push_back(inner_return);
+  
+
+  ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, Call_Of);
+
+
+  ArgsV.insert(ArgsV.begin(), scope_struct);
+  std::string call_fn = Call_Of;
+  Value *ret = callret(call_fn, ArgsV);
+
+
   return ret;
 }

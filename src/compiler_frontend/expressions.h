@@ -582,9 +582,7 @@ class ChainCallExprAST : public ExprAST {
   /// of arguments the function takes), as well as if it is an operator.
   class PrototypeAST {
   
-    std::string Name;
-    std::string Class;
-    std::string Method;
+    std::string Name, Return_Type, Class, Method;
   
     std::vector<std::string> Args;
     std::vector<std::string> Types;
@@ -592,7 +590,7 @@ class ChainCallExprAST : public ExprAST {
     unsigned Precedence; // Precedence if a binary op.
   
     public:
-      PrototypeAST(const std::string &Name, const std::string &Class, const std::string &Method,
+      PrototypeAST(const std::string &Name, const std::string &Return_Type, const std::string &Class, const std::string &Method,
                   std::vector<std::string> Args,
                   std::vector<std::string> Types,
                   bool IsOperator = false, unsigned Prec = 0);
