@@ -29,9 +29,10 @@ class Conv2dCPP
     std::size_t workspace_size, workspace_size_w_back, workspace_size_y_back;
     float *d_workspace, *d_workspace_w_back, *d_workspace_y_back;
 
+    bool first_backward=true;
 
     float* d_filter=nullptr;
-    float* d_filter_g=nullptr;
+    float* dW=nullptr;
     int C, OC, ks, stride, padding, out_H, out_W;
     int B = 0;
     int H = 0;
@@ -45,5 +46,6 @@ class Conv2dCPP
   void SetDescriptors(int, int, int, Tensor *tensor);
   void InitFilters();
   float *Forward(Tensor *, int, int, int, int);
-  void Backward(float *, float *, float *, float *);
+  void FirstBackward();
+  void Backward(float *, float *, float *);
 };

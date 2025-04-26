@@ -29,11 +29,8 @@ extern "C" Tensor *tensor_tensor_mma(
   int resultingDimsProd = resultingDimsProdOnMult(linear_layer_dims, Rdims);
 
 
-
-
   float* device_y = get_from_pool(thread_id, resultingDimsProd, "cuda mult");
-  
-  
+    
 
   if (Ldims.size()<2)
     LogErrorS("Tensors multiplication requires at least 2 dimensions.");

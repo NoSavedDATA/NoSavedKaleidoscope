@@ -3,6 +3,7 @@
 #include "../common/cu_commons.h"
 #include "../cuda_threads/include.h"
 #include "../cuda_kernels/handles.h"
+#include "../tensor/include.h"
 #include "utils.h"
 
 using namespace nvcuda;
@@ -20,13 +21,8 @@ __global__ void mult_backwarddx(const float *w,
   int ty = threadIdx.y;
 
   
-
-
-
-
   extern __shared__ char _smem[];
   auto smem = reinterpret_cast<float*>(_smem);
-
 
 
   int offset = tile_offset;
@@ -282,11 +278,22 @@ __global__ void mult_kernel(const float *x, const float *w,
 
 
 
-void matmul_backward(float *inp,  float *weight,
-  int B, int C, int OC,
+void matmul_backward(
+  // float *inp,  float *weight,
+  // int B, int C, int OC,
+  Tensor *L_tensor, Tensor *R_tensor,
   float *dinp, float *dw,
   float *dout)
 {
+
+  float *inp = L_tensor->tensor_ptr;
+  float *weight = R_tensor->tensor_ptr;
+
+  std::vector<float> BC = format_LinearLayer_Dims(L_tensor->dims);
+  float B  = BC[0];
+  float C  = BC[1];
+  float OC = R_tensor->dims[0]; 
+
 
   // backward to input
   float one = 1.0f, zero = 0.0f;

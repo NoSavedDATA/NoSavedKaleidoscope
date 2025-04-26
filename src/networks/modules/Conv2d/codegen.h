@@ -12,9 +12,9 @@
 #include "../../../mangler/scope_struct.h"
 
 
-void conv2d_backward(float *inp,  float *weight,
-                     float *dinp, float *dw,
-                     float *dout, std::string conv_name);
+void conv2d_backward(float *, float, float *,
+                     float *, float *,
+                     std::string conv_name);
 
 
 

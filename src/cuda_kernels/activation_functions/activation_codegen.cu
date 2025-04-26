@@ -37,13 +37,15 @@ extern "C" void *relu(Scope_Struct *scope_struct, Tensor *tensor)
 
 
 
-  Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
-  new_tensor->AttrLNode(tensor, relu_op);
+  // Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
+  // new_tensor->AttrLNode(tensor, relu_op);
+
+  Tensor *new_tensor = customOpTensor(y, dims, DimsProd(dims), "relu_backward", "", tensor);
   return new_tensor;
 }
 
 
-void relu_backward(float* inp, float dims_prod, float* dinp, float* dout) {
+void relu_backward(float* inp, float dims_prod, float *y, float* dinp, float* dout, std::string module_name) {
 
   
   int grid_size, block_size, shared_mem_size; 

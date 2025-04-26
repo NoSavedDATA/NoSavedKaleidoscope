@@ -12,7 +12,7 @@
 
 
 
-void linear_backward(float *x, float *dx, float *dy, std::string name);
+void linear_backward(float *, float, float *, float *, float *, std::string);
 
 
 

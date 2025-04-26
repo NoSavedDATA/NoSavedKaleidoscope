@@ -11,6 +11,8 @@
 std::vector<Tensor *> todo_backward_tensors;
 std::map<std::string, float *> NamedParamGrads;
 
+std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string)>> backward_functions;
+
 
 void CleanTree(Tensor *back_node) {
   if (back_node==nullptr)
@@ -67,7 +69,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
           if(var_to_grad.count(tensor_name)>0)
           {   
             float *acc_y = var_to_grad[tensor_name];
-            
+          
             int grid_size, block_size, shared_mem_size;
             std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
             grid_size = grid_block_mem_sizes[0];
@@ -93,9 +95,8 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
 
     from_custom = from_custom || (in_int(op, custom_ops));
 
-    int B, C, OC;
-    float x_size, w_size, b_size;
 
+    float x_size, w_size, b_size;
     float *inp, *b, *out, *last_inp;
     float *dinp, *dw, *db, *device_db;
     device_dw=nullptr;
@@ -135,13 +136,12 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       grid_size = grid_block_mem_sizes[0];
       block_size = grid_block_mem_sizes[1];
       
-      //std::cout << "Is weight: " << back_node->R_Node->weight << "\n";
+
       if(back_node->R_Node->weight)
       {
         float *new_grad_ptr;
         if (w!=nullptr&&op!=hadamard_op&&op!=add_op)
         {
-          //std::cout << "weight of size " << w_size << "\n";
           if (NamedParamGrads[param_name]==nullptr)
           {
             
@@ -199,21 +199,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
     }
     
 
-    //std::cout << "malloc done"  << "\n";
 
 
-    B=0;
-    C=0;
-    OC=0;
-    if(back_node->L_Node->dims.size()>0)
-    {
-      std::vector<float> BC = format_LinearLayer_Dims(back_node->L_Node->dims);
-      B  = BC[0];
-      C  = BC[1];
-    }
-    if (w!=nullptr)
-      OC = back_node->R_Node->dims[0];
     
+
 
 
     //std::cout << "EXECUTING OP  " << op << "\n";
@@ -227,25 +216,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
         scalarmult_backward(device_dx, device_dy, back_node->scalar, x_size); //todo: This one may be wrong
         break;
       case mult_op:
-        matmul_backward(inp, w, B, C, OC, device_dx, device_dw, device_dy);
-        break;
-      case conv2d:
-        conv2d_backward(inp, w, device_dx, device_dw, device_dy, param_name);
-        break;
-      case maxpool2d:
-        maxpool2d_backward(inp, out, device_dx, device_dy, back_node->name);
-        break;
-      case batchnorm2d:
-        batchnormd2d_backward(inp, device_dx, device_dw, device_db, device_dy, back_node->name);
-        break;
-      //case bn2drelu:
-      //  bn2drelu_backward(inp, intermediate, out, device_dx, device_dw, device_db, device_dintermediate, device_dy, back_node->name);
-      //  break;
-      case relu_op:
-        relu_backward(inp, x_size, device_dx, device_dy);
-        break;
-      case cudnn_relu_op:
-        cudnn_relu_backward(inp, out, device_dx, device_dy, back_node->name);
+        matmul_backward(back_node->L_Node, back_node->R_Node, device_dx, device_dw, device_dy);
         break;
       case gelu_op:
         gelu_backward(inp, x_size, device_dx, device_dy);
@@ -289,16 +260,19 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       case mhsa_op:
         mhsa_backward(inp, device_dx, device_dy, back_node->scopeless_name);
         break;
-      case linear_op:
-        linear_backward(inp, device_dx, device_dy, back_node->scopeless_name);
+      case maxpool2d:
+        maxpool2d_backward(inp, out, device_dx, device_dy, back_node->name);
+        break;
+      case batchnorm2d:
+        batchnormd2d_backward(inp, device_dx, device_dw, device_db, device_dy, back_node->name);
         break;
 
       // Loss Ops
       case cross_entropy_op:
-        CrossEntropyBackward(inp, w, B, C, device_dx, back_node->scalar);
+        CrossEntropyBackward(back_node->L_Node, back_node->R_Node, device_dx, back_node->scalar);
         break;
       case cross_entropy_idx_op:
-        CrossEntropyIdxBackward(inp, w, B, C, device_dx, back_node->scalar);
+        CrossEntropyIdxBackward(back_node->L_Node, back_node->R_Node, device_dx, back_node->scalar);
         break;
       case mse_op:
         MSEBackward(inp, w, back_node->L_Node->dims_prod, device_dx, back_node->scalar);
@@ -309,6 +283,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
 
       case lgrad_op:
         device_dx = device_dy;
+        break;
+
+      case custom_op:
+        backward_functions[back_node->operation](inp, x_size, out, device_dx, device_dy, back_node->scopeless_name);
         break;
 
       default:
