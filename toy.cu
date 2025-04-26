@@ -2925,17 +2925,6 @@ TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_
   TheModule->getOrInsertFunction("CreateEmbeddingOnDemand", CreateEmbeddingOnDemandTy);
 
 
-  //
-  FunctionType *CreateLinearOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy,
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext),
-       int8PtrTy,},
-      false
-  );
-  TheModule->getOrInsertFunction("CreateLinearOnDemand", CreateLinearOnDemandTy);
 
 
   //
@@ -3412,10 +3401,12 @@ int main() {
   floatFunctions["round"] = "roundE";
   floatFunctions["floor"] = "floorE";
 
-
   stringMethods["split"] = "SplitString";
 
 
+  backward_functions["conv2d_backward"] = conv2d_backward;
+  backward_functions["linear_backward"] = linear_backward;
+  backward_functions["relu_backward"] = relu_backward;
 
 
 

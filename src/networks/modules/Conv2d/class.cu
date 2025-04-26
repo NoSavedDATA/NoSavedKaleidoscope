@@ -11,7 +11,9 @@
 #include <vector>
 
 
+#include "../../../backprop/include.h"
 #include "../../../common/cu_commons.h"
+#include "../../../cuda_kernels/elementwise_kernels_inline.cu"
 #include "../../../cuda_kernels/handles.h"
 #include "../../../tensor/include.h"
 #include "class.h"
@@ -19,7 +21,7 @@
 
 Conv2dCPP::Conv2dCPP(int C, int OC, int ks, int stride, int padding, std::string Init, std::vector<std::string> Notes, std::string Name)
     : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Notes(Notes), Name(Name) {
-    NamedTensorsT[Name] = new Tensor();
+    NamedTensorsT[Name+"W"] = new Tensor();
     d_filter=nullptr;
     d_workspace=nullptr;
     d_workspace_w_back=nullptr;
@@ -247,10 +249,30 @@ void Conv2dCPP::InitFilters()
   cudaCheck(cudaMemcpy(d_filter, h_filter.data(), filter_size * sizeof(float), cudaMemcpyDefault));
   this->d_filter = d_filter;
   
+
+  std::vector<float> kernel_dims = {(float)OC, (float)C, (float)ks, (float)ks}; 
+
+  Tensor *tensor_W = createTensor(d_filter, kernel_dims, DimsProd(kernel_dims), true, Name+"W");
+  tensor_W->SetIsWeight();
+
+  NamedTensorsT[Name+"W"] = tensor_W;
 }
 
 
 
+
+void Conv2dCPP::FirstBackward()
+{
+  if (first_backward)
+  {
+    dW = get_from_pool(0, OC*C*ks*ks, "conv2d gradient");
+    set_to_zero_kernel<<<std::ceil((OC*C*ks*ks)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C*ks*ks);
+
+    NamedParamGrads[Name+"W"] = dW;
+    first_backward = false;
+  }
+  
+}
 
 
 float *Conv2dCPP::Forward(Tensor *tensor, int H, int W, int B, int thread_id)
@@ -264,11 +286,13 @@ float *Conv2dCPP::Forward(Tensor *tensor, int H, int W, int B, int thread_id)
   // Initialize weights.
   if (d_filter==nullptr)
     this->InitFilters();
-
-
   
+
   // Forward
   float *d_output = get_from_pool(thread_id, B * out_H * out_W * OC, "conv2d");
+
+
+
 
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
@@ -299,7 +323,7 @@ float *Conv2dCPP::Forward(Tensor *tensor, int H, int W, int B, int thread_id)
 }
 
 
-void Conv2dCPP::Backward(float *tensor, float *dx, float *d_filter_g, float *dy)
+void Conv2dCPP::Backward(float *tensor, float *dx, float *dy)
 {
   //std::cout << "\nConv2d Backward with H: " << H << " W: " << W << "\n";
 
@@ -307,6 +331,8 @@ void Conv2dCPP::Backward(float *tensor, float *dx, float *d_filter_g, float *dy)
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
   
+  FirstBackward();
+
   // Backward to input
   checkCUDNN(cudnnConvolutionBackwardData(
     cudnn,
@@ -325,6 +351,7 @@ void Conv2dCPP::Backward(float *tensor, float *dx, float *d_filter_g, float *dy)
   ));
 
 
+
   // Backward to weight
   checkCUDNN(cudnnConvolutionBackwardFilter(
     cudnn,
@@ -339,13 +366,14 @@ void Conv2dCPP::Backward(float *tensor, float *dx, float *d_filter_g, float *dy)
     workspace_size_w_back, //Obtained with getConvolutionBackwardFilterWorkspaceSize
     &one,
     filter_desc, // filter descriptor
-    d_filter_g
+    dW
   ));
 
+  
 
   /*
   std::cout << "d_w is:\n";
-  PrintTensorF(d_filter_g, C*OC, ks*ks);
+  PrintTensorF(dW, C*OC, ks*ks);
   std::cout << "\n";
   */
 

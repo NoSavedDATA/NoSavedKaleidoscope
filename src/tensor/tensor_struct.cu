@@ -195,6 +195,16 @@ Tensor *createTensorHalf(half* tensor_ptr, const std::vector<float>& dims, float
     new_tensor->NewTensor(tensor_ptr, dims, kDataLen, is_leaf, name, _cuda_stream, _loader);
     return new_tensor;
 }
+Tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+                     std::string operation, std::string module_name, Tensor *LTensor, CudaStreams *_cuda_stream, Loader *_loader) {
+    Tensor *new_tensor = new Tensor();
+    new_tensor->NewTensor(tensor_ptr, dims, kDataLen, false, "", _cuda_stream, _loader);
+    new_tensor->scopeless_name = module_name;
+    new_tensor->operation = operation;
+    new_tensor->AttrLNode(LTensor, custom_op);
+    
+    return new_tensor;
+}
 
 Tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
                      std::string name) {

@@ -13,6 +13,7 @@
 
 
 
+#include "../../../backprop/backprop.h"
 #include "../../../compiler_frontend/include.h"
 #include "../../../data_types/codegen_notes.h"
 #include "../../../mangler/scope_struct.h"
@@ -23,22 +24,14 @@
 
 
 
-void conv2d_backward(float *inp,  float *weight,
-                     float *dinp, float *dw,
-                     float *dout, std::string conv_name)
+void conv2d_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string conv_name)
 {
-
-  //std::cout << "conv2d_backward for " << conv_name << "\n";
   std::unique_ptr<Conv2dCPP> conv = std::move(NamedConv2d[conv_name]);
-
-  conv->Backward(inp, dinp, dw, dout);
-
-
-  NamedConv2d[conv_name] = std::move(conv);
-
-  
+  conv->Backward(inp, dinp, dout);
+  NamedConv2d[conv_name] = std::move(conv);  
 }
-
 
 
 
@@ -112,16 +105,15 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor)
 
 
 
-  Tensor *conv_tensor = NamedTensorsT[conv_name];
-  conv_tensor->NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
-  conv_tensor->SetIsWeight();
+  // Tensor *conv_tensor = NamedTensorsT[conv_name];
+  // conv_tensor->NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
+  // conv_tensor->SetIsWeight();
   
 
   NamedConv2d[conv_name] = std::move(conv);
 
-  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->AttrNodes(tensor, conv_tensor, conv2d);
-  new_tensor->from_cudnn = conv_name;
+
+  Tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "conv2d_backward", conv_name, tensor);
   return new_tensor;
 }
 

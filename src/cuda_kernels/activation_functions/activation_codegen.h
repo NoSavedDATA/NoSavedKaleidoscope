@@ -12,7 +12,8 @@
 extern "C" void *relu(Scope_Struct *scope_struct, Tensor *tensor);
 
 
-void relu_backward(float* inp, float dims_prod, float* dinp, float* dout); 
+
+void relu_backward(float* inp, float dims_prod, float *y, float* dinp, float* dout, std::string module_name);
 
 
 void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* dout); 

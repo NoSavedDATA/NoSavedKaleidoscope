@@ -13,8 +13,8 @@
 
 #include "../../../backprop/include.h"
 #include "../../../common/include.h"
-#include "../../../cuda_kernels/handles.h"
 #include "../../../cuda_kernels/elementwise_kernels_inline.cu"
+#include "../../../cuda_kernels/handles.h"
 #include "../../../mma/include.h"
 #include "../../../notators/notators.h"
 #include "../../../tensor/include.h"

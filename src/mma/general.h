@@ -4,6 +4,7 @@
 #include <cuda_fp16.h>
 #include <mma.h>
 
+#include "../tensor/tensor_struct.h"
 #include "utils.h"
 
 using namespace nvcuda;
@@ -1134,8 +1135,7 @@ __global__ void wmma_mult_kernel_(const float *x, const float *w,
 
 
 
-void matmul_backward(float *inp,  float *weight,
-                    int B, int C, int OC,
+void matmul_backward(Tensor *, Tensor *,
                     float *dinp, float *dw,
                     float *dout);
 

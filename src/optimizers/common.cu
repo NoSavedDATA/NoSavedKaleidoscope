@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "../backprop/include.h"
 #include "../cuda_kernels/calculate_grids.h"
 #include "../cuda_kernels/elementwise_kernels_inline.cu"

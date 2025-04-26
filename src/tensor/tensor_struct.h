@@ -79,6 +79,7 @@ enum BackwardTypes {
   mhsa_op = 52,
   mean_over_semilast_dim_op = 53,
   linear_op = 55,
+  custom_op = 56,
 };
 
 
@@ -115,15 +116,17 @@ struct Tensor {
   int thread_id;
   bool is_pinned;
 
+
   CudaStreams *cuda_stream = nullptr;
   Loader *loader = nullptr;
 
   bool leaf, weight, from_grad_or_load;
   std::string view_of = "";
   std::string name;
-  std::string scopeless_name;
+  std::string scopeless_name = "";
   std::string from_cudnn;
   int op;
+  std::string operation;
 
   Tensor *R_Node, *L_Node, *Sparse_Idx_Tensor;
   bool visited;
@@ -161,6 +164,9 @@ Tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kD
                      
 Tensor *createTensorHalf(half* tensor_ptr, const std::vector<float>& dims, float kDataLen,
                      bool is_leaf, std::string name, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr);
+
+Tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+                     std::string operation, std::string module_name, Tensor *LTensor, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr);
 
 Tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
                      std::string name)
