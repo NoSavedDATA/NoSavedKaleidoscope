@@ -36,7 +36,7 @@ extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struc
 }
 
 extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Struct *scope_struct){
-  std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
+  // std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
   move_to_char_pool(strlen(name)+1, name, "free");

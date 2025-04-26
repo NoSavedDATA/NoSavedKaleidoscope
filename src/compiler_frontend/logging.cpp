@@ -146,7 +146,7 @@ void p2t(std::string msg)
  
 
   bool shall_log = true;
-  std::vector<std::string> ignore_expresions = {"FunctionAST", "CallExpr", "DataExpr", "p2t", "VariableExpr", "NumberExpr", "codegenAsyncFunction", "AsyncExpr"};
+  std::vector<std::string> ignore_expresions = {"FunctionAST", "CallExpr", "DataExpr", "p2t", "VariableExpr", "NumberExpr", "VecIdxExpr", "codegenAsyncFunction", "AsyncExpr"};
 
   for (int i=0; i<ignore_expresions.size(); ++i)
   {

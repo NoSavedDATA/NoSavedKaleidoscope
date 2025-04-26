@@ -42,7 +42,7 @@ std::map<int, std::map<float, std::vector<half *>>> TensorHalfPool;
 
 
 
-float *get_from_pool(int thread_id, float dims_prod, std::string from)
+float *get_from_pool(int thread_id, float dims_prod, std::string from, bool is_new)
 {
 
   if (dims_prod==0)
@@ -51,7 +51,7 @@ float *get_from_pool(int thread_id, float dims_prod, std::string from)
 
   float *tensor_ptr;
 
-  if(TensorPool[thread_id].count(dims_prod)>0)
+  if(TensorPool[thread_id].count(dims_prod)>0 && !is_new)
   {
     std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
     if (tensors_in_pool.size()>0)

@@ -175,26 +175,17 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   std::string scope_tensor_name = scope;
   scope_tensor_name = scope_tensor_name + tensor_name;
-
-
-  //std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n\n\n\n";
-
-  //std::cout << NamedTensorsT.count(tgt_tensor) <<  ", " << NamedTensorsT.count(scope_tensor_name) << "\n";
-  
+ 
   Tensor *tensor, *scope_tensor;
   tensor = NamedTensorsT[tgt_tensor];
 
-
-  if (tensor->thread_id != thread_id)
+  if(tensor->thread_id!=thread_id)
   {
     //std::cout << "\n\n\nRETURNING " << scope_tensor_name << " into " << tgt_tensor << "\n";
     std::cout << "Returning from thread id " << thread_id << " into " << tensor->thread_id << "\n\n\n\n";
     cudaStreamSynchronize(ThreadsStream[thread_id]);
     cudaStreamSynchronize(ThreadsStream[tensor->thread_id]);
-  } else {
-    //std::cout << "Returning from thread id " << thread_id << " into " << tensor->thread_id << "\n\n\n\n";
   }
-
 
   scope_tensor = NamedTensorsT[scope_tensor_name];
   std::vector<float> dims = scope_tensor->dims;
@@ -214,18 +205,17 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
 
   if(thread_id!=0)
   {
-    //ThreadedScopeTensorsToClean[thread_id][scope].erase(std::remove(ThreadedScopeTensorsToClean[thread_id][scope].begin(), ThreadedScopeTensorsToClean[thread_id][scope].end(), scope_tensor_name), ThreadedScopeTensorsToClean[thread_id][scope].end());
     threaded_Tensors_to_save[thread_id][scope].push_back(scope_tensor);
     threaded_tensors_to_save[thread_id][scope].push_back(scope_tensor->tensor_ptr);
-  }
+  } 
   else if(nn_mode==eval_mode)//
     to_free_tensor_forward(scope_tensor, scope);//
   else
     to_free_tensor(scope_tensor);
   //delete scope_tensor;
   NamedTensorsT.erase(scope_tensor_name);
-
   scope_tensors[scope].clear();
+  
   return 0;
 }
 
