@@ -14,22 +14,23 @@
 
 
 #include "../../../compiler_frontend/logging.h"
+#include "../../../data_types/codegen_notes.h"
 #include "../../../tensor/include.h"
 #include "../globals.h"
 #include "class.h"
 
 
 
-extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+// extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, int thread_id, char *pool_namec, int is_obj_attr_or_self)
+extern "C" void *Pool2d(Scope_Struct *scope_struct, Tensor *tensor)
 {
-  //std::cout << "MaxPoolForward2d of " << conv_namec << " and tensor " << tensor.name << "\n";
+  //std::cout << "MaxPoolForward2d of " << pool_namec << " and tensor " << tensor.name << "\n";
   
-  std::string _self = self;
-  std::string conv_name = conv_namec;
-  if (is_obj_attr_or_self)
-    conv_name = _self + conv_name;
 
-  //std::cout << "Conv forward for  conv: " << conv_name <<"\n";
+  std::string pool_name = scope_struct->first_arg;
+  int thread_id = scope_struct->thread_id;
+
+  //std::cout << "Conv forward for  conv: " << pool_name <<"\n";
   
 
   float *tensor_ptr, *output, *d_filter;
@@ -44,7 +45,7 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, int thread_id, cha
   float OC = C;
 
 
-  std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
+  std::unique_ptr<MaxPool2dCPP> conv = std::move(NamedMaxPool2d[pool_name]);
 
   tensor->Sync();
   output = conv->Forward(tensor, H, W, B, C, thread_id);
@@ -59,39 +60,47 @@ extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, int thread_id, cha
   std::vector<float> new_dims = {(float)B, (float)OC, (float)conv->out_H, (float)conv->out_W};
   
 
-  NamedMaxPool2d[conv_name] = std::move(conv);
+  NamedMaxPool2d[pool_name] = std::move(conv);
 
-  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
-  new_tensor->AttrLNode(tensor, maxpool2d);
-  new_tensor->from_cudnn = conv_name;
-  return new_tensor;
+
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "pool2d_backward", pool_name, tensor);
 }
 
 
 
 
 
-void maxpool2d_backward(float *inp,  float *out,
-                     float *dinp,
-                     float *dout, std::string conv_name)
+void pool2d_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string pool_name)
 {
-  //std::cout << "maxpool2d_backward of " << conv_name << "\n";
-  std::unique_ptr<MaxPool2d> conv = std::move(NamedMaxPool2d[conv_name]);
+  //std::cout << "maxpool2d_backward of " << pool_name << "\n";
+  std::unique_ptr<MaxPool2dCPP> conv = std::move(NamedMaxPool2d[pool_name]);
 
   conv->Backward(inp, out, dinp, dout);
 
-  NamedMaxPool2d[conv_name] = std::move(conv);
+  NamedMaxPool2d[pool_name] = std::move(conv);
 
   
 }
 
 
-extern "C" float CreateMaxPool2dOnDemand(char *tensor_name, char *type, float ks, float stride, float padding)
+extern "C" float Pool2d_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
+  std::cout << "Pool2d_Create execution" << ".\n";
+  
+  float ks = notes_vector->get<float>(0);
+  float stride = notes_vector->get<float>(1);
+  float padding = notes_vector->get<float>(2);
+  
   std::cout << "\nCreate maxpool2d on demand:\n" << "   ks " << ks << " stride " << stride << " padding " << padding << "\n";
+  char *type = "max";
+  if(notes_vector->data->size()==4) 
+  type = notes_vector->get<char *>(3);
 
-  auto maxpool = std::make_unique<MaxPool2d>((int)ks, (int)stride, (int)padding, type);
 
-  NamedMaxPool2d[tensor_name] = std::move(maxpool);
+  auto maxpool = std::make_unique<MaxPool2dCPP>((int)ks, (int)stride, (int)padding, type);
+
+  NamedMaxPool2d[name] = std::move(maxpool);
   return 0;
 }

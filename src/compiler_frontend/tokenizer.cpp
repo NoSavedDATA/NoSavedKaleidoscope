@@ -77,8 +77,7 @@ std::map<int, std::string> token_to_string = {
   { tok_conv2d, "Conv2d"},
   { tok_lstm, "LSTM"},
   { tok_embedding, "Embedding"},
-  { tok_maxpool2d, "MaxPool2d"},
-  { tok_avgpool2d, "AvgPool2d"},
+  { tok_pool2d, "Pool2d"},
   { tok_batchnorm2d, "BatchNorm2d"},
   { tok_bn2drelu, "BN2dRelu"},
   { tok_relu, "Relu"},
@@ -325,17 +324,11 @@ static int get_token() {
         if (!(isalnum(LastChar) || LastChar=='_'))
           return tok_embedding;
       }
-      if (IdentifierStr == "MaxPool2d")
+      if (IdentifierStr == "Pool2d")
       {
         LastChar = getchar();
         if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_maxpool2d;
-      }
-      if (IdentifierStr == "AvgPool2d")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_avgpool2d;
+          return tok_pool2d;
       }
       if (IdentifierStr == "BatchNorm2d")
       {

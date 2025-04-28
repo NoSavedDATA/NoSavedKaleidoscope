@@ -11,7 +11,7 @@
 #include "../../../tensor/tensor_struct.h"
 
 
-class MaxPool2d
+class MaxPool2dCPP
 {
   public:
     // Forward
@@ -25,7 +25,7 @@ class MaxPool2d
     int H = 0;
     int W = 0;
 
-    MaxPool2d(int ks, int stride, int padding, std::string Type);
+    MaxPool2dCPP(int ks, int stride, int padding, std::string Type);
 
   
 

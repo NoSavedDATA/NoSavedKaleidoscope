@@ -277,7 +277,7 @@ void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size
 }
 
 
-extern "C" float shape(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" float tensor_shape(Scope_Struct *scope_struct, Tensor *tensor)
 {
   std::cout << "\nTensor \033[95m" << tensor->name<<"/"<<tensor->scopeless_name << "\033[0m:\n   ";
   PrintDims(tensor->dims);
