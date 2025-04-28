@@ -79,3 +79,5 @@ __global__ __forceinline__ void tensor_clip(float* x, float *y, float _min, floa
 __device__ inline float lerp(float start, float end, float weight) {
   return fma(weight, end, fma(-weight, start, start));
 }
+
+

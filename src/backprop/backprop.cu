@@ -15,7 +15,11 @@ std::map<std::string, std::function<void(float *, float, float *, float *, float
 
 
 void CleanTree(Tensor *back_node) {
+  // Avoid calling CleanTree separatly. As this has the overhead of goign throughout the tree multiple times.
+
   if (back_node==nullptr)
+    return;
+  if (back_node->weight)
     return;
   CleanTree(back_node->L_Node);
   CleanTree(back_node->R_Node);
@@ -25,22 +29,107 @@ void CleanTree(Tensor *back_node) {
   to_free_tensor(back_node);
 }
 
-void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, bool from_custom, int parent_op)
+
+inline void HandleLeafGradient(Tensor *back_node, float *device_dy, std::string tensor_name, bool from_custom) {
+  float dims_prod = back_node->dims_prod;
+  if (!from_custom)
+  {
+    if(tensor_name!="")
+    {
+      if(var_to_grad.count(tensor_name)>0)
+      {   
+        float *acc_y = var_to_grad[tensor_name];
+        cpp_tensor_tensor_add(acc_y, device_dy, dims_prod);
+        to_pool(dims_prod, acc_y, "dy of leaf");
+      } else
+        var_to_grad[tensor_name] = device_dy;
+    }
+    to_pool(dims_prod, device_dy, "dy of leaf");
+  }
+  
+  to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor"); 
+  to_free_tensor(back_node);
+}
+
+
+
+
+inline void Acquire_Simple_Derivative(float *&d_ptr, float size, int op, bool from_custom) {
+  std::string from = "dx of "+ std::to_string(op);
+ 
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(size, grid_size, block_size);
+
+  d_ptr = get_from_pool(0, size, from);
+  //TODO: remove this set to zero to improve performance (then, adjust gather op dx to be set to zero)
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(d_ptr, size);
+}
+
+
+inline void Acquire_Weight_Gradient(float *&d_ptr, float size, std::string param_name, int op, bool from_custom) {
+  if (op==hadamard_op||op==add_op)
+    return;
+
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(size, grid_size, block_size);
+  
+  if (NamedParamGrads[param_name]==nullptr)
+  {
+    float *new_grad_ptr;
+    
+    new_grad_ptr = get_from_pool(0, size, "weight grad pointer");
+    set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, size);
+    NamedParamGrads[param_name] = new_grad_ptr;
+  }
+  d_ptr = NamedParamGrads[param_name];
+}
+
+
+
+inline void Alloc_Child_Nodes_Derivatives(Tensor* back_node, float*& d_lhs, float*& d_rhs, size_t lhs_size, size_t rhs_size, int op, bool from_custom) {
+
+  if (back_node->L_Node)
+  {
+    if (!back_node->L_Node->weight)
+    {
+      if(op!=add_op && op!=scalar_add_op && !from_custom && op!=broadcast_lastdim_add_op && back_node->L_Node->op != detach_op)
+        Acquire_Simple_Derivative(d_lhs, lhs_size, op, from_custom);
+    }
+    else
+      Acquire_Weight_Gradient(d_lhs, lhs_size, back_node->L_Node->name, op, from_custom);
+  }
+
+
+  if(back_node->R_Node!=nullptr&&!in_int(op, loss_ops))
+  {
+    if (!back_node->R_Node->weight)
+    {
+      if(!in_int(op, weightless_ops) && !from_custom && back_node->R_Node->op != detach_op && op!=add_op)
+        Acquire_Simple_Derivative(d_rhs, rhs_size, op, from_custom);
+    }
+    else  
+      Acquire_Weight_Gradient(d_rhs, rhs_size, back_node->R_Node->name, op, from_custom);
+  }
+}
+
+
+
+
+void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_custom, int parent_op)
 {
   if(back_node==nullptr)
     return;
 
   int op=back_node->op;
   std::string tensor_name, param_name, bias_name;
-  float *w;
-  float *device_dx, *device_dw;
-  device_dx=nullptr;
-  device_dw=nullptr;
+  float *rhs, *d_lhs, *d_rhs;
+  d_lhs=nullptr;
+  d_rhs=nullptr;
   float dims_prod = back_node->dims_prod;
 
   
 
-  if(!in_int(op, gradless_ops) && !from_gradless)
+  if(!in_int(op, gradless_ops))
   {
 
     //std::cout << "\nTraversing: " << back_node->name << "/" << back_node->scopeless_name << ", op: " << back_node->op << ", parent_op: " << parent_op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
@@ -54,239 +143,118 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       return;
     }
 
-
     if (back_node->weight) // dw is updated by pointer
       return;
     
-
     tensor_name = back_node->scopeless_name;
     if (back_node->leaf)
     {
-      if (!from_custom)
-      {
-        if(tensor_name!="")
-        {
-          if(var_to_grad.count(tensor_name)>0)
-          {   
-            float *acc_y = var_to_grad[tensor_name];
-          
-            int grid_size, block_size, shared_mem_size;
-            std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-            grid_size = grid_block_mem_sizes[0];
-            block_size = grid_block_mem_sizes[1];
-
-            
-            add_inplace<<<grid_size, block_size>>>(acc_y, device_dy, dims_prod);
-
-            to_pool(dims_prod, acc_y, "dy of leaf");
-
-          } else
-            var_to_grad[tensor_name] = device_dy;
-        }
-        to_pool(dims_prod, device_dy, "dy of leaf");
-      }
-      //std::cout << "\n\nAccumulating grad of: " << tensor_name << "\n\n\n";
-      
-      to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor");
-      
-      to_free_tensor(back_node);
+      HandleLeafGradient(back_node, device_dy, tensor_name, from_custom);
       return;
     }
 
     from_custom = from_custom || (in_int(op, custom_ops));
 
 
-    float x_size, w_size, b_size;
-    float *inp, *b, *out, *last_inp;
-    float *dinp, *dw, *db, *device_db;
-    device_dw=nullptr;
-    device_db=nullptr;
-    w=nullptr;
-    b=nullptr;
+
+
+    float lhs_size, rhs_size;
+    float *lhs, *out;
+    d_rhs=nullptr;
+    rhs=nullptr;
     
 
     
 
     tensor_name = back_node->L_Node->scopeless_name;
-
-    inp = back_node->L_Node->tensor_ptr;
-    x_size = back_node->L_Node->dims_prod;
-
+    lhs = back_node->L_Node->tensor_ptr;
     out = back_node->tensor_ptr;
+    lhs_size = back_node->L_Node->dims_prod;
 
     if(back_node->R_Node!=nullptr)
     {
       param_name  = back_node->R_Node->name;
-      w = back_node->R_Node->tensor_ptr;
-      w_size = back_node->R_Node->dims_prod;
-
-      b = back_node->R_Node->b;
-      b_size = back_node->R_Node->b_size;
+      rhs = back_node->R_Node->tensor_ptr;
+      rhs_size = back_node->R_Node->dims_prod;
     }
 
 
-    //std::cout << "malloc device w" << "\n";
-
-    // weight gradient
-    if(!in_int(op, loss_ops)&&back_node->R_Node!=nullptr)
-    {
-      
-      int grid_size, block_size; 
-      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(w_size);
-      grid_size = grid_block_mem_sizes[0];
-      block_size = grid_block_mem_sizes[1];
-      
-
-      if(back_node->R_Node->weight)
-      {
-        float *new_grad_ptr;
-        if (w!=nullptr&&op!=hadamard_op&&op!=add_op)
-        {
-          if (NamedParamGrads[param_name]==nullptr)
-          {
-            
-            new_grad_ptr = get_from_pool(0, w_size, "weight grad pointer");
-            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, w_size);
-            NamedParamGrads[param_name] = new_grad_ptr;
-          }
-          device_dw = NamedParamGrads[param_name];
-        }
-
-        if (b!=nullptr&&op!=hadamard_op&&op!=add_op)
-        {
-          bias_name = param_name+"_bias";
-
-          if (NamedParamGrads[bias_name]==nullptr)
-          {
-            int grid_size_b, block_size_b; 
-            std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(w_size);
-            grid_size_b = grid_block_mem_sizes[0];
-            block_size_b = grid_block_mem_sizes[1];
-            
-            new_grad_ptr = get_from_pool(0, w_size, "bias grad pointer");
-            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, b_size);
-            NamedParamGrads[bias_name] = new_grad_ptr;
-          }
-          device_db = NamedParamGrads[bias_name];
-        }
-      } else {
-      
-        if(!in_int(op, weightless_ops) && !from_custom && back_node->R_Node->op != detach_op)
-        {
-          std::string from = "dw of " + std::to_string(op);
-          device_dw = get_from_pool(0, w_size, from);
-          set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
-        }
-      }
-    }
+ 
     
-
-
-    // input gradient
-    std::string from = "dx of "+ std::to_string(op);
-    
-
-    if(op!=add_op && op!=scalar_add_op && !from_custom && op!=lgrad_op && op!=broadcast_lastdim_add_op) {
-      int grid_size, block_size; 
-      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(x_size);
-      grid_size = grid_block_mem_sizes[0];
-      block_size = grid_block_mem_sizes[1];
-
-      device_dx = get_from_pool(0, x_size, from);
-
-      //TODO: remove this set to zero to improve performance (then, adjust gather op dx to be set to zero)
-      set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dx, x_size);
-    }
-    
+    Alloc_Child_Nodes_Derivatives(back_node, d_lhs, d_rhs, lhs_size, rhs_size, op, from_custom);
+  
 
 
 
-    
 
-
-
-    //std::cout << "EXECUTING OP  " << op << "\n";
     switch (op)
     {
       // Simple Leaf Nodes Ops
       case scalar_add_op:
-        device_dx = device_dy;
+        d_lhs = device_dy;
         break;
       case scalar_mult_op:
-        scalarmult_backward(device_dx, device_dy, back_node->scalar, x_size); //todo: This one may be wrong
+        scalarmult_backward(d_lhs, device_dy, back_node->scalar, lhs_size); //todo: This one may be wrong
         break;
       case mult_op:
-        matmul_backward(back_node->L_Node, back_node->R_Node, device_dx, device_dw, device_dy);
-        break;
-      case gelu_op:
-        gelu_backward(inp, x_size, device_dx, device_dy);
-        break;
-      case sigmoid_op:
-        sigmoid_backward(out, x_size, device_dx, device_dy);
-        break;
-      case tanh_op:
-        tanh_backward(out, x_size, device_dx, device_dy);
+        matmul_backward(back_node->L_Node, back_node->R_Node, d_lhs, d_rhs, device_dy);
         break;
       case add_op:
-        device_dx = device_dy;
-        device_dw = device_dy;
+        d_lhs = device_dy;
+        d_rhs = device_dy;
         break;
       case hadamard_op:
-        hadamard_backward(inp, w, device_dx, device_dw, device_dy, x_size);
+        hadamard_backward(lhs, rhs, d_lhs, d_rhs, device_dy, lhs_size);
         break;
       case dropout_op:
-        dropout_backward(device_dx, w, device_dy, x_size);
-        device_dw = device_dy;
+        dropout_backward(d_lhs, rhs, device_dy, lhs_size);
+        d_rhs = device_dy;
         break;
       case gather_last_dim_op:
-        gather_last_dim_backward(device_dx, device_dy, back_node);
-        device_dw = device_dy;
+        gather_last_dim_backward(d_lhs, device_dy, back_node);
+        d_rhs = device_dy;
         break;
       case broadcast_lastdim_add_op:
-        device_dx = device_dy;
-        broadcast_lastdim_add_backward(device_dw, device_dy, w_size, x_size);
+        d_lhs = device_dy;
+        broadcast_lastdim_add_backward(d_rhs, device_dy, rhs_size, lhs_size);
         break;
       case mean_over_semilast_dim_op:
-        mean_over_semilast_dim_backward(device_dx, device_dy, back_node);
+        mean_over_semilast_dim_backward(d_lhs, device_dy, back_node);
         break;
       
       // Custom Ops
       case lstm_op:
-        lstm_backward(inp, device_dx, device_dy, back_node->scopeless_name);
+        lstm_backward(lhs, d_lhs, device_dy, back_node->scopeless_name);
         break;
       case embedding_op:
-        embedding_backward(inp, device_dy, back_node->scopeless_name);
+        embedding_backward(lhs, device_dy, back_node->scopeless_name);
         break;
       case mhsa_op:
-        mhsa_backward(inp, device_dx, device_dy, back_node->scopeless_name);
+        mhsa_backward(lhs, d_lhs, device_dy, back_node->scopeless_name);
         break;
       case maxpool2d:
-        maxpool2d_backward(inp, out, device_dx, device_dy, back_node->name);
+        maxpool2d_backward(lhs, out, d_lhs, device_dy, back_node->name);
         break;
-      case batchnorm2d:
-        batchnormd2d_backward(inp, device_dx, device_dw, device_db, device_dy, back_node->name);
-        break;
+      // case batchnorm2d:
+      //   batchnormd2d_backward(lhs, d_lhs, d_rhs, device_db, device_dy, back_node->name);
+      //   break;
 
       // Loss Ops
       case cross_entropy_op:
-        CrossEntropyBackward(back_node->L_Node, back_node->R_Node, device_dx, back_node->scalar);
+        CrossEntropyBackward(back_node->L_Node, back_node->R_Node, d_lhs, back_node->scalar);
         break;
       case cross_entropy_idx_op:
-        CrossEntropyIdxBackward(back_node->L_Node, back_node->R_Node, device_dx, back_node->scalar);
+        CrossEntropyIdxBackward(back_node->L_Node, back_node->R_Node, d_lhs, back_node->scalar);
         break;
       case mse_op:
-        MSEBackward(inp, w, back_node->L_Node->dims_prod, device_dx, back_node->scalar);
+        MSEBackward(lhs, rhs, back_node->L_Node->dims_prod, d_lhs, back_node->scalar);
         break;
       case mse_is_w_op:
-        MSEWithPrioritiesBackward(back_node, device_dx);
-        break;
-
-      case lgrad_op:
-        device_dx = device_dy;
+        MSEWithPrioritiesBackward(back_node, d_lhs);
         break;
 
       case custom_op:
-        backward_functions[back_node->operation](inp, x_size, out, device_dx, device_dy, back_node->scopeless_name);
+        backward_functions[back_node->operation](lhs, lhs_size, out, d_lhs, device_dy, back_node->scopeless_name);
         break;
 
       default:
@@ -298,11 +266,11 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
   } else
   {
     //std::cout << "\n\nFROM A GRADLESS OP" << "\n\n\n";
-    from_gradless = true;
+    CleanTree(back_node);
   }
 
   
-  if (in_int(op, loss_ops)||op==lgrad_op)
+  if (in_int(op, loss_ops))
   {
     to_pool(back_node->R_Node->dims_prod, back_node->R_Node->tensor_ptr, "in loss_ops");
     delete back_node->R_Node;
@@ -310,11 +278,10 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
   }
   
 
-
-  // Garbage Collector
-  TraversePreOrder(back_node->L_Node, device_dx, from_gradless, from_custom, op);
-  TraversePreOrder(back_node->R_Node, device_dw, from_gradless, from_custom, op);
+  TraversePreOrder(back_node->L_Node, d_lhs, from_custom, op);
+  TraversePreOrder(back_node->R_Node, d_rhs, from_custom, op);
   
+  // Garbage Collector
   if (back_node->Sparse_Idx_Tensor!=nullptr)
     save_from_pool(back_node->Sparse_Idx_Tensor);
   
@@ -334,17 +301,14 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
 extern "C" float backprop(Scope_Struct *scope_struct)
 {
 
-  int op;
-  
+  int op; 
   std::string tensor_name;
-  
   float *device_dy=nullptr;
 
 
 
   while(todo_backward_tensors.size()>0)
   {
-    //std::cout << "\n\nbackprop:\n\n\n";
     Tensor *back_node = todo_backward_tensors.back();
     todo_backward_tensors.pop_back();
 
@@ -357,15 +321,12 @@ extern "C" float backprop(Scope_Struct *scope_struct)
       tensor_name = back_node->name;
       //std::cout << "\n\n\n   backward attribution of " << tensor_name << "\n";
       device_dy = var_to_grad[tensor_name];
-      //if (device_dy==nullptr)
-      //  std::cout << "propagating null device_dy"  << "\n";
       var_to_grad.erase(tensor_name);
       
       back_node = back_node->R_Node;
     }
-
-    
-    TraversePreOrder(back_node, device_dy, false, false, op);
+  
+    TraversePreOrder(back_node, device_dy, false, op);
   }
 
 
@@ -373,10 +334,8 @@ extern "C" float backprop(Scope_Struct *scope_struct)
 
 
   for(Tensor *tensor : backprop_Tensors_to_save) // e.g: sparse idx tensors
-  {
-    
-    backprop_Tensors_to_free.erase(std::remove(backprop_Tensors_to_free.begin(), backprop_Tensors_to_free.end(), tensor), backprop_Tensors_to_free.end());
-    
+  { 
+    backprop_Tensors_to_free.erase(std::remove(backprop_Tensors_to_free.begin(), backprop_Tensors_to_free.end(), tensor), backprop_Tensors_to_free.end()); 
     for(std::tuple<float, float *, std::string> pair : backprop_tensors_to_pool)
     {
       float *tensor_ptr = std::get<1>(pair);
@@ -386,9 +345,9 @@ extern "C" float backprop(Scope_Struct *scope_struct)
         backprop_tensors_to_pool.erase(std::remove(backprop_tensors_to_pool.begin(), backprop_tensors_to_pool.end(), pair), backprop_tensors_to_pool.end());
         break;
       }
-    }
-    
+    } 
   }
+
 
   for(Tensor *tensor : backprop_Tensors_to_free)
     delete tensor;

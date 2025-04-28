@@ -42,7 +42,7 @@ bool in_char(char ch, const std::vector<char>& list);
 
 bool in_str(std::string str, std::vector<std::string> list);
 
-bool in_int(int value, const std::vector<int>& list);
+bool in_int(int value, const std::vector<int> list);
 
 bool in_int_ptr(int value, int *list, int size);
 

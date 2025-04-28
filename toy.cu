@@ -3407,6 +3407,9 @@ int main() {
   backward_functions["conv2d_backward"] = conv2d_backward;
   backward_functions["linear_backward"] = linear_backward;
   backward_functions["relu_backward"] = relu_backward;
+  backward_functions["gelu_backward"] = gelu_backward;
+  backward_functions["sigmoid_backward"] = sigmoid_backward;
+  backward_functions["tanh_backward"] = tanh_backward;
 
 
 
