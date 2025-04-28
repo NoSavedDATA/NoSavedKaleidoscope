@@ -61,8 +61,9 @@ extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, 
 
 
 //TODO: mean over axis
-extern "C" void *mean(int thread_id, Tensor *tensor, float first_dim, ...)
+extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...)
 {
+  int thread_id = scope_struct->thread_id;
   //std::cout << "MEAN OF " << tensor->name << "\n";
 
 

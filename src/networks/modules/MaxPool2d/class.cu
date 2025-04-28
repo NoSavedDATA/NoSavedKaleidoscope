@@ -17,12 +17,12 @@
 #include "class.h"
 
 
-MaxPool2d::MaxPool2d(int ks, int stride, int padding, std::string Type)
+MaxPool2dCPP::MaxPool2dCPP(int ks, int stride, int padding, std::string Type)
     : ks(ks), stride(stride), padding(padding), Type(Type) {}
 
 
 
-void MaxPool2d::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
+void MaxPool2dCPP::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
 {
   this->H = H;
   this->W = W;
@@ -83,7 +83,7 @@ void MaxPool2d::SetDescriptors(int H, int W, int B, int C, Tensor *tensor)
 
 
 
-float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
+float *MaxPool2dCPP::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
   // Initialize descriptors.
   //std::cout << "\nPool2d Forward with H: " << H << " W: " << W << "\n";
@@ -118,7 +118,7 @@ float *MaxPool2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thread
 }
 
 
-void MaxPool2d::Backward(float *tensor, float *out, float *dx, float *dy)
+void MaxPool2dCPP::Backward(float *tensor, float *out, float *dx, float *dy)
 {
   //std::cout << "\nMaxPool2d Backward with H: " << H << " W: " << W << "\n";
 

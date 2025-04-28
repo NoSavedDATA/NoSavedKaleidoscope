@@ -323,8 +323,9 @@ extern "C" void *tmax(int thread_id, Tensor *tensor, float first_dim, ...)
 
 
 
-extern "C" void *argmax(int thread_id, Tensor *tensor, float first_dim, ...) 
+extern "C" void *tensor_argmax(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...) 
 {
+  int thread_id = scope_struct->thread_id;
   //std::cout << "ARGMAX OF " << tensor->name << " at thread: " << thread_id << "\n";
   cudaCheck(cudaGetLastError());
 

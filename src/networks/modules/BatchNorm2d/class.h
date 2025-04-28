@@ -11,7 +11,7 @@
 #include "../../../tensor/tensor_struct.h"
 
 
-class BatchNorm2d
+class BatchNorm2dCPP
 {
   public:
     cudnnTensorDescriptor_t input_desc, output_desc, scale_bias_mean_var_desc;
@@ -29,7 +29,7 @@ class BatchNorm2d
     int W = 0;
     std::string Name;
 
-    BatchNorm2d(int C, std::string Name);
+    BatchNorm2dCPP(int C, std::string Name);
 
   
   void SetDescriptors(int, int, int, Tensor *);

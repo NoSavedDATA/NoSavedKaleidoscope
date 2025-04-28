@@ -20,7 +20,7 @@
 
 
 
-BatchNorm2d::BatchNorm2d(int C, std::string Name)
+BatchNorm2dCPP::BatchNorm2dCPP(int C, std::string Name)
     : C(C), Name(Name) {
   NamedTensorsT[Name] = new Tensor();
   NamedTensorsT[Name+"_bias"] = new Tensor();
@@ -28,7 +28,7 @@ BatchNorm2d::BatchNorm2d(int C, std::string Name)
 
 
 
-void BatchNorm2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
+void BatchNorm2dCPP::SetDescriptors(int H, int W, int B, Tensor *tensor)
 {
   this->H = H;
   this->W = W;
@@ -69,7 +69,7 @@ void BatchNorm2d::SetDescriptors(int H, int W, int B, Tensor *tensor)
   checkCUDNN(cudnnDeriveBNTensorDescriptor(scale_bias_mean_var_desc, input_desc, CUDNN_BATCHNORM_SPATIAL_PERSISTENT));
 }
 
-void BatchNorm2d::InitMovingAverages()
+void BatchNorm2dCPP::InitMovingAverages()
 {
   float *aux;
 
@@ -106,7 +106,7 @@ void BatchNorm2d::InitMovingAverages()
   delete[] aux;
 }
 
-float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
+float *BatchNorm2dCPP::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
 
   if (H != this->H || W != this->W || B != this->B)
@@ -183,7 +183,7 @@ float *BatchNorm2d::Forward(Tensor *tensor, int H, int W, int B, int C, int thre
 }
 
 
-void BatchNorm2d::Backward(float *tensor, float *dx, float *dw, float *db, float *dy)
+void BatchNorm2dCPP::Backward(float *tensor, float *dx, float *dw, float *db, float *dy)
 {
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;

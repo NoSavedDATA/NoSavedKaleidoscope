@@ -1383,6 +1383,26 @@ static void InitializeModule() {
 
 
   //
+  FunctionType *BatchNorm2dTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("BatchNorm2d", BatchNorm2dTy);
+
+
+
+  //
+  FunctionType *Pool2dTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("Pool2d", Pool2dTy);
+
+
+
+  //
   FunctionType *conv2dForwardTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy},
@@ -1443,13 +1463,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("MaxPoolForward2d", MaxPoolForward2dTy);
 
 
-  //
-  FunctionType *BatchNormForward2dTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
-      false
-  );
-  TheModule->getOrInsertFunction("BatchNormForward2d", BatchNormForward2dTy);
 
 
   //
@@ -1530,7 +1543,7 @@ static void InitializeModule() {
       {int8PtrTy, int8PtrTy},
       false
   );
-  TheModule->getOrInsertFunction("shape", shapeTy);
+  TheModule->getOrInsertFunction("tensor_shape", shapeTy);
   
 
   //
@@ -1590,10 +1603,10 @@ static void InitializeModule() {
   // 
   FunctionType *meanTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
-  TheModule->getOrInsertFunction("mean", meanTy);
+  TheModule->getOrInsertFunction("tensor_mean", meanTy);
   
 
   // 
@@ -1608,10 +1621,10 @@ static void InitializeModule() {
   //
   FunctionType *argmaxTy = FunctionType::get(
       int8PtrTy,
-      {Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
       true // vararg
   );
-  TheModule->getOrInsertFunction("argmax", argmaxTy);
+  TheModule->getOrInsertFunction("tensor_argmax", argmaxTy);
   
 
   //
@@ -2735,6 +2748,12 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("Linear_Create", Linear_Create);
 
+  FunctionType *Pool2d_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("Pool2d_Create", Pool2d_Create);
 
   FunctionType *Conv2d_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -2742,6 +2761,13 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("Conv2d_Create", Conv2d_Create);
+
+  FunctionType *BatchNorm2d_Create = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("BatchNorm2d_Create", BatchNorm2d_Create);
 
   FunctionType *scope_struct_CreateTy = FunctionType::get(
       int8PtrTy,
@@ -2941,14 +2967,6 @@ TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_
   TheModule->getOrInsertFunction("CreateMHSAOnDemand", CreateMHSAOnDemandTy);
 
 
-  //
-  FunctionType *CreateBatchNorm2dOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       Type::getFloatTy(*TheContext)},
-      false
-  );
-  TheModule->getOrInsertFunction("CreateBatchNorm2dOnDemand", CreateBatchNorm2dOnDemandTy);
 
 
   //
@@ -2970,16 +2988,6 @@ TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_
   TheModule->getOrInsertFunction("CreateReluOnDemand", CreateReluOnDemandTy);
 
 
-  //
-  FunctionType *CreateMaxPool2dOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy,
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext)},
-      false
-  );
-  TheModule->getOrInsertFunction("CreateMaxPool2dOnDemand", CreateMaxPool2dOnDemandTy);
 
 
   //
@@ -3405,6 +3413,7 @@ int main() {
 
 
   backward_functions["conv2d_backward"] = conv2d_backward;
+  backward_functions["pool2d_backward"] = pool2d_backward;
   backward_functions["linear_backward"] = linear_backward;
   backward_functions["relu_backward"] = relu_backward;
   backward_functions["gelu_backward"] = gelu_backward;
@@ -3416,12 +3425,14 @@ int main() {
   functions_return_type = {{"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"relu", "tensor"}, {"softmax", "tensor"},
                            {"log", "tensor"}, {"randu_like", "tensor"}, {"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"},
                            {"dropout", "tensor"}, {"rl_discounted_return", "tensor"}, {"self_attn", "tensor"}, {"Jitter", "tensor"}, {"mse_with_priorities", "tensor"},
-                           {"btc_mult", "tensor"}, {"btc_multT", "tensor"}, {"tensor_view", "tensor"}, {"clip", "tensor"}, {"argmax", "tensor"}, {"tmax", "tensor"},
-                           {"tensor_onehot", "tensor"}, {"shape", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
-                           {"prod", "tensor"}, {"mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
+                           {"btc_mult", "tensor"}, {"btc_multT", "tensor"}, {"tensor_view", "tensor"}, {"clip", "tensor"}, {"tensor_argmax", "tensor"}, {"tmax", "tensor"},
+                           {"tensor_onehot", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
+                           {"prod", "tensor"}, {"tensor_mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
                            {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
                            {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
-                           {"tuple_print", "float"}};
+                           {"tuple_print", "float"},
+                           {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"}};
+
 
 
 
@@ -3429,9 +3440,11 @@ int main() {
 
                            
 
-  user_cpp_functions = {"Linear", "shape", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
+  user_cpp_functions = {"Linear", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
                         "tensor_sum", "tensor_prod", "tensor_mean", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
-                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "tuple_print"};
+                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "tuple_print",
+                        "BatchNorm2d", "Pool2d", "LSTM", "MHSA", "Embedding"};
+                        
 
 
 

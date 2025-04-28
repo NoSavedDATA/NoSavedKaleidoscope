@@ -1735,117 +1735,117 @@ std::unique_ptr<ExprAST> ParseMHSAExpr() {
 
 
 
-//
-std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
-  std::string type;
-  if (CurTok==tok_maxpool2d)
-    type = "max";
-  if (CurTok==tok_avgpool2d)
-    type = "avg";
+// //
+// std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
+//   std::string type;
+//   if (CurTok==tok_maxpool2d)
+//     type = "max";
+//   if (CurTok==tok_avgpool2d)
+//     type = "avg";
 
-  getNextToken(); // eat the MaxPool2d.
+//   getNextToken(); // eat the MaxPool2d.
   
-  if (CurTok != '[')
-    return LogError("MaxPool2d declaration expected [");
-    getNextToken();
+//   if (CurTok != '[')
+//     return LogError("MaxPool2d declaration expected [");
+//     getNextToken();
 
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "";
-  //std::make_unique<NumberExprAST>(NumVal)
+//   std::vector<std::unique_ptr<ExprAST>> dims;
+//   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+//   std::string init = "";
+//   //std::make_unique<NumberExprAST>(NumVal)
   
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected tensor dimension number.");
+//   while (true) {
+//     if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+//       return LogError("Expected tensor dimension number.");
     
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
+//     if (CurTok==tok_number)
+//     {
+//       if (std::fmod(NumVal, 1.0) != 0)
+//         LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
     
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      dims.push_back(std::move(ParseSelfExpr()));
-    }
-
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
-
-  
-
-  if (CurTok != ']')
-    return LogError("Expected ].");
-    getNextToken();
-
-  if (dims.size()<3)
-    return LogError("MaxPool2d requires kernel size, stride and padding.");
-
-
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
-
-  if (CurTok != tok_identifier)
-    return LogError("Expected conv identifier name.");
-
-
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
+//       dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+//       getNextToken();
+//     } else if (CurTok==tok_identifier)
+//       if (in_str(IdentifierStr, tensor_inits))
+//       {
+//         init = IdentifierStr;
+//         getNextToken();
+//       } else
+//         dims.push_back(std::move(ParseIdentifierExpr()));
+//     else {
+//       dims.push_back(std::move(ParseSelfExpr()));
+//     }
 
     
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "MaxPoolForward2d";
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Esperado um ou mais identificadores após var.");
-  }
-
-
-
-  auto aux = std::make_unique<MaxPool2dExprAST>(std::move(VarNames), type,
-                                             std::move(dims[0]), std::move(dims[1]), std::move(dims[2]));
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
+//     if (CurTok != ',')
+//       break;
+//     getNextToken(); // eat the ','.
+//   }
 
   
-  if (CurTok==tok_space)
-    getNextToken();
+
+//   if (CurTok != ']')
+//     return LogError("Expected ].");
+//     getNextToken();
+
+//   if (dims.size()<3)
+//     return LogError("MaxPool2d requires kernel size, stride and padding.");
+
+
+//   std::string pre_dot="";
+//   bool is_self = false;
+//   bool is_attr = false;
+//   if (CurTok == tok_self)
+//   {
+//     is_self=true;
+//     getNextToken();
+//   }
+//   if (CurTok == tok_class_attr)
+//   {
+//     is_attr=true;
+//     pre_dot = IdentifierStr;
+//     std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
+//     getNextToken();
+//   }
+
+//   if (CurTok != tok_identifier)
+//     return LogError("Expected conv identifier name.");
+
+
+
+//   while (true) {
+//     std::string Name = IdentifierStr;
+    
+//     getNextToken(); // eat identifier.
+
+    
+//     std::unique_ptr<ExprAST> Init = nullptr;
+//     VarNames.push_back(std::make_pair(Name, std::move(Init)));
+//     functionVars[Name] = "MaxPoolForward2d";
+
+//     // End of var list, exit loop.
+//     if (CurTok != ',')
+//       break;
+//     getNextToken(); // eat the ','.
+
+//     if (CurTok != tok_identifier)
+//       return LogError("Esperado um ou mais identificadores após var.");
+//   }
+
+
+
+//   auto aux = std::make_unique<MaxPool2dExprAST>(std::move(VarNames), type,
+//                                              std::move(dims[0]), std::move(dims[1]), std::move(dims[2]));
+//   aux->SetSelf(is_self);
+//   aux->SetIsAttribute(is_attr);
+//   aux->SetPreDot(pre_dot);
+
   
-  return aux;
-}
+//   if (CurTok==tok_space)
+//     getNextToken();
+  
+//   return aux;
+// }
 
 
 
@@ -2361,12 +2361,10 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) 
     return ParseMHSAExpr();
   case tok_linear:
     return ParseDataExpr(class_name);
-  case tok_maxpool2d:
-    return ParseMaxPool2dExpr();
-  case tok_avgpool2d:
-    return ParseMaxPool2dExpr();
+  case tok_pool2d:
+    return ParseDataExpr();
   case tok_batchnorm2d:
-    return ParseBatchNorm2dExpr();
+    return ParseDataExpr();
   case tok_bn2drelu:
     return ParseBN2dReluExpr();
   case tok_relu:

@@ -54,8 +54,12 @@ inline void HandleLeafGradient(Tensor *back_node, float *device_dy, std::string 
 
 
 
-inline void Acquire_Simple_Derivative(float *&d_ptr, float size, int op, bool from_custom) {
-  std::string from = "dx of "+ std::to_string(op);
+inline void Acquire_Simple_Derivative(float *&d_ptr, float size, int op, bool from_custom, std::string parent) {
+  if (op==add_op)
+    return;
+  // std::string from = "dx of "+ std::to_string(op);
+
+  std::string from = "dx of " + parent;
  
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(size, grid_size, block_size);
@@ -93,7 +97,10 @@ inline void Alloc_Child_Nodes_Derivatives(Tensor* back_node, float*& d_lhs, floa
     if (!back_node->L_Node->weight)
     {
       if(op!=add_op && op!=scalar_add_op && !from_custom && op!=broadcast_lastdim_add_op && back_node->L_Node->op != detach_op)
-        Acquire_Simple_Derivative(d_lhs, lhs_size, op, from_custom);
+      {
+        std::string parent = back_node->scopeless_name;
+        Acquire_Simple_Derivative(d_lhs, lhs_size, op, from_custom, parent);
+      }
     }
     else
       Acquire_Weight_Gradient(d_lhs, lhs_size, back_node->L_Node->name, op, from_custom);
@@ -105,7 +112,7 @@ inline void Alloc_Child_Nodes_Derivatives(Tensor* back_node, float*& d_lhs, floa
     if (!back_node->R_Node->weight)
     {
       if(!in_int(op, weightless_ops) && !from_custom && back_node->R_Node->op != detach_op && op!=add_op)
-        Acquire_Simple_Derivative(d_rhs, rhs_size, op, from_custom);
+        Acquire_Simple_Derivative(d_rhs, rhs_size, op, from_custom, "rhs");
     }
     else  
       Acquire_Weight_Gradient(d_rhs, rhs_size, back_node->R_Node->name, op, from_custom);
@@ -232,12 +239,12 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_custom, int
       case mhsa_op:
         mhsa_backward(lhs, d_lhs, device_dy, back_node->scopeless_name);
         break;
-      case maxpool2d:
-        maxpool2d_backward(lhs, out, d_lhs, device_dy, back_node->name);
-        break;
-      // case batchnorm2d:
-      //   batchnormd2d_backward(lhs, d_lhs, d_rhs, device_db, device_dy, back_node->name);
+      // case maxpool2d:
+      //   maxpool2d_backward(lhs, out, d_lhs, device_dy, back_node->name);
       //   break;
+      // case batchnorm2d:
+        // batchnormd2d_backward(lhs, d_lhs, d_rhs, device_db, device_dy, back_node->name);
+        // break;
 
       // Loss Ops
       case cross_entropy_op:
