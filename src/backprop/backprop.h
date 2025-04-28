@@ -14,7 +14,7 @@ extern std::map<std::string, float *> NamedParamGrads;
 extern std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string)>> backward_functions;
 
 
-void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, bool from_custom, int parent_op);
+void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_custom, int parent_op);
 
 
 

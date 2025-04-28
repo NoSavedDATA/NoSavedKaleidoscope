@@ -192,8 +192,6 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
   
   if(first_backward)
     FirstBackward();
-  //if(changed_descriptors)
-  //  SetBackwardDescriptors();
 
 
   if (_fp32)

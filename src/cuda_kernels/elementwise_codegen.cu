@@ -78,3 +78,5 @@ extern "C" void *clip(int thread_id, Tensor tensor, float _min, float _max)
   new_tensor->op=clip_op; //TODO: what is the grad of clip?
   return new_tensor;
 }
+
+

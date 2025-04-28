@@ -20,13 +20,10 @@ extern "C" void *relu(Scope_Struct *scope_struct, Tensor *tensor)
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   float dims_prod = tensor->dims_prod;
 
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   
 
   float *y = get_from_pool(thread_id, dims_prod, "relu");
@@ -36,39 +33,22 @@ extern "C" void *relu(Scope_Struct *scope_struct, Tensor *tensor)
   relu_forward<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
 
 
-
-  // Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
-  // new_tensor->AttrLNode(tensor, relu_op);
-
-  Tensor *new_tensor = customOpTensor(y, dims, DimsProd(dims), "relu_backward", "", tensor);
-  return new_tensor;
+  return customOpTensor(y, dims, DimsProd(dims), "relu_backward", "", tensor);
 }
 
 
 void relu_backward(float* inp, float dims_prod, float *y, float* dinp, float* dout, std::string module_name) {
-
-  
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-
+  int grid_size, block_size;
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   relu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(inp, dinp, dout, dims_prod);
-  
 }
 
 
-void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* dout) {
-
-  
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-  shared_mem_size = grid_block_mem_sizes[2];
-
-  gelu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, inp, dout, dims_prod);
-  
+// void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* dout) {
+void gelu_backward(float* inp, float dims_prod, float *y, float* dinp, float* dout, std::string module_name) {  
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
+  gelu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, inp, dout, dims_prod);  
 }
 
 extern "C" void *gelu(Scope_Struct *scope_struct, Tensor *tensor)
@@ -77,18 +57,14 @@ extern "C" void *gelu(Scope_Struct *scope_struct, Tensor *tensor)
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<float> dims = tensor->dims;
 
-  std::cout << "GELU AT THREAD " << thread_id << "\n";
+  // std::cout << "GELU AT THREAD " << thread_id << "\n";
   
-
   float dims_prod = DimsProd(dims);
 
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-  shared_mem_size = grid_block_mem_sizes[2];
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
+
   
   float *y = get_from_pool(thread_id, dims_prod,"gelu");
 
@@ -96,23 +72,17 @@ extern "C" void *gelu(Scope_Struct *scope_struct, Tensor *tensor)
   cudaStream_t stream = ThreadsStream[thread_id];
   gelu_forward_kernel1<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
   
-
-  
-  int is_forward_func=1;
-  
-
-  Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
-  new_tensor->AttrLNode(tensor, gelu_op);
-  return new_tensor;
+ 
+  return customOpTensor(y, dims, DimsProd(dims), "gelu_backward", "", tensor);
 }
 
-void sigmoid_backward(const float* out, float dims_prod, float* dinp, const float* dout) {
+
+
+
+void sigmoid_backward(float* inp, float dims_prod, float *out, float* dinp, float* dout, std::string module_name) {  
   
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-  shared_mem_size = grid_block_mem_sizes[2];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
   sigmoid_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
   
@@ -127,13 +97,9 @@ extern "C" void *sigmoid(Scope_Struct *scope_struct, Tensor *tensor)
 
   float dims_prod = DimsProd(dims);
 
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-  shared_mem_size = grid_block_mem_sizes[2];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
   float *y = get_from_pool(thread_id, dims_prod, "sigmoid");  
   
@@ -146,23 +112,21 @@ extern "C" void *sigmoid(Scope_Struct *scope_struct, Tensor *tensor)
   int is_forward_func=1;
 
 
-  Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
-  new_tensor->AttrLNode(tensor, sigmoid_op);
-  return new_tensor;
+  return customOpTensor(y, dims, DimsProd(dims), "sigmoid_backward", "", tensor);
 }
 
 
-void tanh_backward(const float* out, float dims_prod, float* dinp, const float* dout) {
+void tanh_backward(float* inp, float dims_prod, float *out, float* dinp, float* dout, std::string module_name) {  
   
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   
 
   tanh_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
   
 }
+
+
 
 extern "C" void *_tanh(Scope_Struct *scope_struct, Tensor *tensor)
 {
@@ -173,13 +137,9 @@ extern "C" void *_tanh(Scope_Struct *scope_struct, Tensor *tensor)
 
   float dims_prod = DimsProd(dims);
 
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-  shared_mem_size = grid_block_mem_sizes[2];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(dims);
   
   float *y = get_from_pool(thread_id, dims_prod, "tanh");
 
@@ -191,9 +151,7 @@ extern "C" void *_tanh(Scope_Struct *scope_struct, Tensor *tensor)
 
   //std::cout << "tanh tensor attribution from " << tensor->name<<"/"<<tensor->scopeless_name << "\n";
 
-  Tensor *new_tensor = createTensor(y, dims, DimsProd(dims), false, "");
-  new_tensor->AttrLNode(tensor, tanh_op);
-  return new_tensor;
+  return customOpTensor(y, dims, DimsProd(dims), "tanh_backward", "", tensor);
 }
 
 
@@ -211,10 +169,8 @@ extern "C" void *softmax(Scope_Struct *scope_struct, Tensor *tensor)
   int C = dims[1];
 
 
-  int grid_size, block_size, shared_mem_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  int grid_size, block_size;
+  CalculateGridAndBlockSizes(B*C, grid_size, block_size);
 
 
   tensor->Sync();
@@ -228,15 +184,12 @@ extern "C" void *softmax(Scope_Struct *scope_struct, Tensor *tensor)
   grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
   grid_size  = B;
   block_size = grid_block_mem_sizes[1];
-
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
   softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, probs, B, C);
   */
  
  
-  grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateSimpleWarpGridAndBlockSizes(B, grid_size, block_size);
 
   online_softmax<<<grid_size, block_size, 0, stream>>>(tensor_ptr, probs, B, C);
 

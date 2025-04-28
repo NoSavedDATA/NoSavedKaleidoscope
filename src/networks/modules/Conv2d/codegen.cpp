@@ -113,8 +113,7 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor)
   NamedConv2d[conv_name] = std::move(conv);
 
 
-  Tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "conv2d_backward", conv_name, tensor);
-  return new_tensor;
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "conv2d_backward", conv_name, tensor);
 }
 
 
