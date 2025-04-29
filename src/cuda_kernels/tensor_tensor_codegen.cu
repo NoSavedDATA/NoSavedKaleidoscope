@@ -170,12 +170,10 @@ extern "C" Tensor *tensor_tensor_sub(
 }
 
 
-extern "C" Tensor *tensor_tensor_equal(
-                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" Tensor *tensor_tensor_equal(Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
 
   int thread_id = scope_struct->thread_id;
                             
-  //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
   std::vector<float> Ldims, Rdims;
   Ldims = tensor_x->dims;
@@ -184,17 +182,14 @@ extern "C" Tensor *tensor_tensor_equal(
   float *device_w = tensor_w->tensor_ptr;
 
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
   float dims_prod = tensor_x->dims_prod;
 
 
-  float* device_y = get_from_pool(thread_id, dims_prod, "eq");
+  float* device_y = get_from_pool(thread_id, dims_prod, "equal op");
 
 
   int grid_size, block_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   
   tensor_x->Sync();
   tensor_w->Sync();

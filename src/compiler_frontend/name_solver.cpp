@@ -60,8 +60,7 @@ Value *NameSolverAST::codegen(Value *scope_struct) {
       {
         var_name = Builder->CreateCall(TheModule->getFunction("ConcatStrFreeLeft"),
                                                         {var_name, name});
-        var_name = Builder->CreateCall(TheModule->getFunction("LoadObject"),
-                                                        {var_name});
+        var_name = callret("LoadObject", {var_name});
 
       }
 

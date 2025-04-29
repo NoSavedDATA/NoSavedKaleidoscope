@@ -64,9 +64,7 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor)
   float W = dims[dims.size()-1];
 
 
-
   std::unique_ptr<Conv2dCPP> conv = std::move(NamedConv2d[conv_name]);
-
 
 
   if ((int)C!=(int)conv->C)
@@ -79,37 +77,16 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor)
   }
 
 
-
   tensor->Sync();
 
   output = conv->Forward(tensor, H, W, B, thread_id);
 
-  int ks_H = conv->ks;
-  int ks_W = conv->ks;
-
-
+ 
   
-  
-  float resultingDimsProd = B * (float)conv->OC * (float)conv->out_H * (float)conv->out_W;
-
-  int is_forward_func = 1;
-  
-
 
   std::vector<float> new_dims = {(float)conv->B, (float)conv->OC, (float)conv->out_H, (float)conv->out_W};
   
-
-  //for backprop:
-  std::vector<float> kernel_dims = {(float)conv->OC, (float)C, (float)conv->ks, (float)conv->ks}; 
-
-
-
-
-  // Tensor *conv_tensor = NamedTensorsT[conv_name];
-  // conv_tensor->NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
-  // conv_tensor->SetIsWeight();
   
-
   NamedConv2d[conv_name] = std::move(conv);
 
 

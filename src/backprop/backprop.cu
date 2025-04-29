@@ -14,20 +14,6 @@ std::map<std::string, float *> NamedParamGrads;
 std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string)>> backward_functions;
 
 
-void CleanTree(Tensor *back_node) {
-  // Avoid calling CleanTree separatly. As this has the overhead of goign throughout the tree multiple times.
-
-  if (back_node==nullptr)
-    return;
-  if (back_node->weight)
-    return;
-  CleanTree(back_node->L_Node);
-  CleanTree(back_node->R_Node);
-
-  float dims_prod = back_node->dims_prod;
-  to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor"); 
-  to_free_tensor(back_node);
-}
 
 
 inline void HandleLeafGradient(Tensor *back_node, float *device_dy, std::string tensor_name, bool from_custom) {
@@ -48,7 +34,9 @@ inline void HandleLeafGradient(Tensor *back_node, float *device_dy, std::string 
   }
   
   to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor"); 
-  to_free_tensor(back_node);
+  // std::cout << "Adding " << tensor_name << ".\n";
+  if (!back_node->is_last_version)
+    to_free_tensor(back_node);
 }
 
 
@@ -144,7 +132,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_custom, int
     {
     
       tensor_name = back_node->scopeless_name;
-      CleanTree(back_node);
+      CleanTree_Backprop(back_node);
       std::string _err = "dy derivate is null at the backward mode with op "+std::to_string(op) + " for tensor " + tensor_name;
       // LogError(_err);
       return;
@@ -239,12 +227,6 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_custom, int
       case mhsa_op:
         mhsa_backward(lhs, d_lhs, device_dy, back_node->scopeless_name);
         break;
-      // case maxpool2d:
-      //   maxpool2d_backward(lhs, out, d_lhs, device_dy, back_node->name);
-      //   break;
-      // case batchnorm2d:
-        // batchnormd2d_backward(lhs, d_lhs, d_rhs, device_db, device_dy, back_node->name);
-        // break;
 
       // Loss Ops
       case cross_entropy_op:
@@ -273,20 +255,21 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_custom, int
   } else
   {
     //std::cout << "\n\nFROM A GRADLESS OP" << "\n\n\n";
-    CleanTree(back_node);
+    CleanTree_Backprop(back_node);
   }
 
   
-  if (in_int(op, loss_ops))
-  {
-    to_pool(back_node->R_Node->dims_prod, back_node->R_Node->tensor_ptr, "in loss_ops");
-    delete back_node->R_Node;
-    back_node->R_Node = nullptr;
-  }
+  // if (in_int(op, loss_ops))
+  // {
+  //   to_pool(back_node->R_Node->dims_prod, back_node->R_Node->tensor_ptr, "in loss_ops");
+  //   delete back_node->R_Node;
+  //   back_node->R_Node = nullptr;
+  // }
   
 
   TraversePreOrder(back_node->L_Node, d_lhs, from_custom, op);
   TraversePreOrder(back_node->R_Node, d_rhs, from_custom, op);
+
   
   // Garbage Collector
   if (back_node->Sparse_Idx_Tensor!=nullptr)

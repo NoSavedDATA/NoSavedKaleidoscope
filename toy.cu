@@ -1179,7 +1179,8 @@ static void InitializeModule() {
   //
   FunctionType *SGDTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext),
+      {int8PtrTy,
+       Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext),
        Type::getFloatTy(*TheContext)}, 
@@ -1599,6 +1600,12 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("prod", prodTy);
 
+  FunctionType *mean2Ty = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+      true // vararg
+  );
+  TheModule->getOrInsertFunction("mean_tensor", mean2Ty);
 
   // 
   FunctionType *meanTy = FunctionType::get(
@@ -3414,6 +3421,7 @@ int main() {
 
   backward_functions["conv2d_backward"] = conv2d_backward;
   backward_functions["pool2d_backward"] = pool2d_backward;
+  backward_functions["batchnorm2d_backward"] = batchnorm2d_backward;
   backward_functions["linear_backward"] = linear_backward;
   backward_functions["relu_backward"] = relu_backward;
   backward_functions["gelu_backward"] = gelu_backward;
@@ -3430,7 +3438,7 @@ int main() {
                            {"prod", "tensor"}, {"tensor_mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
                            {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
                            {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
-                           {"tuple_print", "float"},
+                           {"tuple_print", "float"}, {"mean_tensor", "tensor"},
                            {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"}};
 
 
@@ -3441,7 +3449,7 @@ int main() {
                            
 
   user_cpp_functions = {"Linear", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
-                        "tensor_sum", "tensor_prod", "tensor_mean", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
+                        "tensor_sum", "tensor_prod", "tensor_mean", "mean_tensor", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
                         "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "tuple_print",
                         "BatchNorm2d", "Pool2d", "LSTM", "MHSA", "Embedding"};
                         
@@ -3463,7 +3471,7 @@ int main() {
 
 
   // Universal
-  vararg_methods = {"tensor_view", "tensor_sum", "tensor_mean", "tensor_prod", "tensor_tmax", "tensor_argmax", "tensor_load_bin_idx"};
+  vararg_methods = {"tensor_view", "tensor_sum", "tensor_mean", "mean_tensor" ,"tensor_prod", "tensor_tmax", "tensor_argmax", "tensor_load_bin_idx"};
   string_methods = {"split", "split_idx"};
 
 

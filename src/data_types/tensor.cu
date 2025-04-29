@@ -114,10 +114,24 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, Tensor *
       tensor->SetIsWeight();
     tensor->op = create_tensor_op;
 
-    
-    NamedTensorsT[tensor_name] = tensor;
-  // }
+   
 
+    // }
+
+  if(NamedTensorsT.count(tensor_name)>0)
+  {
+    Tensor *tensor_to_clean = NamedTensorsT[tensor_name];
+
+    // if (tensor_to_clean->name=="batch_acc")
+    // if (tensor_to_clean->name=="batch_acc"||tensor_to_clean->name=="y")
+    // {
+      // std::cout << "0000000000000000000000000000000000000CLEANING " << tensor_name << ".\n";
+      move_to_pool(thread_id, tensor_to_clean->dims_prod, tensor_to_clean->tensor_ptr, "tensor_Create tensor substitution of " + tensor_to_clean->name + ".");
+    // }
+    // delete tensor_to_clean;
+  }
+    
+  NamedTensorsT[tensor_name] = tensor;
   
   delete[] tensor_name;
   delete[] scopeless_name;
@@ -225,10 +239,11 @@ inline Tensor *store_intermediate_result_tensor(Tensor *stored_tensor, Tensor *t
 inline void clean_tensor(Tensor *stored_tensor, Tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   if (nn_mode==eval_mode||stored_tensor->thread_id!=0)
   {
-    if(stored_tensor->thread_id!=0)
-      move_to_pool(stored_tensor->thread_id, stored_tensor->dims_prod, stored_tensor->tensor_ptr, "z=x");
-    else
-      ThreadedScopeTensorsToClean[stored_tensor->thread_id][scope].push_back(stored_tensor->name);
+    CleanTreeNow(stored_tensor->thread_id, stored_tensor, stored_tensor->name);
+    // if(stored_tensor->thread_id==0)
+    //   move_to_pool(stored_tensor->thread_id, stored_tensor->dims_prod, stored_tensor->tensor_ptr, "z=x");
+    // else
+    //   ThreadedScopeTensorsToClean[stored_tensor->thread_id][scope].push_back(stored_tensor->name);
   }
   // Else, save the tensor for the backrpop.
 }
@@ -281,12 +296,14 @@ extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *s
 {
   // std::cout << "tensor_Store execution" << ".\n";
 
+
   char *scope = scope_struct->scope;
   int thread_id= scope_struct->thread_id;
   int has_grad = scope_struct->has_grad;
 
 
   Tensor *stored_tensor = NamedTensorsT[tensor_name];
+  stored_tensor->is_last_version = false;
   
   // View op
   if (tensor->view_of == tensor_name)
@@ -314,7 +331,9 @@ extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *s
   }
 
   stored_tensor->thread_id = thread_id;
-  NamedTensorsT[tensor_name] = stored_tensor;  
+  stored_tensor->is_last_version = true;
+  NamedTensorsT[tensor_name] = stored_tensor;
+  cudaCheck(cudaGetLastError());
   return 0;
 }
 
@@ -379,11 +398,9 @@ extern "C" void *gpu(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_
 
 extern "C" float tensor_gpuw(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_tensor, float idx)
 {
- 
-  
-  // std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << "\n";
-  
   int thread_id = scope_struct->thread_id;
+
+  // std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << " and thread id: " << thread_id << "\n";
 
   float *tensor_ptr, *tensor_cpu;
 
@@ -435,7 +452,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, Tensor *tensor, Tensor 
 
 
 
-  if (nn_mode==eval_mode)
+  if (nn_mode==eval_mode||thread_id!=0)
   {
 
   } else {
@@ -449,6 +466,8 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, Tensor *tensor, Tensor 
 
   tensor->AttrTensor(tensor_ptr, batchless_dims, batchless_dims_prod, cuda_stream, loader);
   tensor->from_grad_or_load = true;
+  tensor->leaf=true;
+
 
   return 0;
 }

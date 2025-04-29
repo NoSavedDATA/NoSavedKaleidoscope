@@ -420,7 +420,7 @@ extern "C" void *tensor_argmax(Scope_Struct *scope_struct, Tensor *tensor, float
 
   if(thread_id==0)
   {
-    //std::cout << "maxed is " << new_dims_prod << "\n";
+    // std::cout << "MOVING MAXED TO POOL. maxed is " << new_dims_prod << "\n";
     move_to_pool(thread_id, new_dims_prod, maxed, "argmax maxed");
   }
   else

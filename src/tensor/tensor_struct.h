@@ -115,6 +115,7 @@ struct Tensor {
   int b_size=0;
   int thread_id;
   bool is_pinned;
+  bool is_last_version = false;
 
 
   CudaStreams *cuda_stream = nullptr;

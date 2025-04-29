@@ -10,6 +10,5 @@
 
 
 
-void batchnormd2d_backward(float *inp, 
-    float *dinp, float *dw, float *db,
-    float *dout, std::string conv_name);
+void batchnorm2d_backward(float *inp, float size, float *out,
+  float *dinp, float *dout, std::string bn_name);

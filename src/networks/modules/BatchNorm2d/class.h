@@ -16,6 +16,9 @@ class BatchNorm2dCPP
   public:
     cudnnTensorDescriptor_t input_desc, output_desc, scale_bias_mean_var_desc;
     
+    bool first_backward=true;
+
+    float *dW, *dB;
     float* scale=nullptr;
     float* bias=nullptr;
     float* running_mean=nullptr;
@@ -35,6 +38,7 @@ class BatchNorm2dCPP
   void SetDescriptors(int, int, int, Tensor *);
   void InitMovingAverages();
   float *Forward(Tensor *, int, int, int, int, int);
-  void Backward(float *, float *, float *, float *, float *);
+  void Backward(float *, float *, float *);
+  void FirstBackward();
 
 };

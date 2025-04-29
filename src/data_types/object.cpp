@@ -10,13 +10,13 @@ std::map<std::string, int> objectVecsLastId;
 
 
 
-extern "C" void InstantiateObject(char *scope, char *obj_name)
+extern "C" void InstantiateObject(char *obj_name, char *full_name)
 {
-  //std::cout << "\n\n\n\nInstantiateObject of: " << scope << obj_name << "\n\n\n";
+  // std::cout << "\n\n\n\nInstantiateObject of: " << full_name << "\n\n\n";
   std::string _obj_name = obj_name;
 
-  NamedObjects[scope+_obj_name] = _obj_name + RandomString(13);
-  //std::cout << "Saving " << NamedObjects[scope+_obj_name]  << "\n\n";
+  NamedObjects[full_name] = _obj_name + RandomString(13);
+  // std::cout << "Saving " << NamedObjects[full_name]  << "\n\n";
 }
 
 
@@ -30,10 +30,17 @@ extern "C" char *objHash(char *scope, char *obj_name)
 
 extern "C" char *LoadObject(char *obj_name)
 {
-  //std::cout << "LOADING OBJECT FROM " << obj_name << "\n";
+  // std::cout << "LOADING OBJECT " << obj_name << "\n";
   std::string ret = NamedObjects[obj_name];
   delete[] obj_name;
-  //std::cout << "Load object of: " << ret << "\n";
+  // std::cout << "GOT OBJECT : " << ret << "\n";
+
+  // std::cout << "Objects found: " << ".\n";
+  // for (auto &pair : NamedObjects)
+  // {
+  //   std::cout << pair.first << " --> " << pair.second << ".\n";
+  // }
+
   return str_to_char(ret);
 }
 
