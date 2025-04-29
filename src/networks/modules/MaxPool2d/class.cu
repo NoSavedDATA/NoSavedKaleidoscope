@@ -118,7 +118,7 @@ float *MaxPool2dCPP::Forward(Tensor *tensor, int H, int W, int B, int C, int thr
 }
 
 
-void MaxPool2dCPP::Backward(float *tensor, float *out, float *dx, float *dy)
+void MaxPool2dCPP::Backward(float *inp, float *out, float *dx, float *dy)
 {
   //std::cout << "\nMaxPool2d Backward with H: " << H << " W: " << W << "\n";
 
@@ -137,7 +137,7 @@ void MaxPool2dCPP::Backward(float *tensor, float *out, float *dx, float *dy)
     output_desc, // output grad tensor descriptor
     dy,
     input_desc,
-    tensor,
+    inp,
     &zero,
     input_desc, // input descriptor
     dx

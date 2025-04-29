@@ -189,3 +189,36 @@ extern "C" float clean_forward(Scope_Struct *scope_struct)
   cudaCheck(cudaGetLastError());
   return 0;
 }
+
+
+void CleanTree_Backprop(Tensor *back_node) {
+  // Avoid calling CleanTree separatly. As this has the overhead of goign throughout the tree multiple times.
+
+  if (back_node==nullptr)
+    return;
+  if (back_node->weight)
+    return;
+  CleanTree_Backprop(back_node->L_Node);
+  CleanTree_Backprop(back_node->R_Node);
+
+  float dims_prod = back_node->dims_prod;
+  to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor"); 
+  // to_free_tensor(back_node);
+}
+
+
+void CleanTreeNow(int thread_id, Tensor *tensor, std::string root_name) {
+  if (tensor==nullptr)
+    return;
+  
+  if (tensor->weight || (tensor->leaf && tensor->name!=root_name))
+    return;
+
+  CleanTreeNow(thread_id, tensor->L_Node, root_name);
+  CleanTreeNow(thread_id, tensor->R_Node, root_name);
+
+  float dims_prod = tensor->dims_prod;
+
+  move_to_pool(thread_id, tensor->dims_prod, tensor->tensor_ptr, "eval/thread_id!=0 cleaning");
+  delete tensor;
+}

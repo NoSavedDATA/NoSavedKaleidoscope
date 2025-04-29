@@ -45,7 +45,7 @@ void linear_backward(float *x, float size, float *out, float *dx, float *dy, std
 
 extern "C" void *Linear(Scope_Struct *scope_struct, Tensor *tensor)
 {
-  std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
+  // std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
   int thread_id = scope_struct->thread_id;
   
   

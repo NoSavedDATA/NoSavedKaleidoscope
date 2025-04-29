@@ -18,4 +18,3 @@ class SGD_optim : public Optimizer {
 };
 
 
-extern "C" float SGD(Scope_Struct *, float lr, float momentum, float weight_decay, float grad_clip);

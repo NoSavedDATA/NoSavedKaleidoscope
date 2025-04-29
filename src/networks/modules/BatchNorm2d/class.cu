@@ -11,8 +11,10 @@
 #include <vector>
 
 
+#include "../../../backprop/include.h"
 #include "../../../common/cu_commons.h"
 #include "../../../cuda_kernels/calculate_grids.h"
+#include "../../../cuda_kernels/elementwise_kernels_inline.cu"
 #include "../../../cuda_kernels/handles.h"
 #include "../../../tensor/include.h"
 #include "class.h"
@@ -22,8 +24,8 @@
 
 BatchNorm2dCPP::BatchNorm2dCPP(int C, std::string Name)
     : C(C), Name(Name) {
-  NamedTensorsT[Name] = new Tensor();
-  NamedTensorsT[Name+"_bias"] = new Tensor();
+  // NamedTensorsT[Name+"W"] = new Tensor();
+  // NamedTensorsT[Name+"B"] = new Tensor();
 }
 
 
@@ -104,6 +106,17 @@ void BatchNorm2dCPP::InitMovingAverages()
   cudaCheck(cudaMalloc(&saved_var, C*sizeof(float)));
   cudaCheck(cudaMemcpy(saved_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
+
+
+  Tensor *scale_tensor, *bias_tensor;
+  scale_tensor = new Tensor();
+  scale_tensor->NewTensor(scale, {(float)C}, C, true, Name);
+
+  bias_tensor = new Tensor();
+  bias_tensor->NewTensor(bias, {(float)C}, C, true, Name);
+
+  NamedTensorsT[Name+"W"] = scale_tensor;
+  NamedTensorsT[Name+"B"] = bias_tensor;
 }
 
 float *BatchNorm2dCPP::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
@@ -183,13 +196,36 @@ float *BatchNorm2dCPP::Forward(Tensor *tensor, int H, int W, int B, int C, int t
 }
 
 
-void BatchNorm2dCPP::Backward(float *tensor, float *dx, float *dw, float *db, float *dy)
+
+void BatchNorm2dCPP::FirstBackward() {
+  if (first_backward) {
+
+    dW = get_from_pool(0, C, "BatchNorm2d dW");
+    dB = get_from_pool(0, C, "BatchNorm2d dB");
+
+    
+    set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, C);
+    set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dB, C);
+
+    NamedParamGrads[Name+"W"] = dW;
+    NamedParamGrads[Name+"B"] = dB;
+
+    first_backward=false;
+  }
+}
+
+
+
+
+void BatchNorm2dCPP::Backward(float *tensor, float *dx, float *dy)
 {
   constexpr float one = 1.0f;
   constexpr float zero = 0.0f;
   float eps = 0.00001f;
   
+  FirstBackward();
   
+
   checkCUDNN(cudnnBatchNormalizationBackward(
     cudnn,
     CUDNN_BATCHNORM_SPATIAL_PERSISTENT,
@@ -205,8 +241,8 @@ void BatchNorm2dCPP::Backward(float *tensor, float *dx, float *dw, float *db, fl
     dx,
     scale_bias_mean_var_desc,
     scale,
-    dw,
-    db,
+    dW,
+    dB,
     eps,
     saved_mean,
     saved_var

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include "../../backprop/include.h"
 #include "../../mangler/scope_struct.h"
 #include "../../tensor/include.h"
@@ -79,9 +81,8 @@ void CrossEntropyBackward(Tensor *L_tensor, Tensor *R_tensor,
 
 extern "C" float cross_entropy(Scope_Struct *scope_struct, Tensor *y_hat, Tensor *y, float scale)
 {
-  
   Tensor *loss_tensor = new Tensor();
-
+  // std::cout << "Cross entropy got last version? " << y_hat->is_last_version << "/" << y->is_last_version << ".\n";
 
   loss_tensor->AttrNodes(y_hat, y, cross_entropy_op);
   loss_tensor->scalar = scale;

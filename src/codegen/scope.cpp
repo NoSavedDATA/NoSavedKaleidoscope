@@ -200,6 +200,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
     ThreadedScopeTensorsToClean[tensor->thread_id][previous_scope].push_back(tensor->name);
   tensor->AttrTensor(scope_tensor->tensor_ptr, scope_tensor->dims, scope_tensor->dims_prod, scope_tensor->cuda_stream, scope_tensor->loader);
   tensor->from_grad_or_load = scope_tensor->from_grad_or_load;
+  tensor->is_last_version = true;
   
   
 

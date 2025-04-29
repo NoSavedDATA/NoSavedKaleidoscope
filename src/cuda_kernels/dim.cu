@@ -57,7 +57,143 @@ extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, 
 }
 
 
+extern "C" void *mean_tensor(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...)
+{
+  int thread_id = scope_struct->thread_id;
+  //std::cout << "MEAN OF " << tensor->name << "\n";
 
+
+  float *tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  float *summed;
+
+  cudaStream_t stream = ThreadsStream[thread_id];
+
+  va_list args;
+  va_start(args, first_dim);
+
+  if (first_dim==TERMINATE_VARARG)
+  { 
+    va_end(args);
+    float *ret;
+    int dims_prod = DimsProd(dims);
+
+    summed = new float[dims_prod];
+    cudaCheck(cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream));
+
+    cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
+  
+    float tensor_sum=0;
+    for(int i=0; i<dims_prod; i++)
+      tensor_sum += summed[i];
+    tensor_sum = tensor_sum/tensor->dims_prod;
+    
+    delete[] summed;
+  
+    float *aux = new float[1];
+    aux[0] = tensor_sum;
+    cudaCheck(cudaMemcpyAsync(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice, stream));
+    delete[] aux;
+  
+    std::vector<float> new_dims;
+    new_dims.push_back(1.0f);
+  
+    Tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
+    new_tensor->op=mean_op;
+    new_tensor->AttrLNode(tensor, mean_op);
+    return new_tensor;
+  }
+
+
+  std::vector<float> sum_dims, new_dims;
+  if (first_dim<0)
+    first_dim = dims.size()+first_dim;
+  sum_dims.push_back(first_dim);
+
+  for (int i=0; i<10; i++)
+  {
+    if (i==9)
+    {
+      LogErrorS("A tensor with 10 dimensions??? (mean)");
+      std::cout << "Input tensor dims:" << "\n";
+      PrintDims(tensor->dims);
+      std::cout << "Mean dims:" << "\n";
+      PrintDims(sum_dims);
+      return nullptr;
+    }
+
+    float dim = va_arg(args, float);
+    
+    if (dim==TERMINATE_VARARG)
+      break;
+    if (in_float_vec(dim, sum_dims))  
+    {
+      std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.mean() operation.";
+      LogErrorS(_error);
+      return nullptr;
+    }
+    if (dim<0)
+      dim = dims.size()+dim;
+    sum_dims.push_back(dim);
+  }
+  va_end(args);
+  
+  
+  float summed_dim;
+  for (int i=0; i<dims.size(); i++)
+    if (!in_float_vec(i, sum_dims))
+      new_dims.push_back(dims[i]);
+    else
+      summed_dim=dims[i];
+
+
+  int dims_prod = DimsProd(dims);
+  int new_dims_prod = DimsProd(new_dims);
+
+  
+  summed = get_from_pool(thread_id, new_dims_prod, "mean");
+  cudaMemset(summed, 0, new_dims_prod * sizeof(float));
+
+
+  
+  
+  
+
+  if (sum_dims[0]==(dims.size()-2))
+  {
+    std::vector<float> _dims = RemoveLastDim(RemoveLastDim(dims));
+    dims_prod = DimsProd(_dims);
+
+    int warps_per_block = THREADS_PER_BLOCK/WARP_SIZE;
+    //warps_per_block = fminf(warps_per_block, dims[dims.size()-2]);
+    
+    // TODO: is this kernel grid_size correct?
+    mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
+
+    Tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
+    new_tensor->AttrLNode(tensor, mean_over_semilast_dim_op);
+    new_tensor->scalar = dims[dims.size()-2];
+    return new_tensor;
+  }
+
+  /*
+  if (dims.size()==1)
+  {
+    sum_single_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod);
+    new_dims = {1.0f};
+  }
+  else if (sum_dims[0]==(dims.size()-1))
+    sum_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, summed_dim);
+  if (sum_dims[0]==(dims.size()-2))
+    sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
+
+
+  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  return new_tensor;
+  */
+  LogErrorS("Mean of specific dim is not implemented yet.");
+  return nullptr;
+}
 
 
 //TODO: mean over axis
@@ -158,7 +294,6 @@ extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float f
   summed = get_from_pool(thread_id, new_dims_prod, "mean");
   cudaMemset(summed, 0, new_dims_prod * sizeof(float));
 
-  //std::cout << "\n\nDims prod: " << dims_prod << "\nNew dims prod: " << new_dims_prod << "\nSummed dim size: " << summed_dim << "\n\n";
 
   
   
@@ -172,7 +307,7 @@ extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float f
     int warps_per_block = THREADS_PER_BLOCK/WARP_SIZE;
     //warps_per_block = fminf(warps_per_block, dims[dims.size()-2]);
     
-
+    // TODO: is this kernel grid_size correct?
     mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
     Tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");

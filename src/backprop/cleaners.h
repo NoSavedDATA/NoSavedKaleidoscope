@@ -61,4 +61,8 @@ void CleanThreadTensors(std::string scope, int thread_id);
 void CleanScopeTensors(std::string scope);
 
 
-extern "C" float clean_forward(Scope_Struct *scope_struct);
+
+
+void CleanTree_Backprop(Tensor *back_node);
+
+void CleanTreeNow(int thread_id, Tensor *tensor, std::string);

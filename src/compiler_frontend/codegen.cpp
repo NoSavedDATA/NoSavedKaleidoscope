@@ -1754,7 +1754,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
   {
     const std::string &VarName = VarNames[i].first;
 
-    Value *var_name;// = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
+    Value *var_name, *obj_name;// = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     
     std::string pre_dot = GetPreDot();
     bool is_self = GetSelf();
@@ -1762,32 +1762,32 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
     
     if (!GetIsVec())
     {
-      var_name = Builder->CreateGlobalString(VarName);
+      obj_name = global_str(VarName);
 
-      if (is_self||is_attr) 
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-      Builder->CreateCall(TheModule->getFunction("InstantiateObject"),
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+      if (is_attr)
+        var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), obj_name});
+      else if (is_self) 
+        var_name = callret("ConcatStr", {callret("get_scope_first_arg", {scope_struct}), obj_name});
+      else
+        var_name = obj_name;
+
+      call("InstantiateObject", {obj_name, var_name});
     }
     else if (Init) // init of vec[size]
     {
       //var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
-      var_name = Builder->CreateGlobalString(VarName);
+      var_name = global_str(VarName);
 
       if (is_self||is_attr) 
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
+        var_name = callret("ConcatStr", {callret("get_scope_first_arg", {scope_struct}), var_name});
       if (!(is_self||is_attr))
-        var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Break?
-                                              {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+        var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
 
       //var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
       //                                        {object_hash, var_name});
 
 
-      Builder->CreateCall(TheModule->getFunction("InitObjectVecWithNull"),
-                                                {var_name, init});
+      call("InitObjectVecWithNull", {var_name, init});
     } else
     {}
   }
@@ -2326,8 +2326,11 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       tgt_function = Class+tgt_function;  
     }
     
+    // p2t("SETTING FIRSTARG OF " + tgt_function);
+    // call("scope_struct_Print", {scope_struct_copy});
     first_arg = NameSolver->codegen(scope_struct_copy);
     call("set_scope_first_arg", {scope_struct_copy, first_arg});
+    // call("scope_struct_Print", {scope_struct_copy});
 
     changed_first_arg = true;  
   }
