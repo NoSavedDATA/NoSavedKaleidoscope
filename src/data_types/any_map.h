@@ -15,7 +15,7 @@ public:
 
     ~AnyMap(); 
 
-    void append(std::string, std::any value, std::string); 
+    void append(char *, std::any value, std::string); 
 
     template <typename T>
     T get(std::string index); 

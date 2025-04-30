@@ -8,6 +8,7 @@
 
 #include "../common/include.h"
 #include "../codegen/random.h"
+#include "../codegen/string.h"
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
@@ -34,7 +35,7 @@ extern "C" void *str_vec_Load(char *object_var_name, Scope_Struct *scope_struct)
 extern "C" void str_vec_Store(char *name, std::vector<char *> value, Scope_Struct *scope_struct){
   // std::cout << "STORING " << name << " on demand as StrVec type.\n";
   ClassStrVecs[name] = value;
-  move_to_char_pool(strlen(name)+1, name, "free");
+  // move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
 }
 
@@ -148,7 +149,7 @@ extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, char *vec_name, float 
   // std::cout << "Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
   delete[] vec_name;
 
-  return vec[idx];
+  return CopyString(vec[idx]);
 }
 
 

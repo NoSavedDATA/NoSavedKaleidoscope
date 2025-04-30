@@ -1,6 +1,6 @@
 #include "../char_pool/include.h"
 #include "../codegen/string.h"
-#include "../data_types/any_map.h" 
+#include "../data_types/include.h" 
 
 #include "scope_struct.h"
 
@@ -9,10 +9,14 @@ Scope_Struct::Scope_Struct() {
     first_arg = get_from_char_pool(1,"Scope mangler first_arg");
     scope = get_from_char_pool(1,"Scope mangler scope");
     previous_scope = get_from_char_pool(1,"Scope mangler previous scope");
+    function_name = get_from_char_pool(1,"Scope mangler previous scope");
+
+
 
     first_arg[0] = '\0';
     scope[0] = '\0';
     previous_scope[0] = '\0';
+    function_name[0] = '\0';
 }
 std::map<std::string, Scope_Struct *> NamedScopeStructs;
 
@@ -25,6 +29,9 @@ void Scope_Struct::Set_Scope(char *scope) {
 void Scope_Struct::Set_Previous_Scope(char *previous_scope) {
     this->previous_scope = CopyString(previous_scope);
 }
+void Scope_Struct::Set_Function_Name(char *function_name) {
+    this->function_name = CopyString(function_name);
+}
 void Scope_Struct::Set_Thread_Id(int thread_id) {
     this->thread_id = thread_id;
 }
@@ -36,14 +43,21 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     first_arg = CopyString(scope_to_copy->first_arg);
     scope = CopyString(scope_to_copy->scope);
     previous_scope = CopyString(scope_to_copy->previous_scope);
+    function_name = CopyString(scope_to_copy->function_name);
+
 
     thread_id = scope_to_copy->thread_id;
     has_grad = scope_to_copy->has_grad;
+    code_line = scope_to_copy->code_line;
+
+    
 }
 
 void Scope_Struct::Alloc_MarkSweepMap() {
-    // mark_sweep_map = new AnyMap();
+    mark_sweep_map = new AnyMap();
 }
+
+    
 
 
 void Scope_Struct::Print() {
@@ -69,6 +83,12 @@ extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy) {
 }
 
 
+extern "C" Scope_Struct *scope_struct_Dive(Scope_Struct *scope_struct) {
+    return scope_struct;
+}
+
+
+
 extern "C" void set_scope_first_arg(Scope_Struct *scope_struct, char *first_arg) {
     // std::cout << "set_scope_first_arg: " << first_arg << ".\n";
     scope_struct->Set_First_Arg(first_arg);
@@ -89,6 +109,12 @@ extern "C" void set_scope_has_grad(Scope_Struct *scope_struct, int has_grad) {
     // std::cout << "set_scope_has_grad: " << has_grad << ".\n";
     scope_struct->Set_Has_Grad(has_grad);
 }
+
+extern "C" void set_scope_function_name(Scope_Struct *scope_struct, char *function_name) {
+    // std::cout << "set_scope_has_grad: " << has_grad << ".\n";
+    scope_struct->Set_Function_Name(function_name);
+}
+
 
 extern "C" char *get_scope_first_arg(Scope_Struct *scope_struct) {
     // std::cout << "get_scope_first_arg: " << scope_struct->first_arg << ".\n";
@@ -150,9 +176,15 @@ extern "C" void scope_struct_New_Anon_Expr(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Alloc_MarkSweepMap(Scope_Struct *scope_struct) {
-    std::cout << "GET MARK SWEEP"  << ".\n";
     scope_struct->Alloc_MarkSweepMap();
 }
+
+extern "C" void scope_struct_Copy_MarkSweepMap(Scope_Struct *in_scope, Scope_Struct *out_scope) {
+    // std::cout << "COPY MARKSWEEP" << ".\n";
+    // The input struct receives the scope vars to clean. Cleaning scope vars from FunctionAST did not work.
+    in_scope->mark_sweep_map = out_scope->mark_sweep_map;
+}
+
 
 
 inline void delete_scope(Scope_Struct *scope_struct) {
@@ -160,17 +192,59 @@ inline void delete_scope(Scope_Struct *scope_struct) {
     delete[] scope_struct->first_arg;
     delete[] scope_struct->scope;
     delete[] scope_struct->previous_scope;
+    delete[] scope_struct->function_name;
+
+    if (scope_struct->mark_sweep_map!=nullptr)
+        delete scope_struct->mark_sweep_map;
+
 
     delete scope_struct;
 }
 
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
-    // std::cout << "Delete scope struct" << ".\n";
+    if (strcmp(scope_struct->function_name,"")==0)
+        return;
 
+    // if (scope_struct->thread_id==0)
 
+    for (auto &pair : *scope_struct->mark_sweep_map->data_types)
+    {
+        // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
 
+        if(pair.second=="float")
+        {
+            // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
+            NamedClassValues.erase(pair.first);
+            // std::cout << "Cleaned " << pair.first << ".\n";
+        }
 
+        if(pair.second=="str")
+        {
+            // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
+            char *val = NamedStrs[pair.first];
+            NamedClassValues.erase(pair.first);
+            move_to_char_pool(strlen(val)+1, val, "Mark sweep of str");
+            // std::cout << "Cleaned" << pair.first << ".\n";
+
+        }
+
+        if(pair.second=="tensor")
+        {
+            // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
+            Tensor *tensor = NamedTensorsT[pair.first];
+            // if (nn_mode==eval_mode||scope_struct->thread_id!=0)
+            // {
+            //     std::cout << "Delete tensor on " << scope_struct->thread_id << ".\n";
+            //     delete tensor;
+            // }
+            // if (nn_mode==eval_mode)
+            //     delete tensor;
+            // move_to_pool(scope_struct->thread_id, tensor->dims_prod, tensor->tensor_ptr, "tensor MarkSweep");
+            NamedTensorsT.erase(pair.first);
+        }
+
+    }
 
     delete_scope(scope_struct);
 }

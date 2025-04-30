@@ -213,9 +213,9 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
     to_free_tensor_forward(scope_tensor, scope);//
   else
     to_free_tensor(scope_tensor);
+  
   //delete scope_tensor;
-  NamedTensorsT.erase(scope_tensor_name);
-  scope_tensors[scope].clear();
+  // NamedTensorsT.erase(scope_tensor_name);
   
   return 0;
 }

@@ -48,7 +48,7 @@ extern "C" void *str_Load(char *name, Scope_Struct *scope_struct){
 
 
 
-extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct){
+extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) {
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   
@@ -56,8 +56,6 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct){
   NamedStrs[name] = value;
   //std::cout << "Store " << value << " at " << name << "\n";
   pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
 
   return 0;
 }
@@ -290,4 +288,10 @@ extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str)
 extern "C" void str_Delete(char *in_str) {
   // std::cout << "str_Delete of " << in_str << ".\n";
   move_to_char_pool(strlen(in_str)+1, in_str, "free");
+}
+
+
+extern "C" void str_MarkToSweep(Scope_Struct *scope_struct, char *name, char *value) {
+  // std::cout << "str_MarkToSweep of " << name << ".\n";
+  scope_struct->mark_sweep_map->append(name, value, "str");
 }

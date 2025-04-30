@@ -513,7 +513,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   std::string load_fn = type + "_Load";
   V = callret(load_fn, {var_name, scope_struct});
   // p2t("Load of " + Name);
-  // call("str_Delete", {var_name});
+  call("str_Delete", {var_name});
 
   return V;
 }
@@ -960,8 +960,24 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       // p2t("Store at " + store_op);
       call(store_op, {Lvar_name, idx, Val, scope_struct});
 
-    } else { 
+    } else
       call(store_op, {Lvar_name, Val, scope_struct});
+
+
+
+    if(!LHS->GetSelf()&&!LHS->GetIsAttribute())
+    {
+      std::string mark_op = LType + "_MarkToSweep";
+      // if (!in_str(LType, {"float", "str"}))
+      // {
+      //   p2t("MARKING " + LType);
+      // }
+    //   p2t("MARK TO SWEEP OF " + LType);
+      call(mark_op, {scope_struct, Lvar_name, Val});
+    }
+    else
+    {  
+      call("str_Delete", {Lvar_name});
     }
     
 
@@ -2405,6 +2421,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, tgt_function);
 
   // Always include scope on the beggining
+  call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
   ArgsV.insert(ArgsV.begin(), scope_struct_copy);
   // ArgsV.insert(ArgsV.begin(), scope_struct);
 
@@ -2419,7 +2436,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
   
   
-  // call("scope_struct_Delete", {scope_struct});
 
   
   Value *ret;
@@ -2471,8 +2487,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   p2t("CallExpr clean scope"); 
   
 
-  // call("scope_struct_Delete", {scope_struct_copy});
-  // call("scope_struct_Delete", {scope_struct});
 
   // Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   

@@ -38,8 +38,6 @@ extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Str
   // std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
-  move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
   return 0;
 }
 
@@ -48,8 +46,6 @@ extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_S
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name][(int)idx] = value;
-  move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
   return 0;
 }
 

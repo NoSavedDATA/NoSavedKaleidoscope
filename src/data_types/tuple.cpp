@@ -163,3 +163,10 @@ extern "C" void *AnyVector_Idx(AnyVector *vec, int idx)
   }
   return std::any_cast<void *>((*vec->data)[idx]);
 }
+
+
+
+extern "C" void tuple_MarkToSweep(Scope_Struct *scope_struct, char *name, AnyVector *value) {
+  std::cout << "tuple_MarkToSweep" << ".\n";
+  scope_struct->mark_sweep_map->append(name, value, "vector");
+}

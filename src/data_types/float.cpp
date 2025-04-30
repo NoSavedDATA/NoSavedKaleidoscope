@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 
+#include "../codegen/string.h"
 #include "../common/extension_functions.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
@@ -64,9 +65,15 @@ extern "C" void float_Store(char *name, float value, Scope_Struct *scope_struct)
   pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = value;
   pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "float_Store");
-  //delete[] name;
+  
+
 }
+
+
+extern "C" void float_MarkToSweep(Scope_Struct *scope_struct, char *name, float value) {
+  scope_struct->mark_sweep_map->append(name, value, "float");
+}
+
 
 extern "C" void StoreOnDemandNoFree(char *name, float value){
   
