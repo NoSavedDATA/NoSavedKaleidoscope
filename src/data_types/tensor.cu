@@ -150,9 +150,8 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, Tensor *
 extern "C" void *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
   // std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   Tensor *ret = NamedTensorsT[tensor_name];
-  move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
   //std::cout << "return load." << "\n";
-  //delete[] tensor_name;
+  
   return ret;
 }
 

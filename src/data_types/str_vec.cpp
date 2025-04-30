@@ -27,7 +27,6 @@ extern "C" void *str_vec_Load(char *object_var_name, Scope_Struct *scope_struct)
   // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   void *ret = &ClassStrVecs[object_var_name];
-  delete[] object_var_name;
   return ret;
 }
 

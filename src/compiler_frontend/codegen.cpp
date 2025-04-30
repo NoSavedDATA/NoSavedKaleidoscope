@@ -507,19 +507,14 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   if (type=="object")
     return var_name;
   if (type=="tensor" && !seen_var_attr)
-  {
     call("PrintTensor", {scope_struct, var_name});
-    // return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
   
 
   std::string load_fn = type + "_Load";
-  // std::cout << "Load fn: " << load_fn << ".\n";
-  V = Builder->CreateCall(TheModule->getFunction(load_fn),
-                                                  {var_name, scope_struct});
-  // p2t("Return of " + load_fn);
-  // if (type=="float")
-  //   call("print_float", {V});
+  V = callret(load_fn, {var_name, scope_struct});
+  // p2t("Load of " + Name);
+  // call("str_Delete", {var_name});
+
   return V;
 }
 
@@ -2424,12 +2419,15 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
   
   
+  // call("scope_struct_Delete", {scope_struct});
+
   
   Value *ret;
   if (CalleeOverride=="none")
   {
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
     // if (tgt_function=="Testincrement_yield_ptr")
+    call("scope_struct_Delete", {scope_struct_copy});
     // {
     //   p2t("Function value is");
     //   call("print_float", {ret});
@@ -2466,11 +2464,16 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       // call("print", {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});
       ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
     }
+    call("scope_struct_Delete", {scope_struct_copy});
     return ret;
   }
 
   p2t("CallExpr clean scope"); 
   
+
+  // call("scope_struct_Delete", {scope_struct_copy});
+  // call("scope_struct_Delete", {scope_struct});
+
   // Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
   
   // if (changed_first_arg)

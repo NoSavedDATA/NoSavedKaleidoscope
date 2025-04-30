@@ -31,7 +31,6 @@ extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struc
   // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   void *ret = &ClassFloatVecs[object_var_name];
-  delete[] object_var_name;
   return ret;
 }
 

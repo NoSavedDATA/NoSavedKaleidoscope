@@ -37,6 +37,8 @@ NXXFLAGS := $(CUDA_ARCH_NVCC) -I$(EIGEN_INCLUDE) -Xptxas=-v
 OBJ_DIR = obj
 BIN_DIR = bin
 SRC_DIR = src
+LIB_DIR := obj_static
+
 
 # CUDA Source and Object Files
 CU_SRC = $(shell find $(SRC_DIR) -name "*.cu")
@@ -49,6 +51,13 @@ CXX_OBJ = $(CXX_SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 CXX_DIR = $(sort $(dir $(CXX_OBJ)))
 
 OBJ_DIRS := $(sort $(CU_DIR) $(CXX_DIR))
+
+
+# static libs (.a) for .o files
+LIB_SUBDIRS := $(shell find $(OBJ_DIR) -mindepth 1 -maxdepth 1 -type d)
+STATIC_LIBS := $(patsubst $(OBJ_DIR)/%, $(LIB_DIR)/%.a, $(LIB_SUBDIRS))
+
+
 
 # Executable name
 OBJ := bin/nsk
@@ -68,9 +77,9 @@ $(foreach dir, $(OBJ_DIRS), \
 )
 
 $(shell mkdir -p $(BIN_DIR);)
+$(shell mkdir -p $(LIB_DIR);)
 
 $(info objects: $(CU_OBJ) sources: $(CU_SRC))
-
 
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu
@@ -79,7 +88,12 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ)
+# $(LIB_DIR)/%.a: $(CU_OBJ) $(CXX_OBJ)
+# 	ar rcs $@ $(CU_OBJ) $(CXX_OBJ)
+
+
+$(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ) $(STATIC_LIBS)
+#	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(STATIC_LIBS) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
 	@touch $(BUILD_FLAG)

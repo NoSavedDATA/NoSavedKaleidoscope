@@ -1,5 +1,6 @@
-#include"../char_pool/include.h"
-#include"../codegen/string.h"
+#include "../char_pool/include.h"
+#include "../codegen/string.h"
+#include "../data_types/any_map.h" 
 
 #include "scope_struct.h"
 
@@ -38,6 +39,10 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 
     thread_id = scope_to_copy->thread_id;
     has_grad = scope_to_copy->has_grad;
+}
+
+void Scope_Struct::Alloc_MarkSweepMap() {
+    // mark_sweep_map = new AnyMap();
 }
 
 
@@ -141,4 +146,37 @@ extern "C" void scope_struct_New_Anon_Expr(Scope_Struct *scope_struct) {
     scope_struct->first_arg = GetEmptyChar();
     scope_struct->scope = GetEmptyChar();
     scope_struct->previous_scope = GetEmptyChar();
+}
+
+
+extern "C" void scope_struct_Alloc_MarkSweepMap(Scope_Struct *scope_struct) {
+    std::cout << "GET MARK SWEEP"  << ".\n";
+    scope_struct->Alloc_MarkSweepMap();
+}
+
+
+inline void delete_scope(Scope_Struct *scope_struct) {
+
+    delete[] scope_struct->first_arg;
+    delete[] scope_struct->scope;
+    delete[] scope_struct->previous_scope;
+
+    delete scope_struct;
+}
+
+
+extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
+    // std::cout << "Delete scope struct" << ".\n";
+
+
+
+
+
+    delete_scope(scope_struct);
+}
+
+
+extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {
+    // std::cout << "Delete scope struct" << ".\n";    
+    delete_scope(scope_struct);
 }
