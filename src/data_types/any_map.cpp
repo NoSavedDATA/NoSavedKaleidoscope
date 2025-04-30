@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "../char_pool/char_pool.h"
 #include "../tensor/tensor_dim_functions.h"
 #include "../tensor/tensor_struct.h"
 #include "any_map.h"
@@ -13,8 +14,6 @@
 std::map<std::string, AnyMap *> NamedDicts;
 
 
-extern "C" AnyMap *CreateNotesVector();
-extern "C" float Dispose_NotesVector(AnyMap *);
 
 
 // template char *AnyMap::get<char *>(std::string);
@@ -59,13 +58,17 @@ AnyMap::AnyMap() {
 }
 
 AnyMap::~AnyMap() {
+    // std::cout << "DELETING A MAP" << ".\n";
     delete data;  // Free memory
     delete data_types;
 }
 
-void AnyMap::append(std::string key, std::any value, std::string data_type) {
-    (*data)[key] = value;
-    (*data_types)[key] = data_type;
+void AnyMap::append(char *key, std::any value, std::string data_type) {
+    std::string _key = key;
+    (*data)[_key] = value;
+    (*data_types)[_key] = data_type;
+
+    move_to_char_pool(strlen(key)+1, key, "Append to AnyMap");
 }
 
 

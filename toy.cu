@@ -587,7 +587,7 @@ Function *FunctionAST::codegen() {
 
   
   // Record the function arguments in the NamedValues map.
-  Value *first_arg, *scope_string, *previous_scope, *thread_id, *has_grad, *scope_struct;
+  Value *first_arg, *scope_string, *previous_scope, *thread_id, *has_grad, *scope_struct, *incoming_scope_struct;
 
   
   scope_struct = callret("scope_struct_Create", {});
@@ -615,7 +615,6 @@ Function *FunctionAST::codegen() {
   bool has_self = false; 
   bool has_scope = false;
   bool has_previous_scope = false;
-  bool has_scope_struct = false;
   
 
 
@@ -639,17 +638,16 @@ Function *FunctionAST::codegen() {
     if (arg_name == "scope_struct")
     {
       p2t("-------------------------------------------=============-----------------===========--------FunctionAST COPY SCOPE STRUCT");
+    
+    //   scope_struct = callret("scope_struct_Dive", {&Arg});
 
+      scope_struct = callret("scope_struct_Copy", {&Arg});      
 
-      scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {&Arg});      
-      has_scope_struct = true;
-
-
-      first_arg = Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}); 
-      scope_string = Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}); 
-      previous_scope = Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}); 
-      thread_id = Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}); 
-      has_grad = Builder->CreateCall(TheModule->getFunction("get_scope_has_grad"), {scope_struct}); 
+      first_arg = callret("get_scope_first_arg", {scope_struct}); 
+      scope_string = callret("get_scope_scope", {scope_struct}); 
+      previous_scope = callret("get_scope_previous_scope", {scope_struct}); 
+      thread_id = callret("get_scope_thread_id", {scope_struct}); 
+      has_grad = callret("get_scope_has_grad", {scope_struct}); 
       
     }
 
@@ -712,7 +710,7 @@ Function *FunctionAST::codegen() {
 
   // Builder->CreateCall(TheModule->getFunction("print_codegen"), {Builder->CreateGlobalString("FunctionAST finish func args")});
 
-//   call("scope_struct_Alloc_MarkSweepMap", {scope_struct}); 
+  call("scope_struct_Alloc_MarkSweepMap", {scope_struct}); 
 
   Value *RetVal;
   for (auto &body : Body)
@@ -723,6 +721,8 @@ Function *FunctionAST::codegen() {
     p2t("FunctionAST Body codegen post");
   }
 
+
+  call("scope_struct_Clean_Scope", {scope_struct}); 
 
 
   
@@ -738,7 +738,6 @@ Function *FunctionAST::codegen() {
   p2t("FunctionAST " + function_name + " clean scope");
 
 
-  call("scope_struct_Clean_Scope", {scope_struct}); 
   
   // if(has_self)
   //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
@@ -755,6 +754,7 @@ Function *FunctionAST::codegen() {
 
   
   
+
   p2t("FunctionAST return");
 
   if (RetVal) {
@@ -2797,6 +2797,14 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("scope_struct_Create", scope_struct_CreateTy);
 
 
+  FunctionType *set_scope_function_nameTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("set_scope_function_name", set_scope_function_nameTy);
+
+
   FunctionType *set_scope_first_argTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy},
@@ -2884,6 +2892,13 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);
 
 
+  FunctionType *scope_struct_DiveTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
+
   
   //
   FunctionType *print_randomsTy = FunctionType::get(
@@ -2910,6 +2925,35 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("scope_struct_Save_for_Async", scope_struct_Save_for_AsyncTy);
 
 
+  FunctionType *float_MarkToSweepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+      false 
+  );
+  TheModule->getOrInsertFunction("float_MarkToSweep", float_MarkToSweepTy);
+
+
+  FunctionType *str_MarkToSweepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("str_MarkToSweep", str_MarkToSweepTy);
+
+  FunctionType *tensor_MarkToSweepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("tensor_MarkToSweep", tensor_MarkToSweepTy);
+
+  FunctionType *tuple_MarkToSweepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("tuple_MarkToSweep", tuple_MarkToSweepTy);
+
 
   FunctionType *scope_struct_Alloc_MarkSeepTy = FunctionType::get(
       int8PtrTy,
@@ -2918,6 +2962,12 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("scope_struct_Alloc_MarkSweepMap", scope_struct_Alloc_MarkSeepTy);
 
+  FunctionType *scope_struct_Copy_MarkSeepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Copy_MarkSweepMap", scope_struct_Copy_MarkSeepTy);
 
   FunctionType *scope_struct_Clean_ScopeTy = FunctionType::get(
       int8PtrTy,

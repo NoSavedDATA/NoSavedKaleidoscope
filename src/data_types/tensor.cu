@@ -151,7 +151,7 @@ extern "C" void *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
   // std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   Tensor *ret = NamedTensorsT[tensor_name];
   //std::cout << "return load." << "\n";
-  
+
   return ret;
 }
 
@@ -770,4 +770,11 @@ extern "C" float tensor_CalculateIdx(char *tensor_name, float first_idx, ...) {
 
 
   return idx_at;
+}
+
+
+
+extern "C" void tensor_MarkToSweep(Scope_Struct *scope_struct, char *name, Tensor *value) {
+  // std::cout << "tensor_MarkToSweep" << ".\n";
+  scope_struct->mark_sweep_map->append(name, value, "tensor");
 }

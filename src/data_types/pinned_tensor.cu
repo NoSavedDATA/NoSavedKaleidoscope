@@ -99,7 +99,6 @@ extern "C" void pinned_tensor_Store_Idx(char *tensor_name, float idx_at, float v
   float *device_x = base_address + static_cast<int>(idx_at);
 
   *device_x = val;
-  move_to_char_pool(strlen(tensor_name)+1, tensor_name, "free");
 }
 
 
