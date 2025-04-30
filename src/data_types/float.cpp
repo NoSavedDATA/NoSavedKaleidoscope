@@ -55,8 +55,6 @@ extern "C" float float_Load(char *object_var_name, Scope_Struct *scope_struct) {
   pthread_mutex_unlock(&clean_scope_mutex);
   
 
-  move_to_char_pool(strlen(object_var_name)+1, object_var_name, "free");
-  //delete[] object_var_name;
   return ret;
 }
 

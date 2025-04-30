@@ -3,11 +3,15 @@
 #include <map>
 #include <string>
 
+#include "../data_types/any_map.h" 
+
 
 struct Scope_Struct { 
     char *first_arg = nullptr;
     char *scope = nullptr;
     char *previous_scope = nullptr;
+
+    // AnyMap *mark_sweep_map = nullptr;
     
     int thread_id=0;
     int has_grad=1;
@@ -19,6 +23,7 @@ struct Scope_Struct {
     void Set_Previous_Scope(char *);
     void Set_Thread_Id(int);
     void Set_Has_Grad(int);
+    void Alloc_MarkSweepMap();
 
     void Copy(Scope_Struct *);
 

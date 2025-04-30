@@ -40,7 +40,7 @@ extern "C" void *str_Load(char *name, Scope_Struct *scope_struct){
   pthread_mutex_lock(&clean_scope_mutex);
   char *ret = NamedStrs[name];
   pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "free");
+  // move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
 
   return ret;
@@ -283,4 +283,11 @@ extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str)
   float ret = std::strtof(copied, &end);
   delete[] copied;
   return ret;
+}
+
+
+
+extern "C" void str_Delete(char *in_str) {
+  // std::cout << "str_Delete of " << in_str << ".\n";
+  move_to_char_pool(strlen(in_str)+1, in_str, "free");
 }

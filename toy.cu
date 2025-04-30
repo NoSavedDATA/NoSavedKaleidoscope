@@ -652,6 +652,7 @@ Function *FunctionAST::codegen() {
       has_grad = Builder->CreateCall(TheModule->getFunction("get_scope_has_grad"), {scope_struct}); 
       
     }
+
     
     std::string type = "";
     if (typeVars.find(arg_name) != typeVars.end())
@@ -711,6 +712,8 @@ Function *FunctionAST::codegen() {
 
   // Builder->CreateCall(TheModule->getFunction("print_codegen"), {Builder->CreateGlobalString("FunctionAST finish func args")});
 
+//   call("scope_struct_Alloc_MarkSweepMap", {scope_struct}); 
+
   Value *RetVal;
   for (auto &body : Body)
   {
@@ -719,6 +722,7 @@ Function *FunctionAST::codegen() {
     RetVal = body->codegen(scope_struct);
     p2t("FunctionAST Body codegen post");
   }
+
 
 
   
@@ -732,6 +736,9 @@ Function *FunctionAST::codegen() {
 
 
   p2t("FunctionAST " + function_name + " clean scope");
+
+
+  call("scope_struct_Clean_Scope", {scope_struct}); 
   
   // if(has_self)
   //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
@@ -1066,7 +1073,13 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("tensor_tensor_div", CudaDivTy);
 
-
+  //
+  FunctionType *str_DeleteTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("str_Delete", str_DeleteTy);
 
 
   //
@@ -2896,6 +2909,29 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("scope_struct_Save_for_Async", scope_struct_Save_for_AsyncTy);
 
+
+
+  FunctionType *scope_struct_Alloc_MarkSeepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Alloc_MarkSweepMap", scope_struct_Alloc_MarkSeepTy);
+
+
+  FunctionType *scope_struct_Clean_ScopeTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Clean_Scope", scope_struct_Clean_ScopeTy);
+
+  FunctionType *scope_struct_DeleteTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Delete", scope_struct_DeleteTy);
 
   FunctionType *scope_struct_Load_for_AsyncTy = FunctionType::get(
       int8PtrTy,
