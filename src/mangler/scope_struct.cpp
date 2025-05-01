@@ -21,15 +21,19 @@ Scope_Struct::Scope_Struct() {
 std::map<std::string, Scope_Struct *> NamedScopeStructs;
 
 void Scope_Struct::Set_First_Arg(char *first_arg) {
-    this->first_arg = CopyString(first_arg);
+    delete[] this->first_arg;
+    this->first_arg = first_arg;
 }
 void Scope_Struct::Set_Scope(char *scope) {
-    this->scope = CopyString(scope);
+    delete[] this->scope;
+    this->scope = scope;
 }
 void Scope_Struct::Set_Previous_Scope(char *previous_scope) {
-    this->previous_scope = CopyString(previous_scope);
+    delete[] this->previous_scope;
+    this->previous_scope = previous_scope;
 }
 void Scope_Struct::Set_Function_Name(char *function_name) {
+    delete[] this->function_name;
     this->function_name = CopyString(function_name);
 }
 void Scope_Struct::Set_Thread_Id(int thread_id) {
@@ -40,6 +44,11 @@ void Scope_Struct::Set_Has_Grad(int has_grad) {
 }
 void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 {
+    delete[] first_arg;
+    delete[] scope;
+    delete[] previous_scope;
+    delete[] function_name;
+
     first_arg = CopyString(scope_to_copy->first_arg);
     scope = CopyString(scope_to_copy->scope);
     previous_scope = CopyString(scope_to_copy->previous_scope);
@@ -67,7 +76,6 @@ void Scope_Struct::Print() {
 
 extern "C" Scope_Struct *scope_struct_Create() {
     Scope_Struct *scope_struct = new Scope_Struct();
-    // std::cout << "Created scope struct" << ".\n";
     return scope_struct;
 }
 
