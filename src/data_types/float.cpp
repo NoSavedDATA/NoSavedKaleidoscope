@@ -8,11 +8,6 @@
 #include "include.h"
 
 
-extern "C" void *to_string(float v)
-{
-  //todo: allow float instead of int only
-  return str_to_char(std::to_string((int)v));
-}
 
 
 extern "C" void PrintFloat(float value){
@@ -41,7 +36,6 @@ extern "C" float float_Create(char *name, char *scopeless_name, float init_val, 
   
   // move_to_char_pool(strlen(name)+1, name, "float_Store");
 
-  delete[] name;
   delete[] scopeless_name;
 
   return 0;
