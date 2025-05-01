@@ -2300,10 +2300,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
 
-  //Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
-  previous_scope = callret("CopyString", {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct_copy})});
-
-
+  previous_scope = callret("CopyString", {callret("get_scope_scope", {scope_struct_copy})});
   call("set_scope_previous_scope", {scope_struct_copy, previous_scope});
 
 
@@ -2333,15 +2330,10 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     is_user_cpp_function = in_str(tgt_function, user_cpp_functions);
 
     if (not_coding_language_method)
-    {
       tgt_function = Class+tgt_function;  
-    }
     
-    // p2t("SETTING FIRSTARG OF " + tgt_function);
-    // call("scope_struct_Print", {scope_struct_copy});
     first_arg = NameSolver->codegen(scope_struct_copy);
     call("set_scope_first_arg", {scope_struct_copy, first_arg});
-    // call("scope_struct_Print", {scope_struct_copy});
 
     changed_first_arg = true;  
   }
@@ -2359,6 +2351,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       call("set_scope_scope", {scope_struct_copy, scope_string});
     }
   }
+  
   target_args_size+=1; //always add scope_struct
 
   if (Load_Type!="none") // x.view -> tensor_Load
