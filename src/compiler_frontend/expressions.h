@@ -375,57 +375,35 @@ class VecIdxExprAST : public ExprAST {
   };
   
   
-  /// BinaryExprAST - Expression class for a binary operator.
-  class BinaryExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-    std::string Elements, Operation;
-  
-  public:
-    BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  class BinaryTensorScalarExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-  
-  public:
-    BinaryTensorScalarExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  class BinaryTensorTensorExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-  
-  public:
-    BinaryTensorTensorExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  
-  
-  
-  class BinaryObjExprAST : public ExprAST {
-    char Op;
-    std::unique_ptr<ExprAST> LHS, RHS;
-  
-  public:
-    BinaryObjExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                  std::unique_ptr<ExprAST> RHS);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
+/// BinaryExprAST - Expression class for a binary operator.
+class BinaryExprAST : public ExprAST {
+  char Op;
+  std::unique_ptr<ExprAST> LHS, RHS;
+  std::string Elements, Operation;
+
+public:
+  BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
+                std::unique_ptr<ExprAST> RHS);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+
+
+
+
+
+class BinaryObjExprAST : public ExprAST {
+  char Op;
+  std::unique_ptr<ExprAST> LHS, RHS;
+
+public:
+  BinaryObjExprAST(char Op, std::unique_ptr<ExprAST> LHS,
+                std::unique_ptr<ExprAST> RHS);
+
+  Value *codegen(Value *scope_struct) override;
+};
   
   
   

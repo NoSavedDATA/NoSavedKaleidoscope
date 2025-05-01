@@ -86,7 +86,7 @@ Value *StringExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
-  return global_str(Val);
+  return callret("CopyString", {global_str(Val)});
 }
 
 Value *NullPtrExprAST::codegen(Value *scope_struct) {
@@ -185,18 +185,22 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     //   call("scope_struct_Print", {scope_struct});
 
     
+    Value *initial_value = Init->codegen(scope_struct);
     
     std::string create_fn = Type + "_Create";    
+    std::string mark_to_sweep_fn  = Type + "_MarkToSweep";
     p2t("DataExpr Call create for " + create_fn);
 
-    call(create_fn, {var_name, scopeless_name, Init->codegen(scope_struct),
+    call(create_fn, {var_name, scopeless_name, initial_value,
                       notes_vector, scope_struct});
     
     p2t("DataExpr Dispose notes vector");
 
-    Builder->CreateCall(TheModule->getFunction("Dispose_NotesVector"), {notes_vector});
+    call("Dispose_NotesVector", {notes_vector});
 
-    
+    // p2t("Call mark to sweep of " + mark_to_sweep_fn);
+    if(!(is_self||is_attr))
+      call(mark_to_sweep_fn, {scope_struct, var_name, initial_value});
   }
 
 
@@ -694,140 +698,6 @@ Value *ObjectVecIdxExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *BinaryTensorScalarExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  Value *tensor_name = Builder->CreateGlobalString(LHS->GetName());
-
-
-
-  std::string pre_dot = LHS->GetPreDot();
-  bool is_self = LHS->GetSelf();
-  bool is_attr = LHS->GetIsAttribute();
-
-  if (is_attr) { // Gets from pre_dot if it is a class attribute
-    Value * object_name = Builder->CreateGlobalString(pre_dot);
-
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, tensor_name});
-  }
-  if (is_self)
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), tensor_name});
-  if (!(is_self||is_attr))
-    tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), tensor_name});
-    
-
-
-
-  // Special case '=' because we don't want to emit the LHS as an expression.
-  if (Op == '=') {
-    seen_var_attr=true;
-    // Assignment requires the LHS to be an identifier.
-    // This assume we're building without RTTI because LLVM builds that way by
-    // default.  If you build LLVM with RTTI this can be changed to a
-    // dynamic_cast for automatic error checking.
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    if (!LHSE)
-      return LogErrorV("'=' destiny must be a var.");
-    // Codegen the RHS.
-    
-    Value *Val = RHS->codegen(scope_struct);
-    if (!Val)
-      return nullptr;
-
-    
-    
-    std::cout << "1 0 attr\n";
-    
-
-
-    //LogErrorS("Attribution from float into tensor is not possible.");    
-    
-    
-      
-    
-    seen_var_attr=false;
-    return Val;
-  }
-
-
-  std::cout << "\n\n\nTensor scalar for LHS: " << LHS->GetName() << " RHS: " << RHS->GetName() << "\n\n\n";
-  Value *LtensorPtr = LHS->codegen(scope_struct);
-  Value *R = RHS->codegen(scope_struct);
-  std::cout << "\n\n\nTensor scalar post codegen" << "\n\n\n";
-
-
-
-  if (!LtensorPtr || !R)
-    return nullptr;
-
-
-
-  /*
-  std::cout << "\nTensorScalar, LHS is self: " << LHS->GetSelf() << "\n";
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-  std::string functionName = TheFunction->getName().str();
-  std::cout << "Fname: " << functionName << "\n\n";
-  */
-  
-
-
-
-  switch (Op)
-  {
-  case '*':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarmult");
-  case '/':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarDiv"),
-                               {LtensorPtr, R, scope_struct}, "cudascalardiv");
-  case 77:
-    return Builder->CreateCall(TheModule->getFunction("CudaReverseScalarDiv"),
-                               {LtensorPtr, R, scope_struct}, "cudareversescalardiv");
-  case '+':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarAdd"),
-                               {LtensorPtr, R, scope_struct}, "cudascalaradd");
-  case '-':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarSub"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarsub");
-  case tok_equal:
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarEqual"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarequal");
-  case tok_diff:
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarDiff"),
-                               {LtensorPtr, R, scope_struct}, "cudascalardiff");
-  case '<':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarMinor"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarminor");
-  case '>':
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarHigher"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarhigher");
-  case tok_minor_eq:
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarMinorEq"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarminoreq");
-  case tok_higher_eq:
-    return Builder->CreateCall(TheModule->getFunction("CudaScalarHigherEq"),
-                               {LtensorPtr, R, scope_struct}, "cudascalarhighereq");
-  case ':':
-    return LtensorPtr;
-  case tok_space:
-    return R;
-  default:
-    break;
-  }
-  
-
-  // If it wasn't a builtin binary operator, it must be a user defined one. Emit
-  // a call to it.
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {LtensorPtr, R};
-  return Builder->CreateCall(F, Ops, "binop");
-}
 
 
 
@@ -1058,153 +928,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *BinaryTensorTensorExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  Value *LtensorName = Builder->CreateGlobalString(LHS->GetName());
-  Value *RtensorName = Builder->CreateGlobalString(RHS->GetName());
-  Value *object_name;
-
-
-  
-  // if is attribution
-  if (Op == '=') {
-  
-    seen_var_attr=true;
-
-    Value *RtensorPtr = RHS->codegen(scope_struct);
-    
-
-    if (!LHS->GetIsVec())
-    {
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(scope_struct);
-
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-      
-      //std::cout << "1 1 attr\n";
-
-
-      Builder->CreateCall(TheModule->getFunction("tensor_Store"),
-                          {LtensorName, RtensorPtr, scope_struct});
-      //std::cout << "Post attr call\n\n";
-    } else
-    {
-      std::cout << "1 1 INDEXED attr\n";
-
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      LtensorName = LHSE->NameSolver->codegen(scope_struct);
-      if (!LHSE)
-        return LogErrorV("'=' left side expression must be a var.");
-
-      if(LHSE->Idx[0]->GetType()!="tensor")
-      {
-        std::vector<Value *> idx_calc_args;
-        idx_calc_args.push_back(LtensorName);
-        for (int i=0; i<LHSE->Idx.size(); i++)
-          idx_calc_args.push_back(LHSE->Idx[i]->codegen(scope_struct));
-        Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                              idx_calc_args);
-
-        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdx"),
-                            {LtensorName, RtensorPtr,
-                             idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      } else {
-        VariableExprAST *idx = static_cast<VariableExprAST *>(LHSE->Idx[0].get());
-        Value *idx_tensor_name = idx->NameSolver->codegen(scope_struct);
-        
-        Builder->CreateCall(TheModule->getFunction("AttrTensorOnIdxTensor"), {LtensorName, idx_tensor_name, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-
-      }
-    }
-
-    seen_var_attr=false;
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
-
-
-
-
-  std::string functionName = Builder->GetInsertBlock()->getParent()->getName().str();
-  std::cout << "\nTensor Tensor for function: " << functionName << "\n";
-  int forward_func = 0;
-  if(ends_with(functionName, "forward"))
-    forward_func = 1;
-  forward_func = 1; // TODO: RemoveLastDim this line
-
-
-
-  
-  Value *LtensorPtr = LHS->codegen(scope_struct);
-  Value *RtensorPtr = RHS->codegen(scope_struct);
-
-
-
-  if (!LtensorPtr || !RtensorPtr)
-    return nullptr;
-
-  Function *CudaFn;
-
-  std::cout << "Tensor tensor: " << LHS->GetName() << ", " << RHS->GetName() << "\n";
-    
-
-
-  Value *is_forward_func = ConstantInt::get(Type::getInt32Ty(*TheContext), forward_func);
-  
-  /*
-  void *vec = &NamedDims[LHS->GetName()];
-  Value* LLVMValue = ConstantInt::get(Type::getInt64Ty(*TheContext), reinterpret_cast<uint64_t>(vec));
-  LLVMValue = Builder->CreateIntToPtr(LLVMValue, int8PtrTy);
-  */
-
-  
-  Value *new_dims;
-
-  switch (Op)
-  {
-  case '@':
-    return Builder->CreateCall(TheModule->getFunction("CudaMult"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-  case '/':
-  {
-    return Builder->CreateCall(TheModule->getFunction("CudaDiv"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-  }
-  case '+':
-    return Builder->CreateCall(TheModule->getFunction("CudaAdd"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-  case '*':
-    return Builder->CreateCall(TheModule->getFunction("CudaHadamard"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-  case '-':
-    return Builder->CreateCall(TheModule->getFunction("CudaSub"),
-                                    {is_forward_func,
-                                     LtensorPtr, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-  case tok_equal:
-    return Builder->CreateCall(TheModule->getFunction("CudaEqual"),
-                               {is_forward_func, LtensorPtr, RtensorPtr, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})}, "cudaequal");
-  case ':':
-    return LtensorPtr;
-  default:
-    break;
-  }
-  
-
-  std::string _error = "The operator " + ReverseToken(Op) + " is not implemented for operations between tensors";
-  LogErrorS(_error);
-  
-  Function *F = getFunction(std::string("binary") + Op);
-  assert(F && "Operator not found.");
-
-  Value *Ops[] = {LtensorName, RtensorName};
-  return Builder->CreateCall(F, Ops, "binop");
-}
 
 
 
@@ -2242,9 +1965,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
   int nested_function;
   if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
-  {
     nested_function=0;
-  }
   else
     nested_function=1;
 
@@ -2337,6 +2058,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     changed_first_arg = true;  
   }
+  call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
+
 
   p2t("CallExpr Finish mangle, get scope info.\n---Function Name: " + tgt_function);
   
@@ -2351,16 +2074,15 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       call("set_scope_scope", {scope_struct_copy, scope_string});
     }
   }
-  
-  target_args_size+=1; //always add scope_struct
 
+  target_args_size+=1; //always add scope_struct
   if (Load_Type!="none") // x.view -> tensor_Load
     target_args_size += 1;
 
 
 
-  // p2t("CallExpr require scope functions");
-  // if(in_str(tgt_function, require_scope_functions))
+
+
 
  
 
@@ -2381,8 +2103,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     }
 
     tgt_function_name = CalleeF->getName().str();
-    // std::cout << "CALLEEF " << tgt_function_name << ".\n";
-    // p2t("CALLEEF " + tgt_function_name );
 
     // If argument mismatch error.
     if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
@@ -2414,20 +2134,11 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, tgt_function);
 
   // Always include scope on the beggining
-  call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
   ArgsV.insert(ArgsV.begin(), scope_struct_copy);
-  // ArgsV.insert(ArgsV.begin(), scope_struct);
 
 
 
-
-  
-
-  // std::cout << "\n\nCallExpr Create call: "  << tgt_function_name << " from parent: " << functionName << ", with override: " << CalleeOverride << " and " << ArgsV.size() << " args." << "\n\n";
-  
-  
-  
-  
+ 
   
 
   
@@ -2481,19 +2192,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
 
 
-  // Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
-  
-  // if (changed_first_arg)
-  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
-  
-  // if (has_first_arg_copy)
-  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg_copy});
-
-  // if (has_scope)
-  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_string});
-
-  // if (must_free_arg0)
-  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {ArgsV[0]});
   
   ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   return ret;

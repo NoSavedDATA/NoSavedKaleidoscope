@@ -21,7 +21,6 @@ extern "C" float float_vec_Create(char *name, char *scopeless_name, void *init_v
     ClassFloatVecs[name] = vec;
   }
 
-  delete[] name;
   delete[] scopeless_name;
 
   return 0;
@@ -39,6 +38,10 @@ extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Str
 
   ClassFloatVecs[name] = value;
   return 0;
+}
+
+extern "C" void float_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, void *value) {
+  scope_struct->mark_sweep_map->append(name, value, "float_vec");
 }
 
 extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_Struct *scope_struct){
@@ -119,14 +122,6 @@ extern "C" float float_vec_CalculateIdx(char *data_name, float first_idx, ...) {
 
 extern "C" float float_vec_first_nonzero(Scope_Struct *scope_struct, std::vector<float> vec)
 { 
-  /*
-  std::cout << "[";
-  for (int i=0; i<vec.size(); i++)
-    std::cout << vec[i] << ", ";
-  std::cout << "]" << "\n";
-  */
-
-
   float idx = -1;
   for (int i=0; i<vec.size(); i++)
     if (vec[i]!=0)
@@ -137,3 +132,16 @@ extern "C" float float_vec_first_nonzero(Scope_Struct *scope_struct, std::vector
 
   return idx;
 }
+
+
+
+extern "C" float float_vec_print(Scope_Struct *scope_struct, std::vector<float> vec) {
+  std::cout << "[";
+  for (int i=0; i<vec.size()-1; i++)
+    std::cout << vec[i] << ", ";
+
+  std::cout << vec[vec.size()-1] << "]" << "\n";
+  return 0;
+}
+
+

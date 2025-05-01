@@ -26,8 +26,7 @@ extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, An
   NamedStrs[name] = init_val;
   //std::cout << "Store " << value << " at " << name << "\n";
   pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(name)+1, name, "free");
-  move_to_char_pool(strlen(name)+1, scopeless_name, "free");
+  move_to_char_pool(strlen(scopeless_name)+1, scopeless_name, "free");
   //delete[] name;
 
   return 0;
@@ -58,6 +57,10 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
   pthread_mutex_unlock(&clean_scope_mutex);
 
   return 0;
+}
+
+extern "C" void str_MarkToSweep(Scope_Struct *scope_struct, char *name, void *value) {
+  scope_struct->mark_sweep_map->append(name, value, "str");
 }
 
 
@@ -290,8 +293,3 @@ extern "C" void str_Delete(char *in_str) {
   move_to_char_pool(strlen(in_str)+1, in_str, "free");
 }
 
-
-extern "C" void str_MarkToSweep(Scope_Struct *scope_struct, char *name, char *value) {
-  // std::cout << "str_MarkToSweep of " << name << ".\n";
-  scope_struct->mark_sweep_map->append(name, value, "str");
-}

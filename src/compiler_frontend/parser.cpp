@@ -2593,9 +2593,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
         // std::cout << "---REVERSING" << ".\n";
 
 
-        // RHS = std::make_unique<BinaryTensorScalarExprAST>('*',
-        //                                             std::move(RHS),
-        //                                             std::move(std::make_unique<NumberExprAST>(-1.0f)));
                                                     
 
         std::string op_type = op_elements + "_mult";
@@ -2610,8 +2607,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
         // std::cout << "---Setting type as " << return_type << ".\n";
         LHS->SetType(return_type);
 
-        // LHS = std::make_unique<BinaryTensorScalarExprAST>('+',
-        //                                             std::move(RHS), std::move(LHS));
       } else {
 
         // std::cout << "Reverse 2" << ".\n";

@@ -19,6 +19,9 @@ public:
 
     template <typename T>
     T get(std::string index); 
+    
+    template <typename T>
+    void delete_type(std::string);
 
     size_t size() const; 
 

@@ -66,12 +66,15 @@ void Scope_Struct::Alloc_MarkSweepMap() {
     mark_sweep_map = new AnyMap();
 }
 
-    
-
 
 void Scope_Struct::Print() {
     std::cout << "Scope struct:\n\tFirst arg: " << first_arg << "\n\tScope: " << scope << "\n\tPrevious scope: " << previous_scope << "\n\tThread id: " << thread_id << "\n\tHas grad: " << has_grad << ".\n\n";
 }
+
+
+
+
+
 
 
 extern "C" Scope_Struct *scope_struct_Create() {
@@ -87,6 +90,10 @@ extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy) {
     scope_struct->Copy(scope_to_copy);
 
     // std::cout << "Scope struct copied" << ".\n";
+    return scope_struct;
+}
+extern "C" Scope_Struct *scope_struct_Overwrite(Scope_Struct *scope_struct, Scope_Struct *scope_to_copy) {
+    scope_struct->Copy(scope_to_copy);
     return scope_struct;
 }
 
@@ -176,11 +183,6 @@ extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thr
 }
 
 
-extern "C" void scope_struct_New_Anon_Expr(Scope_Struct *scope_struct) {
-    scope_struct->first_arg = GetEmptyChar();
-    scope_struct->scope = GetEmptyChar();
-    scope_struct->previous_scope = GetEmptyChar();
-}
 
 
 extern "C" void scope_struct_Alloc_MarkSweepMap(Scope_Struct *scope_struct) {
@@ -203,7 +205,10 @@ inline void delete_scope(Scope_Struct *scope_struct) {
     delete[] scope_struct->function_name;
 
     if (scope_struct->mark_sweep_map!=nullptr)
+    {
+        // std::cout << "Delete mark sweep" << ".\n";
         delete scope_struct->mark_sweep_map;
+    }
 
 
     delete scope_struct;
@@ -229,10 +234,11 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
 
         if(pair.second=="str")
         {
-            // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
+            std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
             char *val = NamedStrs[pair.first];
             NamedClassValues.erase(pair.first);
-            move_to_char_pool(strlen(val)+1, val, "Mark sweep of str");
+            scope_struct->mark_sweep_map->delete_type<char *>(pair.first);
+            // move_to_char_pool(strlen(val)+1, val, "Mark sweep of str");
             // std::cout << "Cleaned" << pair.first << ".\n";
 
         }

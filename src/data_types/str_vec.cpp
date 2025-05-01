@@ -18,7 +18,6 @@
 extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
 
-  delete[] name;
   delete[] scopeless_name;
 
   return 0;
@@ -37,6 +36,10 @@ extern "C" void str_vec_Store(char *name, std::vector<char *> value, Scope_Struc
   ClassStrVecs[name] = value;
   // move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
+}
+
+extern "C" void str_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, void *value) {
+  scope_struct->mark_sweep_map->append(name, value, "str_vec");
 }
 
 
@@ -156,4 +159,14 @@ extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, char *vec_name, float 
 
 extern "C" float str_vec_CalculateIdx(char *data_name, float first_idx, ...) {
   return first_idx;
+}
+
+
+extern "C" float str_vec_print(Scope_Struct *scope_struct, std::vector<char *> vec) {
+  std::cout << "[";
+  for (int i=0; i<vec.size()-1; i++)
+    std::cout << vec[i] << ", ";
+
+  std::cout << vec[vec.size()-1] << "]" << "\n";
+  return 0;
 }

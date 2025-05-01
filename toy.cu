@@ -596,8 +596,6 @@ Function *FunctionAST::codegen() {
   thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
   has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
 
-  if (function_name=="__anon_expr")
-    call("scope_struct_New_Anon_Expr", {scope_struct}); // New empty char for first_arg, scope and previous_scope
  
   
   call("set_scope_thread_id", {scope_struct, thread_id});
@@ -615,6 +613,8 @@ Function *FunctionAST::codegen() {
   bool has_self = false; 
   bool has_scope = false;
   bool has_previous_scope = false;
+
+  
   
 
 
@@ -641,7 +641,7 @@ Function *FunctionAST::codegen() {
     
     //   scope_struct = callret("scope_struct_Dive", {&Arg});
 
-      scope_struct = callret("scope_struct_Copy", {&Arg});      
+      scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
 
       first_arg = callret("get_scope_first_arg", {scope_struct}); 
       scope_string = callret("get_scope_scope", {scope_struct}); 
@@ -656,32 +656,25 @@ Function *FunctionAST::codegen() {
     if (typeVars.find(arg_name) != typeVars.end())
       type = typeVars[arg_name];
 
-    // Coder args    
+    // Todo: Mark these variables for sweep
+    // Coder args
     if (type=="float")
     {
-      Value *var_name = Builder->CreateGlobalString(arg_name);
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                    {scope_string, var_name});
+      Value *var_name = global_str(arg_name);
+      var_name = callret("ConcatStr", {scope_string, var_name});
 
-      Builder->CreateCall(TheModule->getFunction("StoreArgOnDemand"),
-                                                  {scope_string, var_name, &Arg});
+      call("StoreArgOnDemand", {scope_string, var_name, &Arg});
     } else if (type=="str")
     {
-      Value *var_name = Builder->CreateGlobalString(arg_name);
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"), //TODO: Store scope vars to clean for this too
-                                    {scope_string, var_name});
-
-
-      Builder->CreateCall(TheModule->getFunction("str_Store"),
-                                                  {var_name, &Arg, scope_struct});
+      Value *var_name = global_str(arg_name);
+      var_name = callret("ConcatStr", {scope_string, var_name});
+      call("str_Store", {var_name, &Arg, scope_struct});
     }
     else if (type!="tensor")
     {
       AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
       Builder->CreateStore(&Arg, Alloca);
       //Builder->CreateStore(Builder->CreateLoad(Type::getFloatTy(*TheContext), &Arg), Alloca);
-
-
 
       NamedValues[std::string(Arg.getName())] = Alloca;
 
@@ -690,10 +683,7 @@ Function *FunctionAST::codegen() {
     {
       if (type=="tensor")
       {
-        //Builder->CreateCall(TheModule->getFunction("print"),
-        //  {Builder->CreateGlobalString(__print), &Arg});
-
-        Builder->CreateCall(TheModule->getFunction("CopyArgTensor"),
+        call("CopyArgTensor",
                           {&Arg,
                            Builder->CreateGlobalString(arg_name),
                            previous_scope,
@@ -708,7 +698,6 @@ Function *FunctionAST::codegen() {
   // call("scope_struct_Print", {scope_struct});
 
 
-  // Builder->CreateCall(TheModule->getFunction("print_codegen"), {Builder->CreateGlobalString("FunctionAST finish func args")});
 
   call("scope_struct_Alloc_MarkSweepMap", {scope_struct}); 
 
@@ -726,32 +715,6 @@ Function *FunctionAST::codegen() {
 
 
   
-
-  //Value *aux = Builder->CreateGlobalString(function_name);
-
-
-  
-  
-
-
-
-  p2t("FunctionAST " + function_name + " clean scope");
-
-
-  
-  // if(has_self)
-  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {first_arg});
-
-  // if(has_scope)
-  // {
-  //   Builder->CreateCall(TheModule->getFunction("CleanScopeVars"), {scope_string, thread_id});
-  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {scope_string}); 
-  // }
-
-  
-  // if(has_previous_scope)
-  //   Builder->CreateCall(TheModule->getFunction("FreeChar"), {previous_scope});
-
   
   
 
@@ -2167,15 +2130,27 @@ static void InitializeModule() {
 
 
 
+  FunctionType *str_vec_printTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("str_vec_print", str_vec_printTy);
 
   //
+  FunctionType *float_vec_printTy = FunctionType::get(
+      Type::getFloatTy(*TheContext),
+      {int8PtrTy, int8PtrTy}, 
+      false 
+  );
+  TheModule->getOrInsertFunction("float_vec_print", float_vec_printTy);
+
   FunctionType *float_vec_first_nonzeroTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy}, 
       false 
   );
   TheModule->getOrInsertFunction("float_vec_first_nonzero", float_vec_first_nonzeroTy);
-
 
   //
   FunctionType *LoadStrVecOnDemandTy = FunctionType::get(
@@ -2891,6 +2866,12 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);
 
+  FunctionType *scope_struct_OverwriteTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("scope_struct_Overwrite", scope_struct_OverwriteTy);
 
   FunctionType *scope_struct_DiveTy = FunctionType::get(
       int8PtrTy,
@@ -2910,12 +2891,6 @@ static void InitializeModule() {
   
 
 
-  FunctionType *scope_struct_New_Anon_ExprTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_New_Anon_Expr", scope_struct_New_Anon_ExprTy);
 
   FunctionType *scope_struct_Save_for_AsyncTy = FunctionType::get(
       int8PtrTy,
@@ -2932,6 +2907,19 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("float_MarkToSweep", float_MarkToSweepTy);
 
+  FunctionType *float_vec_MarkToSweepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("float_vec_MarkToSweep", float_vec_MarkToSweepTy);
+
+  FunctionType *str_vec_MarkToSweepTy = FunctionType::get(
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy},
+      false 
+  );
+  TheModule->getOrInsertFunction("str_vec_MarkToSweep", str_vec_MarkToSweepTy);
 
   FunctionType *str_MarkToSweepTy = FunctionType::get(
       int8PtrTy,
@@ -3563,7 +3551,7 @@ int main() {
 
   // tensor + string + ...
   // e.g: x.view(), str.split()
-  native_methods = {"split", "split_idx", "float_vec_first_nonzero", "append"};
+  native_methods = {"split", "split_idx", "float_vec_first_nonzero", "append", "float_vec_print", "str_vec_print"};
   native_methods = concat_str_vec(native_methods, return_tensor_methods);
   native_methods = concat_str_vec(native_methods, user_cpp_functions);
   //native_methods = concat_str_vec(native_methods, return_pinned_methods);

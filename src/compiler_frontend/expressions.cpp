@@ -315,15 +315,6 @@ BinaryExprAST::BinaryExprAST(char Op, std::string Elements, std::string Operatio
   
   
   
-BinaryTensorScalarExprAST::BinaryTensorScalarExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-  
-  
-
-BinaryTensorTensorExprAST::BinaryTensorTensorExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
 
   

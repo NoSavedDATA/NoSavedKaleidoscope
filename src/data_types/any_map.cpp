@@ -51,6 +51,43 @@ float AnyMap::get<float>(std::string key) {
     // return std::any_cast<float>((*data)[key]);
 }
 
+
+
+
+
+
+
+template <typename T>
+void AnyMap::delete_type(std::string key) {
+    auto it = data->find(key);
+
+    void *data_ptr = std::any_cast<void *>(it->second);
+    if(data_ptr!=nullptr)
+        delete static_cast<T>(data_ptr);
+}
+
+
+template <>
+void AnyMap::delete_type<char *>(std::string key) {
+    auto it = data->find(key);
+    
+    void *data_ptr = std::any_cast<void *>(it->second);
+    if(data_ptr!=nullptr)
+    {
+        std::cout << "NOT NULL" << ".\n";
+        delete[] static_cast<char *>(data_ptr);
+    } else
+        std::cout << "NULL" << ".\n";
+
+}
+
+
+
+
+
+
+
+
 AnyMap::AnyMap() {
     
     data = new std::map<std::string, std::any>(); // Allocate memory
