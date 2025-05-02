@@ -27,12 +27,3 @@ public:
 
 extern std::map<std::string, AnyVector *> NamedVectors;
 
-
-extern "C" AnyVector *CreateNotesVector();
-extern "C" float Dispose_NotesVector(AnyVector *);
-
-
-extern "C" AnyVector *Add_Float_To_NotesVector(AnyVector *, float value);
-
-
-extern "C" AnyVector *Add_String_To_NotesVector(AnyVector *, char *value);

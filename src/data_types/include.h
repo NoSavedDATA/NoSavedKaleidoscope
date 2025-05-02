@@ -13,6 +13,7 @@
 #include "str.h"
 #include "str_vec.h"
 #include "tensor.h"
+#include "tuple.h"
 
 using namespace llvm;
 

@@ -17,7 +17,7 @@ std::map<std::string, std::string> AuxRandomStrs;
 
 
   
-extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct) {
+extern "C" void *str_Create(char *name, char *scopeless_name, char *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct) {
 
   // std::cout << "Creating string"  << ".\n";
   // std::cout << "Val: " << init_val << ".\n";
@@ -26,10 +26,8 @@ extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, An
   NamedStrs[name] = init_val;
   //std::cout << "Store " << value << " at " << name << "\n";
   pthread_mutex_unlock(&clean_scope_mutex);
-  move_to_char_pool(strlen(scopeless_name)+1, scopeless_name, "free");
-  //delete[] name;
 
-  return 0;
+  return init_val;
 }
 
 extern "C" void *str_Load(char *name, Scope_Struct *scope_struct){
@@ -52,10 +50,17 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   
   pthread_mutex_lock(&clean_scope_mutex);
+  if(NamedStrs.count(name)>0) 
+  {
+    char *old_val = NamedStrs[name];
+    move_to_char_pool(strlen(old_val)+1, old_val, "Mark sweep of str");
+  }
   NamedStrs[name] = value;
   //std::cout << "Store " << value << " at " << name << "\n";
   pthread_mutex_unlock(&clean_scope_mutex);
-
+  
+  // std::cout << "STORING STRING " << value << " AT " << name << ".\n";
+  
   return 0;
 }
 
@@ -63,9 +68,20 @@ extern "C" void str_MarkToSweep(Scope_Struct *scope_struct, char *name, void *va
   scope_struct->mark_sweep_map->append(name, value, "str");
 }
 
+void str_Clean_Up(std::string name, void *data_ptr)
+{
+  // std::cout << "str_Clean_Up" << ".\n";
+  char *char_ptr = static_cast<char *>(data_ptr);
+  move_to_char_pool(strlen(char_ptr)+1, char_ptr, "Mark sweep of str");
+
+  pthread_mutex_lock(&clean_scope_mutex);
+  NamedStrs.erase(name);
+  pthread_mutex_unlock(&clean_scope_mutex);
+}
+
 
 extern "C" void *str_Copy(Scope_Struct *scope_struct, char *str) {
-  // std::cout << "Load str " << name << ".\n";
+  // std::cout << "Copying string: " << str << ".\n";
   char *ret = CopyString(str);
   return ret;
 }

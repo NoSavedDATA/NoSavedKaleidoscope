@@ -12,8 +12,6 @@
 std::map<std::string, AnyVector *> NamedVectors;
 
 
-extern "C" AnyVector *CreateNotesVector();
-extern "C" float Dispose_NotesVector(AnyVector *);
 
 
 // template float AnyVector::get<float>(size_t);
@@ -90,7 +88,7 @@ extern "C" AnyVector *CreateNotesVector() {
     return notes_vector;
 }
 
-extern "C" float Dispose_NotesVector(AnyVector *notes_vector) {
+extern "C" float Dispose_NotesVector(AnyVector *notes_vector, char *scopeless_name) {
 
     for (int i=0; i<notes_vector->size(); i++)
     {
@@ -103,6 +101,7 @@ extern "C" float Dispose_NotesVector(AnyVector *notes_vector) {
     }
     
     delete notes_vector;
+    delete[] scopeless_name;
 
 
     return 0;

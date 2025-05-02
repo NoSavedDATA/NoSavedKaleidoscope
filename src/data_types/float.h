@@ -7,3 +7,6 @@
 #include "../common/extension_functions.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
+
+
+void float_Clean_Up(std::string name, void *data_ptr);

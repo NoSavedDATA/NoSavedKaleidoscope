@@ -15,11 +15,8 @@ extern "C" void StoreArgOnDemand(char *scope, char *name, float value){
 
   std::string _name = name;
   
-  ScopeVarsToClean[scope].push_back(std::make_pair(_name, "float"));
   pthread_mutex_unlock(&clean_scope_mutex);
 
-  move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
 }
 
 
