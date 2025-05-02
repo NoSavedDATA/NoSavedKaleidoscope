@@ -11,7 +11,7 @@ std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
 
 
-extern "C" float float_vec_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *float_vec_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
   // std::cout << "float_vec_Create" << ".\n";
 
@@ -21,9 +21,8 @@ extern "C" float float_vec_Create(char *name, char *scopeless_name, void *init_v
     ClassFloatVecs[name] = vec;
   }
 
-  delete[] scopeless_name;
 
-  return 0;
+  return nullptr;
 }
 
 extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
@@ -43,6 +42,11 @@ extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Str
 extern "C" void float_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, void *value) {
   scope_struct->mark_sweep_map->append(name, value, "float_vec");
 }
+ 
+void float_vec_Clean_Up(std::string name, void *data_ptr) {
+  ClassFloatVecs.erase(name);
+}
+
 
 extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_Struct *scope_struct){
   // std::cout << "float_vec_Store_Idx" << ".\n";

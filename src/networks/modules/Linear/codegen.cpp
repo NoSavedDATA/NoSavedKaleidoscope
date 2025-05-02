@@ -129,8 +129,6 @@ extern "C" float Linear_Create(char *name, char *scopeless_name, void *init_val,
   NamedLinear[name] = std::move(linear);
 
   std::cout << "***Created Linear: " << name << ".\n";
-  delete[] name;
-  delete[] scopeless_name;
 
   return 0;
 }

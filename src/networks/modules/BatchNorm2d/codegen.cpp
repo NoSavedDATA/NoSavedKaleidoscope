@@ -95,5 +95,6 @@ extern "C" float BatchNorm2d_Create(char *name, char *scopeless_name, void *init
 
 
   NamedBatchNorm2d[name] = std::move(conv);
+  
   return 0;
 }

@@ -89,7 +89,7 @@ extern "C" float tuple_print(Scope_Struct *scope_struct, AnyVector *tuple) {
 }
 
 
-extern "C" float tuple_Create(char *name, char *scopeless_name, AnyVector *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *tuple_Create(char *name, char *scopeless_name, AnyVector *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
   std::cout << "tuple_Create"  << ".\n";
 
@@ -120,8 +120,21 @@ extern "C" float tuple_Create(char *name, char *scopeless_name, AnyVector *init_
 
 
 
-  return 0;
+  return init_val;
 }
+
+extern "C" void tuple_MarkToSweep(Scope_Struct *scope_struct, char *name, AnyVector *value) {
+  scope_struct->mark_sweep_map->append(name, static_cast<void *>(value), "tuple");
+}
+
+
+void tuple_Clean_Up(std::string name, void *data_ptr) {
+  if (data_ptr==nullptr)
+    return;
+  std::cout << "Tuple cleanup" << ".\n";
+}
+
+
 
 
 
@@ -165,8 +178,3 @@ extern "C" void *AnyVector_Idx(AnyVector *vec, int idx)
 }
 
 
-
-extern "C" void tuple_MarkToSweep(Scope_Struct *scope_struct, char *name, AnyVector *value) {
-  std::cout << "tuple_MarkToSweep" << ".\n";
-  scope_struct->mark_sweep_map->append(name, value, "vector");
-}

@@ -2,6 +2,7 @@
 
 #include"backprop/include.h"
 #include"char_pool/include.h"
+#include"clean_up/include.h"
 #include"codegen/include.h"
 #include"common/include.h"
 #include"compiler_frontend/include.h"

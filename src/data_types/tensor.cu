@@ -19,7 +19,7 @@
 
 
 
-extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
   
   // if (notes_vector->data->size()>0)
@@ -99,9 +99,8 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, Tensor *
         delete[] tensor_cpu;
       }
     } else {
-      std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(product);
-      int grid_size = grid_block_mem_sizes[0];
-      int block_size = grid_block_mem_sizes[1];
+      int grid_size, block_size;
+      CalculateGridAndBlockSizes(product, grid_size, block_size);
       cudaStream_t stream = ThreadsStream[thread_id];
       copy_tensor_kernel<<<grid_size, block_size, 0, stream>>>(tensor_ptr, init_val->tensor_ptr, product);
     }
@@ -133,11 +132,9 @@ extern "C" float tensor_Create(char *tensor_name, char *scopeless_name, Tensor *
     
   NamedTensorsT[tensor_name] = tensor;
   
-  delete[] tensor_name;
-  delete[] scopeless_name;
 
 
-  return 0;
+  return tensor;
 }
 
 
@@ -336,6 +333,17 @@ extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *s
   return 0;
 }
 
+extern "C" void tensor_MarkToSweep(Scope_Struct *scope_struct, char *name, Tensor *value) {
+  if (value==nullptr)
+    std::cout << "tensor_MarkToSweep is nullptr" << ".\n";
+
+  scope_struct->mark_sweep_map->append(name, static_cast<void *>(value), "tensor");
+}
+
+
+void tensor_Clean_Up(std::string name, void *data_ptr) {
+  // std::cout << "tensor_Clean_Up" << ".\n";
+}
 
 
 
@@ -773,8 +781,3 @@ extern "C" float tensor_CalculateIdx(char *tensor_name, float first_idx, ...) {
 }
 
 
-
-extern "C" void tensor_MarkToSweep(Scope_Struct *scope_struct, char *name, Tensor *value) {
-  // std::cout << "tensor_MarkToSweep" << ".\n";
-  scope_struct->mark_sweep_map->append(name, value, "tensor");
-}

@@ -92,7 +92,8 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 # 	ar rcs $@ $(CU_OBJ) $(CXX_OBJ)
 
 
-$(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ) $(STATIC_LIBS)
+# $(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ) $(STATIC_LIBS)
+$(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ)
 #	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(STATIC_LIBS) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"

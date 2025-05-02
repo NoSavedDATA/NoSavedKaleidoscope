@@ -9,4 +9,5 @@
 
 
 
+void tuple_Clean_Up(std::string name, void *data_ptr);
 

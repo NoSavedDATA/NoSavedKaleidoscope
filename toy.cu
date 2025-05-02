@@ -616,6 +616,7 @@ Function *FunctionAST::codegen() {
 
   
   
+  call("scope_struct_Alloc_MarkSweepMap", {scope_struct}); 
 
 
   p2t("FunctionAST start function args.");
@@ -634,63 +635,55 @@ Function *FunctionAST::codegen() {
     p2t(__print);
 
 
+    p2t("FunctionAST Got arg "+arg_name+" for function "+function_name);
     // Default args
     if (arg_name == "scope_struct")
     {
-      p2t("-------------------------------------------=============-----------------===========--------FunctionAST COPY SCOPE STRUCT");
-    
-    //   scope_struct = callret("scope_struct_Dive", {&Arg});
+        p2t("-------------------------------------------=============-----------------===========--------FunctionAST COPY SCOPE STRUCT");
+        
+        //   scope_struct = callret("scope_struct_Dive", {&Arg});
 
-      scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
+        scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
 
-      first_arg = callret("get_scope_first_arg", {scope_struct}); 
-      scope_string = callret("get_scope_scope", {scope_struct}); 
-      previous_scope = callret("get_scope_previous_scope", {scope_struct}); 
-      thread_id = callret("get_scope_thread_id", {scope_struct}); 
-      has_grad = callret("get_scope_has_grad", {scope_struct}); 
+        first_arg = callret("get_scope_first_arg", {scope_struct}); 
+        scope_string = callret("get_scope_scope", {scope_struct}); 
+        previous_scope = callret("get_scope_previous_scope", {scope_struct}); 
+        thread_id = callret("get_scope_thread_id", {scope_struct}); 
+        has_grad = callret("get_scope_has_grad", {scope_struct}); 
       
+        
+    } else { 
+        std::string type = "";
+        if (typeVars.find(arg_name) != typeVars.end())
+            type = typeVars[arg_name];
+        std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
+
+        // Coder args
+        if (type!="tensor")
+        {
+            Value *var_name = global_str(arg_name);
+            var_name = callret("ConcatStr", {scope_string, var_name});
+
+            call(type+"_Store", {var_name, &Arg, scope_struct});
+            call(type+"_MarkToSweep", {scope_struct, var_name, &Arg});
+        } else {
+            call("CopyArgTensor",
+                            {&Arg,
+                            global_str(arg_name),
+                            previous_scope,
+                            scope_string,
+                            thread_id});
+        }
     }
+    // else if (type!="tensor")
+    // {
+    //   AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
+    //   Builder->CreateStore(&Arg, Alloca);
+    //   //Builder->CreateStore(Builder->CreateLoad(Type::getFloatTy(*TheContext), &Arg), Alloca);
 
-    
-    std::string type = "";
-    if (typeVars.find(arg_name) != typeVars.end())
-      type = typeVars[arg_name];
+    //   NamedValues[std::string(Arg.getName())] = Alloca;
 
-    // Todo: Mark these variables for sweep
-    // Coder args
-    if (type=="float")
-    {
-      Value *var_name = global_str(arg_name);
-      var_name = callret("ConcatStr", {scope_string, var_name});
-
-      call("StoreArgOnDemand", {scope_string, var_name, &Arg});
-    } else if (type=="str")
-    {
-      Value *var_name = global_str(arg_name);
-      var_name = callret("ConcatStr", {scope_string, var_name});
-      call("str_Store", {var_name, &Arg, scope_struct});
-    }
-    else if (type!="tensor")
-    {
-      AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
-      Builder->CreateStore(&Arg, Alloca);
-      //Builder->CreateStore(Builder->CreateLoad(Type::getFloatTy(*TheContext), &Arg), Alloca);
-
-      NamedValues[std::string(Arg.getName())] = Alloca;
-
-    }
-    else
-    {
-      if (type=="tensor")
-      {
-        call("CopyArgTensor",
-                          {&Arg,
-                           Builder->CreateGlobalString(arg_name),
-                           previous_scope,
-                           scope_string,
-                           thread_id});
-      }
-    }
+    // }
   }
   
 
@@ -699,7 +692,6 @@ Function *FunctionAST::codegen() {
 
 
 
-  call("scope_struct_Alloc_MarkSweepMap", {scope_struct}); 
 
   Value *RetVal;
   for (auto &body : Body)
@@ -2523,7 +2515,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("float_Store", float_StoreTy);
 
   FunctionType *str_StoreTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
+      Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy, int8PtrTy},
       false //
   );
@@ -2666,14 +2658,14 @@ static void InitializeModule() {
 
   FunctionType *Dispose_NotesVector = FunctionType::get(
     Type::getFloatTy(*TheContext),
-    {int8PtrTy},
+    {int8PtrTy, int8PtrTy},
     false 
   );
   TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVector);
 
 
   FunctionType *str_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      int8PtrTy,
       {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
@@ -2688,14 +2680,14 @@ static void InitializeModule() {
 
 
   FunctionType *str_vec_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+      int8PtrTy,
+      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("str_vec_Create", str_vec_Create);
 
   FunctionType *float_vec_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      int8PtrTy,
       {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
@@ -2716,14 +2708,14 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_Create);
 
   FunctionType *tensor_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      int8PtrTy,
       {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
 
   FunctionType *tuple_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
+      int8PtrTy,
       {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
       false 
   );
@@ -3501,6 +3493,13 @@ int main() {
   backward_functions["gelu_backward"] = gelu_backward;
   backward_functions["sigmoid_backward"] = sigmoid_backward;
   backward_functions["tanh_backward"] = tanh_backward;
+
+  clean_up_functions["float"] = float_Clean_Up;
+  clean_up_functions["str"] = str_Clean_Up;
+  clean_up_functions["tensor"] = tensor_Clean_Up;
+  clean_up_functions["tuple"] = tuple_Clean_Up;
+  clean_up_functions["float_vec"] = float_vec_Clean_Up;
+  clean_up_functions["str_vec"] = str_vec_Clean_Up;
 
 
 

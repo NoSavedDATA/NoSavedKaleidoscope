@@ -6,13 +6,13 @@
 #include <vector>
 
 #include "../char_pool/char_pool.h"
+#include "../clean_up/clean_up.h"
 #include "../tensor/tensor_dim_functions.h"
 #include "../tensor/tensor_struct.h"
 #include "any_map.h"
 
 
 std::map<std::string, AnyMap *> NamedDicts;
-
 
 
 
@@ -54,31 +54,21 @@ float AnyMap::get<float>(std::string key) {
 
 
 
-
-
-
-template <typename T>
 void AnyMap::delete_type(std::string key) {
     auto it = data->find(key);
+    auto it_type = data_types->find(key);
+   
 
-    void *data_ptr = std::any_cast<void *>(it->second);
-    if(data_ptr!=nullptr)
-        delete static_cast<T>(data_ptr);
-}
-
-
-template <>
-void AnyMap::delete_type<char *>(std::string key) {
-    auto it = data->find(key);
+    void *data_ptr=nullptr;
+    if(it_type->second!="float")
+        data_ptr = std::any_cast<void *>(it->second);    
     
-    void *data_ptr = std::any_cast<void *>(it->second);
-    if(data_ptr!=nullptr)
-    {
-        std::cout << "NOT NULL" << ".\n";
-        delete[] static_cast<char *>(data_ptr);
-    } else
-        std::cout << "NULL" << ".\n";
+    // if(data_ptr!=nullptr)
+    //     std::cout << "" << it_type->second << " NOT NULL.\n";
+    // else 
+    //     std::cout << "GOT NULL OF " << it_type->second << ".\n";
 
+    clean_up_functions[it_type->second](it->first, data_ptr);
 }
 
 
@@ -102,6 +92,7 @@ AnyMap::~AnyMap() {
 
 void AnyMap::append(char *key, std::any value, std::string data_type) {
     std::string _key = key;
+
     (*data)[_key] = value;
     (*data_types)[_key] = data_type;
 

@@ -224,40 +224,7 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     for (auto &pair : *scope_struct->mark_sweep_map->data_types)
     {
         // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
-
-        if(pair.second=="float")
-        {
-            // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
-            NamedClassValues.erase(pair.first);
-            // std::cout << "Cleaned " << pair.first << ".\n";
-        }
-
-        if(pair.second=="str")
-        {
-            std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
-            char *val = NamedStrs[pair.first];
-            NamedClassValues.erase(pair.first);
-            scope_struct->mark_sweep_map->delete_type<char *>(pair.first);
-            // move_to_char_pool(strlen(val)+1, val, "Mark sweep of str");
-            // std::cout << "Cleaned" << pair.first << ".\n";
-
-        }
-
-        if(pair.second=="tensor")
-        {
-            // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
-            Tensor *tensor = NamedTensorsT[pair.first];
-            // if (nn_mode==eval_mode||scope_struct->thread_id!=0)
-            // {
-            //     std::cout << "Delete tensor on " << scope_struct->thread_id << ".\n";
-            //     delete tensor;
-            // }
-            // if (nn_mode==eval_mode)
-            //     delete tensor;
-            // move_to_pool(scope_struct->thread_id, tensor->dims_prod, tensor->tensor_ptr, "tensor MarkSweep");
-            NamedTensorsT.erase(pair.first);
-        }
-
+        scope_struct->mark_sweep_map->delete_type(pair.first);
     }
 
     delete_scope(scope_struct);

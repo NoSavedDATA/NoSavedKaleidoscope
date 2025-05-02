@@ -15,12 +15,16 @@
 
 
 
-extern "C" float str_vec_Create(char *name, char *scopeless_name, float init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *str_vec_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
 {
+  if (init_val!=nullptr)
+  { 
+    std::vector<char *> vec = *static_cast<std::vector<char *>*>(init_val);
+    ClassStrVecs[name] = vec;
+  }
 
-  delete[] scopeless_name;
 
-  return 0;
+  return nullptr;
 }
 
 extern "C" void *str_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
@@ -42,6 +46,10 @@ extern "C" void str_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, void
   scope_struct->mark_sweep_map->append(name, value, "str_vec");
 }
 
+void str_vec_Clean_Up(std::string name, void *data_ptr) {
+  ClassStrVecs.erase(name);
+}
+
 
 
 
@@ -49,7 +57,6 @@ extern "C" float PrintStrVec(std::vector<char*> vec)
 {
   for (int i=0; i<vec.size(); i++)
     std::cout << vec[i] << "\n";
-
   return 0;
 }
 

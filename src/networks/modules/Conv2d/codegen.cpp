@@ -138,8 +138,6 @@ extern "C" float Conv2d_Create(char *name, char *scopeless_name, void *init_val,
   NamedConv2d[name] = std::move(conv2d);
 
   std::cout << "***Created Conv2d: " << name << ".\n";
-  delete[] name;
-  delete[] scopeless_name;
 
   return 0;
 }

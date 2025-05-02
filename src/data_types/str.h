@@ -1,34 +1,8 @@
 #pragma once
 
+#include <string>
+
 #include "../mangler/scope_struct.h"
 
-extern "C" float str_Create(char *name, char *scopeless_name, char *init_val, AnyVector *notes_vector, Scope_Struct *);
-extern "C" void *str_Load(char *, Scope_Struct *);
-extern "C" float str_Store(char *, char *, Scope_Struct *);
 
-
-
-
-extern "C" float PrintStr(char* value);
-
-
-extern "C" float *split_str_to_float(char *in_string, int gather_position);
-
-
-extern "C" char *str_str_add(char *, char *, Scope_Struct *);
-extern "C" char *float_str_add(float, char *, Scope_Struct *);
-extern "C" char *str_float_add(char *, float, Scope_Struct *);
-
-extern "C" void *cat_str_float(char *c, float v);
-
-
-
-
-extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *pattern);
-
-extern "C" char *str_split_idx(Scope_Struct *, char *, char *, float);
-
-
-extern "C" float str_to_float(Scope_Struct *, char *);
-
-extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str);
+void str_Clean_Up(std::string, void *data);

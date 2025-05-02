@@ -2777,7 +2777,11 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
       ArgNames.push_back(IdentifierStr);
 
       if (type=="float" || type=="tensor")
+      {
+        // std::cout << "Attributing " << type << " for " << IdentifierStr << ".\n";
         typeVars[IdentifierStr] = type;
+      }
+
       else if (type=="function")
         functionVars[IdentifierStr] = "ConvForward2d";
       else

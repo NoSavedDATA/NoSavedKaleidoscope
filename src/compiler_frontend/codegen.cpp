@@ -191,16 +191,19 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     std::string mark_to_sweep_fn  = Type + "_MarkToSweep";
     p2t("DataExpr Call create for " + create_fn);
 
-    call(create_fn, {var_name, scopeless_name, initial_value,
+    initial_value = callret(create_fn, {var_name, scopeless_name, initial_value,
                       notes_vector, scope_struct});
     
-    p2t("DataExpr Dispose notes vector");
+    // p2t("DataExpr Dispose notes vector");
+    // p2t("Dispose notes vector of " + Type + "/" + Name + "/" + std::to_string(is_self) + "/" + std::to_string(is_attr));
 
-    call("Dispose_NotesVector", {notes_vector});
+    call("Dispose_NotesVector", {notes_vector, scopeless_name});
 
     // p2t("Call mark to sweep of " + mark_to_sweep_fn);
     if(!(is_self||is_attr))
       call(mark_to_sweep_fn, {scope_struct, var_name, initial_value});
+    else
+      call("str_Delete", {var_name});
   }
 
 
@@ -505,7 +508,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
     {
       std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
       if (ends_with(entry.first, Name))
-      return ret;
+        return ret;
     } 
   }
   if (type=="object")
@@ -837,13 +840,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if(!LHS->GetSelf()&&!LHS->GetIsAttribute())
     {
-      std::string mark_op = LType + "_MarkToSweep";
+      std::string mark_to_sweep_fn = LType + "_MarkToSweep";
       // if (!in_str(LType, {"float", "str"}))
       // {
       //   p2t("MARKING " + LType);
       // }
     //   p2t("MARK TO SWEEP OF " + LType);
-      call(mark_op, {scope_struct, Lvar_name, Val});
+      call(mark_to_sweep_fn, {scope_struct, Lvar_name, Val});
     }
     else
     {  
@@ -1928,7 +1931,16 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
       arg = callret("tensor_Load", {arg, scope_struct});
     }
     else
+    {
       arg = Args[i]->codegen(scope_struct);
+      std::string type = Args[i]->GetType();
+      
+      p2t("CallExpr Argument type is " + type);
+      
+      // Todo: str does not get cleaned after copy
+      // if (type!="float"&&Args[i]->GetIsVarLoad())
+      //   arg = callret(type+"_Copy", {scope_struct, arg});
+    }
 
     ArgsV.push_back(arg);
 
