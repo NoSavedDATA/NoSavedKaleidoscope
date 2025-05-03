@@ -449,8 +449,6 @@ static int get_token() {
   
   if (ThisChar==10 || LastChar==tok_tab)
   {
-    
-
     int seen_spaces=0;
 
     while(LastChar==10 || LastChar==tok_tab || LastChar==32) {

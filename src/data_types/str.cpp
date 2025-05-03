@@ -168,6 +168,7 @@ extern "C" float *split_str_to_float(char *in_string, int gather_position)
     gather_position = splitted.size()+gather_position;
 
   ret[0] = std::stof(splitted[gather_position]);
+  delete[] in_string;
 
   return ret;
 }
@@ -222,19 +223,6 @@ extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *patter
 
 extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pattern, float idx)
 {
-
-  // std::cout << "str_split_idx for " << self << ".\n";
-  // std::string name = scope_struct->first_arg;
-  
-  // std::cout << "splitting " << name << "\n";
-
-  // pthread_mutex_lock(&clean_scope_mutex);
-  // char *self = NamedStrs[name];
-  // pthread_mutex_unlock(&clean_scope_mutex);
-
-  // std::cout << name << " is " << self << ".\n";
-  // std::cout << "splitting: " << self << ", with pattern: " << pattern << "\n";
-
   
   std::vector<char *> splits;
   char *input = (char*)malloc(strlen(self) + 1);
@@ -248,7 +236,6 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
     splits.push_back(token);
     token = strtok_r(nullptr, pattern, &saveptr); // Get the next token
   }
-
 
 
   if(splits.size()<=1)
@@ -267,7 +254,9 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
   // Convert the retained token to a std::string
   char *result = CopyString(splits[idx]);
 
-  delete[] input;
+
+  free(pattern);
+  free(input);
 
   return result;
 }
@@ -283,7 +272,10 @@ extern "C" float str_to_float(Scope_Struct *scope_struct, char *in_str)
   char *end;
 
   float ret = std::strtof(copied, &end);
-  delete[] copied;
+
+  free(copied);
+  free(in_str);
+
   return ret;
 }
 
