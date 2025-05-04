@@ -34,6 +34,8 @@ LIBS := $(LLVM_LIBS) $(LLVM_SYSTEM_LIBS) $(CUDA_LIBS) $(SYSTEM_LIBS) $(OPENCV_LI
 NXXFLAGS := $(CUDA_ARCH_NVCC) -I$(EIGEN_INCLUDE) -Xptxas=-v
 
 # Directories
+LIB_PARSER_OBJ_DIR = lib_parser_obj
+LIB_PARSER_SRC_DIR = lib_parser
 OBJ_DIR = obj
 BIN_DIR = bin
 SRC_DIR = src
@@ -53,6 +55,11 @@ CXX_DIR = $(sort $(dir $(CXX_OBJ)))
 OBJ_DIRS := $(sort $(CU_DIR) $(CXX_DIR))
 
 
+# Lib Parser Object Files
+LIB_PARSER_SRC = $(shell find $(LIB_PARSER_SRC_DIR) -name "*.cpp")
+
+
+
 # static libs (.a) for .o files
 LIB_SUBDIRS := $(shell find $(OBJ_DIR) -mindepth 1 -maxdepth 1 -type d)
 STATIC_LIBS := $(patsubst $(OBJ_DIR)/%, $(LIB_DIR)/%.a, $(LIB_SUBDIRS))
@@ -60,15 +67,15 @@ STATIC_LIBS := $(patsubst $(OBJ_DIR)/%, $(LIB_DIR)/%.a, $(LIB_SUBDIRS))
 
 
 # Executable name
+LIB_PARSER := bin/lib_parser.o
 OBJ := bin/nsk
 SRC := toy.cu
 
-.PHONY: directories
+.PHONY: prebuild
 
 BUILD_FLAG := .build_flag
 
 
-all: $(OBJ) check_done
 
 $(info var is: ${OBJ_DIRS})
 $(foreach dir, $(OBJ_DIRS), \
@@ -81,35 +88,47 @@ $(shell mkdir -p $(LIB_DIR);)
 
 $(info objects: $(CU_OBJ) sources: $(CU_SRC))
 
+$(shell mkdir -p $(LIB_PARSER_OBJ_DIR);)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu
+
+
+
+all: prebuild $(OBJ) check_done
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu | prebuild
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 	
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | prebuild
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-# $(LIB_DIR)/%.a: $(CU_OBJ) $(CXX_OBJ)
-# 	ar rcs $@ $(CU_OBJ) $(CXX_OBJ)
 
-
-# $(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ) $(STATIC_LIBS)
 $(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ)
-#	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(STATIC_LIBS) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
 	@touch $(BUILD_FLAG)
 
-# $(OBJ): $(SRC)
-# 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
+
+prebuild: $(LIB_PARSER)
+	@echo ">>> PREBUILD STEP <<<"
+	$(shell bin/lib_parser.o;)
+
+$(LIB_PARSER_OBJ_DIR)/%.o: $(LIB_PARSER_SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(LIB_PARSER) : $(LIB_PARSER_SRC)
+	$(CXX) $(CXXFLAGS) $(LIB_PARSER_SRC) -o $(LIB_PARSER)
+	@echo "------------PREBUILD DONE DEON DEONDEON DEON ODENDEON"
+
+
 
 check_done:
 	@if [ ! -f $(BUILD_FLAG) ]; then \
-		echo -e "\n\n\033[1;33mNo changes found [ ]\n\033[0m"; \
+		echo "\n\n\033[1;33mNo changes found [ ]\n\033[0m"; \
 	fi
 	@rm -f $(BUILD_FLAG)
 
 clean:
-	rm -rf $(BIN_DIR) $(OBJ_DIR)
+	rm -rf $(BIN_DIR) $(OBJ_DIR) $(LIB_PARSER_OBJ_DIR)
 
 # Track dependencies
 -include $(CU_OBJ:.o=.d) $(CXX_OBJ:.o=.d)

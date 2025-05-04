@@ -49,7 +49,7 @@ int main() {
 
     std::string all_libs = Get_Base_Lib();
 
-    std::cout << all_libs << ".\n";
+    // std::cout << all_libs << ".\n";
 
 
     std::string root = "lib_parser/parsed_libs";
@@ -69,13 +69,13 @@ int main() {
         file.close();
 
 
-        std::cout << "Add file " << parsed_file << " to llvm libs.\n";
+        // std::cout << "Add file " << parsed_file << " to llvm libs.\n";
     }
 
 
     all_libs = all_libs + "\n}";
 
-    std::cout << all_libs << ".\n";
+    // std::cout << all_libs << ".\n";
 
 
 

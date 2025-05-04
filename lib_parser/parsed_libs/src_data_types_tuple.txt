@@ -1,4 +1,4 @@
-1821-05-04 14:34:03
+1821-05-04 17:27:05
 
 	FunctionType *tuple_NewTy= FunctionType::get(
 		int8PtrTy,
@@ -27,6 +27,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("tuple_print", tuple_printTy);
+
+	FunctionType *tuple_testTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tuple_test", tuple_testTy);
 
 	FunctionType *tuple_CreateTy= FunctionType::get(
 		int8PtrTy,

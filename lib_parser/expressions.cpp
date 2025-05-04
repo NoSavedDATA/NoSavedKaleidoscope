@@ -14,17 +14,17 @@ ExternFunctionExpr::ExternFunctionExpr(const std::string &ReturnType, const std:
 
 std::string ExternFunctionExpr::Generate_LLVM(std::string fname, std::string lib_string) {
     // std::cout << "ExternFunctionExpr for file " << fname << ".\n";
-    std::cout << "Function:\n\tReturn Type:\t" << ReturnType << "\n\tName:\t\t" << FunctionName << "\n\tArgs:\t\t";
+    // std::cout << "Function:\n\tReturn Type:\t" << ReturnType << "\n\tName:\t\t" << FunctionName << "\n\tArgs:\t\t";
 
-    if(ArgTypes.size()>0)
-    {
-        for (int i=0;i<ArgTypes.size()-1;++i)
-            std::cout << ArgTypes[i] << ", ";
-        std::cout << ArgTypes[ArgTypes.size()-1];
-    }
+    // if(ArgTypes.size()>0)
+    // {
+    //     for (int i=0;i<ArgTypes.size()-1;++i)
+    //         std::cout << ArgTypes[i] << ", ";
+    //     std::cout << ArgTypes[ArgTypes.size()-1];
+    // }
 
 
-    std::cout <<  "\n\n\n";
+    // std::cout <<  "\n\n\n";
 
 
 

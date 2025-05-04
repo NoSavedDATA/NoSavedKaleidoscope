@@ -1,0 +1,15 @@
+1821-05-04 17:01:22
+
+	FunctionType *dictionary_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("dictionary_Create", dictionary_CreateTy);
+
+	FunctionType *dictionary_DisposeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dictionary_Dispose", dictionary_DisposeTy);

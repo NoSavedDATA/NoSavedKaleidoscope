@@ -65,7 +65,7 @@ extern "C" AnyVector *tuple_New(Scope_Struct *scope_struct, char *type, ...)
 
 extern "C" float tuple_Store(char *name, AnyVector *vector, Scope_Struct *scope_struct)
 {
-  std::cout << "tuple_Store of " << name << ".\n";
+  // std::cout << "tuple_Store of " << name << ".\n";
 
   NamedVectors[name] = vector;
 
@@ -73,10 +73,9 @@ extern "C" float tuple_Store(char *name, AnyVector *vector, Scope_Struct *scope_
 }
 
 
-extern "C" void *tuple_Load(char *name, Scope_Struct *scope_struct){
+extern "C" AnyVector *tuple_Load(char *name, Scope_Struct *scope_struct){
   std::cout << "tuple_Load"  << ".\n";
   AnyVector *ret = NamedVectors[name];
-  move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] tensor_name;
   return ret;
 }
@@ -86,6 +85,12 @@ extern "C" void *tuple_Load(char *name, Scope_Struct *scope_struct){
 extern "C" float tuple_print(Scope_Struct *scope_struct, AnyVector *tuple) {
   // std::cout << "\n";
   tuple->print();
+  return 0;
+}
+
+
+extern "C" float tuple_test(Scope_Struct *scope_struct, AnyVector *tuple) {
+  std::cout << "REACHED TUPLE TEST" << ".\n";
   return 0;
 }
 

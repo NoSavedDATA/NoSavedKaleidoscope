@@ -135,7 +135,7 @@ int tokenize() {
     LastChar = get_file_char();
     if(LastChar=='/')
     {
-      while(LastChar!=tok_space)
+      while(LastChar!=tok_space&&LastChar!=tok_eof&&LastChar!=tok_finish&&LastChar!=',')
         LastChar = get_file_char();
     } else
       return LastChar;
