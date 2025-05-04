@@ -1,8 +1,12 @@
+#include <fstream>
+#include <iostream>
 #include <map>
 #include <string>
 #include <vector>
 
 #include "include.h"
+
+namespace fs = std::filesystem;
 
 std::string Get_Base_Lib() {
     std::string fpath = "src/libs_llvm/libs.cpp";
@@ -43,8 +47,43 @@ int main() {
 
     Parse_Libs();
 
-    std::string base_lib = Get_Base_Lib();
+    std::string all_libs = Get_Base_Lib();
+
+    std::cout << all_libs << ".\n";
+
+
+    std::string root = "lib_parser/parsed_libs";
+    std::vector<fs::path> files = glob_cpp(root, ".txt");
+
+    std::ifstream file;
+    std::string line;
+    for (auto &parsed_file : files)
+    {
+        std::string lib_string = "";
+        file.open(parsed_file);
+
+        std::getline(file, line); // consume date
+
+        while(std::getline(file, line))
+            all_libs = all_libs + line + "\n";
+        file.close();
+
+
+        std::cout << "Add file " << parsed_file << " to llvm libs.\n";
+    }
+
+
+    all_libs = all_libs + "\n}";
+
+    std::cout << all_libs << ".\n";
+
+
+
     
+    std::ofstream llvm_lib_file("src/libs_llvm/libs.cpp");
+    llvm_lib_file << all_libs;
+    llvm_lib_file.close();
+
 
     return 0;
 }

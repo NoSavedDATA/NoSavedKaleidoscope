@@ -42,6 +42,10 @@ std::string Mangle_Lib_File_Name(std::string fname) {
     if (pos != std::string::npos) {
         path.replace(pos, 4, ".txt");
     }
+    pos = path.rfind(".cu");
+    if (pos != std::string::npos) {
+        path.replace(pos, 4, ".txt");
+    }
     
     path = "lib_parser/parsed_libs/" + path;
     return path;
@@ -234,6 +238,9 @@ void Parse_Libs() {
 
         while (CurTok!=tok_eof&&CurTok!=tok_finish)
             functions = Parse_Primary(std::move(functions));
+        
+        if(files.size()==0)
+            break;
 
         lib_string = Generate_LLVMs(lib_string, std::move(functions));
 
@@ -243,5 +250,5 @@ void Parse_Libs() {
         Save_Lib_String(lib_string); 
     }
     
-    std::cout << "Finish Parsing"  << ".\n";
+    std::cout << "Finish parsing libraries"  << ".\n";
 }
