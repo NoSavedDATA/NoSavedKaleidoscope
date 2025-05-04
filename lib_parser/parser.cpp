@@ -250,5 +250,5 @@ void Parse_Libs() {
         Save_Lib_String(lib_string); 
     }
     
-    std::cout << "Finish parsing libraries"  << ".\n";
+    // std::cout << "Finish parsing libraries"  << ".\n";
 }

@@ -47,12 +47,12 @@ bool was_file_modified(std::string lib_file, std::string parsed_file) {
     oss << std::put_time(std::localtime(&cftime), "%F %T");
     std::string string_last_modified = oss.str();
 
-    std::cout << "Last modified: " << string_last_modified << ".\n";
-    std::cout << "First line " << first_line << ".\n";
+    // std::cout << "Last modified: " << string_last_modified << ".\n";
+    // std::cout << "First line " << first_line << ".\n";
 
     bool was_modified = string_last_modified!=first_line;
     
-    std::cout << "Was modified? " << std::to_string(was_modified) << ".\n";
+    // std::cout << "Was modified? " << std::to_string(was_modified) << ".\n";
 
     return was_modified;
 }
@@ -96,20 +96,24 @@ void get_cpp_files(const fs::path& rootDir) {
 
         if (fexists(parsed_lib))
         {
-            std::cout << "FOUND FILE " << parsed_lib << ".\n";            
+            // std::cout << "FOUND FILE " << parsed_lib << ".\n";            
             if (was_file_modified(fname, parsed_lib))
                 aux.push_back(lib_file);
         } else
+        {
+            // std::cout << "37120937128973012737812307123812730127037128930712312FILE " << lib_file << " WAS NOT FOUND.\n";   
             aux.push_back(lib_file);
+        }
 
     }
 
 
-    std::cout << "\n\n\n";
-    for (auto &lib_file : aux)
-        std::cout << "Shall parse " << lib_file.string() << ".\n";
+    // std::cout << "\n\n\n";
+    // for (auto &lib_file : aux)
+    //     std::cout << "Shall parse " << lib_file.string() << ".\n";
 
     files = aux;
+
     
     // std::exit(0);
 
@@ -136,7 +140,7 @@ char get_file_char() {
             return tok_finish;
         // std::cout << "Got files. Reading" << ".\n";
         current_file_name = files[0].string();
-        std::cout << "Reading file: " << current_file_name << ".\n";
+        // std::cout << "Reading file: " << current_file_name << ".\n";
         file.open(current_file_name);
         file_counter+=1;
     }
@@ -150,15 +154,15 @@ char get_file_char() {
     else {
         file.close();
         
-        std::cout << "\n\n\n\n=====================================================================================\n\n\n\n\n";
-        std::cout << "Finished reading file" << current_file_name << ".\n";
+        // std::cout << "\n\n\n\n=====================================================================================\n\n\n\n\n";
+        // std::cout << "Finished reading file" << current_file_name << ".\n";
         
         if(file_counter>=files.size())
             return tok_finish;
        
         current_file_name = files[file_counter].string();
 
-        std::cout << "open " << current_file_name << ".\n";
+        // std::cout << "open " << current_file_name << ".\n";
         file.open(current_file_name);
 
         file_counter+=1;

@@ -7,6 +7,13 @@
 	);
 	TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_CreateTy);
 
+	FunctionType *pinned_tensor_Store_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pinned_tensor_Store_Idx", pinned_tensor_Store_IdxTy);
+
 	FunctionType *pinned_tensor_CalculateIdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},

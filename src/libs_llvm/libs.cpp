@@ -45,6 +45,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("tuple_print", tuple_printTy);
 
+	FunctionType *tuple_testTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tuple_test", tuple_testTy);
+
 	FunctionType *tuple_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -100,20 +107,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("Add_String_To_NotesVector", Add_String_To_NotesVectorTy);
-
-	FunctionType *dictionary_CreateTy= FunctionType::get(
-		int8PtrTy,
-		{},
-		false
-	);
-	TheModule->getOrInsertFunction("dictionary_Create", dictionary_CreateTy);
-
-	FunctionType *dictionary_DisposeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("dictionary_Dispose", dictionary_DisposeTy);
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -233,6 +226,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_CreateTy);
+
+	FunctionType *pinned_tensor_Store_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pinned_tensor_Store_Idx", pinned_tensor_Store_IdxTy);
 
 	FunctionType *pinned_tensor_CalculateIdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -471,6 +471,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_vec_print", str_vec_printTy);
+
+	FunctionType *dictionary_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("dictionary_Create", dictionary_CreateTy);
+
+	FunctionType *dictionary_DisposeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dictionary_Dispose", dictionary_DisposeTy);
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
