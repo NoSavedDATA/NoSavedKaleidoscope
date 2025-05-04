@@ -130,6 +130,16 @@ int tokenize() {
     Line += " ";
   }
 
+  if(LastChar=='/')
+  {
+    LastChar = get_file_char();
+    if(LastChar=='/')
+    {
+      while(LastChar!=tok_space)
+        LastChar = get_file_char();
+    } else
+      return LastChar;
+  }
  
 
   if (isalpha(LastChar) || LastChar=='_' || LastChar=='\"') { // identifier: [a-zA-Z][a-zA-Z0-9]*
@@ -169,7 +179,7 @@ int tokenize() {
         IdentifierStr += LastChar;
       } else
           return return_string_token();
-          
+
     }
   }
  

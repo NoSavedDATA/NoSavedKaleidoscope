@@ -952,26 +952,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("tensor_float_minor_eq", CudaScalarMinorEqTy);
 
 
-  FunctionType *str_str_addTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("str_str_add", str_str_addTy);
   
-  FunctionType *float_str_addTy = FunctionType::get(
-      int8PtrTy,
-      {Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("float_str_add", float_str_addTy);
-
-  FunctionType *str_float_addTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("str_float_add", str_float_addTy);
 
   //===----------------------------------------------------------------------===//
   // Tensor Tensor CUDA Ops
@@ -2505,38 +2486,7 @@ static void InitializeModule() {
       {},
       false
   );
-  TheModule->getOrInsertFunction("RandomStrOnDemand", RandomStrOnDemandTy);
-
-  
-  // 
-  FunctionType *float_StoreTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
-      false //
-  );
-  TheModule->getOrInsertFunction("float_Store", float_StoreTy);
-
-  FunctionType *str_StoreTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false //
-  );
-  TheModule->getOrInsertFunction("str_Store", str_StoreTy);
-
-  FunctionType *str_vec_StoreTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false //
-  );
-  TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
-  
-  // 
-  FunctionType *StoreOnDemandNoFreeTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
-      false //
-  );
-  TheModule->getOrInsertFunction("StoreOnDemandNoFree", StoreOnDemandNoFreeTy);
+  TheModule->getOrInsertFunction("RandomStrOnDemand", RandomStrOnDemandTy);  
 
   
   // 
@@ -2546,84 +2496,7 @@ static void InitializeModule() {
       false //
   );
   TheModule->getOrInsertFunction("StoreArgOnDemand", StoreArgOnDemandTy);
-  
-
-  //
-  FunctionType *float_LoadTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("float_Load", float_LoadTy);
-
-  FunctionType *float_vec_LoadTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("float_vec_Load", float_vec_LoadTy);
-
-
-  FunctionType *str_CopyTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("str_Copy", str_CopyTy);
-  
-  FunctionType *str_LoadTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("str_Load", str_LoadTy);
-
-  FunctionType *str_vec_LoadTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
-
-
-  FunctionType *tensor_CopyTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("tensor_Copy", tensor_CopyTy);
-
-
-  FunctionType *tuple_LoadTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("tuple_Load", tuple_LoadTy);
-
-
-  FunctionType *tuple_printTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("tuple_print", tuple_printTy);
-  
-  FunctionType *tensor_LoadTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("tensor_Load", tensor_LoadTy);
-
-  //
-  FunctionType *LoadOnDemandNoFreeTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("LoadOnDemandNoFree", LoadOnDemandNoFreeTy);
-  
+    
 
   //
   FunctionType *StoreDimsOnDemandTy = FunctionType::get(
@@ -2633,67 +2506,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("StoreDimsOnDemand", StoreDimsOnDemandTy);
   
-
-
-
-  FunctionType *Add_String_To_NotesVector = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("Add_String_To_NotesVector", Add_String_To_NotesVector);
-
-  FunctionType *Add_Float_To_NotesVector = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("Add_Float_To_NotesVector", Add_Float_To_NotesVector);
-
-
-  FunctionType *CreateNotesVector = FunctionType::get(
-      int8PtrTy,
-      {},
-      false 
-  );
-  TheModule->getOrInsertFunction("CreateNotesVector", CreateNotesVector);
-
-  FunctionType *Dispose_NotesVector = FunctionType::get(
-    Type::getFloatTy(*TheContext),
-    {int8PtrTy, int8PtrTy},
-    false 
-  );
-  TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVector);
-
-
-  FunctionType *str_Create = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("str_Create", str_Create);
-
-  FunctionType *float_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("float_Create", float_Create);
-
-
-  FunctionType *str_vec_Create = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("str_vec_Create", str_vec_Create);
-
-  FunctionType *float_vec_Create = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("float_vec_Create", float_vec_Create);
   
   FunctionType *print_codegenTy = FunctionType::get(
       int8PtrTy,
@@ -2702,33 +2514,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("print_codegen", print_codegenTy);
 
-  FunctionType *pinned_tensor_Create = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_Create);
-
-  FunctionType *tensor_Create = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("tensor_Create", tensor_Create);
-
-  FunctionType *tuple_Create = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("tuple_Create", tuple_Create);
-
-  FunctionType *tuple_NewTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-      true // vararg 
-  );
-  TheModule->getOrInsertFunction("tuple_New", tuple_NewTy);
 
   FunctionType *Linear_Create = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -2873,8 +2658,7 @@ static void InitializeModule() {
       false 
   );
   TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
-
-  
+ 
   //
   FunctionType *print_randomsTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -2884,57 +2668,12 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
   
 
-
-
   FunctionType *scope_struct_Save_for_AsyncTy = FunctionType::get(
       int8PtrTy,
       {int8PtrTy, int8PtrTy},
       false 
   );
   TheModule->getOrInsertFunction("scope_struct_Save_for_Async", scope_struct_Save_for_AsyncTy);
-
-
-  FunctionType *float_MarkToSweepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("float_MarkToSweep", float_MarkToSweepTy);
-
-  FunctionType *float_vec_MarkToSweepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("float_vec_MarkToSweep", float_vec_MarkToSweepTy);
-
-  FunctionType *str_vec_MarkToSweepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("str_vec_MarkToSweep", str_vec_MarkToSweepTy);
-
-  FunctionType *str_MarkToSweepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("str_MarkToSweep", str_MarkToSweepTy);
-
-  FunctionType *tensor_MarkToSweepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("tensor_MarkToSweep", tensor_MarkToSweepTy);
-
-  FunctionType *tuple_MarkToSweepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("tuple_MarkToSweep", tuple_MarkToSweepTy);
 
 
   FunctionType *scope_struct_Alloc_MarkSeepTy = FunctionType::get(
@@ -2984,22 +2723,8 @@ static void InitializeModule() {
     int8PtrTy,
     {int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
     false
-);
-TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_Async_Scope);
-
-  //
-  FunctionType *CreateConv2dOnDemandTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy,
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext),
-       Type::getFloatTy(*TheContext)},
-      false
   );
-  TheModule->getOrInsertFunction("CreateConv2dOnDemand", CreateConv2dOnDemandTy);
+  TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_Async_Scope);
 
 
   //
