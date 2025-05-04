@@ -19,14 +19,15 @@ enum Token {
     tok_float = -3,
     tok_any_ptr = -4,
     tok_identifier = -5,
+    tok_three_dots = -6,
 
     wait_token = 700,
 
     tok_space=10,
     tok_tab=9,
 
-    tok_eof=-255,
-    tok_finish=-256
+    tok_eof=4,
+    tok_finish=127
 };
 
   
@@ -40,7 +41,11 @@ extern std::vector<char> terminal_tokens;
 
 
 extern std::string IdentifierStr; // Filled in if tok_identifier
+extern std::string Line;// Filled in if tok_identifier
 extern float NumVal;             // Filled in if tok_number
+
+
+extern int CurTok;
 
 
 extern int LineCounter;
@@ -51,4 +56,6 @@ extern int LastSeenTabs;
 
 
 
-int getNextToken();
+int tokenize();
+bool getDotToken();
+void getNextToken();

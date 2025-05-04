@@ -1,0 +1,8 @@
+1821-04-26 09:54:01
+
+	FunctionType *nullptr_getTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("nullptr_get", nullptr_getTy);

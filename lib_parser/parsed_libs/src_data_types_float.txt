@@ -1,0 +1,64 @@
+1821-05-02 19:00:28
+
+	FunctionType *PrintFloatTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintFloat", PrintFloatTy);
+
+	FunctionType *UnbugFloatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("UnbugFloat", UnbugFloatTy);
+
+	FunctionType *print_floatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("print_float", print_floatTy);
+
+	FunctionType *float_CreateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_Create", float_CreateTy);
+
+	FunctionType *float_LoadTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_Load", float_LoadTy);
+
+	FunctionType *float_StoreTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_Store", float_StoreTy);
+
+	FunctionType *float_MarkToSweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_MarkToSweep", float_MarkToSweepTy);
+
+	FunctionType *StoreOnDemandNoFreeTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("StoreOnDemandNoFree", StoreOnDemandNoFreeTy);
+
+	FunctionType *LoadOnDemandNoFreeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("LoadOnDemandNoFree", LoadOnDemandNoFreeTy);

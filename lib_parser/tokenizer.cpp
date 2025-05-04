@@ -37,7 +37,9 @@ std::map<int, std::string> token_to_string = {
   { tok_C, "C" },
   { tok_float, "float" },
   { tok_any_ptr, "any_pointer *" },
+  { tok_three_dots, "..." },
   { wait_token, "wait token" },
+  { tok_eof, "EOF" },
   { tok_finish, "FINISH" },
 };
 
@@ -59,9 +61,14 @@ int LastSeenTabs = 0;
 
 
 
-std::string ReverseToken(int _char)
+std::string ReverseToken(int tok)
 {
-  return token_to_string[_char];
+  // std::cout << "curtok: " << tok << ".\n";
+  if (tok==tok_identifier)
+    return IdentifierStr;
+  if (token_to_string.count(tok)>0)
+    return token_to_string[tok];
+  return std::to_string(static_cast<char>(tok));
 }
 
 /// get_token - Return the next token from standard input.
@@ -74,95 +81,119 @@ std::vector<char> reset_chars = {tok_tab, ',', '(', ')', '{', '}'};
 std::map<std::string, int> token_map = {
   {"extern", tok_extern},
   {"\"C\"", tok_C},
+  {"float", tok_float},
 };
 
-
-
-int getNextToken() {
-
-  char LastChar = get_file_char();
-
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
-
-  while (LastChar==tok_space)
+int return_string_token() { 
+  if(token_map.count(IdentifierStr)>0)
   {
-    std::cout << "Line is:" << Line << "\n";
-    Line="";
-    IdentifierStr="";
-    LastChar=get_file_char();
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
+    return token_map[IdentifierStr];
+  }
+  return tok_identifier;
+}
+
+char LastChar = ' ';
+bool getDotToken() {
+
+  int i=0;
+  while(CurTok=='.')
+  {
+    getNextToken();
+    i+=1;
   }
 
-    if(LastChar==tok_finish||LastChar==tok_eof)
+  // std::cout << "GOT DOT " << i << " Token " << ReverseToken(CurTok) << ".\n";
+  if(i==3)
+    return true;
+
+  return false;
+}
+
+
+int tokenize() {
+
+  // if (LastChar==tok_space||LastChar==tok_tab)
+  // {
+    while (LastChar==tok_space||LastChar==tok_tab)
     {
-      std::cout << "GOT FINISH" << ".\n";
+      Line="";
+      IdentifierStr="";
+      LastChar=get_file_char();
     }
-  if (in_char(LastChar, reset_chars))
-  {
-    IdentifierStr = "";
-    LastChar = get_file_char();
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
-  }
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
+  //   return tok_space;
+  // }
+
 
   while (LastChar==32) //blank space
   {
     LastChar = get_file_char();
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
     Line += " ";
   }
-  
-  IdentifierStr="";
+
+ 
+
   if (isalpha(LastChar) || LastChar=='_' || LastChar=='\"') { // identifier: [a-zA-Z][a-zA-Z0-9]*
-    while (isalpha(LastChar) || LastChar=='_' || LastChar=='\"') {
-      IdentifierStr += LastChar;
-      Line += LastChar;
+
+    IdentifierStr=LastChar;
+
+    while (isalpha(LastChar) || LastChar=='_' || LastChar=='\"' || LastChar==':' || LastChar=='<' || LastChar=='>' || LastChar=='*'||LastChar==32) {
+      
       LastChar = get_file_char();
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
-    }
+      bool terminate=false;
+      while(LastChar==32)
+      {
+        LastChar = get_file_char();
+        terminate=true;
+      }
 
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
+      if(terminate)
+      {
+        if(LastChar!='*'&&LastChar!='>')
+          return return_string_token();
+        else {
+          if(LastChar=='*')
+          {
+            Line += LastChar;
+            IdentifierStr += LastChar;
+            LastChar = get_file_char();
+            if(LastChar!='>')
+              return return_string_token();
+          }
+        }
+          terminate = false;
+      }
 
-    if(token_map.count(IdentifierStr)>0)
-    {
-      std::cout << "\nFound token, got line:\n" << Line << ".\n\n";
-      return token_map[IdentifierStr];
+      if (isalpha(LastChar) || LastChar=='_' || LastChar=='\"' || LastChar==':' || LastChar=='<' || LastChar=='>' || LastChar=='*')
+      {
+        Line += LastChar;
+        IdentifierStr += LastChar;
+      } else
+          return return_string_token();
+          
     }
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
-    return tok_identifier;
   }
  
-    if(LastChar==tok_finish||LastChar==tok_eof)
-    {
-      std::cout << "GOT FINISH" << ".\n";
-    }
+  while (LastChar==32) //blank space
+  {
+    LastChar = get_file_char();
+    Line += " ";
+  }
 
 
-  return wait_token;
+  int ReturnChar = LastChar;
+  LastChar = get_file_char();
+
+  if(ReturnChar==tok_finish)
+    return tok_finish;
+  if(ReturnChar==tok_eof)
+    return tok_eof;
+  
+
+  return ReturnChar;
 }
 
 
+int CurTok;
+void getNextToken() {
+  CurTok = tokenize();
+}

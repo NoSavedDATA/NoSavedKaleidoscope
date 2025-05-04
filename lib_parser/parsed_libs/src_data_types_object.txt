@@ -1,0 +1,78 @@
+1821-04-29 18:46:38
+
+	FunctionType *InstantiateObjectTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("InstantiateObject", InstantiateObjectTy);
+
+	FunctionType *objHashTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("objHash", objHashTy);
+
+	FunctionType *LoadObjectTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("LoadObject", LoadObjectTy);
+
+	FunctionType *InitObjectVecWithNullTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("InitObjectVecWithNull", InitObjectVecWithNullTy);
+
+	FunctionType *is_nullTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("is_null", is_nullTy);
+
+	FunctionType *objAttr_var_from_varTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("objAttr_var_from_var", objAttr_var_from_varTy);
+
+	FunctionType *objAttr_var_from_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("objAttr_var_from_vec", objAttr_var_from_vecTy);
+
+	FunctionType *objAttr_vec_from_varTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("objAttr_vec_from_var", objAttr_vec_from_varTy);
+
+	FunctionType *objAttr_vec_from_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("objAttr_vec_from_vec", objAttr_vec_from_vecTy);
+
+	FunctionType *appendTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("append", appendTy);
+
+	FunctionType *LoadObjectScopeNameTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("LoadObjectScopeName", LoadObjectScopeNameTy);

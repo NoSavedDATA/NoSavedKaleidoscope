@@ -1,0 +1,29 @@
+1821-05-02 11:17:29
+
+	FunctionType *CreateNotesVectorTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("CreateNotesVector", CreateNotesVectorTy);
+
+	FunctionType *Dispose_NotesVectorTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVectorTy);
+
+	FunctionType *Add_Float_To_NotesVectorTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("Add_Float_To_NotesVector", Add_Float_To_NotesVectorTy);
+
+	FunctionType *Add_String_To_NotesVectorTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Add_String_To_NotesVector", Add_String_To_NotesVectorTy);

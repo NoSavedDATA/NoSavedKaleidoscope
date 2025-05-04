@@ -9,4 +9,7 @@
 
 
 
+std::string Mangle_Lib_File_Name(std::string fname);
 
+
+void Parse_Libs();
