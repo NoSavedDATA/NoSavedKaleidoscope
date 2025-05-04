@@ -21,54 +21,59 @@ std::vector<fs::path> files;
 int file_counter = 0;
 
 
-void get_cpp_files(const fs::path& rootDir) {
+
+std::vector<fs::path> glob_cpp(const fs::path& rootDir) {
     std::vector<fs::path> cppFiles;
     std::mutex mtx;
 
     for (const auto& entry : fs::recursive_directory_iterator(rootDir)) {
         if (entry.is_regular_file() && entry.path().extension() == ".cpp") {
             std::lock_guard<std::mutex> lock(mtx); // Thread-safe if parallelized
-            files.push_back(entry.path());
+            cppFiles.push_back(entry.path());
         }
     }
+
+    return std::move(cppFiles);
+}
+
+
+
+
+void get_cpp_files(const fs::path& rootDir) {
+
+
+    files = glob_cpp(rootDir);
+
+    // std::vector<fs::path> aux;
+    // aux.push_back(files[0]);
+    // files = aux;
+
+
+    std::vector<fs::path> aux;
+
+    for (auto &lib_file : files){
+        std::string fname = lib_file.string()
+        std::string parsed_lib = Mangle_Lib_File_Name(fname);
+        
+        file.open(fname);
+
+        file.close();
+    }
+
+
+    
+    std::exit(0);
+
+    // std::cout << "files[0]" << files[0] << ".\n";
 
     has_started = true;
 }
 
 
 
-// void Parse_File(const std::string &filename) {
-
-//     std::ifstream file(filename);
-//     if (!file) {
-//         std::cerr << "Failed to open file: " << filename << '\n';
-//         return;
-//     }
 
 
-//     char ch;
-//     while (file.get(ch))
-//         Tokenize(ch);
-
-// }
-
-// int () {
-
-//     std::string folder = "src/data_types";
-//     auto files = get_cpp_files(folder);
-
-//     for (const auto& file : files) {
-//         std::cout << "Parsing lib file: " << file << '\n';
-//         Parse_File(file.string());
-
-//         return 0;
-//     }
-
-//     return 0;
-// }
-
-
-
+std::string current_file_name = "";
 
 
 char get_file_char() {
@@ -79,25 +84,14 @@ char get_file_char() {
         std::string folder = "src/data_types";
         get_cpp_files(folder);
         // std::cout << "Got files. Reading" << ".\n";
-        std::cout << "Reading file: " << files[0].string() << ".\n";
-        file.open(files[0].string());
+        current_file_name = files[0].string();
+        std::cout << "Reading file: " << current_file_name << ".\n";
+        file.open(current_file_name);
         file_counter+=1;
     }
 
-    // std::cout << "checking file eof" << ".\n";
 
-    // if(file.eof())
-    // {
-    //     // std::exit(0);
-    //     std::cout << "\n\n\n\n=====================================================================================\n\n\n\n\n";
-    //     std::cout << "Finished reading file" << files[file_counter-1].string() << ".\n";
-    //     file_counter+=1;
-    //     if(file_counter>files.size())
-    //         return -255;
-    //     file.open(files[file_counter].string());
-    // }
 
-    // std::cout << "getting char" << ".\n";
 
     char ch;
     if(file.get(ch))
@@ -106,21 +100,18 @@ char get_file_char() {
         file.close();
         
         std::cout << "\n\n\n\n=====================================================================================\n\n\n\n\n";
-        std::cout << "Finished reading file" << files[file_counter-1].string() << ".\n";
+        std::cout << "Finished reading file" << current_file_name << ".\n";
         
         if(file_counter>=files.size())
-        {
-            std::cout << "RETURNING TOKEN FINISH HERERERERE" << ".\n";
             return tok_finish;
-        }
-        
+       
+        current_file_name = files[file_counter].string();
 
-        std::cout << "open " << files[file_counter].string() << ".\n";
-        file.open(files[file_counter].string());
+        std::cout << "open " << current_file_name << ".\n";
+        file.open(current_file_name);
 
         file_counter+=1;
 
-        std::cout << "RETURNING TOKEN EOF HERERERERE" << ".\n";
         return tok_eof;
     }
 }

@@ -18,6 +18,7 @@
 
 
 
+
 extern "C" AnyVector *tuple_New(Scope_Struct *scope_struct, char *type, ...)
 {
   // std::cout << "tuple_New. First type: " << type << ".\n";

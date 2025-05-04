@@ -1,0 +1,85 @@
+1821-05-02 14:16:04
+
+	FunctionType *float_vec_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Create", float_vec_CreateTy);
+
+	FunctionType *float_vec_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Load", float_vec_LoadTy);
+
+	FunctionType *float_vec_StoreTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Store", float_vec_StoreTy);
+
+	FunctionType *float_vec_MarkToSweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_MarkToSweep", float_vec_MarkToSweepTy);
+
+	FunctionType *float_vec_Store_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
+
+	FunctionType *PrintFloatVecTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintFloatVec", PrintFloatVecTy);
+
+	FunctionType *zeros_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("zeros_vec", zeros_vecTy);
+
+	FunctionType *ones_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("ones_vec", ones_vecTy);
+
+	FunctionType *float_vec_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Idx", float_vec_IdxTy);
+
+	FunctionType *float_vec_CalculateIdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("float_vec_CalculateIdx", float_vec_CalculateIdxTy);
+
+	FunctionType *float_vec_first_nonzeroTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_first_nonzero", float_vec_first_nonzeroTy);
+
+	FunctionType *float_vec_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_print", float_vec_printTy);

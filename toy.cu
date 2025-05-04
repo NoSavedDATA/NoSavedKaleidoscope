@@ -770,6 +770,8 @@ static void InitializeModule() {
   seen_var_attr = false;
 
 
+  Generate_LLVM_Functions();
+
 
   //===----------------------------------------------------------------------===//
   // Scalar   Operations

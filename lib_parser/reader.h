@@ -17,3 +17,6 @@ extern std::ifstream file;
 
 char get_file_char();
 
+
+extern std::string current_file_name;
+

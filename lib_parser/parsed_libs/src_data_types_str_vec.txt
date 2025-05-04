@@ -1,0 +1,92 @@
+1821-05-04 14:38:17
+
+	FunctionType *str_vec_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_vec_Create", str_vec_CreateTy);
+
+	FunctionType *str_vec_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
+
+	FunctionType *str_vec_StoreTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
+
+	FunctionType *str_vec_MarkToSweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_vec_MarkToSweep", str_vec_MarkToSweepTy);
+
+	FunctionType *PrintStrVecTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintStrVec", PrintStrVecTy);
+
+	FunctionType *LenStrVecTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("LenStrVec", LenStrVecTy);
+
+	FunctionType *ShuffleStrVecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("ShuffleStrVec", ShuffleStrVecTy);
+
+	FunctionType *shuffle_strTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
+
+	FunctionType *_glob_b_Ty= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("_glob_b_", _glob_b_Ty);
+
+	FunctionType *IndexStrVecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("IndexStrVec", IndexStrVecTy);
+
+	FunctionType *str_vec_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("str_vec_Idx", str_vec_IdxTy);
+
+	FunctionType *str_vec_CalculateIdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("str_vec_CalculateIdx", str_vec_CalculateIdxTy);
+
+	FunctionType *str_vec_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_vec_print", str_vec_printTy);
