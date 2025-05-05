@@ -100,7 +100,7 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor)
 
 
 
-extern "C" float Conv2d_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" float Conv2d_Create(char *name, char *scopeless_name, void *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
 
   std::cout << "\n\n\n----------------------EXECUTION: CREATING CONV2D: " << name << ".\n\n\n\n";

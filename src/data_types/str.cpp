@@ -17,7 +17,7 @@ std::map<std::string, std::string> AuxRandomStrs;
 
 
   
-extern "C" void *str_Create(char *name, char *scopeless_name, char *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct) {
+extern "C" char *str_Create(char *name, char *scopeless_name, char *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct) {
 
   // std::cout << "Creating string"  << ".\n";
   // std::cout << "Val: " << init_val << ".\n";
@@ -30,7 +30,7 @@ extern "C" void *str_Create(char *name, char *scopeless_name, char *init_val, An
   return init_val;
 }
 
-extern "C" void *str_Load(char *name, Scope_Struct *scope_struct){
+extern "C" char *str_Load(char *name, Scope_Struct *scope_struct){
   // std::cout << "Load str " << name << ".\n";
   //char *ret = CopyString(NamedStrs[name]);
   
@@ -80,7 +80,7 @@ void str_Clean_Up(std::string name, void *data_ptr)
 }
 
 
-extern "C" void *str_Copy(Scope_Struct *scope_struct, char *str) {
+extern "C" char *str_Copy(Scope_Struct *scope_struct, char *str) {
   // std::cout << "Copying string: " << str << ".\n";
   char *ret = CopyString(str);
   return ret;
@@ -158,25 +158,11 @@ extern "C" float PrintStr(char* value){
 }
 
 
-extern "C" float *split_str_to_float(char *in_string, int gather_position)
-{
-  std::vector<std::string> splitted = split_str(in_string, '/');
-
-  float * ret = new float[1];
-
-  if(gather_position<0)
-    gather_position = splitted.size()+gather_position;
-
-  ret[0] = std::stof(splitted[gather_position]);
-  delete[] in_string;
-
-  return ret;
-}
 
 
 
 
-extern "C" void *cat_str_float(char *c, float v)
+extern "C" char *cat_str_float(char *c, float v)
 {
 
   std::string s = c;
@@ -193,7 +179,7 @@ extern "C" void *cat_str_float(char *c, float v)
 
 
 
-extern "C" void *SplitString(Scope_Struct *scope_struct,char *self, char *pattern)
+extern "C" std::vector<char *> *SplitString(Scope_Struct *scope_struct,char *self, char *pattern)
 {
 
   //std::cout << "\n\nSPLITTING: " << self << ", with pattern: " << pattern << "\n";

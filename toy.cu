@@ -385,45 +385,7 @@ extern "C" float printtt(int thread_id, Tensor tensor)
 
 
 
-extern "C" void *self_attn(int thread_id, Tensor *tensor)
-{
-  float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
-  
-  
-  dims =  format_LinearLayer_Dims(dims);
 
-  int B = dims[0];
-  int C = dims[1];
-
-
-  int grid_size, block_size, shared_mem_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-
-
-  tensor->Sync();
-  float *probs = get_from_pool(thread_id, B*C, "self_attn");
-  cudaStream_t stream = ThreadsStream[thread_id];
-  set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(probs, B*C);
-
-
-
-  grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-
-
-  online_softmax<<<grid_size, block_size, 0, stream>>>(tensor_ptr, probs, B, C);
-  
-  
-  Tensor *new_tensor = createTensor(probs, dims, tensor->dims_prod, false, "");
-  new_tensor->op=self_attn_op;
-  return new_tensor;
-  std::cout << "a" << ".\n";
-
-}
 
 
 
@@ -2189,21 +2151,7 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("str_vec_Idx", IndexClassStrVecTy);
 
-  //
-  FunctionType *tuple_idxTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)}, 
-      false 
-  );
-  TheModule->getOrInsertFunction("tuple_Idx", tuple_idxTy);
   
-  FunctionType *AnyVector_idxTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)}, 
-      false 
-  );
-  TheModule->getOrInsertFunction("AnyVector_Idx", AnyVector_idxTy);
-
   //
   FunctionType *IndexClassFloatVecTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -2821,20 +2769,7 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("RemoveTensorScopeAttrOnIndex", RemoveTensorScopeAttrOnIndexTy);
 
 
-  FunctionType *tuple_StoreTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy}, 
-      false 
-  );
-  TheModule->getOrInsertFunction("tuple_Store", tuple_StoreTy);
 
-  //
-  FunctionType *tensor_StoreTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy}, 
-      false 
-  );
-  TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
 
   FunctionType *AttrTensorNoFreeTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
@@ -3224,7 +3159,7 @@ int main() {
   clean_up_functions["float"] = float_Clean_Up;
   clean_up_functions["str"] = str_Clean_Up;
   clean_up_functions["tensor"] = tensor_Clean_Up;
-  clean_up_functions["tuple"] = tuple_Clean_Up;
+  clean_up_functions["list"] = list_Clean_Up;
   clean_up_functions["float_vec"] = float_vec_Clean_Up;
   clean_up_functions["str_vec"] = str_vec_Clean_Up;
 
@@ -3238,7 +3173,7 @@ int main() {
                            {"prod", "tensor"}, {"tensor_mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
                            {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
                            {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
-                           {"tuple_print", "float"}, {"mean_tensor", "tensor"}, {"tuple_test", "float"},
+                           {"mean_tensor", "tensor"},
                            {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"}};
 
 
@@ -3250,8 +3185,8 @@ int main() {
 
   user_cpp_functions = {"Linear", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
                         "tensor_sum", "tensor_prod", "tensor_mean", "mean_tensor", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
-                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "tuple_print",
-                        "BatchNorm2d", "Pool2d", "LSTM", "MHSA", "Embedding", "tuple_test"};
+                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "list_print",
+                        "BatchNorm2d", "Pool2d", "LSTM", "MHSA", "Embedding", "list_test"};
                         
 
 

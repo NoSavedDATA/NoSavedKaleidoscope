@@ -15,7 +15,7 @@
 
 
 
-extern "C" void *str_vec_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *str_vec_Create(char *name, char *scopeless_name, void *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
   if (init_val!=nullptr)
   { 

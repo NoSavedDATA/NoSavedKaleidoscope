@@ -12,7 +12,37 @@ ExternFunctionExpr::ExternFunctionExpr(const std::string &ReturnType, const std:
 
 
 
-std::string ExternFunctionExpr::Generate_LLVM(std::string fname, std::string lib_string) {
+
+Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type, std::string function_name) {
+
+    std::string return_type="";
+    if(in_return_type=="char*")
+        return_type = "str";
+    else if (in_return_type=="std::vector<char*>*")
+        return_type = "str_vec";
+    else if (in_return_type=="std::vector<float>*")
+        return_type = "float_vec";
+    else if (begins_with(in_return_type, "data_type_")) {
+        return_type = remove_substring(in_return_type, "data_type_");
+        if (ends_with(return_type, "*"))
+            return_type = remove_substring(return_type, "*");
+    }
+    else {
+
+    }
+
+
+    // std::cout << in_return_type << " --> " << return_type << ".\n";
+
+
+    if (in_return_type!="float"&&in_return_type!="void")
+        lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, ";
+    lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", ";
+
+    return lib_info;
+}
+
+Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) {
     // std::cout << "ExternFunctionExpr for file " << fname << ".\n";
     // std::cout << "Function:\n\tReturn Type:\t" << ReturnType << "\n\tName:\t\t" << FunctionName << "\n\tArgs:\t\t";
 
@@ -25,7 +55,9 @@ std::string ExternFunctionExpr::Generate_LLVM(std::string fname, std::string lib
 
 
     // std::cout <<  "\n\n\n";
+    
 
+    lib_info = Generate_Function_Dict(lib_info, ReturnType, FunctionName); 
 
 
     std::string fTy = FunctionName+"Ty";
@@ -74,7 +106,7 @@ std::string ExternFunctionExpr::Generate_LLVM(std::string fname, std::string lib
 
 
 
-    lib_string = lib_string + "\n" + line1 + line2 + line3 + line4 + line5 + line6;
+    lib_info->llvm_string = lib_info->llvm_string + "\n" + line1 + line2 + line3 + line4 + line5 + line6;
 
-    return lib_string;
+    return lib_info;
 }

@@ -100,24 +100,13 @@ void get_cpp_files(const fs::path& rootDir) {
             if (was_file_modified(fname, parsed_lib))
                 aux.push_back(lib_file);
         } else
-        {
-            // std::cout << "37120937128973012737812307123812730127037128930712312FILE " << lib_file << " WAS NOT FOUND.\n";   
             aux.push_back(lib_file);
-        }
-
     }
 
-
-    // std::cout << "\n\n\n";
-    // for (auto &lib_file : aux)
-    //     std::cout << "Shall parse " << lib_file.string() << ".\n";
-
-    files = aux;
+    // aux.push_back(files[0]);
+    // files = aux;
 
     
-    // std::exit(0);
-
-    // std::cout << "files[0]" << files[0] << ".\n";
 
     has_started = true;
 }

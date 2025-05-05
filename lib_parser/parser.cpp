@@ -21,12 +21,18 @@ std::string file_name;
 
 
 
-std::string Generate_LLVMs(std::string lib_string, std::vector<std::unique_ptr<Expr>> functions)
+Lib_Info::Lib_Info() {};
+
+
+
+
+
+Lib_Info *Generate_LLVMs(Lib_Info *lib_info, std::vector<std::unique_ptr<Expr>> functions)
 {
     for (auto &function : functions)
-        lib_string = function->Generate_LLVM(file_name, lib_string);
+        lib_info = function->Generate_LLVM(file_name, lib_info);
 
-   return lib_string; 
+   return lib_info; 
 }
 
 
@@ -60,7 +66,7 @@ void Write_Txt(std::string fname, std::string content) {
     lib_file.close();
 }
 
-void Save_Lib_String(std::string lib_string) {
+void Save_llvm_string(Lib_Info *lib_info) {
 
     fs::path file_path(file_name);
 
@@ -74,14 +80,14 @@ void Save_Lib_String(std::string lib_string) {
     oss << std::put_time(std::localtime(&cftime), "%F %T");
     std::string string_last_modified = oss.str();
 
-    // std::cout << "Last modified: " << string_last_modified << ".\n";
 
 
-    std::string save_lib_string = string_last_modified + "\n" + lib_string;
+    std::string save_llvm_string = string_last_modified + "\n" + lib_info->llvm_string;
     std::string lib_file_name = Mangle_Lib_File_Name(file_name);
     
-    Write_Txt(lib_file_name, save_lib_string);
+    Write_Txt(lib_file_name, save_llvm_string);
 
+    free(lib_info);
 }
 
 
@@ -233,7 +239,8 @@ void Parse_Libs() {
 
     while (CurTok!=tok_finish)
     {
-        std::string lib_string = "";
+        Lib_Info *lib_info = new Lib_Info();
+
         std::vector<std::unique_ptr<Expr>> functions;
 
         while (CurTok!=tok_eof&&CurTok!=tok_finish)
@@ -242,12 +249,16 @@ void Parse_Libs() {
         if(files.size()==0)
             break;
 
-        lib_string = Generate_LLVMs(lib_string, std::move(functions));
+        lib_info = Generate_LLVMs(lib_info, std::move(functions));
 
         if (CurTok==tok_eof)
             getNextToken();
 
-        Save_Lib_String(lib_string); 
+        // std::cout << lib_info->dict_string << ".\n\n";
+        // std::cout << "functions list: " << lib_info->functions_string << ".\n";
+        // std::cout << "------------" << ".\n\n\n\n";
+
+        Save_llvm_string(lib_info); 
     }
     
     // std::cout << "Finish parsing libraries"  << ".\n";
