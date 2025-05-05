@@ -6,13 +6,13 @@
 #include <vector>
 
 
-class AnyVector {
+class data_type_list {
 public: 
     std::vector<std::any>* data;  // Pointer to vector stored in heap
     std::vector<std::string>* data_types;  // Pointer to vector stored in heap
-    AnyVector(); 
+    data_type_list(); 
 
-    ~AnyVector(); 
+    ~data_type_list(); 
 
     void append(std::any value, std::string); 
 
@@ -25,5 +25,5 @@ public:
 };
 
 
-extern std::map<std::string, AnyVector *> NamedVectors;
+extern std::map<std::string, data_type_list *> NamedVectors;
 

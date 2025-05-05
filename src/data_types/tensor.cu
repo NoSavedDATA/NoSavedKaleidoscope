@@ -19,7 +19,7 @@
 
 
 
-extern "C" void *tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
   
   // if (notes_vector->data->size()>0)
@@ -160,7 +160,7 @@ extern "C" void *tensor_Copy(Scope_Struct *scope_struct, Tensor *tensor){
 
   std::string tensor_name = tensor->name;
   
-  std::string arg_tensor_name = "tuple_" + tensor_name;
+  std::string arg_tensor_name = "list_" + tensor_name;
   
 
   std::vector<float> dims = tensor->dims;

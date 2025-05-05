@@ -1,6 +1,7 @@
 #pragma once
 
 
+#include "include.h"
 
 
 class Expr {
@@ -8,7 +9,7 @@ class Expr {
      virtual ~Expr() = default;
      bool Vararg=false;
 
-     virtual std::string Generate_LLVM(std::string, std::string) = 0;
+     virtual Lib_Info *Generate_LLVM(std::string, Lib_Info *) = 0;
 };
 
 
@@ -20,7 +21,7 @@ class ExternFunctionExpr : public Expr {
 
     ExternFunctionExpr(const std::string &ReturnType, const std::string &FunctionName, std::vector<std::string> ArgTypes, bool Vararg);
 
-    std::string Generate_LLVM(std::string, std::string) override;
+    Lib_Info *Generate_LLVM(std::string, Lib_Info *) override;
 };
 
 

@@ -11,7 +11,7 @@ std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
 
 
-extern "C" void *float_vec_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" std::vector<float> *float_vec_Create(char *name, char *scopeless_name, void *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
   // std::cout << "float_vec_Create" << ".\n";
 
@@ -25,10 +25,10 @@ extern "C" void *float_vec_Create(char *name, char *scopeless_name, void *init_v
   return nullptr;
 }
 
-extern "C" void *float_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
+extern "C" std::vector<float> *float_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
   // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
-  void *ret = &ClassFloatVecs[object_var_name];
+  std::vector<float> *ret = &ClassFloatVecs[object_var_name];
   return ret;
 }
 
@@ -72,7 +72,7 @@ extern "C" float PrintFloatVec(std::vector<float> vec)
 }
 
 
-extern "C" void * zeros_vec(Scope_Struct *scope_struct, float size) {
+extern "C" std::vector<float> * zeros_vec(Scope_Struct *scope_struct, float size) {
   // TODO: turn into python like expression [0]*size
 
   std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 0.0f);
@@ -86,7 +86,7 @@ extern "C" void * zeros_vec(Scope_Struct *scope_struct, float size) {
   return &FloatVecAuxHash[random_str];
 }
 
-extern "C" void * ones_vec(Scope_Struct *scope_struct, float size) {
+extern "C" std::vector<float> * ones_vec(Scope_Struct *scope_struct, float size) {
   // TODO: turn into python like expression [0]*size
 
   std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 1.0f);

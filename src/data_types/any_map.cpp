@@ -12,16 +12,16 @@
 #include "any_map.h"
 
 
-std::map<std::string, AnyMap *> NamedDicts;
+std::map<std::string, data_type_dict *> NamedDicts;
 
 
 
-// template char *AnyMap::get<char *>(std::string);
-// template Tensor *AnyMap::get<Tensor *>(std::string);
+// template char *data_type_dict::get<char *>(std::string);
+// template Tensor *data_type_dict::get<Tensor *>(std::string);
 
 
 template <typename T>
-T AnyMap::get(std::string key) {
+T data_type_dict::get(std::string key) {
     auto it = data->find(key);
     if (it!=data->end())
     {
@@ -34,7 +34,7 @@ T AnyMap::get(std::string key) {
 }
 
 template <>
-float AnyMap::get<float>(std::string key) {
+float data_type_dict::get<float>(std::string key) {
     auto it = data->find(key);
     if (it!=data->end())
     {
@@ -54,7 +54,7 @@ float AnyMap::get<float>(std::string key) {
 
 
 
-void AnyMap::delete_type(std::string key) {
+void data_type_dict::delete_type(std::string key) {
     auto it = data->find(key);
     auto it_type = data_types->find(key);
    
@@ -78,34 +78,34 @@ void AnyMap::delete_type(std::string key) {
 
 
 
-AnyMap::AnyMap() {
+data_type_dict::data_type_dict() {
     
     data = new std::map<std::string, std::any>(); // Allocate memory
     data_types = new std::map<std::string, std::string>();
 }
 
-AnyMap::~AnyMap() {
+data_type_dict::~data_type_dict() {
     // std::cout << "DELETING A MAP" << ".\n";
     delete data;  // Free memory
     delete data_types;
 }
 
-void AnyMap::append(char *key, std::any value, std::string data_type) {
+void data_type_dict::append(char *key, std::any value, std::string data_type) {
     std::string _key = key;
 
     (*data)[_key] = value;
     (*data_types)[_key] = data_type;
 
-    move_to_char_pool(strlen(key)+1, key, "Append to AnyMap");
+    move_to_char_pool(strlen(key)+1, key, "Append to data_type_dict");
 }
 
 
-size_t AnyMap::size() const {
+size_t data_type_dict::size() const {
     return data->size();
 }
 
 
-void AnyMap::print() {
+void data_type_dict::print() {
     std::cout << "\n";
     // for(int i=0; i<data->size(); i++)
     // {
@@ -125,15 +125,15 @@ void AnyMap::print() {
 
 
 
-extern "C" AnyMap *dictionary_Create() {
+extern "C" data_type_dict *dictionary_Create() {
     // std::cout << "Creating vector\n";
-    AnyMap *notes_vector = new AnyMap();
+    data_type_dict *notes_vector = new data_type_dict();
     // std::cout << "Notes Vector created.\n";
 
     return notes_vector;
 }
 
-extern "C" float dictionary_Dispose(AnyMap *notes_vector) {
+extern "C" float dictionary_Dispose(data_type_dict *notes_vector) {
 
     // for (int i=0; i<notes_vector->size(); i++)
     // {
@@ -152,7 +152,7 @@ extern "C" float dictionary_Dispose(AnyMap *notes_vector) {
 }
 
 
-// extern "C" AnyMap *Add_Float_To_NotesVector(AnyMap *notes_vector, float value) {
+// extern "C" data_type_dict *Add_Float_To_NotesVector(data_type_dict *notes_vector, float value) {
 
 //     notes_vector->append(value, "float");
 
@@ -161,7 +161,7 @@ extern "C" float dictionary_Dispose(AnyMap *notes_vector) {
 
 
 
-// extern "C" AnyMap *Add_String_To_NotesVector(AnyMap *notes_vector, char *value) {
+// extern "C" data_type_dict *Add_String_To_NotesVector(data_type_dict *notes_vector, char *value) {
 
 //     // std::cout << "Add_String " << value << " to notes_vector" << ".\n";
 //     notes_vector->append((void *)value, "str");

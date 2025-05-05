@@ -2343,7 +2343,7 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) 
     return ParseDataExpr(class_name);
   case tok_data:
     return ParseDataExpr(class_name);
-  case tok_tuple:
+  case tok_list:
     return ParseDataExpr(class_name);
   case tok_tensor:
     return ParseDataExpr(class_name);
@@ -2560,7 +2560,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(int ExprPre
     // std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
     // std::cout << "op type: " << op_elements << ".\n";
 
-    if ((L_type=="tuple"||R_type=="tuple") && BinOp!='=')
+    if ((L_type=="list"||R_type=="list") && BinOp!='=')
     {
       LogError("Tuple elements type are unknow during parsing type. Please load the element into a static type variable first.");
       return std::make_tuple(nullptr,0,"None");

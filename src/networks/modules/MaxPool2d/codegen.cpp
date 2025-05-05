@@ -85,7 +85,7 @@ void pool2d_backward(float *inp, float size, float *out,
 }
 
 
-extern "C" float Pool2d_Create(char *name, char *scopeless_name, void *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" float Pool2d_Create(char *name, char *scopeless_name, void *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
   std::cout << "Pool2d_Create execution" << ".\n";
   

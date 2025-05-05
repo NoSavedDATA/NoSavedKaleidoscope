@@ -774,7 +774,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         
         std::string store_op = LType + "_Store";
         
-        call(store_op, {Lvar_name, callret("AnyVector_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)}), scope_struct});
+        call(store_op, {Lvar_name, callret("list_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)}), scope_struct});
 
       }
 
@@ -1469,8 +1469,8 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
 
   seen_var_attr = false;
 
-  // std::cout << "Call tuple_New" << ".\n";
-  return callret("tuple_New", values);
+  // std::cout << "Call list_New" << ".\n";
+  return callret("list_New", values);
 }
 
 

@@ -1,4 +1,4 @@
-1821-05-03 09:48:18
+1821-05-05 17:06:37
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -62,13 +62,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("PrintStr", PrintStrTy);
-
-	FunctionType *split_str_to_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("split_str_to_float", split_str_to_floatTy);
 
 	FunctionType *cat_str_floatTy= FunctionType::get(
 		int8PtrTy,

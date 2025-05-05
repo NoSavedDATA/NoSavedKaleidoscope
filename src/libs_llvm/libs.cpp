@@ -17,69 +17,6 @@ void Generate_LLVM_Functions() {
     int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     
 
-	FunctionType *tuple_NewTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("tuple_New", tuple_NewTy);
-
-	FunctionType *tuple_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tuple_Store", tuple_StoreTy);
-
-	FunctionType *tuple_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tuple_Load", tuple_LoadTy);
-
-	FunctionType *tuple_printTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tuple_print", tuple_printTy);
-
-	FunctionType *tuple_testTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tuple_test", tuple_testTy);
-
-	FunctionType *tuple_CreateTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tuple_Create", tuple_CreateTy);
-
-	FunctionType *tuple_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tuple_MarkToSweep", tuple_MarkToSweepTy);
-
-	FunctionType *tuple_IdxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("tuple_Idx", tuple_IdxTy);
-
-	FunctionType *AnyVector_IdxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("AnyVector_Idx", AnyVector_IdxTy);
-
 	FunctionType *CreateNotesVectorTy= FunctionType::get(
 		int8PtrTy,
 		{},
@@ -170,13 +107,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("PrintStr", PrintStrTy);
-
-	FunctionType *split_str_to_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("split_str_to_float", split_str_to_floatTy);
 
 	FunctionType *cat_str_floatTy= FunctionType::get(
 		int8PtrTy,
@@ -569,6 +499,62 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_print", float_vec_printTy);
+
+	FunctionType *list_NewTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("list_New", list_NewTy);
+
+	FunctionType *list_StoreTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Store", list_StoreTy);
+
+	FunctionType *list_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Load", list_LoadTy);
+
+	FunctionType *list_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_print", list_printTy);
+
+	FunctionType *list_testTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_test", list_testTy);
+
+	FunctionType *list_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
+
+	FunctionType *list_MarkToSweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_MarkToSweep", list_MarkToSweepTy);
+
+	FunctionType *list_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,

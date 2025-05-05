@@ -17,7 +17,7 @@
 
 
 
-extern "C" float pinned_tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, AnyVector *notes_vector, Scope_Struct *scope_struct)
+extern "C" float pinned_tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
 
   // std::cout << "PINNED TENSOR CREATE"  << ".\n";

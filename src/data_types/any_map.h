@@ -7,13 +7,13 @@
 #include <vector>
 
 
-class AnyMap {
+class data_type_dict {
 public: 
     std::map<std::string, std::any>* data;  // Pointer to vector stored in heap
     std::map<std::string, std::string>* data_types;  // Pointer to vector stored in heap
-    AnyMap(); 
+    data_type_dict(); 
 
-    ~AnyMap(); 
+    ~data_type_dict(); 
 
     void append(char *, std::any value, std::string); 
 
@@ -28,4 +28,4 @@ public:
 };
 
 
-extern std::map<std::string, AnyMap *> NamedDicts;
+extern std::map<std::string, data_type_dict *> NamedDicts;
