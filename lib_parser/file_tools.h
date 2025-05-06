@@ -17,6 +17,8 @@ struct Lib_Files {
     std::string file_name="";
     std::string user_cpp="";
     std::string returns_dict="";
+    std::string clean_up="";
+    std::string backward="";
 
     void Mangle_Lib_File_Name(std::string);
 };

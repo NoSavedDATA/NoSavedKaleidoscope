@@ -24,7 +24,7 @@ void set_functions_return_type() {
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, 
 						{"str_Create", "str"}, {"str_Load", "str"}, {"str_Copy", "str"}, {"str_str_add", "str"}, {"str_float_add", "str"}, {"float_str_add", "str"}, {"cat_str_float", "str"}, {"SplitString", "str_vec"}, {"str_split_idx", "str"}, 
 						{"float_vec_Create", "float_vec"}, {"float_vec_Load", "float_vec"}, {"zeros_vec", "float_vec"}, {"ones_vec", "float_vec"}, 
-						{"tensor_Create", "tensor"}, {"tensor_Load", "tensor"}, {"gpu", "tensor"}, {"randu_like", "tensor"}, {"tensor_view", "tensor"}, {"NewVecToTensor", "tensor"}, 
+						{"tensor_Create", "tensor"}, {"tensor_Load", "tensor"}, {"gpu", "tensor"}, {"randu_like", "tensor"}, {"tensor_view", "tensor"}, {"NewVecToTensor", "tensor"}, {"zeros_like", "tensor"}, 
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, 
 						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, 
 						{"CreateNotesVector", "list"}, {"Add_Float_To_NotesVector", "list"}, {"Add_String_To_NotesVector", "list"}, 

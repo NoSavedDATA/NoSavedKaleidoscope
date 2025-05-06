@@ -781,3 +781,27 @@ extern "C" float tensor_CalculateIdx(char *tensor_name, float first_idx, ...) {
 }
 
 
+
+
+extern "C" data_type_tensor *zeros_like(Scope_Struct *scope_struct, data_type_tensor *tensor) {
+
+  // data_type_tensor *zeros_tensor = new data_type_tensor();
+
+  int thread_id = scope_struct->thread_id;
+  float *tensor_ptr = tensor->tensor_ptr;
+  std::vector<float> dims = tensor->dims;
+  float dims_prod = tensor->dims_prod;
+
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
+  
+
+  float *y = get_from_pool(thread_id, dims_prod, "relu");
+
+
+  tensor->Sync();
+  cudaStream_t stream = ThreadsStream[thread_id];
+  set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(y, dims_prod);
+
+  return customOpTensor(y, dims, DimsProd(dims), "set_to_zero", "", tensor);
+}

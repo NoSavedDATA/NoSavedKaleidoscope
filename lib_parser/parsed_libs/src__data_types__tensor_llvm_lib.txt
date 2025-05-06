@@ -1,4 +1,4 @@
-1821-05-05 21:00:31
+1821-05-05 22:23:07
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -90,3 +90,10 @@
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("tensor_CalculateIdx", tensor_CalculateIdxTy);
+
+	FunctionType *zeros_likeTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("zeros_like", zeros_likeTy);

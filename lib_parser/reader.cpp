@@ -88,8 +88,12 @@ char get_file_char() {
 
     char ch;
     if(file.get(ch))
+    {
+        FileRead = FileRead + ch;
         return ch;
+    }
     else {
+        FileRead="";
         file.close();
         
         // std::cout << "\n\n\n\n=====================================================================================\n\n\n\n\n";

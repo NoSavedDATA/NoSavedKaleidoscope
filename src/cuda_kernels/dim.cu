@@ -478,20 +478,22 @@ extern "C" data_type_tensor *prod(int thread_id, data_type_tensor tensor, float 
 
   if (first_dim==TERMINATE_VARARG)
   {
-    va_end(args);
-    int dims_prod = DimsProd(dims);
+    // va_end(args);
+    // int dims_prod = DimsProd(dims);
 
-    summed = get_from_pool(thread_id, dims_prod, "prod all dims");
-    cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream);
+    // summed = get_from_pool(thread_id, dims_prod, "prod all dims");
+    // cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream);
     
-    float tensor_sum=0;
-    for(int i=0; i<dims_prod; i++)
-      tensor_sum += summed[i];
-    tensor_sum = tensor_sum;
+    // float tensor_sum=0;
+    // for(int i=0; i<dims_prod; i++)
+    //   tensor_sum += summed[i];
+    // tensor_sum = tensor_sum;
 
-    std::cout << "prod: " << tensor_sum << "\n";
+    // std::cout << "prod: " << tensor_sum << "\n";
 
-    return summed;
+    // return summed;
+    LogErrorS("MUST REIMPLEMENT PROD WITH NO DIMS AS INPUT");
+    return nullptr;
   }
 
 
