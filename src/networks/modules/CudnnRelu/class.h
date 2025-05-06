@@ -27,8 +27,8 @@ class Relu
     Relu(std::string Name);
 
   
-  void SetDescriptors(int, int, int, int, Tensor *);
-  float *Forward(Tensor *, int, int, int, int);
+  void SetDescriptors(int, int, int, int, data_type_tensor *);
+  float *Forward(data_type_tensor *, int, int, int, int);
   void Backward(float *, float *, float *, float *);
 
 };

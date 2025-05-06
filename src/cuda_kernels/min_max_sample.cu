@@ -17,7 +17,7 @@
 
 
 
-extern "C" void *tensor_onehot(Scope_Struct *scope_struct, Tensor *tensor, float num_classes)
+extern "C" data_type_tensor *tensor_onehot(Scope_Struct *scope_struct, data_type_tensor *tensor, float num_classes)
 {
   int thread_id = scope_struct->thread_id;
   // std::cout << "ONEHOT OF " << tensor->name << "\n";
@@ -51,13 +51,13 @@ extern "C" void *tensor_onehot(Scope_Struct *scope_struct, Tensor *tensor, float
   //onehot_kernel<<<grid_size, block_size>>>(tensor, probs, B, C);
 
 
-  Tensor *new_tensor = createTensor(probs, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(probs, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor, onehot_op);
   return new_tensor;
 }
 
 
-extern "C" float priority_sample(int thread_id, Tensor *tensor, float max_idx, float seed)
+extern "C" float priority_sample(int thread_id, data_type_tensor *tensor, float max_idx, float seed)
 {
   
   float *probs, *sampled, *probs_cpu;
@@ -97,7 +97,7 @@ extern "C" float priority_sample(int thread_id, Tensor *tensor, float max_idx, f
   return ret;
 }
 
-extern "C" float priority_sample_val(int thread_id, Tensor *tensor, float max_idx, float seed)
+extern "C" float priority_sample_val(int thread_id, data_type_tensor *tensor, float max_idx, float seed)
 {  
   float *probs, *sampled, *probs_cpu;
   float ret;
@@ -137,7 +137,7 @@ extern "C" float priority_sample_val(int thread_id, Tensor *tensor, float max_id
 }
 
 
-extern "C" float importance_sample_idx(int thread_id, Tensor *tensor, float max_idx, float alpha, float beta, float seed)
+extern "C" float importance_sample_idx(int thread_id, data_type_tensor *tensor, float max_idx, float alpha, float beta, float seed)
 {  
   
   float *probs, *sampled, *probs_cpu;
@@ -177,7 +177,7 @@ extern "C" float importance_sample_idx(int thread_id, Tensor *tensor, float max_
 
 
 
-extern "C" float importance_sample_weight(int thread_id, Tensor *tensor, float max_idx, float alpha, float beta, float seed)
+extern "C" float importance_sample_weight(int thread_id, data_type_tensor *tensor, float max_idx, float alpha, float beta, float seed)
 {  
   float *probs, *sampled, *is_w_cpu, *is_w;
   float ret;
@@ -218,7 +218,7 @@ extern "C" float importance_sample_weight(int thread_id, Tensor *tensor, float m
 }
 
 
-extern "C" void *tmax(int thread_id, Tensor *tensor, float first_dim, ...) 
+extern "C" data_type_tensor *tmax(int thread_id, data_type_tensor *tensor, float first_dim, ...) 
 { //TODO: automatic type detection for max and min (float vs tensor)
   
   //std::cout << "MAX OF " << tensor.name << "\n";
@@ -316,14 +316,14 @@ extern "C" void *tmax(int thread_id, Tensor *tensor, float first_dim, ...)
   vec_sub<<<grid_size, block_size, shared_mem_size, stream>>>(50000, tensor_ptr, tensor_ptr, dims_prod);
 
 
-  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor, max_op);
   return new_tensor;
 }
 
 
 
-extern "C" void *tensor_argmax(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...) 
+extern "C" data_type_tensor *tensor_argmax(Scope_Struct *scope_struct, data_type_tensor *tensor, float first_dim, ...) 
 {
   int thread_id = scope_struct->thread_id;
   //std::cout << "ARGMAX OF " << tensor->name << " at thread: " << thread_id << "\n";
@@ -427,14 +427,14 @@ extern "C" void *tensor_argmax(Scope_Struct *scope_struct, Tensor *tensor, float
     cudaFree(maxed);
   
 
-  Tensor *new_tensor = createTensor(argmaxed, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(argmaxed, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor, argmax_op);
   cudaCheck(cudaGetLastError());
   return new_tensor;
 }
 
 
-extern "C" void *topk(int thread_id, Tensor tensor, float k) 
+extern "C" data_type_tensor *topk(int thread_id, data_type_tensor tensor, float k) 
 {
   std::cout << "TOPK OF " << tensor.name << "\n";
 
@@ -490,7 +490,7 @@ extern "C" void *topk(int thread_id, Tensor tensor, float k)
   cudaCheck(cudaFree(maxed));
   cudaCheck(cudaFree(argmaxed));
 
-  Tensor *new_tensor = createTensor(topk, topk_dims, topk_dims_prod, false, "");
+  data_type_tensor *new_tensor = createTensor(topk, topk_dims, topk_dims_prod, false, "");
   new_tensor->op=topk_op;
   return new_tensor;
 }

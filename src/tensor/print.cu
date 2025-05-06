@@ -16,11 +16,11 @@
 
 extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
   int thread_id = scope_struct->thread_id;
-  std::cout << "Printing Tensor " << tensorName << " at stream " << thread_id << "\n";
+  std::cout << "Printing tensor " << tensorName << " at stream " << thread_id << "\n";
 
 
 
-  Tensor *tensor = NamedTensorsT[tensorName];
+  data_type_tensor *tensor = NamedTensorsT[tensorName];
   int arr_size = tensor->dims_prod;
   float *tensor_cpu = new float[arr_size];
 
@@ -119,7 +119,7 @@ extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
 
 
 
-extern "C" float print_tensor(Tensor tensor){
+extern "C" float print_tensor(data_type_tensor tensor){
   char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
   std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
 
@@ -140,7 +140,7 @@ extern "C" float PrintTensorF(const float *cuda_tensor, int d1, int d2){
 
 
   float *tensor = new float[arr_size];
-  //std::cout << "Printing Tensor " << arr_size << "\n";
+  //std::cout << "Printing data_type_tensor " << arr_size << "\n";
   
   cudaDeviceSynchronize();
   cudaCheck(cudaMemcpy(tensor, cuda_tensor, arr_size*sizeof(float), cudaMemcpyDeviceToHost));

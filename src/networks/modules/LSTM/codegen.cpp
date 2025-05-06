@@ -32,7 +32,7 @@ void lstm_backward(float *x, float *dx, float *dy, std::string name)
 
 
 
-extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *LSTMForward(char *self, data_type_tensor *tensor_x, data_type_tensor *tensor_ht, data_type_tensor *tensor_ct, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -89,7 +89,7 @@ extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Te
 
 
   /*
-  Tensor *conv_tensor = NamedTensorsT[conv_name];
+  data_type_tensor *conv_tensor = NamedTensorsT[conv_name];
   conv_tensor->NewTensor(conv->d_filter, kernel_dims, DimsProd(kernel_dims), true, conv_name);
   conv_tensor->SetIsWeight();
   */
@@ -99,9 +99,9 @@ extern "C" void *LSTMForward(char *self, Tensor *tensor_x, Tensor *tensor_ht, Te
   
   //std::cout << "Returning from lstm forward."  << "\n";
 
-  //Tensor *aux = createTensor(nullptr, {}, 0, false, conv_name);
+  //data_type_tensor *aux = createTensor(nullptr, {}, 0, false, conv_name);
 
-  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor_x, lstm_op);
   new_tensor->scopeless_name = conv_name;
   return new_tensor;

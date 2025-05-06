@@ -129,10 +129,10 @@ bool ShallCodegen = true;
 
 
 // Tensors
-std::map<std::string, Tensor *> NamedTensorsT;
+std::map<std::string, data_type_tensor *> NamedTensorsT;
 std::map<std::string, float *> NamedPinnedTensors;
 std::map<std::string, std::vector<float>> NamedDims;
-std::vector<Tensor> TensorsToDelete;
+std::vector<data_type_tensor> TensorsToDelete;
 
 
 LCG rng(generate_custom_seed());
@@ -158,10 +158,10 @@ pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_s
 // Tensor related
 std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn, native_modules,
 return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,
-return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str, user_cpp_functions;
+return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str;
 
 
-std::map<std::string, std::string> functions_return_type, reverse_ops;
+std::map<std::string, std::string> reverse_ops;
 
 
 
@@ -350,7 +350,7 @@ extern "C" float Add(float value, float v2)
 
 
 
-extern "C" float printtt(int thread_id, Tensor tensor)
+extern "C" float printtt(int thread_id, data_type_tensor tensor)
 {
   char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
   std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
@@ -3165,29 +3165,29 @@ int main() {
 
 
 
-  functions_return_type = {{"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"relu", "tensor"}, {"softmax", "tensor"},
-                           {"log", "tensor"}, {"randu_like", "tensor"}, {"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"},
-                           {"dropout", "tensor"}, {"rl_discounted_return", "tensor"}, {"self_attn", "tensor"}, {"Jitter", "tensor"}, {"mse_with_priorities", "tensor"},
-                           {"btc_mult", "tensor"}, {"btc_multT", "tensor"}, {"tensor_view", "tensor"}, {"clip", "tensor"}, {"tensor_argmax", "tensor"}, {"tmax", "tensor"},
-                           {"tensor_onehot", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
-                           {"prod", "tensor"}, {"tensor_mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
-                           {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
-                           {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
-                           {"mean_tensor", "tensor"},
-                           {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"}};
-
-
-
-
-
+//   functions_return_type = {{"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"relu", "tensor"}, {"softmax", "tensor"},
+//                            {"log", "tensor"}, {"randu_like", "tensor"}, {"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"},
+//                            {"dropout", "tensor"}, {"rl_discounted_return", "tensor"}, {"self_attn", "tensor"}, {"Jitter", "tensor"}, {"mse_with_priorities", "tensor"},
+//                            {"btc_mult", "tensor"}, {"btc_multT", "tensor"}, {"tensor_view", "tensor"}, {"clip", "tensor"}, {"tensor_argmax", "tensor"}, {"tmax", "tensor"},
+//                            {"tensor_onehot", "tensor"}, {"permute", "tensor"}, {"cpu", "tensor"}, {"printtt", "tensor"}, {"sum", "tensor"},
+//                            {"prod", "tensor"}, {"tensor_mean", "tensor"}, {"tmin", "tensor"}, {"argmin", "tensor"}, {"topk", "tensor"}, {"repeat_interleave", "tensor"},
+//                            {"save_img", "tensor"}, {"tensor_gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"save_as_int", "tensor"}, {"save_as_bin", "tensor"}, {"gather", "tensor"},
+//                            {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"Conv2d", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
+//                            {"mean_tensor", "tensor"},
+//                            {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"}};
 
                            
 
-  user_cpp_functions = {"Linear", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
-                        "tensor_sum", "tensor_prod", "tensor_mean", "mean_tensor", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
-                        "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "list_print",
-                        "BatchNorm2d", "Pool2d", "LSTM", "MHSA", "Embedding", "list_test"};
+//   user_cpp_functions = {"Linear", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
+//                         "tensor_sum", "tensor_prod", "tensor_mean", "mean_tensor", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
+//                         "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "list_print",
+//                         "BatchNorm2d", "Pool2d", "LSTM", "MHSA", "Embedding", "list_test"};
                         
+
+
+  set_functions_return_type();
+  set_user_functions();
+  vararg_methods = {"tensor_view", "tensor_sum", "tensor_mean", "mean_tensor" ,"tensor_prod", "tensor_tmax", "tensor_argmax", "tensor_load_bin_idx"};
 
 
 
@@ -3206,7 +3206,6 @@ int main() {
 
 
   // Universal
-  vararg_methods = {"tensor_view", "tensor_sum", "tensor_mean", "mean_tensor" ,"tensor_prod", "tensor_tmax", "tensor_argmax", "tensor_load_bin_idx"};
   string_methods = {"split", "split_idx"};
 
 
@@ -3215,11 +3214,9 @@ int main() {
   native_methods = {"split", "split_idx", "float_vec_first_nonzero", "append", "float_vec_print", "str_vec_print"};
   native_methods = concat_str_vec(native_methods, return_tensor_methods);
   native_methods = concat_str_vec(native_methods, user_cpp_functions);
-  //native_methods = concat_str_vec(native_methods, return_pinned_methods);
 
   return_string_fn = {"to_string", "cat_str_float"};
 
-  require_scope_functions = {"network_ema"};
 
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "__slee_p_",
                       "LenStrVec", "zeros_vec", "ones_vec", "start_timer", "end_timer",
@@ -3251,16 +3248,6 @@ int main() {
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
             {tok_diff, "different"}, {'/', "divide"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
             {77, "error"}};
-
-
-
-  native_modules = {"ConvForward2d", "MaxPoolForward2d", "BatchNormForward2d", "BN2dReluForward",
-                    "ReluForward", "LSTMForward", "EmbeddingForward", "MHSAForward", "LinearForward"};
-
-  threaded_tensor_functions = {"log2", "network_ema", "priority_sample", "priority_sample_val", "importance_sample_idx", "importance_sample_weight"};
-  threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, native_modules);
-  threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_functions);
-  threaded_tensor_functions = concat_str_vec(threaded_tensor_functions, return_tensor_methods);
 
 
 

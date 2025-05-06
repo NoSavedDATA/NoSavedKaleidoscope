@@ -281,7 +281,7 @@ __global__ void mult_kernel(const float *x, const float *w,
 void matmul_backward(
   // float *inp,  float *weight,
   // int B, int C, int OC,
-  Tensor *L_tensor, Tensor *R_tensor,
+  data_type_tensor *L_tensor, data_type_tensor *R_tensor,
   float *dinp, float *dw,
   float *dout)
 {

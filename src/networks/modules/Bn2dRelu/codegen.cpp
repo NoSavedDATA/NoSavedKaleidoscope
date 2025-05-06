@@ -20,7 +20,7 @@
 
 
 
-extern "C" void *BN2dReluForward(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *BN2dReluForward(char *self, data_type_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   //std::cout << "\nBN2dReluForward2d " << conv_namec << " and tensor " << tensor.name << "\n";
@@ -68,7 +68,7 @@ extern "C" void *BN2dReluForward(char *self, Tensor *tensor, int thread_id, char
   std::vector<float> bn_dims = {(float)C};
   std::string bias_name = conv_name+"_bias";
 
-  Tensor *scale_bias_tensor, *scale_tensor, *bias_tensor;
+  data_type_tensor *scale_bias_tensor, *scale_tensor, *bias_tensor;
 
   // for the backprop
   scale_bias_tensor = createTensor(conv->scale, bn_dims, C, true, conv_name);
@@ -90,7 +90,7 @@ extern "C" void *BN2dReluForward(char *self, Tensor *tensor, int thread_id, char
   NamedBN2dRelu[conv_name] = std::move(conv);
 
   std::vector<float> new_dims = {(float)B, (float)C, (float)H, (float)W};
-  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
+  data_type_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
   new_tensor->AttrNodes(tensor, scale_bias_tensor, bn2drelu);
   new_tensor->from_cudnn = conv_name;
   return new_tensor;

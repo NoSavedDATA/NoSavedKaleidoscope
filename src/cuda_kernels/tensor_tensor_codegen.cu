@@ -11,8 +11,8 @@
 #include "../tensor/include.h"
 #include "include.h"
 
-extern "C" Tensor *tensor_tensor_mma(
-                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" data_type_tensor *tensor_tensor_mma(
+                          data_type_tensor *tensor_x, data_type_tensor *tensor_w, Scope_Struct *scope_struct) {
 
   int thread_id = scope_struct->thread_id;
 
@@ -48,14 +48,14 @@ extern "C" Tensor *tensor_tensor_mma(
   
   std::vector<float> new_dims = NewDimsOnMult(Ldims, Rdims);
 
-  Tensor *new_tensor = createTensor(device_y, new_dims, resultingDimsProd, false, "");
+  data_type_tensor *new_tensor = createTensor(device_y, new_dims, resultingDimsProd, false, "");
   new_tensor->AttrNodes(tensor_x, tensor_w, mult_op);
   return new_tensor;
 }
 
 
-extern "C" Tensor *tensor_tensor_add(
-                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" data_type_tensor *tensor_tensor_add(
+                          data_type_tensor *tensor_x, data_type_tensor *tensor_w, Scope_Struct *scope_struct) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -94,7 +94,7 @@ extern "C" Tensor *tensor_tensor_add(
     add_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
     
 
-    Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
+    data_type_tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
     new_tensor->AttrNodes(tensor_x, tensor_w, add_op);
     return new_tensor;
   }
@@ -112,7 +112,7 @@ extern "C" Tensor *tensor_tensor_add(
     broadcast_lastdim_add<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod, tensor_x->dims[tensor_x->dims.size()-1]);
     
 
-    Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
+    data_type_tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
     new_tensor->AttrNodes(tensor_x, tensor_w, broadcast_lastdim_add_op);
     return new_tensor;
   }
@@ -131,8 +131,8 @@ extern "C" Tensor *tensor_tensor_add(
 }
 
 
-extern "C" Tensor *tensor_tensor_sub(
-                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" data_type_tensor *tensor_tensor_sub(
+                          data_type_tensor *tensor_x, data_type_tensor *tensor_w, Scope_Struct *scope_struct) {
 
   int thread_id = scope_struct->thread_id;
 
@@ -164,13 +164,13 @@ extern "C" Tensor *tensor_tensor_sub(
   sub_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
   
   
-  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  data_type_tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
   new_tensor->AttrNodes(tensor_x, tensor_w, sub_op);
   return new_tensor;
 }
 
 
-extern "C" Tensor *tensor_tensor_equal(Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" data_type_tensor *tensor_tensor_equal(data_type_tensor *tensor_x, data_type_tensor *tensor_w, Scope_Struct *scope_struct) {
 
   int thread_id = scope_struct->thread_id;
                             
@@ -197,14 +197,14 @@ extern "C" Tensor *tensor_tensor_equal(Tensor *tensor_x, Tensor *tensor_w, Scope
   equal_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
   
   
-  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  data_type_tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
   new_tensor->AttrNodes(tensor_x, tensor_w, equal_op);
   return new_tensor;
 }
 
 
-extern "C" Tensor *tensor_tensor_mult(
-                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" data_type_tensor *tensor_tensor_mult(
+                          data_type_tensor *tensor_x, data_type_tensor *tensor_w, Scope_Struct *scope_struct) {
 
   int thread_id = scope_struct->thread_id;
 
@@ -289,15 +289,15 @@ extern "C" Tensor *tensor_tensor_mult(
 
 
 
-  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
+  data_type_tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");
   new_tensor->AttrNodes(tensor_x, tensor_w, hadamard_op);
   return new_tensor;
 }
 
 
 
-extern "C" void *tensor_tensor_div(
-                          Tensor *tensor_x, Tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" data_type_tensor *tensor_tensor_div(
+                          data_type_tensor *tensor_x, data_type_tensor *tensor_w, Scope_Struct *scope_struct) {
                             
   int thread_id = scope_struct->thread_id;
   
@@ -381,7 +381,7 @@ extern "C" void *tensor_tensor_div(
   size_t shared_mem_size = 2 * block_size / 32 * sizeof(float);
   tensor_div<<<grid_size, block_size, shared_mem_size, stream>>>(device_w, device_x, device_y, dims_prod);
 
-  Tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
+  data_type_tensor *new_tensor = createTensor(device_y, Ldims, dims_prod, false, "");  
   new_tensor->AttrNodes(tensor_x, tensor_w, div_op);
   return new_tensor;
 }

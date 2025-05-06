@@ -16,7 +16,7 @@ struct Lib_Info{
 };
 
 
-std::string Mangle_Lib_File_Name(std::string fname);
 
+void Write_Txt(std::string fname, std::string content);
 
 void Parse_Libs();

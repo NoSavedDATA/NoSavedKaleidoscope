@@ -19,7 +19,7 @@
 
 
 
-extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, float dim)
+extern "C" data_type_tensor *repeat_interleave(int thread_id, data_type_tensor tensor, float repeats, float dim)
 {
   //std::cout << "REPEAT_interleave OF " << tensor.name << " with " << repeats << " repeats.\n";
 
@@ -52,12 +52,12 @@ extern "C" void *repeat_interleave(int thread_id, Tensor tensor, float repeats, 
   //onehot_kernel<<<grid_size, block_size>>>(tensor, probs, B, C);
 
 
-  Tensor *new_tensor = createTensor(probs, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(probs, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
 }
 
 
-extern "C" void *mean_tensor(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...)
+extern "C" data_type_tensor *mean_tensor(Scope_Struct *scope_struct, data_type_tensor *tensor, float first_dim, ...)
 {
   int thread_id = scope_struct->thread_id;
   //std::cout << "MEAN OF " << tensor->name << "\n";
@@ -98,7 +98,7 @@ extern "C" void *mean_tensor(Scope_Struct *scope_struct, Tensor *tensor, float f
     std::vector<float> new_dims;
     new_dims.push_back(1.0f);
   
-    Tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
+    data_type_tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
     new_tensor->op=mean_op;
     new_tensor->AttrLNode(tensor, mean_op);
     return new_tensor;
@@ -170,7 +170,7 @@ extern "C" void *mean_tensor(Scope_Struct *scope_struct, Tensor *tensor, float f
     // TODO: is this kernel grid_size correct?
     mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
-    Tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
+    data_type_tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
     new_tensor->AttrLNode(tensor, mean_over_semilast_dim_op);
     new_tensor->scalar = dims[dims.size()-2];
     return new_tensor;
@@ -188,7 +188,7 @@ extern "C" void *mean_tensor(Scope_Struct *scope_struct, Tensor *tensor, float f
     sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
-  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
   */
   LogErrorS("Mean of specific dim is not implemented yet.");
@@ -197,7 +197,7 @@ extern "C" void *mean_tensor(Scope_Struct *scope_struct, Tensor *tensor, float f
 
 
 //TODO: mean over axis
-extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...)
+extern "C" data_type_tensor *tensor_mean(Scope_Struct *scope_struct, data_type_tensor *tensor, float first_dim, ...)
 {
   int thread_id = scope_struct->thread_id;
   //std::cout << "MEAN OF " << tensor->name << "\n";
@@ -238,7 +238,7 @@ extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float f
     std::vector<float> new_dims;
     new_dims.push_back(1.0f);
   
-    Tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
+    data_type_tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
     new_tensor->op=mean_op;
     new_tensor->AttrLNode(tensor, mean_op);
     return new_tensor;
@@ -310,7 +310,7 @@ extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float f
     // TODO: is this kernel grid_size correct?
     mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
-    Tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
+    data_type_tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
     new_tensor->AttrLNode(tensor, mean_over_semilast_dim_op);
     new_tensor->scalar = dims[dims.size()-2];
     return new_tensor;
@@ -328,7 +328,7 @@ extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float f
     sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
-  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
   */
   LogErrorS("Mean of specific dim is not implemented yet.");
@@ -336,7 +336,7 @@ extern "C" void *tensor_mean(Scope_Struct *scope_struct, Tensor *tensor, float f
 }
 
 
-void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node)
+void mean_over_semilast_dim_backward(float *dx, float *dy, data_type_tensor *node)
 {
   std::vector<float> dims = node->L_Node->dims;
   float x_dims_prod = node->L_Node->dims_prod;
@@ -346,7 +346,7 @@ void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node)
   mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dy,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
 }
 
-extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...)
+extern "C" data_type_tensor *sum(int thread_id, data_type_tensor tensor, float first_dim, ...)
 {
   //std::cout << "SUM OF " << tensor.name << "\n";
 
@@ -385,7 +385,7 @@ extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...)
     std::vector<float> new_dims;
     new_dims.push_back(1.0f);
   
-    Tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
+    data_type_tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
     new_tensor->op=sum_op;
     return new_tensor;
   }
@@ -455,14 +455,14 @@ extern "C" void *sum(int thread_id, Tensor tensor, float first_dim, ...)
     sum_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
-  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   new_tensor->op=sum_op;
   return new_tensor;
 }
 
 
 
-extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
+extern "C" data_type_tensor *prod(int thread_id, data_type_tensor tensor, float first_dim, ...)
 {
   //std::cout << "PROD OF " << tensor.name << "\n";
 
@@ -568,13 +568,13 @@ extern "C" void *prod(int thread_id, Tensor tensor, float first_dim, ...)
     prod_over_semilast_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-1], dims[dims.size()-2]);
 
 
-  Tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
 }
 
 
 
-extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float dim)
+extern "C" data_type_tensor *gather(int thread_id, data_type_tensor *tensor, data_type_tensor *idx_tensor, float dim)
 {
   //std::cout << "Gather THREAD IS: " << thread_id << "\n";
 
@@ -617,7 +617,7 @@ extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float
 
     
 
-    Tensor *new_tensor = createTensor(y, new_dims, new_dims_prod, false, "");
+    data_type_tensor *new_tensor = createTensor(y, new_dims, new_dims_prod, false, "");
     //idx_tensor->op = detach_op;
     new_tensor->AttrNodes(tensor, wrapTensorWithDetached(idx_tensor), gather_last_dim_op);
     //new_tensor->AttrLNode(idx_tensor, gather_last_dim_op);
@@ -628,7 +628,7 @@ extern "C" void *gather(int thread_id, Tensor *tensor, Tensor *idx_tensor, float
 
 
 
-void gather_last_dim_backward(float *dx, float *dy, Tensor *node)
+void gather_last_dim_backward(float *dx, float *dy, data_type_tensor *node)
 {
   // consider dx was set to zero already
   
@@ -655,7 +655,7 @@ void gather_last_dim_backward(float *dx, float *dy, Tensor *node)
 }
 
 
-inline void transpose(Tensor *tensor, int thread_id, cudaStream_t stream)
+inline void transpose(data_type_tensor *tensor, int thread_id, cudaStream_t stream)
 {
 
   float *transposed = get_from_pool(thread_id, tensor->dims_prod, "transpose");

@@ -11,7 +11,7 @@
 
 
 
-extern "C" void *EmbeddingForward(char *self, Tensor *tensor_x, int thread_id, char *conv_namec, int is_obj_attr_or_self);
+extern "C" void *EmbeddingForward(char *self, data_type_tensor *tensor_x, int thread_id, char *conv_namec, int is_obj_attr_or_self);
 
 
 

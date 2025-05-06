@@ -5,4 +5,4 @@
 
 #include "../tensor/include.h"
 
-extern "C" void *rl_discounted_return(int thread_id, Tensor *reward, Tensor *terminated, float gamma);
+extern "C" void *rl_discounted_return(int thread_id, data_type_tensor *reward, data_type_tensor *terminated, float gamma);

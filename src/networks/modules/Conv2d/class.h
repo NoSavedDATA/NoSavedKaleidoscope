@@ -43,9 +43,9 @@ class Conv2dCPP
     Conv2dCPP(int C, int OC, int ks, int stride, int padding, std::string Init, std::vector<std::string> Notes, std::string Name); 
 
 
-  void SetDescriptors(int, int, int, Tensor *tensor);
+  void SetDescriptors(int, int, int, data_type_tensor *tensor);
   void InitFilters();
-  float *Forward(Tensor *, int, int, int, int);
+  float *Forward(data_type_tensor *, int, int, int, int);
   void FirstBackward();
   void Backward(float *, float *, float *);
 };

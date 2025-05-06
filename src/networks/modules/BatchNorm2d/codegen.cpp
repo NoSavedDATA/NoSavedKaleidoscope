@@ -21,7 +21,7 @@
 
 
 
-extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   std::string bn_name = scope_struct->first_arg;
   int thread_id = scope_struct->thread_id;

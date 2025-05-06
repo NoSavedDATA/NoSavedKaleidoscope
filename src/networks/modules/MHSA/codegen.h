@@ -13,7 +13,7 @@
 void mhsa_backward(float *x, float *dx, float *dy, std::string name);
 
 
-extern "C" void *MHSAForward(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self);
+extern "C" void *MHSAForward(char *self, data_type_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self);
 
 
 extern "C" float CreateMHSAOnDemand(char *tensor_name, char *init,

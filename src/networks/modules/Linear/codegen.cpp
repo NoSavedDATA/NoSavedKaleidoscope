@@ -43,7 +43,7 @@ void linear_backward(float *x, float size, float *out, float *dx, float *dy, std
 
 
 
-extern "C" void *Linear(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" void *Linear(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   // std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
   int thread_id = scope_struct->thread_id;
@@ -86,7 +86,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, Tensor *tensor)
   NamedLinear[conv_name] = std::move(linear);  
 
 
-  Tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "linear_backward", conv_name, tensor);
+  data_type_tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "linear_backward", conv_name, tensor);
   return new_tensor;
 }
 

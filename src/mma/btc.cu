@@ -66,7 +66,7 @@ __global__ void btc_mult_kernel(float *out, const float *x, const float *w, cons
 
 
 
-extern "C" Tensor *btc_mult(int thread_id, Tensor *x, Tensor*w)
+extern "C" data_type_tensor *btc_mult(int thread_id, data_type_tensor *x, data_type_tensor*w)
 {
 
   std::vector<float> Ldims, Rdims, new_dims;
@@ -109,7 +109,7 @@ extern "C" Tensor *btc_mult(int thread_id, Tensor *x, Tensor*w)
   //mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(device_x, device_w, device_y, TILE_SIZE, TILE_SIZE*TILE_SIZE, Tw, Tx, C);
   
 
-  Tensor *new_tensor = createTensor(device_y, new_dims, new_dims_prod, false, "");
+  data_type_tensor *new_tensor = createTensor(device_y, new_dims, new_dims_prod, false, "");
   new_tensor->AttrNodes(x, w, mult_op);
   return new_tensor;
 }
@@ -182,7 +182,7 @@ __global__ void btc_mult_kernelT(float *out, const float *x, const float *w, con
 
 
 
-extern "C" Tensor *btc_multT(int thread_id, Tensor *x, Tensor*w)
+extern "C" data_type_tensor *btc_multT(int thread_id, data_type_tensor *x, data_type_tensor*w)
 {
 
 
@@ -220,7 +220,7 @@ extern "C" Tensor *btc_multT(int thread_id, Tensor *x, Tensor*w)
   btc_mult_kernelT<<<grid_size, block_size, shared_mem_size, stream>>>(device_y, device_x, device_w, B, Tx, Tw, C, TILE_SIZE, TILE_SIZE_SQ);
 
 
-  Tensor *new_tensor = createTensor(device_y, new_dims, new_dims_prod, false, "");
+  data_type_tensor *new_tensor = createTensor(device_y, new_dims, new_dims_prod, false, "");
   new_tensor->AttrNodes(x, w, mult_op);
   return new_tensor;
 }

@@ -11,7 +11,7 @@
 #include "classification_kernels.h"
 
 
-void CrossEntropyBackward(Tensor *L_tensor, Tensor *R_tensor,
+void CrossEntropyBackward(data_type_tensor *L_tensor, data_type_tensor *R_tensor,
                           float *dloss,
                           float scale)
 {
@@ -79,9 +79,9 @@ void CrossEntropyBackward(Tensor *L_tensor, Tensor *R_tensor,
 
 
 
-extern "C" float cross_entropy(Scope_Struct *scope_struct, Tensor *y_hat, Tensor *y, float scale)
+extern "C" float cross_entropy(Scope_Struct *scope_struct, data_type_tensor *y_hat, data_type_tensor *y, float scale)
 {
-  Tensor *loss_tensor = new Tensor();
+  data_type_tensor *loss_tensor = new data_type_tensor();
   // std::cout << "Cross entropy got last version? " << y_hat->is_last_version << "/" << y->is_last_version << ".\n";
 
   loss_tensor->AttrNodes(y_hat, y, cross_entropy_op);
@@ -96,7 +96,7 @@ extern "C" float cross_entropy(Scope_Struct *scope_struct, Tensor *y_hat, Tensor
 }
 
 
-void CrossEntropyIdxBackward(Tensor *L_tensor, Tensor *R_tensor, 
+void CrossEntropyIdxBackward(data_type_tensor *L_tensor, data_type_tensor *R_tensor, 
                           float *dloss,
                           float scale)
 {
@@ -147,10 +147,10 @@ void CrossEntropyIdxBackward(Tensor *L_tensor, Tensor *R_tensor,
 
 
 
-extern "C" float cross_entropy_idx(Scope_Struct *scope_struct, Tensor *y_hat, Tensor *y, float scale)
+extern "C" float cross_entropy_idx(Scope_Struct *scope_struct, data_type_tensor *y_hat, data_type_tensor *y, float scale)
 {
   
-  Tensor *loss_tensor = new Tensor();
+  data_type_tensor *loss_tensor = new data_type_tensor();
 
 
   loss_tensor->AttrNodes(y_hat, y, cross_entropy_idx_op);

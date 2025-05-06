@@ -8,7 +8,7 @@
 #include "../tensor/tensor_struct.h"
 #include "include.h"
 
-std::vector<Tensor *> todo_backward_tensors;
+std::vector<data_type_tensor *> todo_backward_tensors;
 std::map<std::string, float *> NamedParamGrads;
 
 std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string)>> backward_functions;
@@ -16,7 +16,7 @@ std::map<std::string, std::function<void(float *, float, float *, float *, float
 
 
 
-inline void HandleLeafGradient(Tensor *back_node, float *device_dy, std::string tensor_name, bool from_custom) {
+inline void HandleLeafGradient(data_type_tensor *back_node, float *device_dy, std::string tensor_name, bool from_custom) {
   float dims_prod = back_node->dims_prod;
   if (!from_custom)
   {
@@ -78,7 +78,7 @@ inline void Acquire_Weight_Gradient(float *&d_ptr, float size, std::string param
 
 
 
-inline void Alloc_Child_Nodes_Derivatives(Tensor* back_node, float*& d_lhs, float*& d_rhs, size_t lhs_size, size_t rhs_size, int op, bool from_custom) {
+inline void Alloc_Child_Nodes_Derivatives(data_type_tensor* back_node, float*& d_lhs, float*& d_rhs, size_t lhs_size, size_t rhs_size, int op, bool from_custom) {
 
   if (back_node->L_Node)
   {
@@ -110,7 +110,7 @@ inline void Alloc_Child_Nodes_Derivatives(Tensor* back_node, float*& d_lhs, floa
 
 
 
-void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_custom, int parent_op)
+void TraversePreOrder(data_type_tensor *back_node, float *device_dy, bool from_custom, int parent_op)
 {
   if(back_node==nullptr)
     return;
@@ -299,7 +299,7 @@ extern "C" float backprop(Scope_Struct *scope_struct)
 
   while(todo_backward_tensors.size()>0)
   {
-    Tensor *back_node = todo_backward_tensors.back();
+    data_type_tensor *back_node = todo_backward_tensors.back();
     todo_backward_tensors.pop_back();
 
     to_free_tensor(back_node);
@@ -323,7 +323,7 @@ extern "C" float backprop(Scope_Struct *scope_struct)
 
 
 
-  for(Tensor *tensor : backprop_Tensors_to_save) // e.g: sparse idx tensors
+  for(data_type_tensor *tensor : backprop_Tensors_to_save) // e.g: sparse idx tensors
   { 
     backprop_Tensors_to_free.erase(std::remove(backprop_Tensors_to_free.begin(), backprop_Tensors_to_free.end(), tensor), backprop_Tensors_to_free.end()); 
     for(std::tuple<float, float *, std::string> pair : backprop_tensors_to_pool)
@@ -339,7 +339,7 @@ extern "C" float backprop(Scope_Struct *scope_struct)
   }
 
 
-  for(Tensor *tensor : backprop_Tensors_to_free)
+  for(data_type_tensor *tensor : backprop_Tensors_to_free)
     delete tensor;
 
   for(std::tuple<float, float *, std::string> pair : backprop_tensors_to_pool)
