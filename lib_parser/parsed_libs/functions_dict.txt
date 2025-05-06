@@ -1,0 +1,6 @@
+	clean_up_functions["float_vec"] = float_vec_Clean_Up;
+	clean_up_functions["float"] = float_Clean_Up;
+	clean_up_functions["str"] = str_Clean_Up;
+	clean_up_functions["list"] = list_Clean_Up;
+	clean_up_functions["str_vec"] = str_vec_Clean_Up;
+	clean_up_functions["tensor"] = tensor_Clean_Up;

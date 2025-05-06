@@ -16,12 +16,11 @@
 enum Token {
     tok_extern = -1,
     tok_C = -2,
-    tok_float = -3,
     tok_any_ptr = -4,
     tok_identifier = -5,
     tok_three_dots = -6,
+    tok_non_idented_identifier = -7,
 
-    wait_token = 700,
 
     tok_space=10,
     tok_tab=9,
@@ -46,6 +45,7 @@ extern float NumVal;             // Filled in if tok_number
 
 
 extern int CurTok;
+extern std::string FileRead;
 
 
 extern int LineCounter;

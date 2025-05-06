@@ -41,8 +41,13 @@ Lib_Info *Generate_LLVMs(Lib_Info *lib_info, std::vector<std::unique_ptr<Expr>> 
 
 
 void Write_Txt(std::string fname, std::string content) {
-
     std::ofstream lib_file(fname);
+
+    lib_file << content;
+    lib_file.close();
+}
+void Write_Append(std::string fname, std::string content) {
+    std::ofstream lib_file(fname, std::ios::app);
 
     lib_file << content;
     lib_file.close();
@@ -73,11 +78,56 @@ void Save_llvm_string(Lib_Info *lib_info) {
     Write_Txt(lib_files->file_name, save_llvm_string);
     Write_Txt(lib_files->user_cpp, lib_info->functions_string);
     Write_Txt(lib_files->returns_dict, lib_info->dict_string);
+    Write_Txt(lib_files->clean_up, lib_info->clean_up_functions);
+    Write_Txt(lib_files->backward, lib_info->backward_functions);
 
     free(lib_files);
     free(lib_info);
 }
 
+
+void ParseToNextLine() {
+    while(CurTok!=tok_eof&&CurTok!=tok_space&&CurTok!=tok_finish)
+        getNextToken();
+    getNextToken();
+}
+
+std::unique_ptr<Expr> Parse_CPP_Function() {
+
+
+    // std::cout << "parsing cpp function"  << ".\n";
+    // std::cout << Line << ".\n";
+
+    getNextToken();
+
+    if(CurTok!=tok_identifier) {
+        // ParseToNextLine();
+        auto expr = std::make_unique<PlaceholderExpr>();
+        return expr;
+    }
+    getNextToken();
+    
+    // std::cout << FileRead;
+    // std::cout << "CurTok " << ReverseToken(CurTok) << ".\n";
+    if (CurTok!='(') {
+        // ParseToNextLine();
+        auto expr = std::make_unique<PlaceholderExpr>();
+        return expr;
+    }
+
+    std::string function_name = IdentifierStr;
+    // std::cout << "Found non extern function: " << IdentifierStr << ".\n";
+    getNextToken();
+
+    // std::cout << FileRead;
+
+
+
+    // std::exit(0);
+
+    auto expr = std::make_unique<CppFunctionExpr>(function_name);
+    return expr;
+}
 
 
 std::unique_ptr<Expr> Parse_Extern_Function() {
@@ -88,7 +138,7 @@ std::unique_ptr<Expr> Parse_Extern_Function() {
 
     bool vararg=false;
 
-    getNextToken();
+    getNextToken(); // eat extern
 
 
     if (CurTok!=tok_C)
@@ -96,16 +146,13 @@ std::unique_ptr<Expr> Parse_Extern_Function() {
     
 
     
-    getNextToken(); // function return
-
-    if(CurTok==tok_float)
-        return_type="float";
-    else
-        return_type=IdentifierStr;
+    getNextToken(); // eat "C"
 
 
+    return_type=IdentifierStr;
 
-    getNextToken(); 
+
+    getNextToken(); // eat function reurn
 
 
 
@@ -180,6 +227,8 @@ std::unique_ptr<Expr> Parse_Extern_Function() {
     getNextToken(); // eat ')'
 
 
+    // std::cout << "Function:\n\tReturn Type:\t" << return_type << "\n\tName:\t\t" << function_name << "\n\tArgs:\t\t";
+
     auto extern_fn = std::make_unique<ExternFunctionExpr>(return_type, function_name, std::move(args_types), vararg);
 
     return std::move(extern_fn);
@@ -203,6 +252,12 @@ std::vector<std::unique_ptr<Expr>> Parse_Primary(std::vector<std::unique_ptr<Exp
             file_name = current_file_name;
             std::unique_ptr<Expr> extern_fn = Parse_Extern_Function();
             functions.push_back(std::move(extern_fn));
+            return std::move(functions);
+        }
+        case tok_non_idented_identifier:
+        {
+            std::unique_ptr<Expr> cpp_fn = Parse_CPP_Function();
+            functions.push_back(std::move(cpp_fn));
             return std::move(functions);
         }
         case tok_eof:

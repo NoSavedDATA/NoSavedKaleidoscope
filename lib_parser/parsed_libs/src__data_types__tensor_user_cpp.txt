@@ -1,1 +1,1 @@
-"tensor_Create", "tensor_Load", "tensor_Store", "tensor_MarkToSweep", "gpu", "tensor_gpuw", "cpu", "cpu_idx", "randu_like", "write_zerosw", "tensor_view", "NewVecToTensor", "tensor_CalculateIdx", 
+"tensor_Create", "tensor_Load", "tensor_Store", "tensor_MarkToSweep", "gpu", "tensor_gpuw", "cpu", "cpu_idx", "randu_like", "write_zerosw", "tensor_view", "NewVecToTensor", "tensor_CalculateIdx", "zeros_like", 

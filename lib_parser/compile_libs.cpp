@@ -71,13 +71,15 @@ void CleanDeletedLibs() {
 
 int main() {
 
+    
     Parse_Libs();
 
     CleanDeletedLibs();
 
     std::string all_libs = Get_Base_Lib("src/libs_llvm/libs.cpp", 17);
     std::string all_cpp = Get_Base_Lib("src/libs_llvm/user_cpp_functions.cpp", 17);
-    std::string all_function_dicts = Get_Base_Lib("src/libs_llvm/functions_return.cpp", 23);
+    std::string all_return_dicts = Get_Base_Lib("src/libs_llvm/functions_return.cpp", 23);
+    std::string all_function_dicts = "";
 
 
 
@@ -86,6 +88,8 @@ int main() {
     std::vector<fs::path> files = glob_cpp(root, "llvm_lib.txt");
     std::vector<fs::path> cpp_files = glob_cpp(root, "user_cpp.txt");
     std::vector<fs::path> dict_files = glob_cpp(root, "returns_dict.txt");
+    std::vector<fs::path> clean_up_files = glob_cpp(root, "clean_up.txt");
+    std::vector<fs::path> backward_files = glob_cpp(root, "backward.txt");
 
     std::ifstream file;
     std::string line;
@@ -116,26 +120,45 @@ int main() {
         file.open(parsed_file);
 
         while(std::getline(file, line))
-            all_function_dicts = all_function_dicts + "\t\t\t\t\t\t" + line + "\n";
+            all_return_dicts = all_return_dicts + "\t\t\t\t\t\t" + line + "\n";
+        file.close();
+    }
+
+    for (auto &parsed_file : clean_up_files)
+    {
+        file.open(parsed_file);
+
+        while(std::getline(file, line))
+            all_function_dicts = all_function_dicts + line + "\n\n";
+        file.close();
+    }
+    for (auto &parsed_file : backward_files)
+    {
+        file.open(parsed_file);
+        while(std::getline(file, line))
+            all_function_dicts = all_function_dicts + line + "\n\n";
         file.close();
     }
 
     all_libs = all_libs + "\n}";
+    all_return_dicts = all_return_dicts + "\n\t};\n}";
 
-    all_cpp = all_cpp + "\n\t};\n}";
-    all_function_dicts = all_function_dicts + "\n\t};\n}";
+    
+    all_cpp = all_cpp + "\n\t};\n\n\n";
+    all_cpp = all_cpp + all_function_dicts;
+    all_cpp = all_cpp + "\n}";
 
 
     
     // std::cout << all_libs << ".\n";
     // std::cout << all_cpp << ".\n";
-    // std::cout << all_function_dicts << ".\n";
+    // std::cout << all_return_dicts << ".\n";
 
 
 
     Write_Txt("src/libs_llvm/libs.cpp", all_libs);
     Write_Txt("src/libs_llvm/user_cpp_functions.cpp", all_cpp);
-    Write_Txt("src/libs_llvm/functions_return.cpp", all_function_dicts);
+    Write_Txt("src/libs_llvm/functions_return.cpp", all_return_dicts);
 
 
     return 0;

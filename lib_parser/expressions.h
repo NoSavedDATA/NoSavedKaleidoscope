@@ -25,3 +25,17 @@ class ExternFunctionExpr : public Expr {
 };
 
 
+
+class PlaceholderExpr : public Expr {
+    public:
+    PlaceholderExpr();
+    Lib_Info *Generate_LLVM(std::string, Lib_Info *) override;
+};
+
+
+class CppFunctionExpr : public Expr {
+    public:
+        std::string FunctionName;
+    CppFunctionExpr(const std::string &);
+    Lib_Info *Generate_LLVM(std::string, Lib_Info *) override;
+};

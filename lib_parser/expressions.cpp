@@ -11,6 +11,41 @@ ExternFunctionExpr::ExternFunctionExpr(const std::string &ReturnType, const std:
     : ReturnType(ReturnType), FunctionName(FunctionName), ArgTypes(std::move(ArgTypes)) {this->Vararg=Vararg;};
 
 
+PlaceholderExpr::PlaceholderExpr() {};
+Lib_Info *PlaceholderExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) {
+    // std::cout << "Deal with placeholder" << ".\n";
+    return lib_info;
+}
+
+
+CppFunctionExpr::CppFunctionExpr(const std::string & FunctionName) : FunctionName(FunctionName) {};
+
+Lib_Info *CppFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) {
+    // std::cout << "Deal with cpp function " << FunctionName << ".\n";
+
+    std::string dict_key="";
+
+    if(ends_with(FunctionName, "_Clean_Up"))
+    {
+        dict_key=FunctionName; 
+        size_t pos = dict_key.rfind("_Clean_Up");
+        if (pos != std::string::npos) {
+            dict_key.replace(pos, 9, "");
+        }
+        lib_info->clean_up_functions = lib_info->clean_up_functions + "\tclean_up_functions[\"" + dict_key + "\"] = " + FunctionName+";\n";
+    } else if (ends_with(FunctionName, "_backward"))
+        lib_info->backward_functions = lib_info->backward_functions + "\tbackward_functions[\"" + FunctionName + "\"] = " + FunctionName+";\n";
+    else {
+
+    }
+
+
+
+
+    return lib_info;
+}
+
+
 
 
 Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type, std::string function_name) {

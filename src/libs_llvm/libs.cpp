@@ -528,6 +528,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("tensor_CalculateIdx", tensor_CalculateIdxTy);
 
+	FunctionType *zeros_likeTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("zeros_like", zeros_likeTy);
+
 	FunctionType *CreateNotesVectorTy= FunctionType::get(
 		int8PtrTy,
 		{},

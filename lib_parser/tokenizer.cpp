@@ -35,10 +35,10 @@ bool in_char(char ch, const std::vector<char>& list) {
 std::map<int, std::string> token_to_string = {
   { tok_extern, "extern" },
   { tok_C, "C" },
-  { tok_float, "float" },
+  { tok_non_idented_identifier, "non idented identifier" },
+  // { tok_float, "float" },
   { tok_any_ptr, "any_pointer *" },
   { tok_three_dots, "..." },
-  { wait_token, "wait token" },
   { tok_eof, "EOF" },
   { tok_finish, "FINISH" },
 };
@@ -47,6 +47,7 @@ std::map<int, std::string> token_to_string = {
 
 std::string IdentifierStr = ""; // Filled in if tok_identifier
 std::string Line = ""; // Filled in if tok_identifier
+std::string FileRead=""; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number
 
 
@@ -81,15 +82,19 @@ std::vector<char> reset_chars = {tok_tab, ',', '(', ')', '{', '}'};
 std::map<std::string, int> token_map = {
   {"extern", tok_extern},
   {"\"C\"", tok_C},
-  {"float", tok_float},
+  // {"float", tok_float},
 };
 
+bool begin_with_space=false;
 int return_string_token() { 
   if(token_map.count(IdentifierStr)>0)
   {
     return token_map[IdentifierStr];
   }
-  return tok_identifier;
+  if(begin_with_space)
+    return tok_identifier;
+  begin_with_space=true;
+  return tok_non_idented_identifier;
 }
 
 char LastChar = ' ';
@@ -116,9 +121,14 @@ int tokenize() {
   // {
     while (LastChar==tok_space||LastChar==tok_tab)
     {
+      if (LastChar==tok_space)
+        begin_with_space=false;
+      if (LastChar==tok_tab)
+        begin_with_space=true;
       Line="";
       IdentifierStr="";
       LastChar=get_file_char();
+      FileRead = FileRead+"\n";
     }
   //   return tok_space;
   // }
@@ -126,8 +136,10 @@ int tokenize() {
 
   while (LastChar==32) //blank space
   {
+    begin_with_space=true;
     LastChar = get_file_char();
     Line += " ";
+    FileRead = FileRead+" ";
   }
 
   if(LastChar=='/')
@@ -135,6 +147,7 @@ int tokenize() {
     LastChar = get_file_char();
     if(LastChar=='/')
     {
+      begin_with_space=false;
       while(LastChar!=tok_space&&LastChar!=tok_eof&&LastChar!=tok_finish&&LastChar!=',')
         LastChar = get_file_char();
     } else
@@ -185,8 +198,10 @@ int tokenize() {
  
   while (LastChar==32) //blank space
   {
+    begin_with_space=true;
     LastChar = get_file_char();
     Line += " ";
+    FileRead = FileRead+" ";
   }
 
 

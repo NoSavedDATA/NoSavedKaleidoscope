@@ -1,1 +1,1 @@
-{"tensor_Create", "tensor"}, {"tensor_Load", "tensor"}, {"gpu", "tensor"}, {"randu_like", "tensor"}, {"tensor_view", "tensor"}, {"NewVecToTensor", "tensor"}, 
+{"tensor_Create", "tensor"}, {"tensor_Load", "tensor"}, {"gpu", "tensor"}, {"randu_like", "tensor"}, {"tensor_view", "tensor"}, {"NewVecToTensor", "tensor"}, {"zeros_like", "tensor"}, 
