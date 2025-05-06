@@ -59,8 +59,8 @@ MHSA::MHSA(int nh, int C, int maxT, std::string Init, int_vec *Notators, std::st
     cudaMemcpy(W, W_cpu, 3*C*C * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(W_proj, W_proj_cpu, C*C * sizeof(float), cudaMemcpyHostToDevice);
 
-    Tensor *tensor_W = createTensor(W, {3*(float)C*(float)C}, 3*C*C, true, Name+"W");
-    Tensor *tensor_W_proj = createTensor(W_proj, {(float)C*(float)C}, C*C, true, Name+"W_proj");
+    data_type_tensor *tensor_W = createTensor(W, {3*(float)C*(float)C}, 3*C*C, true, Name+"W");
+    data_type_tensor *tensor_W_proj = createTensor(W_proj, {(float)C*(float)C}, C*C, true, Name+"W_proj");
     tensor_W->SetIsWeight();
     tensor_W_proj->SetIsWeight();
 
@@ -155,7 +155,7 @@ void MHSA::SetDescriptors(int B, int T, int thread_id)
 }
 
 
-float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
+float *MHSA::Forward(data_type_tensor *x, int B, int T, int thread_id)
 {
   //std::cout << "MHSA::Forward" << "\n";
 
@@ -249,8 +249,8 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
 
 
-    // Tensor *x_half = float_to_half(x, thread_id, stream);
-    // Tensor *w_half = createTensor(W, {(float)3*(float)C*(float)C}, 3*C*C, true, "w transpose");
+    // data_type_tensor *x_half = float_to_half(x, thread_id, stream);
+    // data_type_tensor *w_half = createTensor(W, {(float)3*(float)C*(float)C}, 3*C*C, true, "w transpose");
     // // transpose(w_half, thread_id, stream);
     // w_half = float_to_half(w_half, thread_id, stream);
     // half *qkv_half = get_half_from_pool(thread_id, B*T*3*C, "qkv half");

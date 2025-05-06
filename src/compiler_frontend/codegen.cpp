@@ -774,7 +774,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         
         std::string store_op = LType + "_Store";
         
-        call(store_op, {Lvar_name, callret("list_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)}), scope_struct});
+        call(store_op, {Lvar_name, callret("assign_wise_list_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)}), scope_struct});
 
       }
 

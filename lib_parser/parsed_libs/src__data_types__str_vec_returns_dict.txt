@@ -1,0 +1,1 @@
+{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, 

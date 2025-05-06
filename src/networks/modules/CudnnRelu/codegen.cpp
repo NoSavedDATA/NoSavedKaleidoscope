@@ -23,7 +23,7 @@
 
 
 
-extern "C" void *ReluForward(char *self, Tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *ReluForward(char *self, data_type_tensor *tensor, char *conv_namec, int is_obj_attr_or_self)
 {
   
   //TODO: remove self arg and concatenate it instead during the function call
@@ -60,7 +60,7 @@ extern "C" void *ReluForward(char *self, Tensor *tensor, char *conv_namec, int i
   std::vector<float> bn_dims = {(float)C};
   std::string bias_name = conv_name+"_bias";
 
-  Tensor *scale_bias_tensor, *scale_tensor, *bias_tensor;
+  data_type_tensor *scale_bias_tensor, *scale_tensor, *bias_tensor;
 
 
 
@@ -68,7 +68,7 @@ extern "C" void *ReluForward(char *self, Tensor *tensor, char *conv_namec, int i
   NamedRelu[conv_name] = std::move(conv);
 
   std::vector<float> new_dims = {(float)B, (float)C, (float)H, (float)W};
-  Tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
+  data_type_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, conv_name);
   new_tensor->AttrLNode(tensor, cudnn_relu_op);
   new_tensor->from_cudnn = conv_name;
   return new_tensor;

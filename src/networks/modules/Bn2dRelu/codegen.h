@@ -10,7 +10,7 @@
 
 
 
-extern "C" void *BN2dReluForward(char *self, Tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self);
+extern "C" void *BN2dReluForward(char *self, data_type_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self);
 
 
 void bn2drelu_backward(float *inp, float *intermediate, float *out,

@@ -16,7 +16,7 @@ std::map<std::string, data_type_list *> NamedVectors;
 
 // template float data_type_list::get<float>(size_t);
 template char *data_type_list::get<char *>(size_t);
-template Tensor *data_type_list::get<Tensor *>(size_t);
+template data_type_tensor *data_type_list::get<data_type_tensor *>(size_t);
 
 
 template <typename T>
@@ -70,7 +70,7 @@ void data_type_list::print() {
             std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
         if (data_types->at(i)=="tensor")
         {
-            Tensor *t = get<Tensor *>(i);
+            data_type_tensor *t = get<data_type_tensor *>(i);
             std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
             PrintDims(t->dims);
         }

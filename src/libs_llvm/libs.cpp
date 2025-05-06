@@ -17,160 +17,6 @@ void Generate_LLVM_Functions() {
     int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     
 
-	FunctionType *CreateNotesVectorTy= FunctionType::get(
-		int8PtrTy,
-		{},
-		false
-	);
-	TheModule->getOrInsertFunction("CreateNotesVector", CreateNotesVectorTy);
-
-	FunctionType *Dispose_NotesVectorTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVectorTy);
-
-	FunctionType *Add_Float_To_NotesVectorTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("Add_Float_To_NotesVector", Add_Float_To_NotesVectorTy);
-
-	FunctionType *Add_String_To_NotesVectorTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("Add_String_To_NotesVector", Add_String_To_NotesVectorTy);
-
-	FunctionType *str_CreateTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Create", str_CreateTy);
-
-	FunctionType *str_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Load", str_LoadTy);
-
-	FunctionType *str_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Store", str_StoreTy);
-
-	FunctionType *str_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_MarkToSweep", str_MarkToSweepTy);
-
-	FunctionType *str_CopyTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Copy", str_CopyTy);
-
-	FunctionType *str_str_addTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_str_add", str_str_addTy);
-
-	FunctionType *str_float_addTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_float_add", str_float_addTy);
-
-	FunctionType *float_str_addTy= FunctionType::get(
-		int8PtrTy,
-		{Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_str_add", float_str_addTy);
-
-	FunctionType *PrintStrTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("PrintStr", PrintStrTy);
-
-	FunctionType *cat_str_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("cat_str_float", cat_str_floatTy);
-
-	FunctionType *SplitStringTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("SplitString", SplitStringTy);
-
-	FunctionType *str_split_idxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("str_split_idx", str_split_idxTy);
-
-	FunctionType *str_to_floatTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_to_float", str_to_floatTy);
-
-	FunctionType *StrToFloatTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
-
-	FunctionType *str_DeleteTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Delete", str_DeleteTy);
-
-	FunctionType *pinned_tensor_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_CreateTy);
-
-	FunctionType *pinned_tensor_Store_IdxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("pinned_tensor_Store_Idx", pinned_tensor_Store_IdxTy);
-
-	FunctionType *pinned_tensor_CalculateIdxTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("pinned_tensor_CalculateIdx", pinned_tensor_CalculateIdxTy);
-
 	FunctionType *InstantiateObjectTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -317,6 +163,97 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("nullptr_get", nullptr_getTy);
+
+	FunctionType *pinned_tensor_CreateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_CreateTy);
+
+	FunctionType *pinned_tensor_Store_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pinned_tensor_Store_Idx", pinned_tensor_Store_IdxTy);
+
+	FunctionType *pinned_tensor_CalculateIdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("pinned_tensor_CalculateIdx", pinned_tensor_CalculateIdxTy);
+
+	FunctionType *list_NewTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("list_New", list_NewTy);
+
+	FunctionType *list_StoreTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Store", list_StoreTy);
+
+	FunctionType *list_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Load", list_LoadTy);
+
+	FunctionType *list_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_print", list_printTy);
+
+	FunctionType *list_checkmateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_checkmate", list_checkmateTy);
+
+	FunctionType *list_testTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_test", list_testTy);
+
+	FunctionType *list_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
+
+	FunctionType *list_MarkToSweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_MarkToSweep", list_MarkToSweepTy);
+
+	FunctionType *list_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);
+
+	FunctionType *assign_wise_list_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("assign_wise_list_Idx", assign_wise_list_IdxTy);
 
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -500,62 +437,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_print", float_vec_printTy);
 
-	FunctionType *list_NewTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("list_New", list_NewTy);
-
-	FunctionType *list_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Store", list_StoreTy);
-
-	FunctionType *list_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Load", list_LoadTy);
-
-	FunctionType *list_printTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_print", list_printTy);
-
-	FunctionType *list_testTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_test", list_testTy);
-
-	FunctionType *list_CreateTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
-
-	FunctionType *list_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_MarkToSweep", list_MarkToSweepTy);
-
-	FunctionType *list_IdxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);
-
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -646,5 +527,138 @@ void Generate_LLVM_Functions() {
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("tensor_CalculateIdx", tensor_CalculateIdxTy);
+
+	FunctionType *CreateNotesVectorTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("CreateNotesVector", CreateNotesVectorTy);
+
+	FunctionType *Dispose_NotesVectorTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVectorTy);
+
+	FunctionType *Add_Float_To_NotesVectorTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("Add_Float_To_NotesVector", Add_Float_To_NotesVectorTy);
+
+	FunctionType *Add_String_To_NotesVectorTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Add_String_To_NotesVector", Add_String_To_NotesVectorTy);
+
+	FunctionType *str_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_Create", str_CreateTy);
+
+	FunctionType *str_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_Load", str_LoadTy);
+
+	FunctionType *str_StoreTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_Store", str_StoreTy);
+
+	FunctionType *str_MarkToSweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_MarkToSweep", str_MarkToSweepTy);
+
+	FunctionType *str_CopyTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_Copy", str_CopyTy);
+
+	FunctionType *str_str_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_str_add", str_str_addTy);
+
+	FunctionType *str_float_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_float_add", str_float_addTy);
+
+	FunctionType *float_str_addTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_str_add", float_str_addTy);
+
+	FunctionType *PrintStrTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintStr", PrintStrTy);
+
+	FunctionType *cat_str_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("cat_str_float", cat_str_floatTy);
+
+	FunctionType *SplitStringTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("SplitString", SplitStringTy);
+
+	FunctionType *str_split_idxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("str_split_idx", str_split_idxTy);
+
+	FunctionType *str_to_floatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_to_float", str_to_floatTy);
+
+	FunctionType *StrToFloatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
+
+	FunctionType *str_DeleteTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_Delete", str_DeleteTy);
 
 }

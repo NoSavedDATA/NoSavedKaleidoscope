@@ -10,7 +10,7 @@
 #include "kernels.h"
 
 
-extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
+extern "C" data_type_tensor *RandomCrop(int thread_id, data_type_tensor *tensor, float padding)
 {
   float *tensor_ptr, *cropped;
   tensor_ptr = tensor->tensor_ptr;
@@ -49,7 +49,7 @@ extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
   );
   cudaCheck(cudaGetLastError());
   
-  Tensor *new_tensor = createTensor(cropped, dims, dims_prod, false, "", tensor->cuda_stream);
+  data_type_tensor *new_tensor = createTensor(cropped, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, crop_op);
   return new_tensor;
 }
@@ -59,7 +59,7 @@ extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
 
 
 
-extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
+extern "C" data_type_tensor *RandomHorizontalFlip(int thread_id, data_type_tensor *tensor)
 {
   float *tensor_ptr, *flipped;
   tensor_ptr = tensor->tensor_ptr;
@@ -96,7 +96,7 @@ extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
   );
   cudaCheck(cudaGetLastError());
   
-  Tensor *new_tensor = createTensor(flipped, dims, dims_prod, false, "", tensor->cuda_stream);
+  data_type_tensor *new_tensor = createTensor(flipped, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, random_horizontal_flip_op);
   return new_tensor;
 }
@@ -105,7 +105,7 @@ extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
 
 
 
-extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tensor *std)
+extern "C" data_type_tensor *NormalizeImg(int thread_id, data_type_tensor *tensor, data_type_tensor *mean, data_type_tensor *std)
 {
   float *tensor_ptr, *normalized;
   tensor_ptr = tensor->tensor_ptr;
@@ -148,13 +148,13 @@ extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tenso
 
   cudaCheck(cudaGetLastError());
 
-  Tensor *new_tensor = createTensor(normalized, dims, dims_prod, false, "", tensor->cuda_stream);
+  data_type_tensor *new_tensor = createTensor(normalized, dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, normalize_img_op);
   return new_tensor;
 }
 
 
-extern "C" void *Jitter(int thread_id, Tensor *tensor, float factor)
+extern "C" data_type_tensor *Jitter(int thread_id, data_type_tensor *tensor, float factor)
 {
 
 
@@ -170,7 +170,7 @@ extern "C" void *Jitter(int thread_id, Tensor *tensor, float factor)
   jitter_kernel<<<grid_size, block_size, 0, tensor->cuda_stream>>>(jittered, tensor->tensor_ptr, factor, dims_prod, seed);
 
 
-  Tensor *new_tensor = createTensor(jittered, tensor->dims, dims_prod, false, "", tensor->cuda_stream);
+  data_type_tensor *new_tensor = createTensor(jittered, tensor->dims, dims_prod, false, "", tensor->cuda_stream);
   new_tensor->AttrLNode(tensor, jitter_op);
   return new_tensor;
 }

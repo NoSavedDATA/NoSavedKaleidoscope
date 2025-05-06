@@ -26,7 +26,7 @@ class MHSA
 
     MHSA(int nh, int C, int maxT, std::string Init, int_vec *Notators, std::string Name);
   
-  float *Forward(Tensor *, int, int, int);
+  float *Forward(data_type_tensor *, int, int, int);
   void SetDescriptors(int, int, int);
   void Backward(float *, float *, float *);
   void SetBackwardDescriptors();

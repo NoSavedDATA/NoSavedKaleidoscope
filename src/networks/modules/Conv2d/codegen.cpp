@@ -39,7 +39,7 @@ void conv2d_backward(float *inp, float size, float *out,
 
 
 
-extern "C" void *Conv2d(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" void *Conv2d(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   

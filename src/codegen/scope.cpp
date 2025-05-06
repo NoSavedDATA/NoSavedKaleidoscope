@@ -176,7 +176,7 @@ extern "C" float RemoveTensorScope(char *tensor_name, char *scope, char *tgt_ten
   std::string scope_tensor_name = scope;
   scope_tensor_name = scope_tensor_name + tensor_name;
  
-  Tensor *tensor, *scope_tensor;
+  data_type_tensor *tensor, *scope_tensor;
   tensor = NamedTensorsT[tgt_tensor];
 
   if(tensor->thread_id!=thread_id)
@@ -235,7 +235,7 @@ extern "C" float RemoveTensorScopeAttrOnIndex(char *tensor_name, char *scope, ch
 
 
 
-  Tensor *tensor, *scope_tensor;
+  data_type_tensor *tensor, *scope_tensor;
   tensor = NamedTensorsT[tgt_tensor];
 
   scope_tensor = NamedTensorsT[scope_tensor_name];

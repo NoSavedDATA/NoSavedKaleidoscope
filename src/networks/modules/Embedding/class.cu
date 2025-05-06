@@ -37,7 +37,7 @@ Embedding::Embedding(int C, int OC, std::string Init, std::string Name)
     W = get_from_pool(0, OC*C, "Embedding W");
     cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
 
-    Tensor *tensor_W = createTensor(W, {(float)C,(float)OC}, OC*C, true, Name);
+    data_type_tensor *tensor_W = createTensor(W, {(float)C,(float)OC}, OC*C, true, Name);
     
     
     
@@ -62,7 +62,7 @@ void Embedding::SetDescriptors(int B)
 }
 
 
-float *Embedding::Forward(Tensor *tensor, int B, int thread_id)
+float *Embedding::Forward(data_type_tensor *tensor, int B, int thread_id)
 {
   float *out = get_from_pool(thread_id, B*OC, "embedding out");
 

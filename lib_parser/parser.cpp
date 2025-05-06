@@ -37,25 +37,7 @@ Lib_Info *Generate_LLVMs(Lib_Info *lib_info, std::vector<std::unique_ptr<Expr>> 
 
 
 
-std::string Mangle_Lib_File_Name(std::string fname) {
 
-    std::string path = fname;
-    // Replace '/' with '_'
-    std::replace(path.begin(), path.end(), '/', '_');
-
-    // Replace ".cpp" with ".txt"
-    size_t pos = path.rfind(".cpp");
-    if (pos != std::string::npos) {
-        path.replace(pos, 4, ".txt");
-    }
-    pos = path.rfind(".cu");
-    if (pos != std::string::npos) {
-        path.replace(pos, 4, ".txt");
-    }
-    
-    path = "lib_parser/parsed_libs/" + path;
-    return path;
-}
 
 
 void Write_Txt(std::string fname, std::string content) {
@@ -82,11 +64,17 @@ void Save_llvm_string(Lib_Info *lib_info) {
 
 
 
-    std::string save_llvm_string = string_last_modified + "\n" + lib_info->llvm_string;
-    std::string lib_file_name = Mangle_Lib_File_Name(file_name);
-    
-    Write_Txt(lib_file_name, save_llvm_string);
+    Lib_Files *lib_files = new Lib_Files();
+    lib_files->Mangle_Lib_File_Name(file_name);
 
+
+    std::string save_llvm_string = string_last_modified + "\n" + lib_info->llvm_string;
+    
+    Write_Txt(lib_files->file_name, save_llvm_string);
+    Write_Txt(lib_files->user_cpp, lib_info->functions_string);
+    Write_Txt(lib_files->returns_dict, lib_info->dict_string);
+
+    free(lib_files);
     free(lib_info);
 }
 

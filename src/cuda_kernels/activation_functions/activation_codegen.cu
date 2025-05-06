@@ -14,7 +14,7 @@
 
 
 
-extern "C" void *relu(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" data_type_tensor *relu(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   //std::cout << "RELU THREAD IS: " << thread_id << "\n";
   int thread_id = scope_struct->thread_id;
@@ -51,7 +51,7 @@ void gelu_backward(float* inp, float dims_prod, float *y, float* dinp, float* do
   gelu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, inp, dout, dims_prod);  
 }
 
-extern "C" void *gelu(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" data_type_tensor *gelu(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
@@ -88,7 +88,7 @@ void sigmoid_backward(float* inp, float dims_prod, float *out, float* dinp, floa
   
 }
 
-extern "C" void *sigmoid(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" data_type_tensor *sigmoid(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
@@ -128,7 +128,7 @@ void tanh_backward(float* inp, float dims_prod, float *out, float* dinp, float* 
 
 
 
-extern "C" void *_tanh(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" data_type_tensor *_tanh(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
@@ -157,7 +157,7 @@ extern "C" void *_tanh(Scope_Struct *scope_struct, Tensor *tensor)
 
 
 
-extern "C" void *softmax(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" data_type_tensor *softmax(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
@@ -195,7 +195,7 @@ extern "C" void *softmax(Scope_Struct *scope_struct, Tensor *tensor)
 
 
 
-  Tensor *new_tensor = createTensor(probs, tensor->dims, tensor->dims_prod, false, "");
+  data_type_tensor *new_tensor = createTensor(probs, tensor->dims, tensor->dims_prod, false, "");
   new_tensor->op=softmax_op;
   return new_tensor;
 }

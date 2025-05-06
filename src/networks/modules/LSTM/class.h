@@ -26,7 +26,7 @@ class LSTM
   void SetDescriptors(int, int, int);
   void SetBackwardDescriptors();
   void FirstBackward();
-  float *Forward(Tensor *, Tensor *, Tensor *, int, int, int);
+  float *Forward(data_type_tensor *, data_type_tensor *, data_type_tensor *, int, int, int);
   void Backward(float *, float *, float *);
 
 };

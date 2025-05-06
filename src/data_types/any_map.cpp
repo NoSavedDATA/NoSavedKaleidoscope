@@ -17,7 +17,7 @@ std::map<std::string, data_type_dict *> NamedDicts;
 
 
 // template char *data_type_dict::get<char *>(std::string);
-// template Tensor *data_type_dict::get<Tensor *>(std::string);
+// template data_type_tensor *data_type_dict::get<data_type_tensor *>(std::string);
 
 
 template <typename T>
@@ -115,7 +115,7 @@ void data_type_dict::print() {
     //         std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
     //     if (data_types->at(i)=="tensor")
     //     {
-    //         Tensor *t = get<Tensor *>(i);
+    //         data_type_tensor *t = get<data_type_tensor *>(i);
     //         std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
     //         PrintDims(t->dims);
     //     }

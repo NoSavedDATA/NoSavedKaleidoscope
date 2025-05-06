@@ -10,21 +10,21 @@
 std::map<std::string, float *> var_to_grad;
 std::vector<std::tuple<float, float *, std::string>> backprop_tensors_to_pool;
 std::vector<float *> tensors_sent_to_pool;
-std::vector<Tensor *> backprop_Tensors_to_free;
-std::vector<Tensor *> backprop_Tensors_to_save;
+std::vector<data_type_tensor *> backprop_Tensors_to_free;
+std::vector<data_type_tensor *> backprop_Tensors_to_save;
 
 std::map<std::string, std::vector<std::tuple<float, float*,std::string>>> forward_tensors_to_pool;
 std::map<std::string, std::vector<float*>> forward_tensors_sent_to_pool;
-std::map<std::string, std::vector<Tensor*>> forward_Tensors_to_free;
+std::map<std::string, std::vector<data_type_tensor*>> forward_Tensors_to_free;
 std::map<std::string, std::map<std::string, float*>> scope_tensors; // records last version of a tensor //todo: is this one actually used?
 
 std::map<int, std::map<std::string, std::vector<std::tuple<float, float*,std::string>>>> threaded_tensors_to_pool;
 std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_sent_to_pool;
-std::map<int, std::map<std::string, std::vector<Tensor*>>> threaded_Tensors_to_free;
+std::map<int, std::map<std::string, std::vector<data_type_tensor*>>> threaded_Tensors_to_free;
 std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_to_save;
-std::map<int, std::map<std::string, std::vector<Tensor*>>> threaded_Tensors_to_save;
+std::map<int, std::map<std::string, std::vector<data_type_tensor*>>> threaded_Tensors_to_save;
 
-void to_free_tensor(Tensor *tensor_ptr)
+void to_free_tensor(data_type_tensor *tensor_ptr)
 {
   if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_free))
     backprop_Tensors_to_free.push_back(tensor_ptr);
@@ -37,7 +37,7 @@ void to_pool(float dims_prod, float *tensor_ptr, std::string from)
     tensors_sent_to_pool.push_back(tensor_ptr);
   }
 }
-void save_from_pool(Tensor *tensor_ptr)
+void save_from_pool(data_type_tensor *tensor_ptr)
 {
   if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_save))
     backprop_Tensors_to_save.push_back(tensor_ptr);
@@ -45,7 +45,7 @@ void save_from_pool(Tensor *tensor_ptr)
 
 
 
-void to_free_tensor_forward(Tensor *tensor_ptr, std::string scope)
+void to_free_tensor_forward(data_type_tensor *tensor_ptr, std::string scope)
 {
   if(!in_tensor_ptr_vec(tensor_ptr, forward_Tensors_to_free[scope]))
     forward_Tensors_to_free[scope].push_back(tensor_ptr);
@@ -60,7 +60,7 @@ void to_pool_forward(float dims_prod, float *tensor_ptr, std::string scope, std:
 }
 
 
-void to_free_tensor_threaded(Tensor *tensor_ptr, std::string scope, int thread_id)
+void to_free_tensor_threaded(data_type_tensor *tensor_ptr, std::string scope, int thread_id)
 {
   if(!in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_free[thread_id][scope]) && !in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_save[thread_id][scope]))
     threaded_Tensors_to_free[thread_id][scope].push_back(tensor_ptr);
@@ -76,7 +76,7 @@ void to_pool_threaded(float dims_prod, float *tensor_ptr, std::string scope, int
 
 
 
-void ThreadedCleanupToPool(Tensor *back_node, std::string scope, int thread_id)
+void ThreadedCleanupToPool(data_type_tensor *back_node, std::string scope, int thread_id)
 {
   if(back_node==nullptr||back_node->weight)
     return;
@@ -97,7 +97,7 @@ void ThreadedCleanupToPool(Tensor *back_node, std::string scope, int thread_id)
 
 void CleanThreadTensors(std::string scope, int thread_id)
 {
-  for(Tensor *tensor : threaded_Tensors_to_free[thread_id][scope])
+  for(data_type_tensor *tensor : threaded_Tensors_to_free[thread_id][scope])
     delete tensor;
 
   std::vector<float*> scope_tensors_ptrs;
@@ -118,7 +118,7 @@ void CleanThreadTensors(std::string scope, int thread_id)
 
 
 
-int DoesTreeContainWeight(Tensor *back_node)
+int DoesTreeContainWeight(data_type_tensor *back_node)
 {
   if(back_node==nullptr)
     return 0;
@@ -133,7 +133,7 @@ int DoesTreeContainWeight(Tensor *back_node)
 }
 
 
-void ForwardCleanupToPool(Tensor *back_node, std::string scope)
+void ForwardCleanupToPool(data_type_tensor *back_node, std::string scope)
 {
   if(back_node==nullptr||back_node->weight)
     return;
@@ -154,7 +154,7 @@ void ForwardCleanupToPool(Tensor *back_node, std::string scope)
 
 void CleanScopeTensors(std::string scope)
 {
-  for(Tensor *tensor : forward_Tensors_to_free[scope])
+  for(data_type_tensor *tensor : forward_Tensors_to_free[scope])
     delete tensor;
 
   std::vector<float*> scope_tensors_ptrs;
@@ -191,7 +191,7 @@ extern "C" float clean_forward(Scope_Struct *scope_struct)
 }
 
 
-void CleanTree_Backprop(Tensor *back_node) {
+void CleanTree_Backprop(data_type_tensor *back_node) {
   // Avoid calling CleanTree separatly. As this has the overhead of goign throughout the tree multiple times.
 
   if (back_node==nullptr)
@@ -209,7 +209,7 @@ void CleanTree_Backprop(Tensor *back_node) {
 }
 
 
-void CleanTreeNow(int thread_id, Tensor *tensor, std::string root_name) {
+void CleanTreeNow(int thread_id, data_type_tensor *tensor, std::string root_name) {
   if (tensor==nullptr)
     return;
   

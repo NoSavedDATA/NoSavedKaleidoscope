@@ -19,7 +19,7 @@
 
 
 
-extern "C" void *tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" data_type_tensor *tensor_Create(char *tensor_name, char *scopeless_name, data_type_tensor *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
   
   // if (notes_vector->data->size()>0)
@@ -29,7 +29,7 @@ extern "C" void *tensor_Create(char *tensor_name, char *scopeless_name, Tensor *
     int thread_id = scope_struct->thread_id;
     // std::cout << "CREATING TENSOR " << tensor_name << " AT THREAD: " << thread_id << "\n";
 
-    Tensor *tensor;
+    data_type_tensor *tensor;
 
 
     std::vector<float> dims;
@@ -119,7 +119,7 @@ extern "C" void *tensor_Create(char *tensor_name, char *scopeless_name, Tensor *
 
   if(NamedTensorsT.count(tensor_name)>0)
   {
-    Tensor *tensor_to_clean = NamedTensorsT[tensor_name];
+    data_type_tensor *tensor_to_clean = NamedTensorsT[tensor_name];
 
     // if (tensor_to_clean->name=="batch_acc")
     // if (tensor_to_clean->name=="batch_acc"||tensor_to_clean->name=="y")
@@ -144,9 +144,9 @@ extern "C" void *tensor_Create(char *tensor_name, char *scopeless_name, Tensor *
 
 
 
-extern "C" void *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
+extern "C" data_type_tensor *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
   // std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
-  Tensor *ret = NamedTensorsT[tensor_name];
+  data_type_tensor *ret = NamedTensorsT[tensor_name];
   //std::cout << "return load." << "\n";
 
   return ret;
@@ -154,7 +154,7 @@ extern "C" void *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
 
 
 //todo: copy tensor
-extern "C" void *tensor_Copy(Scope_Struct *scope_struct, Tensor *tensor){
+extern "C" data_type_tensor *tensor_Copy(Scope_Struct *scope_struct, data_type_tensor *tensor){
 
   int thread_id = scope_struct->thread_id;
 
@@ -189,7 +189,7 @@ extern "C" void *tensor_Copy(Scope_Struct *scope_struct, Tensor *tensor){
   }
   
 
-  Tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
+  data_type_tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
   new_tensor->scopeless_name = tensor->scopeless_name;
   new_tensor->from_grad_or_load = tensor->from_grad_or_load;
 
@@ -198,7 +198,7 @@ extern "C" void *tensor_Copy(Scope_Struct *scope_struct, Tensor *tensor){
     to_free_tensor_forward(tensor, scope_struct->scope);//
   else
     to_free_tensor(tensor);
-  // std::cout << "Tensor copied" << ".\n";
+  // std::cout << "data_type_tensor copied" << ".\n";
 
   return new_tensor;
 }
@@ -207,7 +207,7 @@ extern "C" void *tensor_Copy(Scope_Struct *scope_struct, Tensor *tensor){
 
 
 
-inline Tensor *store_intermediate_result_tensor(Tensor *stored_tensor, Tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+inline data_type_tensor *store_intermediate_result_tensor(data_type_tensor *stored_tensor, data_type_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   // RHS does not need to be saved. So we just move the pointer to LHS
   // if(nn_mode==eval_mode||thread_id!=0)
   // {
@@ -216,7 +216,7 @@ inline Tensor *store_intermediate_result_tensor(Tensor *stored_tensor, Tensor *t
   //   ForwardCleanupToPool(stored_tensor, scope);
   // }
   // else {
-  Tensor *attr_tensor;
+  data_type_tensor *attr_tensor;
   if (has_grad==0)
       tensor->op = detach_op;
   attr_tensor = createBackward(stored_tensor->scopeless_name, tensor);
@@ -232,7 +232,7 @@ inline Tensor *store_intermediate_result_tensor(Tensor *stored_tensor, Tensor *t
 }
 
 
-inline void clean_tensor(Tensor *stored_tensor, Tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+inline void clean_tensor(data_type_tensor *stored_tensor, data_type_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   if (nn_mode==eval_mode||stored_tensor->thread_id!=0)
   {
     CleanTreeNow(stored_tensor->thread_id, stored_tensor, stored_tensor->name);
@@ -244,7 +244,7 @@ inline void clean_tensor(Tensor *stored_tensor, Tensor *tensor, char *tensor_nam
   // Else, save the tensor for the backrpop.
 }
 
-inline Tensor *change_tensor_dims(Tensor *stored_tensor, Tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+inline data_type_tensor *change_tensor_dims(data_type_tensor *stored_tensor, data_type_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   stored_tensor->tensor_ptr = get_from_pool(thread_id, tensor->dims_prod, "z=x");
   stored_tensor->dims = tensor->dims;
   stored_tensor->dims_prod = tensor->dims_prod;
@@ -254,7 +254,7 @@ inline Tensor *change_tensor_dims(Tensor *stored_tensor, Tensor *tensor, char *t
 
 
 
-inline Tensor *sync_and_copy_tensors(Tensor *stored_tensor, Tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+inline data_type_tensor *sync_and_copy_tensors(data_type_tensor *stored_tensor, data_type_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   int grid_size, block_size, shared_mem_size; 
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
   grid_size = grid_block_mem_sizes[0];
@@ -268,10 +268,10 @@ inline Tensor *sync_and_copy_tensors(Tensor *stored_tensor, Tensor *tensor, char
   return stored_tensor;
 }
 
-inline Tensor *store_leaf_backward(Tensor *stored_tensor, Tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+inline data_type_tensor *store_leaf_backward(data_type_tensor *stored_tensor, data_type_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   if(nn_mode==training_mode&&thread_id==0)
   {
-    Tensor *attribution_tensor;
+    data_type_tensor *attribution_tensor;
   
     if (has_grad==0)
       tensor->op = detach_op;  
@@ -288,7 +288,7 @@ inline Tensor *store_leaf_backward(Tensor *stored_tensor, Tensor *tensor, char *
   return stored_tensor;
 }
 
-extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *scope_struct)
+extern "C" float tensor_Store(char *tensor_name, data_type_tensor *tensor, Scope_Struct *scope_struct)
 {
   // std::cout << "tensor_Store execution" << ".\n";
 
@@ -298,7 +298,7 @@ extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *s
   int has_grad = scope_struct->has_grad;
 
 
-  Tensor *stored_tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *stored_tensor = NamedTensorsT[tensor_name];
   stored_tensor->is_last_version = false;
   
   // View op
@@ -333,7 +333,7 @@ extern "C" float tensor_Store(char *tensor_name, Tensor *tensor, Scope_Struct *s
   return 0;
 }
 
-extern "C" void tensor_MarkToSweep(Scope_Struct *scope_struct, char *name, Tensor *value) {
+extern "C" void tensor_MarkToSweep(Scope_Struct *scope_struct, char *name, data_type_tensor *value) {
   if (value==nullptr)
     std::cout << "tensor_MarkToSweep is nullptr" << ".\n";
 
@@ -347,7 +347,7 @@ void tensor_Clean_Up(std::string name, void *data_ptr) {
 
 
 
-extern "C" void *gpu(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_tensor)
+extern "C" data_type_tensor *gpu(Scope_Struct *scope_struct, data_type_tensor *tensor, data_type_tensor *pinned_tensor)
 {
   //std::cout << "\nGpu transfer for: " << tensor.name << " on worker " << idx << "\n";
   int thread_id = scope_struct->thread_id; 
@@ -388,7 +388,7 @@ extern "C" void *gpu(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_
 
   } else {
     
-    Tensor *attr_tensor;
+    data_type_tensor *attr_tensor;
     attr_tensor = createTensor(tensor_ptr, dims, dims_prod, true, "");
     attr_tensor->op = gpu_op;
     todo_backward_tensors.push_back(attr_tensor); // pass to gc
@@ -403,7 +403,7 @@ extern "C" void *gpu(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_
 
 
 
-extern "C" float tensor_gpuw(Scope_Struct *scope_struct, Tensor *tensor, Tensor *pinned_tensor, float idx)
+extern "C" float tensor_gpuw(Scope_Struct *scope_struct, data_type_tensor *tensor, data_type_tensor *pinned_tensor, float idx)
 {
   int thread_id = scope_struct->thread_id;
 
@@ -464,7 +464,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, Tensor *tensor, Tensor 
 
   } else {
     
-    Tensor *attr_tensor;
+    data_type_tensor *attr_tensor;
     attr_tensor = createTensor(tensor_ptr, batchless_dims, batchless_dims_prod, true, "");
     attr_tensor->op = gpu_op;
     todo_backward_tensors.push_back(attr_tensor); // pass to gc
@@ -480,7 +480,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, Tensor *tensor, Tensor 
 }
 
 
-extern "C" float cpu(Scope_Struct *scope_struct, Tensor *tensor)
+extern "C" float cpu(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
 
   int thread_id = scope_struct->thread_id; 
@@ -511,7 +511,7 @@ extern "C" float cpu(Scope_Struct *scope_struct, Tensor *tensor)
   return 0;
 }
 
-extern "C" float cpu_idx(Scope_Struct *scope_struct, Tensor *tensor, float idx)
+extern "C" float cpu_idx(Scope_Struct *scope_struct, data_type_tensor *tensor, float idx)
 {
 
   float *tensor_cpu;
@@ -531,7 +531,7 @@ extern "C" float cpu_idx(Scope_Struct *scope_struct, Tensor *tensor, float idx)
 }
 
 
-extern "C" void *randu_like(Scope_Struct *scope_struct, Tensor tensor)
+extern "C" data_type_tensor *randu_like(Scope_Struct *scope_struct, data_type_tensor tensor)
 {
   int thread_id = scope_struct->thread_id;
 
@@ -546,7 +546,7 @@ extern "C" void *randu_like(Scope_Struct *scope_struct, Tensor tensor)
   cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice, stream);
   delete[] tensor_cpu;
 
-  Tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
+  data_type_tensor *new_tensor = createTensor(tensor_ptr, tensor.dims, dims_prod, false, "");
   new_tensor->op = randu_like_op;
   return new_tensor;
 }
@@ -558,7 +558,7 @@ void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaS
 }
 
 
-extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
+extern "C" float write_zerosw(data_type_tensor *tensor, float worker_idx)
 {
   std::vector<float> dims = tensor->dims;
 
@@ -574,7 +574,7 @@ extern "C" float write_zerosw(Tensor *tensor, float worker_idx)
 }
 
 
-extern "C" void *tensor_view(Scope_Struct *scope_struct, Tensor *tensor, float first_dim, ...)
+extern "C" data_type_tensor *tensor_view(Scope_Struct *scope_struct, data_type_tensor *tensor, float first_dim, ...)
 {
 
   //std::cout << "Executing: " << tensor.name << "." << "view" << "\n";
@@ -655,7 +655,7 @@ extern "C" void *tensor_view(Scope_Struct *scope_struct, Tensor *tensor, float f
 
   
 
-  Tensor *new_tensor = createTensor(tensor->tensor_ptr, new_dims, DimsProd(new_dims), false, "");
+  data_type_tensor *new_tensor = createTensor(tensor->tensor_ptr, new_dims, DimsProd(new_dims), false, "");
   new_tensor->view_of = tensor->name;
   new_tensor->op=view_op;
   return new_tensor;
@@ -663,7 +663,7 @@ extern "C" void *tensor_view(Scope_Struct *scope_struct, Tensor *tensor, float f
 
 
 
-extern "C" void *NewVecToTensor(Scope_Struct *scope_struct, float first_dim, ...)
+extern "C" data_type_tensor *NewVecToTensor(Scope_Struct *scope_struct, float first_dim, ...)
 {
   std::vector<float> values;
 
@@ -702,7 +702,7 @@ extern "C" void *NewVecToTensor(Scope_Struct *scope_struct, float first_dim, ...
   cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
   
 
-  Tensor *new_tensor = createTensor(tensor_ptr, {dims_prod}, dims_prod, true, "");
+  data_type_tensor *new_tensor = createTensor(tensor_ptr, {dims_prod}, dims_prod, true, "");
   new_tensor->op=create_tensor_from_brackets_op;
   return new_tensor;
 }
@@ -714,7 +714,7 @@ extern "C" float tensor_CalculateIdx(char *tensor_name, float first_idx, ...) {
   
   // std::cout << "pinned_tensor_CalculateIdx of " << tensor_name << "\n";
 
-  Tensor *tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *tensor = NamedTensorsT[tensor_name];
 
   std::vector<float> idxs, new_dims_no_minus, dims;
   int current_dims_prod;

@@ -21,13 +21,13 @@
 
 BN2dRelu::BN2dRelu(int C, std::string Name)
     : C(C), Name(Name) {
-    NamedTensorsT[Name] = new Tensor();
-    NamedTensorsT[Name+"_bias"] = new Tensor();
+    NamedTensorsT[Name] = new data_type_tensor();
+    NamedTensorsT[Name+"_bias"] = new data_type_tensor();
 }
 
 
 
-void BN2dRelu::SetDescriptors(int H, int W, int B, Tensor *tensor)
+void BN2dRelu::SetDescriptors(int H, int W, int B, data_type_tensor *tensor)
 {
   //std::cout << "BN2dRelu::SetDescriptors" << "\n";
   /*
@@ -108,7 +108,7 @@ void BN2dRelu::InitMovingAverages()
   delete[] aux;
 }
 
-float *BN2dRelu::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
+float *BN2dRelu::Forward(data_type_tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
   std::cout << "BN2dRelu::Forward" << "\n";
 

@@ -16,7 +16,7 @@
 
 
 
-extern "C" void *rl_discounted_return(int thread_id, Tensor *reward, Tensor *terminated, float gamma)
+extern "C" data_type_tensor *rl_discounted_return(int thread_id, data_type_tensor *reward, data_type_tensor *terminated, float gamma)
 {
   //std::cout << "rl_discounted_return THREAD IS: " << thread_id << "\n";
 
@@ -45,7 +45,7 @@ extern "C" void *rl_discounted_return(int thread_id, Tensor *reward, Tensor *ter
 
 
 
-  Tensor *new_tensor = createTensor(G, {(float)B}, B, false, "");
+  data_type_tensor *new_tensor = createTensor(G, {(float)B}, B, false, "");
   new_tensor->AttrNodes(reward, terminated, detach_op);
   return new_tensor;
 }

@@ -21,8 +21,8 @@
 
 
 
-// extern "C" void *MaxPoolForward2d(char *self, Tensor *tensor, int thread_id, char *pool_namec, int is_obj_attr_or_self)
-extern "C" void *Pool2d(Scope_Struct *scope_struct, Tensor *tensor)
+// extern "C" void *MaxPoolForward2d(char *self, data_type_tensor *tensor, int thread_id, char *pool_namec, int is_obj_attr_or_self)
+extern "C" void *Pool2d(Scope_Struct *scope_struct, data_type_tensor *tensor)
 {
   //std::cout << "MaxPoolForward2d of " << pool_namec << " and tensor " << tensor.name << "\n";
   

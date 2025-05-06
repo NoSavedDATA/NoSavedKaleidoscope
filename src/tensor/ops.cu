@@ -20,7 +20,7 @@
 
 
 // Copies a pinned_tensor's reserved memory into a tensor.
-extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor, int thread_id)
+extern "C" float AttrTensorNoFree(char *tensor_name, data_type_tensor *tensor, int thread_id)
 {
   //std::cout << "\nAttrTensorNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
   
@@ -29,7 +29,7 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor, int thread_
 
   
 
-  Tensor *tgt_tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *tgt_tensor = NamedTensorsT[tensor_name];
   move_to_pool(tgt_tensor->thread_id, tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "pinned");
   
 
@@ -58,12 +58,12 @@ extern "C" float AttrTensorNoFree(char *tensor_name, Tensor *tensor, int thread_
 }
 
 
-extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at, int thread_id)
+extern "C" float AttrTensorOnIdx(char *tensor_name, data_type_tensor *tensor, float idx_at, int thread_id)
 { 
   //std::cout << "AttrTensorOnIdx of" << tensor_name << " at idx " << idx_at << "\n";
 
   std::vector<float> dims, Rdims;
-  Tensor *tgt_tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *tgt_tensor = NamedTensorsT[tensor_name];
   dims = tgt_tensor->dims;
   int dims_prod = tgt_tensor->dims_prod;
 
@@ -109,15 +109,15 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, Tensor *tensor, float idx_at
 }
 
 
-extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name, Tensor *R_tensor, int thread_id)
+extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name, data_type_tensor *R_tensor, int thread_id)
 { 
   //std::cout << "ATTR Idx tensor " << tensor_name << " at index tensor " << idx_tensor_name << " with tensor " << R_tensor->name << "\n";
 
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
   
   
-  Tensor *tensor = NamedTensorsT[tensor_name];
-  Tensor *idx_tensor = NamedTensorsT[idx_tensor_name];
+  data_type_tensor *tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *idx_tensor = NamedTensorsT[idx_tensor_name];
 
 
   float *tensor_ptr, *idx_tensor_ptr, *r_tensor_ptr;
@@ -146,7 +146,7 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
   if (dims.size()<idx_dims.size())
   {
     LogErrorS("Index tensor must have less dimensions than the indexed tensor.");
-    std::cout << "Tensor dims:" << "\n";
+    std::cout << "data_type_tensor dims:" << "\n";
     PrintDims(dims);
     std::cout << "Idx tensor dims:" << "\n";
     PrintDims(idx_dims);
@@ -212,7 +212,7 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
 
 
 
-extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, Tensor *Rtensor, int thread_id, float first_idx, ...)
+extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, data_type_tensor *Rtensor, int thread_id, float first_idx, ...)
 {
   
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
@@ -239,7 +239,7 @@ extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, Tensor *Rtensor, i
   std::vector<float> dims, aux_dims, Rdims;
   
   
-  Tensor *tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *tensor = NamedTensorsT[tensor_name];
   Rdims = Rtensor->dims;
   float R_dims_prod = Rtensor->dims_prod;
 
@@ -307,7 +307,7 @@ extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, Tensor *Rtensor, i
   
 
 
-  Tensor *indexed = createTensor(new_tensor, new_dims, R_dims_prod, true, "");
+  data_type_tensor *indexed = createTensor(new_tensor, new_dims, R_dims_prod, true, "");
   indexed->from_grad_or_load = tensor->from_grad_or_load;
   */
   return 0;
@@ -341,7 +341,7 @@ extern "C" void *IdxTensor(char *tensor_name, char *scope, int thread_id, float 
   float offset = 0;
   
   
-  Tensor *tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *tensor = NamedTensorsT[tensor_name];
 
 
   float *new_tensor;
@@ -414,7 +414,7 @@ extern "C" void *IdxTensor(char *tensor_name, char *scope, int thread_id, float 
   if(nn_mode==eval_mode)
     ForwardCleanupToPool(tensor, scope);
 
-  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, true, "");
+  data_type_tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, true, "");
   indexed->from_grad_or_load = tensor->from_grad_or_load;
   return indexed;
 }
@@ -427,8 +427,8 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name, i
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
   
   
-  Tensor *tensor = NamedTensorsT[tensor_name];
-  Tensor *idx_tensor = NamedTensorsT[idx_tensor_name];
+  data_type_tensor *tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *idx_tensor = NamedTensorsT[idx_tensor_name];
 
 
   float *tensor_ptr, *idx_tensor_ptr, *new_tensor;
@@ -481,7 +481,7 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name, i
   //cudaCheck(cudaMemcpy(new_tensor, device_x, new_dims_prod*sizeof(float), cudaMemcpyHostToHost));
 
 
-  Tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, false, "");
+  data_type_tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, false, "");
   indexed->AttrNodes(tensor, idx_tensor, idx_with_tensor_op);
   return indexed;
 }

@@ -24,13 +24,13 @@
 
 BatchNorm2dCPP::BatchNorm2dCPP(int C, std::string Name)
     : C(C), Name(Name) {
-  // NamedTensorsT[Name+"W"] = new Tensor();
-  // NamedTensorsT[Name+"B"] = new Tensor();
+  // NamedTensorsT[Name+"W"] = new data_type_tensor();
+  // NamedTensorsT[Name+"B"] = new data_type_tensor();
 }
 
 
 
-void BatchNorm2dCPP::SetDescriptors(int H, int W, int B, Tensor *tensor)
+void BatchNorm2dCPP::SetDescriptors(int H, int W, int B, data_type_tensor *tensor)
 {
   this->H = H;
   this->W = W;
@@ -108,18 +108,18 @@ void BatchNorm2dCPP::InitMovingAverages()
   delete[] aux;
 
 
-  Tensor *scale_tensor, *bias_tensor;
-  scale_tensor = new Tensor();
+  data_type_tensor *scale_tensor, *bias_tensor;
+  scale_tensor = new data_type_tensor();
   scale_tensor->NewTensor(scale, {(float)C}, C, true, Name);
 
-  bias_tensor = new Tensor();
+  bias_tensor = new data_type_tensor();
   bias_tensor->NewTensor(bias, {(float)C}, C, true, Name);
 
   NamedTensorsT[Name+"W"] = scale_tensor;
   NamedTensorsT[Name+"B"] = bias_tensor;
 }
 
-float *BatchNorm2dCPP::Forward(Tensor *tensor, int H, int W, int B, int C, int thread_id)
+float *BatchNorm2dCPP::Forward(data_type_tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
 
   if (H != this->H || W != this->W || B != this->B)

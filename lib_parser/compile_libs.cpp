@@ -8,9 +8,7 @@
 
 namespace fs = std::filesystem;
 
-std::string Get_Base_Lib() {
-    std::string fpath = "src/libs_llvm/libs.cpp";
-
+std::string Get_Base_Lib(std::string fpath, int until_line) {
 
     std::ifstream libs_file(fpath);
 
@@ -27,7 +25,7 @@ std::string Get_Base_Lib() {
             file_string = file_string + line;
             file_string = file_string + '\n';
             i+=1;
-            if (i>17)
+            if (i>until_line)
                 break;
         }
             
@@ -43,23 +41,57 @@ std::string Get_Base_Lib() {
 
 
 
+
+
+void CleanDeletedLibs() {
+
+    std::string root = "lib_parser/parsed_libs";
+    std::vector<fs::path> files = glob_cpp(root, "llvm_lib.txt");
+
+    for (auto &file : files) {
+        std::string src_file = Demangle_File_Name(file);
+
+        if (!fexists(src_file+".cpp") && !fexists(src_file+".cu"))
+        {
+
+            std::string base_lib = file;
+            const std::string suffix = "_llvm_lib.txt";
+            if (base_lib.size() >= suffix.size() &&
+                base_lib.compare(base_lib.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                base_lib.erase(base_lib.size() - suffix.size());
+            }
+
+            fremove(base_lib+"_llvm_lib.txt");
+            fremove(base_lib+"_returns_dict.txt");
+            fremove(base_lib+"_user_cpp.txt");
+        }
+    }
+}
+
+
 int main() {
 
     Parse_Libs();
 
-    std::string all_libs = Get_Base_Lib();
+    CleanDeletedLibs();
 
-    // std::cout << all_libs << ".\n";
+    std::string all_libs = Get_Base_Lib("src/libs_llvm/libs.cpp", 17);
+    std::string all_cpp = Get_Base_Lib("src/libs_llvm/user_cpp_functions.cpp", 17);
+    std::string all_function_dicts = Get_Base_Lib("src/libs_llvm/functions_return.cpp", 23);
+
+
 
 
     std::string root = "lib_parser/parsed_libs";
-    std::vector<fs::path> files = glob_cpp(root, ".txt");
+    std::vector<fs::path> files = glob_cpp(root, "llvm_lib.txt");
+    std::vector<fs::path> cpp_files = glob_cpp(root, "user_cpp.txt");
+    std::vector<fs::path> dict_files = glob_cpp(root, "returns_dict.txt");
 
     std::ifstream file;
     std::string line;
+    
     for (auto &parsed_file : files)
     {
-        std::string lib_string = "";
         file.open(parsed_file);
 
         std::getline(file, line); // consume date
@@ -67,22 +99,43 @@ int main() {
         while(std::getline(file, line))
             all_libs = all_libs + line + "\n";
         file.close();
-
-
-        // std::cout << "Add file " << parsed_file << " to llvm libs.\n";
     }
 
 
+    for (auto &parsed_file : cpp_files)
+    {
+        file.open(parsed_file);
+
+        while(std::getline(file, line))
+            all_cpp = all_cpp + "\t\t" + line + "\n";
+        file.close();
+    }
+
+    for (auto &parsed_file : dict_files)
+    {
+        file.open(parsed_file);
+
+        while(std::getline(file, line))
+            all_function_dicts = all_function_dicts + "\t\t\t\t\t\t" + line + "\n";
+        file.close();
+    }
+
     all_libs = all_libs + "\n}";
 
-    // std::cout << all_libs << ".\n";
-
+    all_cpp = all_cpp + "\n\t};\n}";
+    all_function_dicts = all_function_dicts + "\n\t};\n}";
 
 
     
-    std::ofstream llvm_lib_file("src/libs_llvm/libs.cpp");
-    llvm_lib_file << all_libs;
-    llvm_lib_file.close();
+    // std::cout << all_libs << ".\n";
+    // std::cout << all_cpp << ".\n";
+    // std::cout << all_function_dicts << ".\n";
+
+
+
+    Write_Txt("src/libs_llvm/libs.cpp", all_libs);
+    Write_Txt("src/libs_llvm/user_cpp_functions.cpp", all_cpp);
+    Write_Txt("src/libs_llvm/functions_return.cpp", all_function_dicts);
 
 
     return 0;

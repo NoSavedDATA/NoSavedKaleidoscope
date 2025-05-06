@@ -17,12 +17,12 @@
 
 
 
-extern "C" float pinned_tensor_Create(char *tensor_name, char *scopeless_name, Tensor *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" float pinned_tensor_Create(char *tensor_name, char *scopeless_name, data_type_tensor *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
 {
 
   // std::cout << "PINNED TENSOR CREATE"  << ".\n";
 
-  Tensor *tensor;
+  data_type_tensor *tensor;
 
   std::vector<float> dims;
   bool is_weight = false;
@@ -74,7 +74,7 @@ extern "C" void pinned_tensor_Store_Idx(char *tensor_name, float idx_at, float v
 
   // std::cout << "pinned_tensor_Store_Idx on idx " << idx_at << ".\n";
 
-  Tensor *tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *tensor = NamedTensorsT[tensor_name];
   // PrintDims(tensor->dims);
 
   std::vector<float> dims = tensor->dims;
@@ -109,7 +109,7 @@ extern "C" float pinned_tensor_CalculateIdx(char *tensor_name, float first_idx, 
   
   // std::cout << "pinned_tensor_CalculateIdx of " << tensor_name << "\n";
 
-  Tensor *tensor = NamedTensorsT[tensor_name];
+  data_type_tensor *tensor = NamedTensorsT[tensor_name];
 
   std::vector<float> idxs, new_dims_no_minus, dims;
   int current_dims_prod;

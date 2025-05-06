@@ -25,9 +25,9 @@ void MSEBackward(float *y_hat, float *y,
   //PrintTensorF(dloss, 1, dims_prod);
 }
 
-extern "C" float mse(Tensor *y_hat, Tensor *y, float scale)
+extern "C" float mse(data_type_tensor *y_hat, data_type_tensor *y, float scale)
 {  
-  Tensor *loss_tensor = new Tensor();
+  data_type_tensor *loss_tensor = new data_type_tensor();
 
 
   loss_tensor->AttrNodes(y_hat, y, mse_op);
@@ -44,11 +44,11 @@ extern "C" float mse(Tensor *y_hat, Tensor *y, float scale)
 
 
 
-extern "C" void *mse_with_priorities(int thread_id, Tensor *y_hat, Tensor *y, float scale, Tensor *is_w)
+extern "C" data_type_tensor *mse_with_priorities(int thread_id, data_type_tensor *y_hat, data_type_tensor *y, float scale, data_type_tensor *is_w)
 {  
-  Tensor *mse_tensor, *loss_tensor;
-  mse_tensor = new Tensor();
-  loss_tensor = new Tensor();
+  data_type_tensor *mse_tensor, *loss_tensor;
+  mse_tensor = new data_type_tensor();
+  loss_tensor = new data_type_tensor();
 
 
 
@@ -83,20 +83,20 @@ extern "C" void *mse_with_priorities(int thread_id, Tensor *y_hat, Tensor *y, fl
 
   online_mse<<<grid_size, block_size, 0, main_stream->stream>>>(msed, y_hat->tensor_ptr, y->tensor_ptr, B, C);
 
-  Tensor *new_tensor = createTensor(msed, {B}, B, false, "");
+  data_type_tensor *new_tensor = createTensor(msed, {B}, B, false, "");
   new_tensor->AttrLNode(y_hat, detach_op);
   return new_tensor;
 }
 
 
 
-void MSEWithPrioritiesBackward(Tensor *loss_tensor,
+void MSEWithPrioritiesBackward(data_type_tensor *loss_tensor,
                  float *dloss)
 {
   //std::cout << "MSEWithPriorities Backward" << "\n";
 
   
-  Tensor *y_hat_tensor, *y_tensor, *is_w_tensor;
+  data_type_tensor *y_hat_tensor, *y_tensor, *is_w_tensor;
   y_hat_tensor = loss_tensor->L_Node->L_Node;
   y_tensor = loss_tensor->L_Node->R_Node;
   is_w_tensor = loss_tensor->R_Node;
