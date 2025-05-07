@@ -46,7 +46,7 @@ extern "C" float *load_img(Scope_Struct *scope_struct, char *img_name)
 }
 
 
-extern "C" float * gload_img(Scope_Struct *scope_struct, data_type_tensor tensor, char *img_name, float batch_idx)
+extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char *img_name, float batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor.name <<  "\nImage: " << img_name << "\n";
   
@@ -122,7 +122,7 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, data_type_tensor tensor
 
 
 
-extern "C" float * wload_img(Scope_Struct *scope_struct, data_type_tensor *tensor, char *img_name, float worker_idx, float batch_idx)
+extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, float worker_idx, float batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
@@ -202,7 +202,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, data_type_tensor *tenso
 
 
 
-extern "C" float * wload_img_resize(Scope_Struct *scope_struct, data_type_tensor *tensor, char *img_name, float worker_idx, float batch_idx, float c, float h, float w)
+extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, float worker_idx, float batch_idx, float c, float h, float w)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
@@ -292,7 +292,7 @@ extern "C" float * wload_img_resize(Scope_Struct *scope_struct, data_type_tensor
 
 
 float *current_data;
-extern "C" float load_preprocess_img(Scope_Struct *scope_struct,data_type_tensor tensor, char *img_name)
+extern "C" float load_preprocess_img(Scope_Struct *scope_struct,DT_tensor tensor, char *img_name)
 {
   float *img;
   img = load_img(scope_struct, img_name); 

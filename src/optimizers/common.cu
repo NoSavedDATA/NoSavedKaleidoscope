@@ -33,7 +33,7 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
     if (param_name!="none")
     {
       float *grad = pair.second;
-      data_type_tensor *tensor = NamedTensorsT[param_name];
+      DT_tensor *tensor = NamedTensorsT[param_name];
       
       //std::cout << "param dims: "  << "\n";
       //PrintDims(tensor->dims);
@@ -41,8 +41,8 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 
       if (tensor->Sparse_Idx_Tensor!=nullptr)
       {
-        //std::cout << "data_type_tensor " << param_name << " has a sparse gradient "<< "\n";
-        data_type_tensor *idx_tensor = tensor->Sparse_Idx_Tensor;
+        //std::cout << "DT_tensor " << param_name << " has a sparse gradient "<< "\n";
+        DT_tensor *idx_tensor = tensor->Sparse_Idx_Tensor;
 
         optimizer->sparse_step(tensor->tensor_ptr, grad, idx_tensor->tensor_ptr,
                                idx_tensor->dims, tensor->dims, param_name, streams[i]);

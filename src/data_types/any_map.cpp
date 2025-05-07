@@ -12,16 +12,16 @@
 #include "any_map.h"
 
 
-std::map<std::string, data_type_dict *> NamedDicts;
+std::map<std::string, DT_dict *> NamedDicts;
 
 
 
-// template char *data_type_dict::get<char *>(std::string);
-// template data_type_tensor *data_type_dict::get<data_type_tensor *>(std::string);
+// template char *DT_dict::get<char *>(std::string);
+// template DT_tensor *DT_dict::get<DT_tensor *>(std::string);
 
 
 template <typename T>
-T data_type_dict::get(std::string key) {
+T DT_dict::get(std::string key) {
     auto it = data->find(key);
     if (it!=data->end())
     {
@@ -34,7 +34,7 @@ T data_type_dict::get(std::string key) {
 }
 
 template <>
-float data_type_dict::get<float>(std::string key) {
+float DT_dict::get<float>(std::string key) {
     auto it = data->find(key);
     if (it!=data->end())
     {
@@ -54,7 +54,7 @@ float data_type_dict::get<float>(std::string key) {
 
 
 
-void data_type_dict::delete_type(std::string key) {
+void DT_dict::delete_type(std::string key) {
     auto it = data->find(key);
     auto it_type = data_types->find(key);
    
@@ -78,34 +78,34 @@ void data_type_dict::delete_type(std::string key) {
 
 
 
-data_type_dict::data_type_dict() {
+DT_dict::DT_dict() {
     
     data = new std::map<std::string, std::any>(); // Allocate memory
     data_types = new std::map<std::string, std::string>();
 }
 
-data_type_dict::~data_type_dict() {
+DT_dict::~DT_dict() {
     // std::cout << "DELETING A MAP" << ".\n";
     delete data;  // Free memory
     delete data_types;
 }
 
-void data_type_dict::append(char *key, std::any value, std::string data_type) {
+void DT_dict::append(char *key, std::any value, std::string data_type) {
     std::string _key = key;
 
     (*data)[_key] = value;
     (*data_types)[_key] = data_type;
 
-    move_to_char_pool(strlen(key)+1, key, "Append to data_type_dict");
+    move_to_char_pool(strlen(key)+1, key, "Append to DT_dict");
 }
 
 
-size_t data_type_dict::size() const {
+size_t DT_dict::size() const {
     return data->size();
 }
 
 
-void data_type_dict::print() {
+void DT_dict::print() {
     std::cout << "\n";
     // for(int i=0; i<data->size(); i++)
     // {
@@ -115,7 +115,7 @@ void data_type_dict::print() {
     //         std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
     //     if (data_types->at(i)=="tensor")
     //     {
-    //         data_type_tensor *t = get<data_type_tensor *>(i);
+    //         DT_tensor *t = get<DT_tensor *>(i);
     //         std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
     //         PrintDims(t->dims);
     //     }
@@ -125,15 +125,15 @@ void data_type_dict::print() {
 
 
 
-extern "C" data_type_dict *dictionary_Create() {
+extern "C" DT_dict *dictionary_Create() {
     // std::cout << "Creating vector\n";
-    data_type_dict *notes_vector = new data_type_dict();
+    DT_dict *notes_vector = new DT_dict();
     // std::cout << "Notes Vector created.\n";
 
     return notes_vector;
 }
 
-extern "C" float dictionary_Dispose(data_type_dict *notes_vector) {
+extern "C" float dictionary_Dispose(DT_dict *notes_vector) {
 
     // for (int i=0; i<notes_vector->size(); i++)
     // {
@@ -152,7 +152,7 @@ extern "C" float dictionary_Dispose(data_type_dict *notes_vector) {
 }
 
 
-// extern "C" data_type_dict *Add_Float_To_NotesVector(data_type_dict *notes_vector, float value) {
+// extern "C" DT_dict *Add_Float_To_NotesVector(DT_dict *notes_vector, float value) {
 
 //     notes_vector->append(value, "float");
 
@@ -161,7 +161,7 @@ extern "C" float dictionary_Dispose(data_type_dict *notes_vector) {
 
 
 
-// extern "C" data_type_dict *Add_String_To_NotesVector(data_type_dict *notes_vector, char *value) {
+// extern "C" DT_dict *Add_String_To_NotesVector(DT_dict *notes_vector, char *value) {
 
 //     // std::cout << "Add_String " << value << " to notes_vector" << ".\n";
 //     notes_vector->append((void *)value, "str");

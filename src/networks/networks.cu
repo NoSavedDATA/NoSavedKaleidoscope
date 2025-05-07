@@ -19,7 +19,7 @@ extern "C" float network_ema(int thread_id, char *scope, char *_ema_network, cha
   ema_network = NamedObjects[_ema_network];
   network = NamedObjects[_network];
 
-  data_type_tensor *ema_tensor, *net_tensor;
+  DT_tensor *ema_tensor, *net_tensor;
   cudaStream_t stream = ThreadsStream[thread_id];
 
 

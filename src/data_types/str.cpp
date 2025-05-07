@@ -17,7 +17,7 @@ std::map<std::string, std::string> AuxRandomStrs;
 
 
   
-extern "C" char *str_Create(char *name, char *scopeless_name, char *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct) {
+extern "C" char *str_Create(char *name, char *scopeless_name, char *init_val, DT_list *notes_vector, Scope_Struct *scope_struct) {
 
   // std::cout << "Creating string"  << ".\n";
   // std::cout << "Val: " << init_val << ".\n";

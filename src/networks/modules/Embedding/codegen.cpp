@@ -21,7 +21,7 @@
 
 
 
-extern "C" void *EmbeddingForward(char *self, data_type_tensor *tensor_x, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *EmbeddingForward(char *self, DT_tensor *tensor_x, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -61,7 +61,7 @@ extern "C" void *EmbeddingForward(char *self, data_type_tensor *tensor_x, int th
   NamedEmbedding[conv_name] = std::move(embedding);
   
   
-  data_type_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  DT_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor_x, embedding_op);
   new_tensor->scopeless_name = conv_name;
 

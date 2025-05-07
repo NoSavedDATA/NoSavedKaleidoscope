@@ -6,7 +6,7 @@
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
-extern "C" data_type_tensor *tensor_float_mult(data_type_tensor *tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_mult(DT_tensor *tensor, float R, Scope_Struct *scope_struct) {
   //std::cout << "CudaScalarMult by " << R << "\n";
   int thread_id = scope_struct->thread_id;
   
@@ -25,14 +25,14 @@ extern "C" data_type_tensor *tensor_float_mult(data_type_tensor *tensor, float R
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_mult<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
   new_tensor->AttrLNode(tensor, scalar_mult_op);
   new_tensor->scalar = R;
   return new_tensor;
 }
 
 
-extern "C" data_type_tensor *tensor_float_div(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_div(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -52,11 +52,11 @@ extern "C" data_type_tensor *tensor_float_div(data_type_tensor tensor, float R, 
   vec_div<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
   
-  data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
 
-// extern "C" data_type_tensor *CudaReverseScalarDiv(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+// extern "C" DT_tensor *CudaReverseScalarDiv(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
 //   int thread_id = scope_struct->thread_id;
 
 //   int kDataLen = tensor.dims_prod;
@@ -75,11 +75,11 @@ extern "C" data_type_tensor *tensor_float_div(data_type_tensor tensor, float R, 
 //   cudaStream_t stream = ThreadsStream[thread_id];
 //   vec_reverse_div<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-//   data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+//   DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
 //   return new_tensor;
 // }
 
-extern "C" data_type_tensor *tensor_float_add(data_type_tensor *tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_add(DT_tensor *tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
   
   int dims_prod = tensor->dims_prod;
@@ -97,12 +97,12 @@ extern "C" data_type_tensor *tensor_float_add(data_type_tensor *tensor, float R,
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_add<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, dims_prod);
   
-  data_type_tensor *new_tensor = createTensor(device_y, tensor->dims, dims_prod, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor->dims, dims_prod, false, "");
   new_tensor->AttrLNode(tensor, scalar_add_op);
   return new_tensor;
 }
 
-extern "C" data_type_tensor *tensor_float_sub(data_type_tensor *tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_sub(DT_tensor *tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor->dims_prod;
@@ -120,12 +120,12 @@ extern "C" data_type_tensor *tensor_float_sub(data_type_tensor *tensor, float R,
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_sub<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
   new_tensor->AttrLNode(tensor, scalar_sub_op);
   return new_tensor;
 }
 
-extern "C" data_type_tensor *tensor_float_equal(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_equal(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -143,11 +143,11 @@ extern "C" data_type_tensor *tensor_float_equal(data_type_tensor tensor, float R
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_equal<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
 
-extern "C" data_type_tensor *tensor_float_diff(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_diff(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -165,10 +165,10 @@ extern "C" data_type_tensor *tensor_float_diff(data_type_tensor tensor, float R,
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_diff<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" data_type_tensor *tensor_float_minor(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_minor(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -186,10 +186,10 @@ extern "C" data_type_tensor *tensor_float_minor(data_type_tensor tensor, float R
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_minor<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" data_type_tensor *tensor_float_minor_eq(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_minor_eq(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -207,10 +207,10 @@ extern "C" data_type_tensor *tensor_float_minor_eq(data_type_tensor tensor, floa
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_minor_eq<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" data_type_tensor *tensor_float_higher(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_higher(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -228,10 +228,10 @@ extern "C" data_type_tensor *tensor_float_higher(data_type_tensor tensor, float 
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_higher<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" data_type_tensor *tensor_float_higher_eq(data_type_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_higher_eq(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -249,7 +249,7 @@ extern "C" data_type_tensor *tensor_float_higher_eq(data_type_tensor tensor, flo
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_higher_eq<<<grid_size, block_size, 0, stream>>>(R, tensor.tensor_ptr, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
 

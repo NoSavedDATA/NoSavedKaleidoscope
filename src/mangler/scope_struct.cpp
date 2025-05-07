@@ -63,7 +63,7 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 }
 
 void Scope_Struct::Alloc_MarkSweepMap() {
-    mark_sweep_map = new data_type_dict();
+    mark_sweep_map = new DT_dict();
 }
 
 

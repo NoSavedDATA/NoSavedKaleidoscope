@@ -21,7 +21,7 @@ extern "C" void StoreArgOnDemand(char *scope, char *name, float value){
 
 
 
-extern "C" float CopyArgTensor(data_type_tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope, int thread_id)
+extern "C" float CopyArgTensor(DT_tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope, int thread_id)
 {
   std::string tensor_name = tensor->name;
   //std::cout << "\n\n\nCOPY ARG TENSOR OF " << previous_scope << tensor_name << " into " << scope<<new_tensor_name  << " at thread: " << thread_id << "\n";
@@ -75,7 +75,7 @@ extern "C" float CopyArgTensor(data_type_tensor *tensor, char *new_tensor_name, 
   }
   
 
-  data_type_tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
+  DT_tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
   new_tensor->scopeless_name = tensor->scopeless_name;
   new_tensor->from_grad_or_load = tensor->from_grad_or_load;//
   NamedTensorsT[arg_tensor_name] = new_tensor;

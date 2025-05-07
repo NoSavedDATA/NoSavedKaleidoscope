@@ -21,7 +21,7 @@
 
 Conv2dCPP::Conv2dCPP(int C, int OC, int ks, int stride, int padding, std::string Init, std::vector<std::string> Notes, std::string Name)
     : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Notes(Notes), Name(Name) {
-    NamedTensorsT[Name+"W"] = new data_type_tensor();
+    NamedTensorsT[Name+"W"] = new DT_tensor();
     d_filter=nullptr;
     d_workspace=nullptr;
     d_workspace_w_back=nullptr;
@@ -32,7 +32,7 @@ Conv2dCPP::Conv2dCPP(int C, int OC, int ks, int stride, int padding, std::string
 }
 
 
-void Conv2dCPP::SetDescriptors(int H, int W, int B, data_type_tensor *tensor)
+void Conv2dCPP::SetDescriptors(int H, int W, int B, DT_tensor *tensor)
 {
   this->H = H;
   this->W = W;
@@ -252,7 +252,7 @@ void Conv2dCPP::InitFilters()
 
   std::vector<float> kernel_dims = {(float)OC, (float)C, (float)ks, (float)ks}; 
 
-  data_type_tensor *tensor_W = createTensor(d_filter, kernel_dims, DimsProd(kernel_dims), true, Name+"W");
+  DT_tensor *tensor_W = createTensor(d_filter, kernel_dims, DimsProd(kernel_dims), true, Name+"W");
   tensor_W->SetIsWeight();
 
   NamedTensorsT[Name+"W"] = tensor_W;
@@ -275,7 +275,7 @@ void Conv2dCPP::FirstBackward()
 }
 
 
-float *Conv2dCPP::Forward(data_type_tensor *tensor, int H, int W, int B, int thread_id)
+float *Conv2dCPP::Forward(DT_tensor *tensor, int H, int W, int B, int thread_id)
 {
   // Initialize descriptors.
   //std::cout << "\nConv2d Forward with H: " << H << " W: " << W << "\n";

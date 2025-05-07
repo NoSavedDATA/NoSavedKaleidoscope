@@ -18,7 +18,7 @@
 
 
 
-void data_type_tensor::NewNullTensor()
+void DT_tensor::NewNullTensor()
 {
   tensor_ptr = nullptr;
   dims = {0};
@@ -39,7 +39,7 @@ void data_type_tensor::NewNullTensor()
   Sparse_Idx_Tensor=nullptr;
 }
 
-void data_type_tensor::NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
+void DT_tensor::NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
               bool new_is_leaf, std::string new_name, CudaStreams *_cuda_stream, Loader *_loader){
   tensor_ptr = new_tensor_ptr;
   dims = new_dims;
@@ -63,7 +63,7 @@ void data_type_tensor::NewTensor(float *new_tensor_ptr, std::vector<float> new_d
   scalar=1;
   Sparse_Idx_Tensor=nullptr;
 }
-void data_type_tensor::NewTensor(half *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
+void DT_tensor::NewTensor(half *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
               bool new_is_leaf, std::string new_name, CudaStreams *_cuda_stream, Loader *_loader){
   half_ptr = new_tensor_ptr;
   dims = new_dims;
@@ -88,7 +88,7 @@ void data_type_tensor::NewTensor(half *new_tensor_ptr, std::vector<float> new_di
   Sparse_Idx_Tensor=nullptr;
 }
 
-void data_type_tensor::NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
+void DT_tensor::NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
               std::vector<float> new_dims, float new_dims_prod,
               bool new_is_leaf, std::string new_name){
   tensor_ptr = new_tensor_ptr;
@@ -104,7 +104,7 @@ void data_type_tensor::NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_pt
   Sparse_Idx_Tensor=nullptr;
 }
 
-void data_type_tensor::AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream, Loader *_loader){
+void DT_tensor::AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream, Loader *_loader){
   tensor_ptr = new_tensor_ptr;
   dims = new_dims;
   dims_prod = new_dims_prod;
@@ -114,7 +114,7 @@ void data_type_tensor::AttrTensor(float *new_tensor_ptr, std::vector<float> new_
 }
 
 
-void data_type_tensor::AttrNodes(data_type_tensor *new_L_Tensor, data_type_tensor *new_R_Tensor, int op_type)
+void DT_tensor::AttrNodes(DT_tensor *new_L_Tensor, DT_tensor *new_R_Tensor, int op_type)
 {
   L_Node = new_L_Tensor;
   R_Node = new_R_Tensor;
@@ -127,7 +127,7 @@ void data_type_tensor::AttrNodes(data_type_tensor *new_L_Tensor, data_type_tenso
   is_pinned=false;
 }
 
-void data_type_tensor::AttrLNode(data_type_tensor *new_L_Tensor, int op_type)
+void DT_tensor::AttrLNode(DT_tensor *new_L_Tensor, int op_type)
 {
   L_Node = new_L_Tensor;
   R_Node=nullptr;
@@ -140,7 +140,7 @@ void data_type_tensor::AttrLNode(data_type_tensor *new_L_Tensor, int op_type)
   is_pinned=false;
 }
 
-void data_type_tensor::AttributionBackwardNode(std::string _name, data_type_tensor *new_R_Tensor)
+void DT_tensor::AttributionBackwardNode(std::string _name, DT_tensor *new_R_Tensor)
 {
   name = _name;
   R_Node = new_R_Tensor;
@@ -153,20 +153,20 @@ void data_type_tensor::AttributionBackwardNode(std::string _name, data_type_tens
   weight=false;
   is_pinned=false;
 }
-void data_type_tensor::SetIsWeight()
+void DT_tensor::SetIsWeight()
 {
   weight=true;
   from_grad_or_load=true;
   is_pinned=false;
 }
-void data_type_tensor::SetBias(float *b, int b_size)
+void DT_tensor::SetBias(float *b, int b_size)
 {
   this->b=b;
   this->b_size=b_size;
   leaf=true;
   is_pinned=false;
 }
-void data_type_tensor::Sync()
+void DT_tensor::Sync()
 {
   if(loader!=nullptr)
   {
@@ -183,21 +183,21 @@ void data_type_tensor::Sync()
 
 
 
-data_type_tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
                      bool is_leaf, std::string name, CudaStreams *_cuda_stream, Loader *_loader) {
-    data_type_tensor *new_tensor = new data_type_tensor();
+    DT_tensor *new_tensor = new DT_tensor();
     new_tensor->NewTensor(tensor_ptr, dims, kDataLen, is_leaf, name, _cuda_stream, _loader);
     return new_tensor;
 }
-data_type_tensor *createTensorHalf(half* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<float>& dims, float kDataLen,
                      bool is_leaf, std::string name, CudaStreams *_cuda_stream, Loader *_loader) {
-    data_type_tensor *new_tensor = new data_type_tensor();
+    DT_tensor *new_tensor = new DT_tensor();
     new_tensor->NewTensor(tensor_ptr, dims, kDataLen, is_leaf, name, _cuda_stream, _loader);
     return new_tensor;
 }
-data_type_tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
-                     std::string operation, std::string module_name, data_type_tensor *LTensor, CudaStreams *_cuda_stream, Loader *_loader) {
-    data_type_tensor *new_tensor = new data_type_tensor();
+DT_tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+                     std::string operation, std::string module_name, DT_tensor *LTensor, CudaStreams *_cuda_stream, Loader *_loader) {
+    DT_tensor *new_tensor = new DT_tensor();
     new_tensor->NewTensor(tensor_ptr, dims, kDataLen, false, "", _cuda_stream, _loader);
     new_tensor->scopeless_name = module_name;
     new_tensor->operation = operation;
@@ -206,20 +206,20 @@ data_type_tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& di
     return new_tensor;
 }
 
-data_type_tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
                      std::string name) {
-    data_type_tensor *new_tensor = new data_type_tensor();
+    DT_tensor *new_tensor = new DT_tensor();
     new_tensor->NewPinned(tensor_ptr, tensor_cpu, dims, kDataLen, true, name);
     return new_tensor;
 }
-data_type_tensor *createBackward(std::string name, data_type_tensor *tensor) {
-    data_type_tensor *new_tensor = new data_type_tensor();
+DT_tensor *createBackward(std::string name, DT_tensor *tensor) {
+    DT_tensor *new_tensor = new DT_tensor();
     new_tensor->AttributionBackwardNode(name, tensor);
     return new_tensor;
 }
-data_type_tensor *wrapTensorWithDetached(data_type_tensor* tensor) {
+DT_tensor *wrapTensorWithDetached(DT_tensor* tensor) {
     /*
-    data_type_tensor *new_tensor = new data_type_tensor();
+    DT_tensor *new_tensor = new DT_tensor();
 
     new_tensor->NewNullTensor();
     new_tensor->AttrLNode(tensor, detach_op);
@@ -235,6 +235,6 @@ data_type_tensor *wrapTensorWithDetached(data_type_tensor* tensor) {
 }
 
 
-bool in_tensor_ptr_vec(data_type_tensor *value, const std::vector<data_type_tensor *>& list) {
+bool in_tensor_ptr_vec(DT_tensor *value, const std::vector<DT_tensor *>& list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }

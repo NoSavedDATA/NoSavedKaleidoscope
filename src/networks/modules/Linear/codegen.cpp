@@ -43,7 +43,7 @@ void linear_backward(float *x, float size, float *out, float *dx, float *dy, std
 
 
 
-extern "C" void *Linear(Scope_Struct *scope_struct, data_type_tensor *tensor)
+extern "C" void *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   // std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
   int thread_id = scope_struct->thread_id;
@@ -86,7 +86,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, data_type_tensor *tensor)
   NamedLinear[conv_name] = std::move(linear);  
 
 
-  data_type_tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "linear_backward", conv_name, tensor);
+  DT_tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "linear_backward", conv_name, tensor);
   return new_tensor;
 }
 
@@ -94,7 +94,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, data_type_tensor *tensor)
 
 
 
-extern "C" float Linear_Create(char *name, char *scopeless_name, void *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" float Linear_Create(char *name, char *scopeless_name, void *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
 {
 
   // std::cout << "\n\n\n----------------------EXECUTION: CREATING LINEAR: " << name << ".\n\n\n\n";

@@ -39,7 +39,7 @@ void conv2d_backward(float *inp, float size, float *out,
 
 
 
-extern "C" void *Conv2d(Scope_Struct *scope_struct, data_type_tensor *tensor)
+extern "C" void *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -100,7 +100,7 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, data_type_tensor *tensor)
 
 
 
-extern "C" float Conv2d_Create(char *name, char *scopeless_name, void *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" float Conv2d_Create(char *name, char *scopeless_name, void *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
 {
 
   std::cout << "\n\n\n----------------------EXECUTION: CREATING CONV2D: " << name << ".\n\n\n\n";

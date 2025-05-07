@@ -57,8 +57,8 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
         return_type = "str_vec";
     else if (in_return_type=="std::vector<float>*")
         return_type = "float_vec";
-    else if (begins_with(in_return_type, "data_type_")) {
-        return_type = remove_substring(in_return_type, "data_type_");
+    else if (begins_with(in_return_type, "DT_")) {
+        return_type = remove_substring(in_return_type, "DT_");
         if (ends_with(return_type, "*"))
             return_type = remove_substring(return_type, "*");
     }

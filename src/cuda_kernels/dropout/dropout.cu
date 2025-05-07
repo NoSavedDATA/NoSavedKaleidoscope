@@ -7,7 +7,7 @@
 #include "../include.h"
 
 
-extern "C" data_type_tensor *dropout(int thread_id, data_type_tensor *tensor, float rate)
+extern "C" DT_tensor *dropout(int thread_id, DT_tensor *tensor, float rate)
 {
   if (nn_mode==training_mode&&thread_id==0)
   {
@@ -27,10 +27,10 @@ extern "C" data_type_tensor *dropout(int thread_id, data_type_tensor *tensor, fl
 
     dropout_mask_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, dropout_ptr, tensor->tensor_ptr, rate, scale, dims_prod, seed);
     
-    data_type_tensor *dropout_tensor = createTensor(dropout_ptr, tensor->dims, dims_prod, true, "");
+    DT_tensor *dropout_tensor = createTensor(dropout_ptr, tensor->dims, dims_prod, true, "");
     dropout_tensor->scopeless_name="";
 
-    data_type_tensor *new_tensor = createTensor(device_y, tensor->dims, dims_prod, false, "");
+    DT_tensor *new_tensor = createTensor(device_y, tensor->dims, dims_prod, false, "");
     new_tensor->AttrNodes(tensor, dropout_tensor, dropout_op);
     return new_tensor;
   }
