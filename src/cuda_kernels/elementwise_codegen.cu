@@ -8,7 +8,7 @@
 
 
 
-extern "C" data_type_tensor *logE(int thread_id, data_type_tensor tensor) {
+extern "C" DT_tensor *logE(int thread_id, DT_tensor tensor) {
   //std::cout << "logE of: " << tensor.name << "\n";
 
   float * device_x = tensor.tensor_ptr;
@@ -28,11 +28,11 @@ extern "C" data_type_tensor *logE(int thread_id, data_type_tensor tensor) {
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_log<<<grid_size, block_size, 0, stream>>>(device_x, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
   return new_tensor;
 }
 
-extern "C" data_type_tensor *logE2(int thread_id, data_type_tensor tensor) {
+extern "C" DT_tensor *logE2(int thread_id, DT_tensor tensor) {
   std::cout << "logE2 of: " << tensor.name << "\n";
 
   float * device_x = tensor.tensor_ptr;
@@ -52,12 +52,12 @@ extern "C" data_type_tensor *logE2(int thread_id, data_type_tensor tensor) {
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_log2<<<grid_size, block_size, 0, stream>>>(device_x, device_y, kDataLen);
 
-  data_type_tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, dims, kDataLen, false, "");
   return new_tensor;
 }
 
 
-extern "C" data_type_tensor *clip(int thread_id, data_type_tensor tensor, float _min, float _max)
+extern "C" DT_tensor *clip(int thread_id, DT_tensor tensor, float _min, float _max)
 {
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<float> dims = tensor.dims;
@@ -74,7 +74,7 @@ extern "C" data_type_tensor *clip(int thread_id, data_type_tensor tensor, float 
   tensor_clip<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, device_y, _min, _max, B);
 
   
-  data_type_tensor *new_tensor = createTensor(device_y, dims, tensor.dims_prod, false, "");
+  DT_tensor *new_tensor = createTensor(device_y, dims, tensor.dims_prod, false, "");
   new_tensor->op=clip_op; //TODO: what is the grad of clip?
   return new_tensor;
 }

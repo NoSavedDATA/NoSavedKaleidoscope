@@ -129,10 +129,10 @@ bool ShallCodegen = true;
 
 
 // Tensors
-std::map<std::string, data_type_tensor *> NamedTensorsT;
+std::map<std::string, DT_tensor *> NamedTensorsT;
 std::map<std::string, float *> NamedPinnedTensors;
 std::map<std::string, std::vector<float>> NamedDims;
-std::vector<data_type_tensor> TensorsToDelete;
+std::vector<DT_tensor> TensorsToDelete;
 
 
 LCG rng(generate_custom_seed());
@@ -350,7 +350,7 @@ extern "C" float Add(float value, float v2)
 
 
 
-extern "C" float printtt(int thread_id, data_type_tensor tensor)
+extern "C" float printtt(int thread_id, DT_tensor tensor)
 {
   char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
   std::strcpy(tensorName, tensor.name.c_str()); // Copy the string

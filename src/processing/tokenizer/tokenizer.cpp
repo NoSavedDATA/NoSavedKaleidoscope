@@ -70,7 +70,7 @@ extern "C" float build_vocab(char *filename, float _max_tokens)
 }
 
 
-extern "C" float tokenize(data_type_tensor *tensor, char *filename)
+extern "C" float tokenize(DT_tensor *tensor, char *filename)
 {
   pthread_mutex_lock(&vocab_mutex); // Files are not thread safe
   std::ifstream file(filename);
@@ -107,7 +107,7 @@ extern "C" float tokenize(data_type_tensor *tensor, char *filename)
 }
 
 
-extern "C" float wtokenize(data_type_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
 {
   //tensor e [workers, seq_len, batch_size, vocab_size]
 
@@ -191,7 +191,7 @@ extern "C" float wtokenize(data_type_tensor *tensor, char *filename, float trunc
 }
 
 
-extern "C" float wtokenize_pad_left(data_type_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize_pad_left(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
 {
   // x e [W, T, B]
   
@@ -297,7 +297,7 @@ extern "C" float wtokenize_pad_left(data_type_tensor *tensor, char *filename, fl
 
 
 
-extern "C" float wtokenize_pad_left_batch_first(data_type_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize_pad_left_batch_first(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
 {
   // x e [W, B, T, V]
   
@@ -403,7 +403,7 @@ extern "C" float wtokenize_pad_left_batch_first(data_type_tensor *tensor, char *
 }
 
 
-extern "C" float wtokenize_pad_left_idx(data_type_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize_pad_left_idx(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
 {
   // x e [W, B, T]
   

@@ -9,58 +9,58 @@
 #include "codegen_notes.h"
 
 
-std::map<std::string, data_type_list *> NamedVectors;
+std::map<std::string, DT_list *> NamedVectors;
 
 
 
 
-// template float data_type_list::get<float>(size_t);
-template char *data_type_list::get<char *>(size_t);
-template data_type_tensor *data_type_list::get<data_type_tensor *>(size_t);
+// template float DT_list::get<float>(size_t);
+template char *DT_list::get<char *>(size_t);
+template DT_tensor *DT_list::get<DT_tensor *>(size_t);
 
 
 template <typename T>
-T data_type_list::get(size_t index) {
+T DT_list::get(size_t index) {
     if (index >= data->size()) {
         // throw std::out_of_range("Index out of range");
         std::cout << "Index out of range.";
     }
-    // std::cout << "Get idx " << index << " from data_type_list" << ".\n";
+    // std::cout << "Get idx " << index << " from DT_list" << ".\n";
     return static_cast<T>(std::any_cast<void *>((*data)[index]));
 }
 
 template <>
-float data_type_list::get<float>(size_t index) {
+float DT_list::get<float>(size_t index) {
     if (index >= data->size()) {
         // throw std::out_of_range("Index out of range");
         std::cout << "Index out of range.";
     }
-    // std::cout << "Get float at idx " << index << " from data_type_list" << ".\n";
+    // std::cout << "Get float at idx " << index << " from DT_list" << ".\n";
     return std::any_cast<float>((*data)[index]);
 }
 
-data_type_list::data_type_list() {
+DT_list::DT_list() {
     data = new std::vector<std::any>(); // Allocate memory
     data_types = new std::vector<std::string>();
 }
 
-data_type_list::~data_type_list() {
+DT_list::~DT_list() {
     delete data;  // Free memory
     delete data_types;
 }
 
-void data_type_list::append(std::any value, std::string data_type) {
+void DT_list::append(std::any value, std::string data_type) {
     data->push_back(value);
     data_types->push_back(data_type);
 }
 
 
-size_t data_type_list::size() const {
+size_t DT_list::size() const {
     return data->size();
 }
 
 
-void data_type_list::print() {
+void DT_list::print() {
     std::cout << "\n";
     for(int i=0; i<data->size(); i++)
     {
@@ -70,7 +70,7 @@ void data_type_list::print() {
             std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
         if (data_types->at(i)=="tensor")
         {
-            data_type_tensor *t = get<data_type_tensor *>(i);
+            DT_tensor *t = get<DT_tensor *>(i);
             std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
             PrintDims(t->dims);
         }
@@ -80,15 +80,15 @@ void data_type_list::print() {
 
 
 
-extern "C" data_type_list *CreateNotesVector() {
+extern "C" DT_list *CreateNotesVector() {
     // std::cout << "Creating vector\n";
-    data_type_list *notes_vector = new data_type_list();
+    DT_list *notes_vector = new DT_list();
     // std::cout << "Notes Vector created.\n";
 
     return notes_vector;
 }
 
-extern "C" float Dispose_NotesVector(data_type_list *notes_vector, char *scopeless_name) {
+extern "C" float Dispose_NotesVector(DT_list *notes_vector, char *scopeless_name) {
 
     for (int i=0; i<notes_vector->size(); i++)
     {
@@ -108,7 +108,7 @@ extern "C" float Dispose_NotesVector(data_type_list *notes_vector, char *scopele
 }
 
 
-extern "C" data_type_list *Add_Float_To_NotesVector(data_type_list *notes_vector, float value) {
+extern "C" DT_list *Add_Float_To_NotesVector(DT_list *notes_vector, float value) {
 
     notes_vector->append(value, "float");
 
@@ -117,7 +117,7 @@ extern "C" data_type_list *Add_Float_To_NotesVector(data_type_list *notes_vector
 
 
 
-extern "C" data_type_list *Add_String_To_NotesVector(data_type_list *notes_vector, char *value) {
+extern "C" DT_list *Add_String_To_NotesVector(DT_list *notes_vector, char *value) {
 
     // std::cout << "Add_String " << value << " to notes_vector" << ".\n";
     notes_vector->append((void *)value, "str");

@@ -11,7 +11,7 @@
 
 
 
-extern "C" float load_bin(data_type_tensor *tensor, char *bin_name)
+extern "C" float load_bin(DT_tensor *tensor, char *bin_name)
 {
 
   //std::ifstream file(bin_name, std::ios::binary);
@@ -62,7 +62,7 @@ extern "C" float load_bin(data_type_tensor *tensor, char *bin_name)
 
 
 
-extern "C" float load_bin_idx(data_type_tensor *tensor, char *bin_name, float first_idx, ...)
+extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, float first_idx, ...)
 {
   std::vector<float> idxs;
 
@@ -155,7 +155,7 @@ extern "C" float load_bin_idx(data_type_tensor *tensor, char *bin_name, float fi
 
 
 
-extern "C" float wload_bin(data_type_tensor *tensor, char *bin_name, float worker_idx, float batch_idx)
+extern "C" float wload_bin(DT_tensor *tensor, char *bin_name, float worker_idx, float batch_idx)
 {
   //std::cout << "LOADING BINARY FOR: " << tensor->name <<  "\n";
   //std::cout << "Binary: " << bin_name <<  "\n";

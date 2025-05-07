@@ -22,7 +22,7 @@ MaxPool2dCPP::MaxPool2dCPP(int ks, int stride, int padding, std::string Type)
 
 
 
-void MaxPool2dCPP::SetDescriptors(int H, int W, int B, int C, data_type_tensor *tensor)
+void MaxPool2dCPP::SetDescriptors(int H, int W, int B, int C, DT_tensor *tensor)
 {
   this->H = H;
   this->W = W;
@@ -83,7 +83,7 @@ void MaxPool2dCPP::SetDescriptors(int H, int W, int B, int C, data_type_tensor *
 
 
 
-float *MaxPool2dCPP::Forward(data_type_tensor *tensor, int H, int W, int B, int C, int thread_id)
+float *MaxPool2dCPP::Forward(DT_tensor *tensor, int H, int W, int B, int C, int thread_id)
 {
   // Initialize descriptors.
   //std::cout << "\nPool2d Forward with H: " << H << " W: " << W << "\n";

@@ -187,7 +187,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
   
   std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
 
-  data_type_tensor *tensor = NamedTensorsT[tensor_name];
+  DT_tensor *tensor = NamedTensorsT[tensor_name];
 
 
   // PrintDims(tensor->dims);
@@ -277,7 +277,7 @@ void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size
 }
 
 
-extern "C" float tensor_shape(Scope_Struct *scope_struct, data_type_tensor *tensor)
+extern "C" float tensor_shape(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   std::cout << "\nTensor \033[95m" << tensor->name<<"/"<<tensor->scopeless_name << "\033[0m:\n   ";
   PrintDims(tensor->dims);

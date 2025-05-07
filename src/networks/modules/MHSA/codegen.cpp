@@ -31,7 +31,7 @@ void mhsa_backward(float *x, float *dx, float *dy, std::string name)
 }
 
 
-extern "C" void *MHSAForward(char *self, data_type_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *MHSAForward(char *self, DT_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -87,7 +87,7 @@ extern "C" void *MHSAForward(char *self, data_type_tensor *tensor, int thread_id
   //PrintDims(new_dims);
   
 
-  data_type_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
+  DT_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
   new_tensor->AttrLNode(tensor, mhsa_op);
   new_tensor->scopeless_name = conv_name;
   return new_tensor;

@@ -24,7 +24,7 @@ Relu::Relu(std::string Name)
     : Name(Name) {}
 
 
-void Relu::SetDescriptors(int C, int H, int W, int B, data_type_tensor *tensor)
+void Relu::SetDescriptors(int C, int H, int W, int B, DT_tensor *tensor)
 {
   this->C = C;
   this->H = H;
@@ -64,7 +64,7 @@ void Relu::SetDescriptors(int C, int H, int W, int B, data_type_tensor *tensor)
 }
 
 
-float *Relu::Forward(data_type_tensor *tensor, int H, int W, int B, int C)
+float *Relu::Forward(DT_tensor *tensor, int H, int W, int B, int C)
 {
 
   if (H != this->H || W != this->W || B != this->B)

@@ -11,7 +11,7 @@ std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
 
 
-extern "C" std::vector<float> *float_vec_Create(char *name, char *scopeless_name, void *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" std::vector<float> *float_vec_Create(char *name, char *scopeless_name, void *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
 {
   // std::cout << "float_vec_Create" << ".\n";
 

@@ -12,7 +12,7 @@
 
 
 
-extern "C" float save_img(Scope_Struct *scope_struct,int thread_id, data_type_tensor *tensor, char *img_name)
+extern "C" float save_img(Scope_Struct *scope_struct,int thread_id, DT_tensor *tensor, char *img_name)
 {
   
   int c, h, w;

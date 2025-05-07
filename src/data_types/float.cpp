@@ -28,7 +28,7 @@ extern "C" float print_float(float value){
 }
 
 
-extern "C" float float_Create(char *name, char *scopeless_name, float init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" float float_Create(char *name, char *scopeless_name, float init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
 {
   pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = init_val;

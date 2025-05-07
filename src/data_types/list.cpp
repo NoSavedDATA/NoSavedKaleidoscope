@@ -19,13 +19,13 @@
 
 
 
-extern "C" data_type_list *list_New(Scope_Struct *scope_struct, char *type, ...)
+extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
 {
   // std::cout << "list_New. First type: " << type << ".\n";
   va_list args;
   va_start(args, type);
 
-  data_type_list *notes_vector = new data_type_list();  
+  DT_list *notes_vector = new DT_list();  
 
   bool is_type = false;
   for (int i=0; i<10; i++)
@@ -63,7 +63,7 @@ extern "C" data_type_list *list_New(Scope_Struct *scope_struct, char *type, ...)
 
 
 
-extern "C" float list_Store(char *name, data_type_list *vector, Scope_Struct *scope_struct)
+extern "C" float list_Store(char *name, DT_list *vector, Scope_Struct *scope_struct)
 {
   // std::cout << "list_Store of " << name << ".\n";
 
@@ -73,35 +73,35 @@ extern "C" float list_Store(char *name, data_type_list *vector, Scope_Struct *sc
 }
 
 
-extern "C" data_type_list *list_Load(char *name, Scope_Struct *scope_struct){
+extern "C" DT_list *list_Load(char *name, Scope_Struct *scope_struct){
   std::cout << "list_Load"  << ".\n";
-  data_type_list *ret = NamedVectors[name];
+  DT_list *ret = NamedVectors[name];
   //delete[] tensor_name;
   return ret;
 }
 
 
 
-extern "C" float list_print(Scope_Struct *scope_struct, data_type_list *list) {
+extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
   // std::cout << "\n";
   list->print();
   return 0;
 }
 
 
-extern "C" float list_checkmate(Scope_Struct *scope_struct, data_type_list *list) {
+extern "C" float list_checkmate(Scope_Struct *scope_struct, DT_list *list) {
   std::cout << "REACHED CHECKMATE" << ".\n";
   return 0;
 }
 
 
-extern "C" float list_test(Scope_Struct *scope_struct, data_type_list *list) {
+extern "C" float list_test(Scope_Struct *scope_struct, DT_list *list) {
   std::cout << "REACHED list TEST" << ".\n";
   return 0;
 }
 
 
-extern "C" data_type_list *list_Create(char *name, char *scopeless_name, data_type_list *init_val, data_type_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" DT_list *list_Create(char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
 {
   std::cout << "list_Create"  << ".\n";
 
@@ -135,7 +135,7 @@ extern "C" data_type_list *list_Create(char *name, char *scopeless_name, data_ty
   return init_val;
 }
 
-extern "C" void list_MarkToSweep(Scope_Struct *scope_struct, char *name, data_type_list *value) {
+extern "C" void list_MarkToSweep(Scope_Struct *scope_struct, char *name, DT_list *value) {
   scope_struct->mark_sweep_map->append(name, static_cast<void *>(value), "list");
 }
 
@@ -157,7 +157,7 @@ extern "C" void *list_Idx(Scope_Struct *scope_struct, char *name, float _idx)
 
 
   
-  data_type_list *vec = NamedVectors[name];
+  DT_list *vec = NamedVectors[name];
   move_to_char_pool(strlen(name)+1, name, "free");
 
   
@@ -175,11 +175,11 @@ extern "C" void *list_Idx(Scope_Struct *scope_struct, char *name, float _idx)
 
 
 
-extern "C" void *assign_wise_list_Idx(data_type_list *vec, int idx)
+extern "C" void *assign_wise_list_Idx(DT_list *vec, int idx)
 {
  
   std::string type = vec->data_types->at(idx);
-  // std::cout << "data_type_list_Idx on index " << idx << " for data type " << type << ".\n";
+  // std::cout << "DT_list_Idx on index " << idx << " for data type " << type << ".\n";
 
   if (type=="float")
   {

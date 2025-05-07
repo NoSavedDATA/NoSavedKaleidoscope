@@ -48,9 +48,9 @@ LSTM::LSTM(int C, int OC, std::string Init, std::string Name)
     cudaMemcpy(U, u_cpu, 4*OC* C*sizeof(float), cudaMemcpyHostToDevice); // x weight
     cudaMemcpy(b, b_cpu, 4*OC*   sizeof(float), cudaMemcpyHostToDevice); // bias
 
-    data_type_tensor *tensor_W = createTensor(W, {4*(float)OC, (float)OC}, 4*OC*OC, true, Name+"W");
-    data_type_tensor *tensor_U = createTensor(U, {4*(float)OC, (float)C},  4*OC* C, true, Name+"U");
-    data_type_tensor *tensor_B = createTensor(b, {4*(float)OC},            4*OC   , true, Name+"b");
+    DT_tensor *tensor_W = createTensor(W, {4*(float)OC, (float)OC}, 4*OC*OC, true, Name+"W");
+    DT_tensor *tensor_U = createTensor(U, {4*(float)OC, (float)C},  4*OC* C, true, Name+"U");
+    DT_tensor *tensor_B = createTensor(b, {4*(float)OC},            4*OC   , true, Name+"b");
     tensor_W->SetIsWeight();
     tensor_U->SetIsWeight();
 
@@ -101,7 +101,7 @@ void LSTM::SetDescriptors(int B, int T, int thread_id)
 }
 
 
-float *LSTM::Forward(data_type_tensor *tensor_x, data_type_tensor *tensor_ht, data_type_tensor *tensor_ct, int B, int T, int thread_id)
+float *LSTM::Forward(DT_tensor *tensor_x, DT_tensor *tensor_ht, DT_tensor *tensor_ct, int B, int T, int thread_id)
 {
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
