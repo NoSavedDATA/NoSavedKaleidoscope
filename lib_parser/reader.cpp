@@ -72,8 +72,8 @@ char get_file_char() {
     if(!has_started)
     {
         // std::cout << "Reading first file" << ".\n";
-        std::string folder = "src/data_types";
-        // std::string folder = "src";
+        // std::string folder = "src/data_types";
+        std::string folder = "src";
         get_cpp_files(folder);
         if(files.size()==0)
             return tok_finish;

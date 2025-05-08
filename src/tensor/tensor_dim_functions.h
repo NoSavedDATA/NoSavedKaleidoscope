@@ -29,16 +29,9 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims);
 std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims);
 
 
-extern "C" void *NewDimsOnIdx(std::vector<float> dims);
 
-extern "C" float StoreDimsOnDemand(char *tensor_name, float d);
-
-
-extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) ;
-
-void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size);
+void broadcast_lastdim_add_backward2(float *dx, float *dy, int x_size, int y_size);
 
 
-extern "C" float shape(Scope_Struct *, DT_tensor *);
 
 

@@ -1,0 +1,15 @@
+1821-05-06 21:10:37
+
+	FunctionType *LockMutexTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("LockMutex", LockMutexTy);
+
+	FunctionType *UnlockMutexTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("UnlockMutex", UnlockMutexTy);

@@ -1,0 +1,8 @@
+1821-05-06 21:10:37
+
+	FunctionType *clean_forwardTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("clean_forward", clean_forwardTy);

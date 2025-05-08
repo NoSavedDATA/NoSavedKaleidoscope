@@ -10,13 +10,15 @@
 
 
 
-void mean_over_semilast_dim_backward(float *dx, float *dy, DT_tensor *node);
+
+void mean_over_semilast_dim_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node);
 
 
-
-
-
-void gather_last_dim_backward(float *dx, float *dy, DT_tensor *node);
+void gather_last_dim_backward(float *inp, float dims_prod, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node);
 
 
 inline void transpose(DT_tensor *tensor, int thread_id, cudaStream_t stream); 

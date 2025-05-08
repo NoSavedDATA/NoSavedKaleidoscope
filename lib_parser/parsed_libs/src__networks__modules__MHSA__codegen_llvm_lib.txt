@@ -1,0 +1,15 @@
+1821-05-07 21:02:44
+
+	FunctionType *MHSAForwardTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("MHSAForward", MHSAForwardTy);
+
+	FunctionType *CreateMHSAOnDemandTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("CreateMHSAOnDemand", CreateMHSAOnDemandTy);

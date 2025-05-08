@@ -1,0 +1,1 @@
+{"relu", "tensor"}, {"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"softmax", "tensor"}, 

@@ -1,0 +1,8 @@
+1821-05-06 21:10:37
+
+	FunctionType *_exitTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("_exit", _exitTy);

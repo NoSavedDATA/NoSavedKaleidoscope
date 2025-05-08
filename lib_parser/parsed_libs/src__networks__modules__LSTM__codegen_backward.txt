@@ -1,0 +1,1 @@
+	backward_functions["lstm_backward"] = lstm_backward;

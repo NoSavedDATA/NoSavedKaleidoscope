@@ -1,0 +1,8 @@
+1821-05-06 21:10:37
+
+	FunctionType *print_codegenTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_codegen", print_codegenTy);

@@ -1,0 +1,78 @@
+1821-05-06 21:10:37
+
+	FunctionType *RandomStrOnDemandTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("RandomStrOnDemand", RandomStrOnDemandTy);
+
+	FunctionType *GetEmptyCharTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("GetEmptyChar", GetEmptyCharTy);
+
+	FunctionType *FreeCharFromFuncTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("FreeCharFromFunc", FreeCharFromFuncTy);
+
+	FunctionType *FreeCharTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("FreeChar", FreeCharTy);
+
+	FunctionType *CopyStringTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("CopyString", CopyStringTy);
+
+	FunctionType *ConcatStrTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
+
+	FunctionType *ConcatStrFreeLeftTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("ConcatStrFreeLeft", ConcatStrFreeLeftTy);
+
+	FunctionType *ConcatStrFreeRightTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("ConcatStrFreeRight", ConcatStrFreeRightTy);
+
+	FunctionType *ConcatStrFreeTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("ConcatStrFree", ConcatStrFreeTy);
+
+	FunctionType *ConcatFloatToStrTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("ConcatFloatToStr", ConcatFloatToStrTy);
+
+	FunctionType *ConcatNumToStrFreeTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("ConcatNumToStrFree", ConcatNumToStrFreeTy);

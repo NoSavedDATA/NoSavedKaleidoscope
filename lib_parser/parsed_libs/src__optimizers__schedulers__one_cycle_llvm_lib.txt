@@ -1,0 +1,8 @@
+1821-05-06 21:10:37
+
+	FunctionType *OneCycleLRTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("OneCycleLR", OneCycleLRTy);

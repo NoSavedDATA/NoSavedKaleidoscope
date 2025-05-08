@@ -1,0 +1,43 @@
+1821-05-07 21:09:23
+
+	FunctionType *tensor_tensor_mmaTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_tensor_mma", tensor_tensor_mmaTy);
+
+	FunctionType *tensor_tensor_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_tensor_add", tensor_tensor_addTy);
+
+	FunctionType *tensor_tensor_subTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_tensor_sub", tensor_tensor_subTy);
+
+	FunctionType *tensor_tensor_equalTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_tensor_equal", tensor_tensor_equalTy);
+
+	FunctionType *tensor_tensor_multTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_tensor_mult", tensor_tensor_multTy);
+
+	FunctionType *tensor_tensor_divTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_tensor_div", tensor_tensor_divTy);

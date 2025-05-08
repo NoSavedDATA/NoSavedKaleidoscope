@@ -1,0 +1,8 @@
+1821-05-07 21:33:46
+
+	FunctionType *backpropTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("backprop", backpropTy);

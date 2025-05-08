@@ -261,7 +261,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 }
 
 
-void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size)
+void broadcast_lastdim_add_backward2(float *dx, float *dy, int x_size, int y_size)
 {
 
   int leading_dim = y_size/x_size;

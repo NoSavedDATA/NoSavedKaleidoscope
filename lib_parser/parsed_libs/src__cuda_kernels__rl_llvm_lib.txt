@@ -1,0 +1,8 @@
+1821-05-06 21:09:49
+
+	FunctionType *rl_discounted_returnTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("rl_discounted_return", rl_discounted_returnTy);

@@ -1,0 +1,15 @@
+1821-05-07 20:53:55
+
+	FunctionType *Conv2dTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Conv2d", Conv2dTy);
+
+	FunctionType *Conv2d_CreateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Conv2d_Create", Conv2d_CreateTy);

@@ -1,0 +1,4 @@
+	backward_functions["relu_backward"] = relu_backward;
+	backward_functions["gelu_backward"] = gelu_backward;
+	backward_functions["sigmoid_backward"] = sigmoid_backward;
+	backward_functions["tanh_backward"] = tanh_backward;

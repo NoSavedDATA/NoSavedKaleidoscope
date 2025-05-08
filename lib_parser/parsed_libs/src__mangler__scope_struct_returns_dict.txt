@@ -1,0 +1,1 @@
+{"scope_struct_Create", ""}, {"scope_struct_Copy", ""}, {"scope_struct_Overwrite", ""}, {"scope_struct_Dive", ""}, {"get_scope_first_arg", "str"}, {"get_scope_scope", "str"}, {"get_scope_previous_scope", "str"}, {"get_scope_thread_id", ""}, {"get_scope_has_grad", ""}, {"scope_struct_Load_for_Async", ""}, 

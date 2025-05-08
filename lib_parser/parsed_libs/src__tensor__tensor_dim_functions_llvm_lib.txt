@@ -1,0 +1,36 @@
+1821-05-07 21:27:13
+
+	FunctionType *PrintDimsTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintDims", PrintDimsTy);
+
+	FunctionType *NewDimsOnIdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("NewDimsOnIdx", NewDimsOnIdxTy);
+
+	FunctionType *StoreDimsOnDemandTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("StoreDimsOnDemand", StoreDimsOnDemandTy);
+
+	FunctionType *CalculateIdxOffsetTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("CalculateIdxOffset", CalculateIdxOffsetTy);
+
+	FunctionType *tensor_shapeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_shape", tensor_shapeTy);

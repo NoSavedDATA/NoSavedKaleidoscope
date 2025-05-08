@@ -1,0 +1,43 @@
+1821-05-06 21:10:37
+
+	FunctionType *minTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("min", minTy);
+
+	FunctionType *maxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("max", maxTy);
+
+	FunctionType *logE2fTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("logE2f", logE2fTy);
+
+	FunctionType *roundETy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("roundE", roundETy);
+
+	FunctionType *floorETy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("floorE", floorETy);
+
+	FunctionType *logical_notTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("logical_not", logical_notTy);
