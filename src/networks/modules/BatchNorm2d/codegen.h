@@ -11,4 +11,5 @@
 
 
 void batchnorm2d_backward(float *inp, float size, float *out,
-  float *dinp, float *dout, std::string bn_name);
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node);

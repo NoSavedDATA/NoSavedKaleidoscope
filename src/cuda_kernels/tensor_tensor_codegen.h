@@ -8,7 +8,7 @@
 
 
 
-void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod);
+void hadamard_backward2(float *x, float *w, float *dx, float *dw, float *dy, float dims_prod);
 
 
 

@@ -25,7 +25,6 @@
 #include "template_kernels.h"
 
 
-
 MHSA::MHSA(int nh, int C, int maxT, std::string Init, int_vec *Notators, std::string Name)
     : nh(nh), C(C), maxT(maxT), Init(Init), Notators(Notators), Name(Name) {
     B = 0;

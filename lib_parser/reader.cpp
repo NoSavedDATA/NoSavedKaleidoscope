@@ -53,7 +53,7 @@ void get_cpp_files(const fs::path& rootDir) {
     }
 
     // aux.push_back(files[0]);
-    // files = aux;
+    files = aux;
 
     
 
@@ -73,6 +73,7 @@ char get_file_char() {
     {
         // std::cout << "Reading first file" << ".\n";
         std::string folder = "src/data_types";
+        // std::string folder = "src";
         get_cpp_files(folder);
         if(files.size()==0)
             return tok_finish;

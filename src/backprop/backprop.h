@@ -8,13 +8,13 @@
 #include "../mangler/scope_struct.h"
 #include "../tensor/tensor_struct.h"
 
-extern std::vector<data_type_tensor *> todo_backward_tensors;
+extern std::vector<DT_tensor *> todo_backward_tensors;
 extern std::map<std::string, float *> NamedParamGrads;
 
-extern std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string)>> backward_functions;
+extern std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string, DT_tensor *)>> backward_functions;
 
 
-void TraversePreOrder(data_type_tensor *back_node, float *device_dy, bool from_custom, int parent_op);
+void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, int parent_op);
 
 
 

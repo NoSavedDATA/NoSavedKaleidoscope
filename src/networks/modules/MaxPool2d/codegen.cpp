@@ -72,14 +72,14 @@ extern "C" void *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 void pool2d_backward(float *inp, float size, float *out,
                      float *dinp, float *dout,
-                     std::string pool_name)
+                     std::string module_name, DT_tensor *node)
 {
   //std::cout << "maxpool2d_backward of " << pool_name << "\n";
-  std::unique_ptr<MaxPool2dCPP> conv = std::move(NamedMaxPool2d[pool_name]);
+  std::unique_ptr<MaxPool2dCPP> conv = std::move(NamedMaxPool2d[module_name]);
 
   conv->Backward(inp, out, dinp, dout);
 
-  NamedMaxPool2d[pool_name] = std::move(conv);
+  NamedMaxPool2d[module_name] = std::move(conv);
 
   
 }

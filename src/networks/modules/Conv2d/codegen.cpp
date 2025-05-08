@@ -26,11 +26,11 @@
 
 void conv2d_backward(float *inp, float size, float *out,
                      float *dinp, float *dout,
-                     std::string conv_name)
+                     std::string module_name, DT_tensor *node)
 {
-  std::unique_ptr<Conv2dCPP> conv = std::move(NamedConv2d[conv_name]);
+  std::unique_ptr<Conv2dCPP> conv = std::move(NamedConv2d[module_name]);
   conv->Backward(inp, dinp, dout);
-  NamedConv2d[conv_name] = std::move(conv);  
+  NamedConv2d[module_name] = std::move(conv);  
 }
 
 

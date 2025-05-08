@@ -23,3 +23,5 @@ void Write_Txt(std::string fname, std::string content);
 void Write_Append(std::string fname, std::string content);
 
 void Parse_Libs();
+
+extern std::string file_name;

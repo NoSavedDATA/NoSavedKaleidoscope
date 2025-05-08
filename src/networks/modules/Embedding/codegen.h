@@ -11,12 +11,6 @@
 
 
 
-extern "C" void *EmbeddingForward(char *self, data_type_tensor *tensor_x, int thread_id, char *conv_namec, int is_obj_attr_or_self);
-
-
-
-extern "C" float CreateEmbeddingOnDemand(char *tensor_name, char *init,
-  float C, float OC);
-
-
-void embedding_backward(float *x, float *dy, std::string name);
+void embedding_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node);

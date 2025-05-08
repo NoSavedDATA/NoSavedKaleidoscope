@@ -13,7 +13,7 @@ struct Scope_Struct {
     char *previous_scope = nullptr;
     char *function_name = nullptr;
 
-    data_type_dict *mark_sweep_map = nullptr;
+    DT_dict *mark_sweep_map = nullptr;
     
     int thread_id=0;
     int has_grad=1;

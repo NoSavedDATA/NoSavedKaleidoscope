@@ -1135,7 +1135,7 @@ __global__ void wmma_mult_kernel_(const float *x, const float *w,
 
 
 
-void matmul_backward(data_type_tensor *, data_type_tensor *,
+void matmul_backward2(DT_tensor *, DT_tensor *,
                     float *dinp, float *dw,
                     float *dout);
 

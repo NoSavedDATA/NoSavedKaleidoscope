@@ -70,16 +70,16 @@ extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 //   float *dinp, float *dw, float *db,
   // float *dout, std::string bn_name)
 void batchnorm2d_backward(float *inp, float size, float *out,
-  float *dinp, float *dout,
-  std::string bn_name)
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node)
 {
 
   // std::cout << "batchnorm2d_backward for " << bn_name << "\n";
-  std::unique_ptr<BatchNorm2dCPP> bn = std::move(NamedBatchNorm2d[bn_name]);
+  std::unique_ptr<BatchNorm2dCPP> bn = std::move(NamedBatchNorm2d[module_name]);
 
   bn->Backward(inp, dinp, dout);
 
-  NamedBatchNorm2d[bn_name] = std::move(bn);
+  NamedBatchNorm2d[module_name] = std::move(bn);
 }
 
 

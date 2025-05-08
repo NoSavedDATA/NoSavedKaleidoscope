@@ -11,7 +11,7 @@
 std::vector<DT_tensor *> todo_backward_tensors;
 std::map<std::string, float *> NamedParamGrads;
 
-std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string)>> backward_functions;
+std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string, DT_tensor *)>> backward_functions;
 
 
 
@@ -192,19 +192,19 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
         scalarmult_backward(d_lhs, device_dy, back_node->scalar, lhs_size); //todo: This one may be wrong
         break;
       case mult_op:
-        matmul_backward(back_node->L_Node, back_node->R_Node, d_lhs, d_rhs, device_dy);
+        matmul_backward2(back_node->L_Node, back_node->R_Node, d_lhs, d_rhs, device_dy);
         break;
       case add_op:
         d_lhs = device_dy;
         d_rhs = device_dy;
         break;
       case hadamard_op:
-        hadamard_backward(lhs, rhs, d_lhs, d_rhs, device_dy, lhs_size);
+        hadamard_backward2(lhs, rhs, d_lhs, d_rhs, device_dy, lhs_size);
         break;
-      case dropout_op:
-        dropout_backward(d_lhs, rhs, device_dy, lhs_size);
-        d_rhs = device_dy;
-        break;
+      // case dropout_op:
+      //   dropout_backward(d_lhs, rhs, device_dy, lhs_size);
+      //   d_rhs = device_dy;
+      //   break;
       case gather_last_dim_op:
         gather_last_dim_backward(d_lhs, device_dy, back_node);
         d_rhs = device_dy;
@@ -217,16 +217,6 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
         mean_over_semilast_dim_backward(d_lhs, device_dy, back_node);
         break;
       
-      // Custom Ops
-      case lstm_op:
-        lstm_backward(lhs, d_lhs, device_dy, back_node->scopeless_name);
-        break;
-      case embedding_op:
-        embedding_backward(lhs, device_dy, back_node->scopeless_name);
-        break;
-      case mhsa_op:
-        mhsa_backward(lhs, d_lhs, device_dy, back_node->scopeless_name);
-        break;
 
       // Loss Ops
       case cross_entropy_op:
@@ -243,7 +233,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
         break;
 
       case custom_op:
-        backward_functions[back_node->operation](lhs, lhs_size, out, d_lhs, device_dy, back_node->scopeless_name);
+        backward_functions[back_node->operation](lhs, lhs_size, out, d_lhs, device_dy, back_node->scopeless_name, back_node);
         break;
 
       default:

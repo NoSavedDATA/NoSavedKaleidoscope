@@ -130,11 +130,11 @@ std::string Mangle_Lib_File_Name(std::string fname) {
     // Replace ".cpp" with ".txt"
     size_t pos = path.rfind(".cpp");
     if (pos != std::string::npos) {
-        path.replace(pos, 4, ".txt");
+        path.replace(pos, 4, "_llvm_lib.txt");
     }
     pos = path.rfind(".cu");
     if (pos != std::string::npos) {
-        path.replace(pos, 3, ".txt");
+        path.replace(pos, 3, "_llvm_lib.txt");
     }
     
     path = "lib_parser/parsed_libs/" + path;

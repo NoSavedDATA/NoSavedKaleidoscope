@@ -37,7 +37,9 @@ extern "C" DT_tensor *relu(Scope_Struct *scope_struct, DT_tensor *tensor)
 }
 
 
-void relu_backward(float* inp, float dims_prod, float *y, float* dinp, float* dout, std::string module_name) {
+void relu_backward(float *inp, float dims_prod, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node) {
   int grid_size, block_size;
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   relu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(inp, dinp, dout, dims_prod);
@@ -45,7 +47,9 @@ void relu_backward(float* inp, float dims_prod, float *y, float* dinp, float* do
 
 
 // void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* dout) {
-void gelu_backward(float* inp, float dims_prod, float *y, float* dinp, float* dout, std::string module_name) {  
+void gelu_backward(float *inp, float dims_prod, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node) {  
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   gelu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, inp, dout, dims_prod);  
@@ -79,7 +83,9 @@ extern "C" DT_tensor *gelu(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-void sigmoid_backward(float* inp, float dims_prod, float *out, float* dinp, float* dout, std::string module_name) {  
+void sigmoid_backward(float *inp, float dims_prod, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node) {  
   
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
@@ -116,7 +122,9 @@ extern "C" DT_tensor *sigmoid(Scope_Struct *scope_struct, DT_tensor *tensor)
 }
 
 
-void tanh_backward(float* inp, float dims_prod, float *out, float* dinp, float* dout, std::string module_name) {  
+void tanh_backward(float *inp, float dims_prod, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node) {  
   
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);

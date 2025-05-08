@@ -35,9 +35,9 @@ class BatchNorm2dCPP
     BatchNorm2dCPP(int C, std::string Name);
 
   
-  void SetDescriptors(int, int, int, data_type_tensor *);
+  void SetDescriptors(int, int, int, DT_tensor *);
   void InitMovingAverages();
-  float *Forward(data_type_tensor *, int, int, int, int, int);
+  float *Forward(DT_tensor *, int, int, int, int, int);
   void Backward(float *, float *, float *);
   void FirstBackward();
 

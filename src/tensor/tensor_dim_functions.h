@@ -39,6 +39,6 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) ;
 void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size);
 
 
-extern "C" float shape(Scope_Struct *, data_type_tensor *);
+extern "C" float shape(Scope_Struct *, DT_tensor *);
 
 

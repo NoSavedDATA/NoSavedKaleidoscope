@@ -142,7 +142,10 @@ std::unique_ptr<Expr> Parse_Extern_Function() {
 
 
     if (CurTok!=tok_C)
-        return nullptr;
+    {
+        auto expr = std::make_unique<PlaceholderExpr>();
+        return expr;
+    }
     
 
     
@@ -256,6 +259,7 @@ std::vector<std::unique_ptr<Expr>> Parse_Primary(std::vector<std::unique_ptr<Exp
         }
         case tok_non_idented_identifier:
         {
+            file_name = current_file_name;
             std::unique_ptr<Expr> cpp_fn = Parse_CPP_Function();
             functions.push_back(std::move(cpp_fn));
             return std::move(functions);
@@ -280,19 +284,22 @@ std::vector<std::unique_ptr<Expr>> Parse_Primary(std::vector<std::unique_ptr<Exp
 
 void Parse_Libs() {
 
+
     while (CurTok!=tok_finish)
     {
+        bool has_functions=true;
         Lib_Info *lib_info = new Lib_Info();
 
         std::vector<std::unique_ptr<Expr>> functions;
-
+        
         while (CurTok!=tok_eof&&CurTok!=tok_finish)
             functions = Parse_Primary(std::move(functions));
         
-        if(files.size()==0)
-            break;
 
-        lib_info = Generate_LLVMs(lib_info, std::move(functions));
+        if (functions.size()>0)
+            lib_info = Generate_LLVMs(lib_info, std::move(functions));
+        else
+            has_functions=false;
 
         if (CurTok==tok_eof)
             getNextToken();
@@ -301,7 +308,10 @@ void Parse_Libs() {
         // std::cout << "functions list: " << lib_info->functions_string << ".\n";
         // std::cout << "------------" << ".\n\n\n\n";
 
-        Save_llvm_string(lib_info); 
+        if (has_functions)
+            Save_llvm_string(lib_info);
+        else
+            free(lib_info);
     }
     
     // std::cout << "Finish parsing libraries"  << ".\n";
