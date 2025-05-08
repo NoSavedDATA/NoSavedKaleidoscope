@@ -24,6 +24,6 @@ class Embedding
   
   void SetDescriptors(int);
   void SetBackwardDescriptors();
-  float *Forward(data_type_tensor *, int, int);
+  float *Forward(DT_tensor *, int, int);
   void Backward(float *, float *);
 };

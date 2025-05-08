@@ -159,7 +159,7 @@ int tokenize() {
 
     IdentifierStr=LastChar;
 
-    while (isalpha(LastChar) || LastChar=='_' || LastChar=='\"' || LastChar==':' || LastChar=='<' || LastChar=='>' || LastChar=='*'||LastChar==32) {
+    while (isalnum(LastChar) || LastChar=='_' || LastChar=='\"' || LastChar==':' || LastChar=='<' || LastChar=='>' || LastChar=='*'||LastChar==32) {
       
       LastChar = get_file_char();
       bool terminate=false;
@@ -186,7 +186,7 @@ int tokenize() {
           terminate = false;
       }
 
-      if (isalpha(LastChar) || LastChar=='_' || LastChar=='\"' || LastChar==':' || LastChar=='<' || LastChar=='>' || LastChar=='*')
+      if (isalnum(LastChar) || LastChar=='_' || LastChar=='\"' || LastChar==':' || LastChar=='<' || LastChar=='>' || LastChar=='*')
       {
         Line += LastChar;
         IdentifierStr += LastChar;

@@ -61,14 +61,8 @@ extern "C" void *EmbeddingForward(char *self, DT_tensor *tensor_x, int thread_id
   NamedEmbedding[conv_name] = std::move(embedding);
   
   
-  DT_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->AttrLNode(tensor_x, embedding_op);
-  new_tensor->scopeless_name = conv_name;
 
-  //if(thread_id==0 && nn_mode==training_mode)
-  //  new_tensor->Sparse_Idx_Tensor = tensor_x;
-
-  return new_tensor;
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "embedding_backward", conv_name, tensor_x);
 }
 
 
@@ -91,11 +85,13 @@ extern "C" float CreateEmbeddingOnDemand(char *tensor_name, char *init,
     return 0;
 }
 
-void embedding_backward(float *x, float *dy, std::string name)
+void embedding_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node)
 {
-  std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[name]);
+  std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[module_name]);
 
-  embedding->Backward(x, dy);
+  embedding->Backward(inp, dout);
 
-  NamedEmbedding[name] = std::move(embedding);
+  NamedEmbedding[module_name] = std::move(embedding);
 }

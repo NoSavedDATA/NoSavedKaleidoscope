@@ -6,18 +6,6 @@
 #include "../tensor/tensor_struct.h"
 
 
-extern "C" void StoreArgOnDemand(char *scope, char *name, float value){
-  // std::cout << "StoreArgOnDemand: " << name  << " " << value << "\n";
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  
-  NamedClassValues[name] = value;
-
-  std::string _name = name;
-  
-  pthread_mutex_unlock(&clean_scope_mutex);
-
-}
 
 
 

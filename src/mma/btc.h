@@ -14,5 +14,5 @@ __global__ void btc_mult_kernelT(float *out, const float *x, const float *w, con
 
 
 
-extern "C" data_type_tensor *btc_mult(int thread_id, data_type_tensor *x, data_type_tensor*w);
-extern "C" data_type_tensor *btc_multT(int thread_id, data_type_tensor *x, data_type_tensor*w);
+extern "C" DT_tensor *btc_mult(int thread_id, DT_tensor *x, DT_tensor*w);
+extern "C" DT_tensor *btc_multT(int thread_id, DT_tensor *x, DT_tensor*w);

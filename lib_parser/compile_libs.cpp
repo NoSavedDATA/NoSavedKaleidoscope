@@ -74,10 +74,17 @@ int main() {
     
     Parse_Libs();
 
+    if (files.size()==0)
+    {
+        // std::cout << "FOUND NO FILE TO PARSE" << ".\n";
+        return 0;
+    }
+    // std::cout << "files: " << files.size() << ".\n";
+
     CleanDeletedLibs();
 
     std::string all_libs = Get_Base_Lib("src/libs_llvm/libs.cpp", 17);
-    std::string all_cpp = Get_Base_Lib("src/libs_llvm/user_cpp_functions.cpp", 17);
+    std::string all_cpp = Get_Base_Lib("src/libs_llvm/user_cpp_functions.cu", 17);
     std::string all_return_dicts = Get_Base_Lib("src/libs_llvm/functions_return.cpp", 23);
     std::string all_function_dicts = "";
 
@@ -157,7 +164,7 @@ int main() {
 
 
     Write_Txt("src/libs_llvm/libs.cpp", all_libs);
-    Write_Txt("src/libs_llvm/user_cpp_functions.cpp", all_cpp);
+    Write_Txt("src/libs_llvm/user_cpp_functions.cu", all_cpp);
     Write_Txt("src/libs_llvm/functions_return.cpp", all_return_dicts);
 
 

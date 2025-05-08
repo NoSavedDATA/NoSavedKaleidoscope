@@ -20,13 +20,15 @@
 
 
 
-void lstm_backward(float *x, float *dx, float *dy, std::string name)
+void lstm_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node)
 {
-  std::unique_ptr<LSTM> lstm = std::move(NamedLSTM[name]);
+  std::unique_ptr<LSTM> lstm = std::move(NamedLSTM[module_name]);
 
-  lstm->Backward(x, dx, dy);
+  lstm->Backward(inp, dinp, dout);
 
-  NamedLSTM[name] = std::move(lstm);
+  NamedLSTM[module_name] = std::move(lstm);
 }
 
 
@@ -97,14 +99,10 @@ extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_
   NamedLSTM[conv_name] = std::move(lstm);
   
   
-  //std::cout << "Returning from lstm forward."  << "\n";
 
-  //DT_tensor *aux = createTensor(nullptr, {}, 0, false, conv_name);
 
-  DT_tensor *new_tensor = createTensor(output, new_dims, DimsProd(new_dims), false, "");
-  new_tensor->AttrLNode(tensor_x, lstm_op);
-  new_tensor->scopeless_name = conv_name;
-  return new_tensor;
+ 
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "lstm_backward", conv_name, tensor_x);
 }
 
 

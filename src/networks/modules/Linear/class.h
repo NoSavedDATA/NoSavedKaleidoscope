@@ -30,7 +30,7 @@ class LinearCPP
 
     LinearCPP(int C, int OC, std::string Init, std::vector<std::string> Notes, std::string Name);
   
-  float *Forward(data_type_tensor *, int);
+  float *Forward(DT_tensor *, int);
   void SetDescriptors(int, int);
   void Backward(float *, float *, float *);
   void SetBackwardDescriptors();

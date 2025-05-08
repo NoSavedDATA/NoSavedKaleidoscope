@@ -6,6 +6,6 @@
 
 extern "C" float PrintTensor(Scope_Struct *, char* tensorName);
 
-extern "C" float print_tensor(data_type_tensor tensor);
+extern "C" float print_tensor(DT_tensor tensor);
 
 extern "C" float PrintTensorF(const float *cuda_tensor, int d1, int d2);

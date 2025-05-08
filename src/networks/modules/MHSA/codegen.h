@@ -10,11 +10,6 @@
 
 
 
-void mhsa_backward(float *x, float *dx, float *dy, std::string name);
-
-
-extern "C" void *MHSAForward(char *self, data_type_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self);
-
-
-extern "C" float CreateMHSAOnDemand(char *tensor_name, char *init,
-                                      float nh, float C, float T, int_vec *notators);
+void mhsa_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node);

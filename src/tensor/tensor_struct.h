@@ -103,7 +103,7 @@ extern int nn_mode;
 
 
 
-struct data_type_tensor {
+struct DT_tensor {
   float *tensor_ptr;
   half  *half_ptr;
   float *cpu_tensor_ptr;
@@ -129,7 +129,7 @@ struct data_type_tensor {
   int op;
   std::string operation;
 
-  data_type_tensor *R_Node, *L_Node, *Sparse_Idx_Tensor;
+  DT_tensor *R_Node, *L_Node, *Sparse_Idx_Tensor;
   bool visited;
 
   void NewNullTensor();
@@ -147,11 +147,11 @@ struct data_type_tensor {
   void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr);
 
   
-  void AttrNodes(data_type_tensor *new_L_Tensor, data_type_tensor *new_R_Tensor, int op_type);
+  void AttrNodes(DT_tensor *new_L_Tensor, DT_tensor *new_R_Tensor, int op_type);
 
-  void AttrLNode(data_type_tensor *new_L_Tensor, int op_type);
+  void AttrLNode(DT_tensor *new_L_Tensor, int op_type);
 
-  void AttributionBackwardNode(std::string _name, data_type_tensor *new_R_Tensor);
+  void AttributionBackwardNode(std::string _name, DT_tensor *new_R_Tensor);
 
   void SetIsWeight();
 
@@ -160,27 +160,27 @@ struct data_type_tensor {
   void Sync();
 };
 
-data_type_tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
                      bool is_leaf, std::string name, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr);
                      
-data_type_tensor *createTensorHalf(half* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<float>& dims, float kDataLen,
                      bool is_leaf, std::string name, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr);
 
-data_type_tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
-                     std::string operation, std::string module_name, data_type_tensor *LTensor, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr);
+DT_tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+                     std::string operation, std::string module_name, DT_tensor *LTensor, CudaStreams *_cuda_stream=nullptr, Loader *_loader=nullptr);
 
-data_type_tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
                      std::string name)
                      ;
-data_type_tensor *createBackward(std::string name, data_type_tensor *tensor);
+DT_tensor *createBackward(std::string name, DT_tensor *tensor);
 
-data_type_tensor *wrapTensorWithDetached(data_type_tensor* tensor);
-
-
-bool in_tensor_ptr_vec(data_type_tensor *value, const std::vector<data_type_tensor *>& list);
+DT_tensor *wrapTensorWithDetached(DT_tensor* tensor);
 
 
-extern std::map<std::string, data_type_tensor *> NamedTensorsT;
+bool in_tensor_ptr_vec(DT_tensor *value, const std::vector<DT_tensor *>& list);
+
+
+extern std::map<std::string, DT_tensor *> NamedTensorsT;
 extern std::map<std::string, float *> NamedPinnedTensors;
 extern std::map<std::string, std::vector<float>> NamedDims;
-extern std::vector<data_type_tensor> TensorsToDelete;
+extern std::vector<DT_tensor> TensorsToDelete;

@@ -10,12 +10,6 @@
 
 
 
-void lstm_backward(float *x, float *dx, float *dy, std::string name);
-
-
-extern "C" void *LSTMForward(char *self, data_type_tensor *tensor_x, data_type_tensor *tensor_ht, data_type_tensor *tensor_ct, int thread_id, char *conv_namec, int is_obj_attr_or_self);
-
-
-
-extern "C" float CreateLSTMOnDemand(char *tensor_name, char *init,
-                                      float C, float OC);
+void lstm_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node);

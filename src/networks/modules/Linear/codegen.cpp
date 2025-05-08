@@ -25,13 +25,15 @@
 
 
 
-void linear_backward(float *x, float size, float *out, float *dx, float *dy, std::string name)
+void linear_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node)
 {
-  std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[name]);
+  std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[module_name]);
 
-  linear->Backward(x, dx, dy);
+  linear->Backward(inp, dinp, dout);
 
-  NamedLinear[name] = std::move(linear);
+  NamedLinear[module_name] = std::move(linear);
 }
 
 
