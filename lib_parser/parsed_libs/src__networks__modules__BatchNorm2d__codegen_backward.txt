@@ -1,0 +1,1 @@
+	backward_functions["batchnorm2d_backward"] = batchnorm2d_backward;

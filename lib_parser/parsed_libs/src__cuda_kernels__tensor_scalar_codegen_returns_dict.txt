@@ -1,0 +1,1 @@
+{"tensor_float_mult", "tensor"}, {"tensor_float_div", "tensor"}, {"tensor_float_add", "tensor"}, {"tensor_float_sub", "tensor"}, {"tensor_float_equal", "tensor"}, {"tensor_float_diff", "tensor"}, {"tensor_float_minor", "tensor"}, {"tensor_float_minor_eq", "tensor"}, {"tensor_float_higher", "tensor"}, {"tensor_float_higher_eq", "tensor"}, 

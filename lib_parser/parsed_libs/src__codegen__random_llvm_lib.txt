@@ -1,0 +1,15 @@
+1821-05-06 21:10:37
+
+	FunctionType *print_randomsTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
+
+	FunctionType *randintTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("randint", randintTy);

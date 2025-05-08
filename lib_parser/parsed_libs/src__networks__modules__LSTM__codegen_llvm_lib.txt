@@ -1,0 +1,15 @@
+1821-05-07 21:03:27
+
+	FunctionType *LSTMForwardTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("LSTMForward", LSTMForwardTy);
+
+	FunctionType *CreateLSTMOnDemandTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("CreateLSTMOnDemand", CreateLSTMOnDemandTy);

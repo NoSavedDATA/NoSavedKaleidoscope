@@ -170,10 +170,8 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
     // TODO: is this kernel grid_size correct?
     mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
-    DT_tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
-    new_tensor->AttrLNode(tensor, mean_over_semilast_dim_op);
-    new_tensor->scalar = dims[dims.size()-2];
-    return new_tensor;
+
+    return customOpTensor(summed, new_dims, new_dims_prod, "mean_over_semilast_dim_backward", "", tensor);
   }
 
   /*
@@ -310,10 +308,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
     // TODO: is this kernel grid_size correct?
     mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
-    DT_tensor *new_tensor = createTensor(summed, new_dims, new_dims_prod, false, "");
-    new_tensor->AttrLNode(tensor, mean_over_semilast_dim_op);
-    new_tensor->scalar = dims[dims.size()-2];
-    return new_tensor;
+    return customOpTensor(summed, new_dims, new_dims_prod, "mean_over_semilast_dim_backward", "", tensor);
   }
 
   /*
@@ -336,14 +331,16 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
 }
 
 
-void mean_over_semilast_dim_backward(float *dx, float *dy, DT_tensor *node)
+void mean_over_semilast_dim_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node)
 {
   std::vector<float> dims = node->L_Node->dims;
   float x_dims_prod = node->L_Node->dims_prod;
   float y_dims_prod = node->dims_prod;
 
 
-  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dy,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
+  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dinp, dout,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
 }
 
 extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
@@ -630,7 +627,9 @@ extern "C" DT_tensor *gather(int thread_id, DT_tensor *tensor, DT_tensor *idx_te
 
 
 
-void gather_last_dim_backward(float *dx, float *dy, DT_tensor *node)
+void gather_last_dim_backward(float *inp, float size, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node)
 {
   // consider dx was set to zero already
   
@@ -643,13 +642,11 @@ void gather_last_dim_backward(float *dx, float *dy, DT_tensor *node)
   float dims_prod = node->dims_prod;
 
 
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
 
-  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, idx, leading_dim, dims_prod);
+  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, dout, idx, leading_dim, dims_prod);
 
   //PrintTensorF(idx, 1, node->R_Node->dims_prod);
   //PrintTensorF(dx, dims[0], dims[1]);

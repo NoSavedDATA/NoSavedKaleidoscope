@@ -1,0 +1,1 @@
+	backward_functions["conv2d_backward"] = conv2d_backward;

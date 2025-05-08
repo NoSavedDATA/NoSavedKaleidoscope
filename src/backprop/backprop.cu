@@ -182,15 +182,16 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
 
 
 
+    // std::cout << "BACKPROP OF " << op << ".\n";
     switch (op)
     {
       // Simple Leaf Nodes Ops
       case scalar_add_op:
         d_lhs = device_dy;
         break;
-      case scalar_mult_op:
-        scalarmult_backward(d_lhs, device_dy, back_node->scalar, lhs_size); //todo: This one may be wrong
-        break;
+      // case scalar_mult_op:
+      //   scalarmult_backward(d_lhs, device_dy, back_node->scalar, lhs_size); //todo: This one may be wrong
+      //   break;
       case mult_op:
         matmul_backward2(back_node->L_Node, back_node->R_Node, d_lhs, d_rhs, device_dy);
         break;
@@ -206,16 +207,16 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
       //   d_rhs = device_dy;
       //   break;
       case gather_last_dim_op:
-        gather_last_dim_backward(d_lhs, device_dy, back_node);
+        gather_last_dim_backward(lhs, lhs_size, out, d_lhs, device_dy, back_node->scopeless_name, back_node);
         d_rhs = device_dy;
         break;
       case broadcast_lastdim_add_op:
         d_lhs = device_dy;
-        broadcast_lastdim_add_backward(d_rhs, device_dy, rhs_size, lhs_size);
+        broadcast_lastdim_add_backward2(d_rhs, device_dy, rhs_size, lhs_size);
         break;
-      case mean_over_semilast_dim_op:
-        mean_over_semilast_dim_backward(d_lhs, device_dy, back_node);
-        break;
+      // case mean_over_semilast_dim_op:
+      //   mean_over_semilast_dim_backward(d_lhs, device_dy, back_node);
+      //   break;
       
 
       // Loss Ops
@@ -233,6 +234,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
         break;
 
       case custom_op:
+        // std::cout << "custom: " << back_node->operation << ".\n";
         backward_functions[back_node->operation](lhs, lhs_size, out, d_lhs, device_dy, back_node->scopeless_name, back_node);
         break;
 

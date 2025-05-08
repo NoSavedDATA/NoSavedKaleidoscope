@@ -1,0 +1,8 @@
+1821-05-06 21:10:37
+
+	FunctionType *save_as_binTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("save_as_bin", save_as_binTy);

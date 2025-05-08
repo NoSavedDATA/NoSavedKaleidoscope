@@ -1,0 +1,8 @@
+1821-05-06 21:09:49
+
+	FunctionType *network_emaTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("network_ema", network_emaTy);

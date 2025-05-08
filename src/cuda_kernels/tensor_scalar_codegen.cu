@@ -25,9 +25,10 @@ extern "C" DT_tensor *tensor_float_mult(DT_tensor *tensor, float R, Scope_Struct
   cudaStream_t stream = ThreadsStream[thread_id];
   vec_mult<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
 
-  DT_tensor *new_tensor = createTensor(device_y, tensor->dims, kDataLen, false, "");
-  new_tensor->AttrLNode(tensor, scalar_mult_op);
+
+  DT_tensor *new_tensor = customOpTensor(device_y, tensor->dims, kDataLen, "scalarmult_backward", "", tensor);
   new_tensor->scalar = R;
+
   return new_tensor;
 }
 
@@ -254,13 +255,19 @@ extern "C" DT_tensor *tensor_float_higher_eq(DT_tensor tensor, float R, Scope_St
 }
 
 
-void scalarmult_backward(float *dx, float *dy, float scalar, float dims_prod)
+void scalarmult_backward(float *inp, float dims_prod, float *out,
+                     float *dinp, float *dout,
+                     std::string module_name, DT_tensor *node)
 {
   //std::cout << "scalar mult backward with scalar " << scalar <<  "\n";
   int grid_size, block_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
-  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, scalar, dims_prod);
+  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, dout, node->scalar, dims_prod);
+}
+
+
+extern "C" float opa_gangnam_style(Scope_Struct *sopce_struct) { 
+  std::cout << "OPA GANGNAM STYLE AH" << ".\n";
+  return 0;
 }

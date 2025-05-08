@@ -1,0 +1,15 @@
+1821-05-06 21:10:37
+
+	FunctionType *dir_existsTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dir_exists", dir_existsTy);
+
+	FunctionType *path_existsTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("path_exists", path_existsTy);

@@ -1,0 +1,15 @@
+1821-05-06 21:09:49
+
+	FunctionType *cross_entropyTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("cross_entropy", cross_entropyTy);
+
+	FunctionType *cross_entropy_idxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("cross_entropy_idx", cross_entropy_idxTy);

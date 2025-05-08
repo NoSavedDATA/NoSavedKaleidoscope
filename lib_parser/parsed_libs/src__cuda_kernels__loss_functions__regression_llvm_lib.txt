@@ -1,0 +1,15 @@
+1821-05-06 21:09:49
+
+	FunctionType *mseTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("mse", mseTy);
+
+	FunctionType *mse_with_prioritiesTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("mse_with_priorities", mse_with_prioritiesTy);

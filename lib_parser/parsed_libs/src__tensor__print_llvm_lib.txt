@@ -1,0 +1,22 @@
+1821-05-06 21:09:49
+
+	FunctionType *PrintTensorTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintTensor", PrintTensorTy);
+
+	FunctionType *print_tensorTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_tensor", print_tensorTy);
+
+	FunctionType *PrintTensorFTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintTensorF", PrintTensorFTy);

@@ -1,0 +1,15 @@
+1821-05-07 20:55:31
+
+	FunctionType *BatchNorm2dTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("BatchNorm2d", BatchNorm2dTy);
+
+	FunctionType *BatchNorm2d_CreateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("BatchNorm2d_Create", BatchNorm2d_CreateTy);

@@ -1,0 +1,1 @@
+{"repeat_interleave", "tensor"}, {"mean_tensor", "tensor"}, {"sum", "tensor"}, {"prod", "tensor"}, {"gather", "tensor"}, 

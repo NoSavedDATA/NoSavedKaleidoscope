@@ -1,0 +1,1 @@
+{"tensor_onehot", "tensor"}, {"tmax", "tensor"}, {"tensor_argmax", "tensor"}, {"topk", "tensor"}, 

@@ -1,0 +1,15 @@
+1821-05-07 21:33:16
+
+	FunctionType *LinearTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Linear", LinearTy);
+
+	FunctionType *Linear_CreateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Linear_Create", Linear_CreateTy);
