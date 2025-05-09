@@ -341,9 +341,11 @@ CallExprAST::CallExprAST(std::unique_ptr<ExprAST> NameSolver,
             const std::string &PreDot,
             const std::string &Load_Type,
             bool IsVarForward,
-            const std::string &CalleeOverride)
+            const std::string &CalleeOverride,
+            const std::string &Scope_Random_Str)
     : NameSolver(std::move(NameSolver)), Callee(Callee), Name(Name), Args(std::move(Args)), Class(Class),
-      PreDot(PreDot), Load_Type(Load_Type), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride) {
+      PreDot(PreDot), Load_Type(Load_Type), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride),
+      Scope_Random_Str(Scope_Random_Str) {
   SetType("float");
 }
 

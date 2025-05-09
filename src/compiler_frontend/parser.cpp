@@ -2,17 +2,18 @@
 
 
 
+#include <iostream>
 #include <map>
-#include <vector>
-#include <thread>
-
 #include <random>
+#include <thread>
+#include <vector>
 
 
+
+#include "../codegen/string.h"
 #include "../common/include.h"
 #include "include.h"
 
-#include <iostream>
 
 
 
@@ -390,8 +391,10 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
     name_solver_expr->SetNameSolveToLast(name_solve_to_last);
     // if ()
     // name_solver_expr->SetType;
+    std::string scope_random_string = RandomString(14);
+
     aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, IdName, std::move(Args),
-                                                  "None", "None", "none", is_var_forward, callee_override);
+                                                  "None", "None", "none", is_var_forward, callee_override, scope_random_string);
 
   
 
@@ -1088,10 +1091,12 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
   std::cout << "LOAD TYPE IS: " << load_type << ".\n";
 
+  std::string scope_random_string = RandomString(14);
+
   auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
   name_solver_expr->SetNameSolveToLast(name_solve_to_last);
   auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), callee, IdName, std::move(Args),
-                                        object_class, pre_dot, load_type, is_var_forward, callee_override);
+                                        object_class, pre_dot, load_type, is_var_forward, callee_override, scope_random_string);
 
 
   if (functions_return_type.count(call_of)>0)

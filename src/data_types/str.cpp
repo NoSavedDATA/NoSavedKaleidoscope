@@ -22,10 +22,8 @@ extern "C" char *str_Create(char *name, char *scopeless_name, char *init_val, DT
   // std::cout << "Creating string"  << ".\n";
   // std::cout << "Val: " << init_val << ".\n";
   
-  pthread_mutex_lock(&clean_scope_mutex);
   NamedStrs[name] = init_val;
   //std::cout << "Store " << value << " at " << name << "\n";
-  pthread_mutex_unlock(&clean_scope_mutex);
 
   return init_val;
 }
@@ -34,9 +32,7 @@ extern "C" char *str_Load(char *name, Scope_Struct *scope_struct){
   // std::cout << "Load str " << name << ".\n";
   //char *ret = CopyString(NamedStrs[name]);
   
-  pthread_mutex_lock(&clean_scope_mutex);
   char *ret = NamedStrs[name];
-  pthread_mutex_unlock(&clean_scope_mutex);
   // move_to_char_pool(strlen(name)+1, name, "free");
   //delete[] name;
 
@@ -49,7 +45,6 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   
-  pthread_mutex_lock(&clean_scope_mutex);
   if(NamedStrs.count(name)>0) 
   {
     char *old_val = NamedStrs[name];
@@ -57,7 +52,6 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
   }
   NamedStrs[name] = value;
   //std::cout << "Store " << value << " at " << name << "\n";
-  pthread_mutex_unlock(&clean_scope_mutex);
   
   // std::cout << "STORING STRING " << value << " AT " << name << ".\n";
   
@@ -74,9 +68,6 @@ void str_Clean_Up(std::string name, void *data_ptr)
   char *char_ptr = static_cast<char *>(data_ptr);
   move_to_char_pool(strlen(char_ptr)+1, char_ptr, "Mark sweep of str");
 
-  pthread_mutex_lock(&clean_scope_mutex);
-  NamedStrs.erase(name);
-  pthread_mutex_unlock(&clean_scope_mutex);
 }
 
 
@@ -103,6 +94,30 @@ extern "C" char * str_str_add(char *lc, char *rc, Scope_Struct *scope_struct)
   return result_cstr;
 }
 
+
+
+extern "C" char * str_int_add(char *lc, int rc, Scope_Struct *scope_struct)
+{
+  // std::cout << "Concat string and float fn" << ".\n";
+  // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
+
+  size_t length_lc = strlen(lc);
+
+  // Convert the float to a string
+  std::stringstream ss;
+  ss << rc; // Adjust precision as needed
+  std::string rc_str = ss.str();
+  size_t length_rc = rc_str.length() + 1; // +1 for null terminator
+
+  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, rc_str.c_str(), length_rc);
+
+  // std::cout << "cat str int " << result_cstr << ".\n";
+
+  return result_cstr;
+}
 
 
 extern "C" char * str_float_add(char *lc, float rc, Scope_Struct *scope_struct)

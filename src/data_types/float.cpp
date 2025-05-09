@@ -30,9 +30,10 @@ extern "C" float print_float(float value){
 
 extern "C" float float_Create(char *name, char *scopeless_name, float init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
 {
-  pthread_mutex_lock(&clean_scope_mutex);
+  
+  // pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = init_val;
-  pthread_mutex_unlock(&clean_scope_mutex);
+  // pthread_mutex_unlock(&clean_scope_mutex);
   
   // move_to_char_pool(strlen(name)+1, name, "float_Store");
 
@@ -42,24 +43,24 @@ extern "C" float float_Create(char *name, char *scopeless_name, float init_val, 
 
 extern "C" float float_Load(char *object_var_name, Scope_Struct *scope_struct) {
   
-  // std::cout << "Loading float " << object_var_name << ".\n";
 
-  pthread_mutex_lock(&clean_scope_mutex);
+
+  // std::cout << "Loading float " << object_var_name << ".\n";
+  // pthread_mutex_lock(&clean_scope_mutex);
   float ret = NamedClassValues[object_var_name];
-  pthread_mutex_unlock(&clean_scope_mutex);
+  // pthread_mutex_unlock(&clean_scope_mutex);
   
+
 
   return ret;
 }
 
 
-extern "C" void float_Store(char *name, float value, Scope_Struct *scope_struct){
-  // std::cout << "Float store: " << name << " on thread id: " << thread_id << ".\n";
-  pthread_mutex_lock(&clean_scope_mutex);
+extern "C" void float_Store(char *name, float value, Scope_Struct *scope_struct) {
+  // std::cout << "STORE OF " << name << " ON THREAD " << scope_struct->thread_id << ".\n";
+  // pthread_mutex_lock(&clean_scope_mutex);
   NamedClassValues[name] = value;
-  pthread_mutex_unlock(&clean_scope_mutex);
-  
-
+  // pthread_mutex_unlock(&clean_scope_mutex);
 }
 
 
@@ -68,26 +69,7 @@ extern "C" void float_MarkToSweep(Scope_Struct *scope_struct, char *name, float 
 }
 
 void float_Clean_Up(std::string name, void *data_ptr) {
-  pthread_mutex_lock(&clean_scope_mutex);
-  NamedClassValues.erase(name);
-  pthread_mutex_unlock(&clean_scope_mutex);
+  // pthread_mutex_lock(&clean_scope_mutex);
+  // pthread_mutex_unlock(&clean_scope_mutex);
 }
 
-
-extern "C" void StoreOnDemandNoFree(char *name, float value){
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  NamedClassValues[name] = value;
-  pthread_mutex_unlock(&clean_scope_mutex);
-}
-
-
-
-extern "C" float LoadOnDemandNoFree(char *object_var_name) {
-  
-  pthread_mutex_lock(&clean_scope_mutex);
-  float ret = NamedClassValues[object_var_name];
-  pthread_mutex_unlock(&clean_scope_mutex);
-  
-  return ret;
-}

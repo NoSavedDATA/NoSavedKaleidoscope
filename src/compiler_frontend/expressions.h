@@ -416,6 +416,7 @@ class CallExprAST : public ExprAST {
   std::string Class;
   std::string Name;
   std::string PreDot;
+  std::string Scope_Random_Str;
   std::string Load_Type="none";
   bool IsVarForward;
   std::string CalleeOverride;
@@ -429,7 +430,9 @@ class CallExprAST : public ExprAST {
                 const std::string &PreDot,
                 const std::string &Load_Type,
                 bool IsVarForward,
-                const std::string &CalleeOverride);
+                const std::string &CalleeOverride,
+                const std::string &Scope_Random_Str
+              );
 
   Value *codegen(Value *scope_struct) override;
 };

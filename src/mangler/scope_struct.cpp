@@ -215,6 +215,12 @@ inline void delete_scope(Scope_Struct *scope_struct) {
 }
 
 
+extern "C" float tid(Scope_Struct *scope_struct) {
+    float thread_id = scope_struct->thread_id;
+    return thread_id;
+}
+
+
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     if (strcmp(scope_struct->function_name,"")==0)
         return;
