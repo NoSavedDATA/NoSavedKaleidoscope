@@ -38,3 +38,8 @@ inline Value *callret(std::string fn, std::vector<Value *> args) {
 inline Value *global_str(std::string _string) {
     return Builder->CreateGlobalString(_string);
 }
+
+
+inline Value *const_int(int val) {
+    return ConstantInt::get(Type::getInt32Ty(*TheContext), val);
+}

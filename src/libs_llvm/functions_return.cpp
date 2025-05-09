@@ -22,7 +22,7 @@ void set_functions_return_type() {
                            {"mean_tensor", "tensor"},
                            {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"},
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, 
-						{"str_Create", "str"}, {"str_Load", "str"}, {"str_Copy", "str"}, {"str_str_add", "str"}, {"str_float_add", "str"}, {"float_str_add", "str"}, {"cat_str_float", "str"}, {"SplitString", "str_vec"}, {"str_split_idx", "str"}, 
+						{"str_Create", "str"}, {"str_Load", "str"}, {"str_Copy", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"float_str_add", "str"}, {"cat_str_float", "str"}, {"SplitString", "str_vec"}, {"str_split_idx", "str"}, 
 						{"ConcatScopeStr", "str"}, {"ConcatScopeAtCallExpr", "str"}, 
 						{"tensor_tensor_mma", "tensor"}, {"tensor_tensor_add", "tensor"}, {"tensor_tensor_sub", "tensor"}, {"tensor_tensor_equal", "tensor"}, {"tensor_tensor_mult", "tensor"}, {"tensor_tensor_div", "tensor"}, 
 						{"load_img", ""}, {"gload_img", ""}, {"wload_img", ""}, {"wload_img_resize", ""}, 

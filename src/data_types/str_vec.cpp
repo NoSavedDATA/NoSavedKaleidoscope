@@ -47,7 +47,7 @@ extern "C" void str_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, void
 }
 
 void str_vec_Clean_Up(std::string name, void *data_ptr) {
-  ClassStrVecs.erase(name);
+  // ClassStrVecs.erase(name);
 }
 
 

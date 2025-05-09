@@ -472,6 +472,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Copy_MarkSweepMap", scope_struct_Copy_MarkSweepMapTy);
 
+	FunctionType *tidTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tid", tidTy);
+
 	FunctionType *scope_struct_Clean_ScopeTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
@@ -660,20 +667,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_MarkToSweep", float_MarkToSweepTy);
-
-	FunctionType *StoreOnDemandNoFreeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("StoreOnDemandNoFree", StoreOnDemandNoFreeTy);
-
-	FunctionType *LoadOnDemandNoFreeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("LoadOnDemandNoFree", LoadOnDemandNoFreeTy);
 
 	FunctionType *nullptr_getTy= FunctionType::get(
 		int8PtrTy,
@@ -1507,6 +1500,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_str_add", str_str_addTy);
+
+	FunctionType *str_int_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_int_add", str_int_addTy);
 
 	FunctionType *str_float_addTy= FunctionType::get(
 		int8PtrTy,

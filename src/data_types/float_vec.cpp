@@ -44,7 +44,7 @@ extern "C" void float_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, vo
 }
  
 void float_vec_Clean_Up(std::string name, void *data_ptr) {
-  ClassFloatVecs.erase(name);
+  // ClassFloatVecs.erase(name);
 }
 
 

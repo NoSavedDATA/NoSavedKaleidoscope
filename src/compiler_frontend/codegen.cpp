@@ -181,8 +181,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
 
-    // if (Type=="tensor")
-    //   call("scope_struct_Print", {scope_struct});
 
     
     Value *initial_value = Init->codegen(scope_struct);
@@ -204,6 +202,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       call(mark_to_sweep_fn, {scope_struct, var_name, initial_value});
     else
       call("str_Delete", {var_name});
+    
   }
 
 
@@ -321,12 +320,10 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
 
 
-  Value *var_name = Builder->CreateGlobalString(VarName);
-  var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                    {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
+  Value *var_name = global_str(VarName);
+  var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
 
-  Builder->CreateCall(TheModule->getFunction("StoreOnDemandNoFree"),
-                                                  {var_name, StartVal});
+  call("float_Store", {var_name, StartVal});
 
   // Store the value into the alloca.
   //Builder->CreateStore(StartVal, Alloca);
@@ -395,10 +392,10 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
-  Value *CurVar = Builder->CreateCall(TheModule->getFunction("LoadOnDemandNoFree"), {var_name});
+  Value *CurVar = callret("float_Load", {var_name});
   Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar"); // Increment
-  Builder->CreateCall(TheModule->getFunction("StoreOnDemandNoFree"),
-                                                  {var_name, NextVar});
+
+  call("float_Store", {var_name, NextVar});
 
   
   
@@ -518,8 +515,8 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   
 
   std::string load_fn = type + "_Load";
+
   V = callret(load_fn, {var_name, scope_struct});
-  // p2t("Load of " + Name);
   call("str_Delete", {var_name});
 
   return V;
@@ -752,6 +749,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       return nullptr;
       
     }
+
 
 
     if (LHS->GetIsList())
@@ -1928,6 +1926,7 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
     {      
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(scope_struct);
+
       arg = callret("tensor_Load", {arg, scope_struct});
     }
     else
@@ -2082,7 +2081,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     has_scope = true;
     if(Callee!="print_scope" && !is_user_cpp_function)
     {
-      scope_string = callret("RandomStrOnDemand", {});
+      // scope_string = callret("RandomStrOnDemand", {});
+      scope_string = global_str(Scope_Random_Str);
+      scope_string = callret("str_int_add", {scope_string, callret("get_scope_thread_id", {scope_struct})});
       call("set_scope_scope", {scope_struct_copy, scope_string});
     }
   }
@@ -2180,14 +2181,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
         return LogErrorV(_error);
       }
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-
-    }
-    else if (CalleeOverride=="SplitString")
-    {
-      Value *V = callret("str_Load", {global_str(PreDot), scope_struct_copy});
-      
-      ret = Builder->CreateCall(getFunction("SplitString"), 
-                          {V, ArgsV[1]});
 
     }
     else

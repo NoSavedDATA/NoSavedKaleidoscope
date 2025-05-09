@@ -1,4 +1,4 @@
-1821-05-06 21:10:37
+1821-05-09 19:52:23
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -146,6 +146,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Copy_MarkSweepMap", scope_struct_Copy_MarkSweepMapTy);
+
+	FunctionType *tidTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tid", tidTy);
 
 	FunctionType *scope_struct_Clean_ScopeTy= FunctionType::get(
 		int8PtrTy,
