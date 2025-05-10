@@ -9,4 +9,4 @@
 #include "include.h"
 
 
-void float_Clean_Up(std::string name, void *data_ptr);
+void float_Clean_Up(void *data_ptr);

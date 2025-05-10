@@ -285,21 +285,21 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *tensor_tensor_mmaTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_tensor_mma", tensor_tensor_mmaTy);
 
 	FunctionType *tensor_tensor_addTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_tensor_add", tensor_tensor_addTy);
 
 	FunctionType *tensor_tensor_subTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_tensor_sub", tensor_tensor_subTy);
@@ -313,17 +313,31 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *tensor_tensor_multTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_tensor_mult", tensor_tensor_multTy);
 
 	FunctionType *tensor_tensor_divTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_tensor_div", tensor_tensor_divTy);
+
+	FunctionType *MarkToSweep_MarkTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("MarkToSweep_Mark", MarkToSweep_MarkTy);
+
+	FunctionType *MarkToSweep_UnmarkTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("MarkToSweep_Unmark", MarkToSweep_UnmarkTy);
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -642,7 +656,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *float_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("float_Create", float_CreateTy);
@@ -660,13 +674,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_Store", float_StoreTy);
-
-	FunctionType *float_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("float_MarkToSweep", float_MarkToSweepTy);
 
 	FunctionType *nullptr_getTy= FunctionType::get(
 		int8PtrTy,
@@ -843,13 +850,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
 
-	FunctionType *list_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_MarkToSweep", list_MarkToSweepTy);
-
 	FunctionType *list_IdxTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -898,13 +898,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
-
-	FunctionType *str_vec_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_vec_MarkToSweep", str_vec_MarkToSweepTy);
 
 	FunctionType *PrintStrVecTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -1025,19 +1018,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_Store", float_vec_StoreTy);
 
-	FunctionType *float_vec_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_MarkToSweep", float_vec_MarkToSweepTy);
-
 	FunctionType *float_vec_Store_IdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
+
+	FunctionType *float_vec_MarkTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Mark", float_vec_MarkTy);
 
 	FunctionType *PrintFloatVecTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -1123,12 +1116,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
 
-	FunctionType *tensor_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+	FunctionType *tensor_opaTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("tensor_MarkToSweep", tensor_MarkToSweepTy);
+	TheModule->getOrInsertFunction("tensor_opa", tensor_opaTy);
 
 	FunctionType *gpuTy= FunctionType::get(
 		int8PtrTy,
@@ -1342,70 +1335,70 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *tensor_float_multTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_mult", tensor_float_multTy);
 
 	FunctionType *tensor_float_divTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_div", tensor_float_divTy);
 
 	FunctionType *tensor_float_addTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_add", tensor_float_addTy);
 
 	FunctionType *tensor_float_subTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_sub", tensor_float_subTy);
 
 	FunctionType *tensor_float_equalTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_equal", tensor_float_equalTy);
 
 	FunctionType *tensor_float_diffTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_diff", tensor_float_diffTy);
 
 	FunctionType *tensor_float_minorTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_minor", tensor_float_minorTy);
 
 	FunctionType *tensor_float_minor_eqTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_minor_eq", tensor_float_minor_eqTy);
 
 	FunctionType *tensor_float_higherTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_higher", tensor_float_higherTy);
 
 	FunctionType *tensor_float_higher_eqTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_float_higher_eq", tensor_float_higher_eqTy);
@@ -1480,13 +1473,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("str_Store", str_StoreTy);
 
-	FunctionType *str_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_MarkToSweep", str_MarkToSweepTy);
-
 	FunctionType *str_CopyTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -1503,21 +1489,21 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *str_int_addTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("str_int_add", str_int_addTy);
 
 	FunctionType *str_float_addTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("str_float_add", str_float_addTy);
 
 	FunctionType *float_str_addTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("float_str_add", float_str_addTy);

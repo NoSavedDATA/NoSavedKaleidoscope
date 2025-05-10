@@ -1,4 +1,4 @@
-1821-05-09 19:43:44
+1821-05-09 22:40:38
 
 	FunctionType *PrintFloatTy= FunctionType::get(
 		int8PtrTy,
@@ -23,7 +23,7 @@
 
 	FunctionType *float_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("float_Create", float_CreateTy);
@@ -41,10 +41,3 @@
 		false
 	);
 	TheModule->getOrInsertFunction("float_Store", float_StoreTy);
-
-	FunctionType *float_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("float_MarkToSweep", float_MarkToSweepTy);

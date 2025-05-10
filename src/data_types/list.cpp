@@ -73,7 +73,7 @@ extern "C" float list_Store(char *name, DT_list *vector, Scope_Struct *scope_str
 }
 
 
-extern "C" DT_list *list_Load(char *name, Scope_Struct *scope_struct){
+extern "C" DT_list *list_Load(Scope_Struct *scope_struct, char *name){
   std::cout << "list_Load"  << ".\n";
   DT_list *ret = NamedVectors[name];
   //delete[] tensor_name;
@@ -101,7 +101,7 @@ extern "C" float list_test(Scope_Struct *scope_struct, DT_list *list) {
 }
 
 
-extern "C" DT_list *list_Create(char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector)
 {
   std::cout << "list_Create"  << ".\n";
 
@@ -135,16 +135,15 @@ extern "C" DT_list *list_Create(char *name, char *scopeless_name, DT_list *init_
   return init_val;
 }
 
-extern "C" void list_MarkToSweep(Scope_Struct *scope_struct, char *name, DT_list *value) {
-  scope_struct->mark_sweep_map->append(name, static_cast<void *>(value), "list");
-}
 
 
-void list_Clean_Up(std::string name, void *data_ptr) {
+void list_Clean_Up(void *data_ptr) {
   if (data_ptr==nullptr)
     return;
   std::cout << "list cleanup" << ".\n";
 }
+
+
 
 
 

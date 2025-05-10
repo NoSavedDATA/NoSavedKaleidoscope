@@ -9,5 +9,5 @@
 
 
 
-void list_Clean_Up(std::string name, void *data_ptr);
+void list_Clean_Up(void *data_ptr);
 

@@ -19,7 +19,7 @@
 
 
 
-extern "C" DT_tensor *tensor_Create(char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector)
 {
   
   // if (notes_vector->data->size()>0)
@@ -144,7 +144,7 @@ extern "C" DT_tensor *tensor_Create(char *tensor_name, char *scopeless_name, DT_
 
 
 
-extern "C" DT_tensor *tensor_Load(char *tensor_name, Scope_Struct *scope_struct){
+extern "C" DT_tensor *tensor_Load(Scope_Struct *scope_struct, char *tensor_name) {
   // std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   DT_tensor *ret = NamedTensorsT[tensor_name];
   //std::cout << "return load." << "\n";
@@ -333,16 +333,16 @@ extern "C" float tensor_Store(char *tensor_name, DT_tensor *tensor, Scope_Struct
   return 0;
 }
 
-extern "C" void tensor_MarkToSweep(Scope_Struct *scope_struct, char *name, DT_tensor *value) {
-  if (value==nullptr)
-    std::cout << "tensor_MarkToSweep is nullptr" << ".\n";
 
-  scope_struct->mark_sweep_map->append(name, static_cast<void *>(value), "tensor");
+
+void tensor_Clean_Up(void *data_ptr) {
+  // std::cout << "tensor_Clean_Up" << ".\n";
 }
 
-
-void tensor_Clean_Up(std::string name, void *data_ptr) {
-  // std::cout << "tensor_Clean_Up" << ".\n";
+extern "C" float tensor_opa(Scope_Struct *scope_struct, void *data_ptr) {
+  std::cout << "opa tensor"  << ".\n";
+  PrintDims(static_cast<DT_tensor *>(data_ptr)->dims);
+  return 25;
 }
 
 

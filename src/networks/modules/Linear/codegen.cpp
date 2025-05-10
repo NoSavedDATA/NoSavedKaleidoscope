@@ -96,7 +96,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-extern "C" float Linear_Create(char *name, char *scopeless_name, void *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" float Linear_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
 
   // std::cout << "\n\n\n----------------------EXECUTION: CREATING LINEAR: " << name << ".\n\n\n\n";

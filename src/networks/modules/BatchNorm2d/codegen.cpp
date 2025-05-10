@@ -84,7 +84,7 @@ void batchnorm2d_backward(float *inp, float size, float *out,
 
 
 // extern "C" float CreateBatchNorm2dOnDemand(char *tensor_name, float C)
-extern "C" float BatchNorm2d_Create(char *name, char *scopeless_name, void *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" float BatchNorm2d_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
   if (notes_vector->data->size()<1)
     LogErrorS("BatchNorm2d requires input channels information.");

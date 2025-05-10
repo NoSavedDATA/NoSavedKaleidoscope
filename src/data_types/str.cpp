@@ -17,7 +17,7 @@ std::map<std::string, std::string> AuxRandomStrs;
 
 
   
-extern "C" char *str_Create(char *name, char *scopeless_name, char *init_val, DT_list *notes_vector, Scope_Struct *scope_struct) {
+extern "C" char *str_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, char *init_val, DT_list *notes_vector) {
 
   // std::cout << "Creating string"  << ".\n";
   // std::cout << "Val: " << init_val << ".\n";
@@ -28,7 +28,7 @@ extern "C" char *str_Create(char *name, char *scopeless_name, char *init_val, DT
   return init_val;
 }
 
-extern "C" char *str_Load(char *name, Scope_Struct *scope_struct){
+extern "C" char *str_Load(Scope_Struct *scope_struct, char *name){
   // std::cout << "Load str " << name << ".\n";
   //char *ret = CopyString(NamedStrs[name]);
   
@@ -45,11 +45,7 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
   
   //NamedStrs[name] = CopyString(value); //TODO: Break?
   
-  if(NamedStrs.count(name)>0) 
-  {
-    char *old_val = NamedStrs[name];
-    move_to_char_pool(strlen(old_val)+1, old_val, "Mark sweep of str");
-  }
+  
   NamedStrs[name] = value;
   //std::cout << "Store " << value << " at " << name << "\n";
   
@@ -58,17 +54,15 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
   return 0;
 }
 
-extern "C" void str_MarkToSweep(Scope_Struct *scope_struct, char *name, void *value) {
-  scope_struct->mark_sweep_map->append(name, value, "str");
-}
 
-void str_Clean_Up(std::string name, void *data_ptr)
+void str_Clean_Up(void *data_ptr)
 {
   // std::cout << "str_Clean_Up" << ".\n";
   char *char_ptr = static_cast<char *>(data_ptr);
   move_to_char_pool(strlen(char_ptr)+1, char_ptr, "Mark sweep of str");
-
 }
+
+
 
 
 extern "C" char *str_Copy(Scope_Struct *scope_struct, char *str) {
@@ -77,7 +71,7 @@ extern "C" char *str_Copy(Scope_Struct *scope_struct, char *str) {
   return ret;
 }
 
-extern "C" char * str_str_add(char *lc, char *rc, Scope_Struct *scope_struct)
+extern "C" char * str_str_add(Scope_Struct *scope_struct, char *lc, char *rc)
 {
   // std::cout << "Concat fn" << ".\n";
   // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
@@ -96,7 +90,7 @@ extern "C" char * str_str_add(char *lc, char *rc, Scope_Struct *scope_struct)
 
 
 
-extern "C" char * str_int_add(char *lc, int rc, Scope_Struct *scope_struct)
+extern "C" char * str_int_add(Scope_Struct *scope_struct, char *lc, int rc)
 {
   // std::cout << "Concat string and float fn" << ".\n";
   // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
@@ -120,7 +114,7 @@ extern "C" char * str_int_add(char *lc, int rc, Scope_Struct *scope_struct)
 }
 
 
-extern "C" char * str_float_add(char *lc, float rc, Scope_Struct *scope_struct)
+extern "C" char * str_float_add(Scope_Struct *scope_struct, char *lc, float rc)
 {
   // std::cout << "Concat string and float fn" << ".\n";
   // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
@@ -142,7 +136,7 @@ extern "C" char * str_float_add(char *lc, float rc, Scope_Struct *scope_struct)
   return result_cstr;
 }
 
-extern "C" char * float_str_add(float lc, char *rc, Scope_Struct *scope_struct)
+extern "C" char * float_str_add(Scope_Struct *scope_struct, float lc, char *rc)
 {  
   std::stringstream ss;
   ss << std::fixed << std::setprecision(2) << lc; // Adjust precision as needed
@@ -256,7 +250,6 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
   char *result = CopyString(splits[idx]);
 
 
-  free(pattern);
   free(input);
 
   return result;
@@ -275,7 +268,6 @@ extern "C" float str_to_float(Scope_Struct *scope_struct, char *in_str)
   float ret = std::strtof(copied, &end);
 
   free(copied);
-  free(in_str);
 
   return ret;
 }

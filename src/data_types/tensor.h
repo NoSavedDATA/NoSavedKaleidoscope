@@ -16,4 +16,4 @@
 void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaStream_t stream);
 
 
-void tensor_Clean_Up(std::string, void *);
+void tensor_Clean_Up(void *);

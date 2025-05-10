@@ -11,7 +11,7 @@ std::map<std::string, std::vector<float>> FloatVecAuxHash;
 
 
 
-extern "C" std::vector<float> *float_vec_Create(char *name, char *scopeless_name, void *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" std::vector<float> *float_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
   // std::cout << "float_vec_Create" << ".\n";
 
@@ -25,7 +25,7 @@ extern "C" std::vector<float> *float_vec_Create(char *name, char *scopeless_name
   return nullptr;
 }
 
-extern "C" std::vector<float> *float_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
+extern "C" std::vector<float> *float_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
   // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   std::vector<float> *ret = &ClassFloatVecs[object_var_name];
@@ -39,11 +39,8 @@ extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Str
   return 0;
 }
 
-extern "C" void float_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, void *value) {
-  scope_struct->mark_sweep_map->append(name, value, "float_vec");
-}
  
-void float_vec_Clean_Up(std::string name, void *data_ptr) {
+void float_vec_Clean_Up(void *data_ptr) {
   // ClassFloatVecs.erase(name);
 }
 
@@ -56,6 +53,11 @@ extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_S
   return 0;
 }
 
+
+
+extern "C" void float_vec_Mark(std::vector<float> vec) {
+  return;
+}
 
 
 

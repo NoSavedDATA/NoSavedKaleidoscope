@@ -1,6 +1,7 @@
 #include "../char_pool/include.h"
 #include "../codegen/string.h"
 #include "../data_types/include.h" 
+#include "../mark_sweep/include.h" 
 
 #include "scope_struct.h"
 
@@ -63,7 +64,8 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 }
 
 void Scope_Struct::Alloc_MarkSweepMap() {
-    mark_sweep_map = new DT_dict();
+    // mark_sweep_map = new DT_dict();
+    mark_sweep_map = new MarkSweep();
 }
 
 
@@ -227,11 +229,13 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
 
     // if (scope_struct->thread_id==0)
 
-    for (auto &pair : *scope_struct->mark_sweep_map->data_types)
-    {
-        // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
-        scope_struct->mark_sweep_map->delete_type(pair.first);
-    }
+    // for (auto &pair : *scope_struct->mark_sweep_map->data_types)
+    // {
+    //     // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
+    //     scope_struct->mark_sweep_map->delete_type(pair.first);
+    // }
+
+    scope_struct->mark_sweep_map->clean_up();
 
     delete_scope(scope_struct);
 }

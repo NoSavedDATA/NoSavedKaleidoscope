@@ -68,7 +68,7 @@ void DT_dict::delete_type(std::string key) {
     // else 
     //     std::cout << "GOT NULL OF " << it_type->second << ".\n";
 
-    clean_up_functions[it_type->second](it->first, data_ptr);
+    clean_up_functions[it_type->second](data_ptr);
 }
 
 
