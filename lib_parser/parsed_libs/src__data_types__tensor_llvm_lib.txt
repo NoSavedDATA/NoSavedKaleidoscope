@@ -1,4 +1,4 @@
-1821-05-07 17:22:20
+1821-05-09 22:40:08
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -21,12 +21,12 @@
 	);
 	TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
 
-	FunctionType *tensor_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+	FunctionType *tensor_opaTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("tensor_MarkToSweep", tensor_MarkToSweepTy);
+	TheModule->getOrInsertFunction("tensor_opa", tensor_opaTy);
 
 	FunctionType *gpuTy= FunctionType::get(
 		int8PtrTy,

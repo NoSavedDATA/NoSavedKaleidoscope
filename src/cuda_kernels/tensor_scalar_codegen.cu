@@ -6,7 +6,7 @@
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
-extern "C" DT_tensor *tensor_float_mult(DT_tensor *tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_mult(Scope_Struct *scope_struct, DT_tensor *tensor, float R) {
   //std::cout << "CudaScalarMult by " << R << "\n";
   int thread_id = scope_struct->thread_id;
   
@@ -33,7 +33,7 @@ extern "C" DT_tensor *tensor_float_mult(DT_tensor *tensor, float R, Scope_Struct
 }
 
 
-extern "C" DT_tensor *tensor_float_div(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_div(Scope_Struct *scope_struct, DT_tensor tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -80,7 +80,7 @@ extern "C" DT_tensor *tensor_float_div(DT_tensor tensor, float R, Scope_Struct *
 //   return new_tensor;
 // }
 
-extern "C" DT_tensor *tensor_float_add(DT_tensor *tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_add(Scope_Struct *scope_struct, DT_tensor *tensor, float R) {
   int thread_id = scope_struct->thread_id;
   
   int dims_prod = tensor->dims_prod;
@@ -103,7 +103,7 @@ extern "C" DT_tensor *tensor_float_add(DT_tensor *tensor, float R, Scope_Struct 
   return new_tensor;
 }
 
-extern "C" DT_tensor *tensor_float_sub(DT_tensor *tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_sub(Scope_Struct *scope_struct, DT_tensor *tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor->dims_prod;
@@ -126,7 +126,7 @@ extern "C" DT_tensor *tensor_float_sub(DT_tensor *tensor, float R, Scope_Struct 
   return new_tensor;
 }
 
-extern "C" DT_tensor *tensor_float_equal(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_equal(Scope_Struct *scope_struct, DT_tensor tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -148,7 +148,7 @@ extern "C" DT_tensor *tensor_float_equal(DT_tensor tensor, float R, Scope_Struct
   return new_tensor;
 }
 
-extern "C" DT_tensor *tensor_float_diff(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_float_diff(Scope_Struct *scope_struct, DT_tensor tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -169,7 +169,8 @@ extern "C" DT_tensor *tensor_float_diff(DT_tensor tensor, float R, Scope_Struct 
   DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" DT_tensor *tensor_float_minor(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
+
+extern "C" DT_tensor *tensor_float_minor(Scope_Struct *scope_struct, DT_tensor tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -190,7 +191,8 @@ extern "C" DT_tensor *tensor_float_minor(DT_tensor tensor, float R, Scope_Struct
   DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" DT_tensor *tensor_float_minor_eq(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
+
+extern "C" DT_tensor *tensor_float_minor_eq(Scope_Struct *scope_struct, DT_tensor tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -211,7 +213,8 @@ extern "C" DT_tensor *tensor_float_minor_eq(DT_tensor tensor, float R, Scope_Str
   DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" DT_tensor *tensor_float_higher(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
+
+extern "C" DT_tensor *tensor_float_higher(Scope_Struct *scope_struct, DT_tensor tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;
@@ -232,7 +235,8 @@ extern "C" DT_tensor *tensor_float_higher(DT_tensor tensor, float R, Scope_Struc
   DT_tensor *new_tensor = createTensor(device_y, tensor.dims, kDataLen, false, "");
   return new_tensor;
 }
-extern "C" DT_tensor *tensor_float_higher_eq(DT_tensor tensor, float R, Scope_Struct *scope_struct) {
+
+extern "C" DT_tensor *tensor_float_higher_eq(Scope_Struct *scope_struct, DT_tensor tensor, float R) {
   int thread_id = scope_struct->thread_id;
 
   int kDataLen = tensor.dims_prod;

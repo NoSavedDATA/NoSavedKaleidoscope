@@ -8,4 +8,4 @@
 
 
 
-void float_vec_Clean_Up(std::string name, void *);
+void float_vec_Clean_Up(void *);

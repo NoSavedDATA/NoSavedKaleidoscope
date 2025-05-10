@@ -1,4 +1,4 @@
-1821-05-09 19:45:46
+1821-05-09 23:49:13
 
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -20,13 +20,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
-
-	FunctionType *str_vec_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_vec_MarkToSweep", str_vec_MarkToSweepTy);
 
 	FunctionType *PrintStrVecTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

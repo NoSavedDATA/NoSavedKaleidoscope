@@ -1,0 +1,15 @@
+1821-05-09 23:55:10
+
+	FunctionType *MarkToSweep_MarkTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("MarkToSweep_Mark", MarkToSweep_MarkTy);
+
+	FunctionType *MarkToSweep_UnmarkTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("MarkToSweep_Unmark", MarkToSweep_UnmarkTy);

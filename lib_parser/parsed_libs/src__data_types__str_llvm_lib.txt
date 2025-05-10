@@ -1,4 +1,4 @@
-1821-05-09 19:45:12
+1821-05-10 00:06:27
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -21,13 +21,6 @@
 	);
 	TheModule->getOrInsertFunction("str_Store", str_StoreTy);
 
-	FunctionType *str_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_MarkToSweep", str_MarkToSweepTy);
-
 	FunctionType *str_CopyTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -44,21 +37,21 @@
 
 	FunctionType *str_int_addTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("str_int_add", str_int_addTy);
 
 	FunctionType *str_float_addTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("str_float_add", str_float_addTy);
 
 	FunctionType *float_str_addTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getFloatTy(*TheContext), int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("float_str_add", float_str_addTy);

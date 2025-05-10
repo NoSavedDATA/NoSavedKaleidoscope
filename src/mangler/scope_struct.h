@@ -5,6 +5,7 @@
 
 #include "../data_types/any_map.h" 
 #include "../data_types/codegen_notes.h" 
+#include "../mark_sweep/include.h" 
 
 
 struct Scope_Struct { 
@@ -13,7 +14,8 @@ struct Scope_Struct {
     char *previous_scope = nullptr;
     char *function_name = nullptr;
 
-    DT_dict *mark_sweep_map = nullptr;
+    // MarkSweep *mark_sweep_map = nullptr;
+    MarkSweep *mark_sweep_map = nullptr;
     
     int thread_id=0;
     int has_grad=1;

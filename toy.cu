@@ -626,8 +626,12 @@ Function *FunctionAST::codegen() {
             Value *var_name = global_str(arg_name);
             var_name = callret("ConcatStr", {scope_string, var_name});
 
+
             call(type+"_Store", {var_name, &Arg, scope_struct});
-            call(type+"_MarkToSweep", {scope_struct, var_name, &Arg});
+
+            if (type!="float")
+                call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
+
         } else {
             call("CopyArgTensor",
                             {&Arg,

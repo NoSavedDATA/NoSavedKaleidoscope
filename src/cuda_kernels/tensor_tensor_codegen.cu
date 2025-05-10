@@ -11,8 +11,7 @@
 #include "../tensor/include.h"
 #include "include.h"
 
-extern "C" DT_tensor *tensor_tensor_mma(
-                          DT_tensor *tensor_x, DT_tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_tensor_mma(Scope_Struct *scope_struct, DT_tensor *tensor_x, DT_tensor *tensor_w) {
 
   int thread_id = scope_struct->thread_id;
 
@@ -54,8 +53,7 @@ extern "C" DT_tensor *tensor_tensor_mma(
 }
 
 
-extern "C" DT_tensor *tensor_tensor_add(
-                          DT_tensor *tensor_x, DT_tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_tensor_add(Scope_Struct *scope_struct, DT_tensor *tensor_x, DT_tensor *tensor_w) {
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
@@ -131,8 +129,7 @@ extern "C" DT_tensor *tensor_tensor_add(
 }
 
 
-extern "C" DT_tensor *tensor_tensor_sub(
-                          DT_tensor *tensor_x, DT_tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_tensor_sub(Scope_Struct *scope_struct, DT_tensor *tensor_x, DT_tensor *tensor_w) {
 
   int thread_id = scope_struct->thread_id;
 
@@ -170,7 +167,7 @@ extern "C" DT_tensor *tensor_tensor_sub(
 }
 
 
-extern "C" DT_tensor *tensor_tensor_equal(DT_tensor *tensor_x, DT_tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_tensor_equal(Scope_Struct *scope_struct, DT_tensor *tensor_x, DT_tensor *tensor_w) {
 
   int thread_id = scope_struct->thread_id;
                             
@@ -203,8 +200,7 @@ extern "C" DT_tensor *tensor_tensor_equal(DT_tensor *tensor_x, DT_tensor *tensor
 }
 
 
-extern "C" DT_tensor *tensor_tensor_mult(
-                          DT_tensor *tensor_x, DT_tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_tensor_mult(Scope_Struct *scope_struct, DT_tensor *tensor_x, DT_tensor *tensor_w) {
 
   int thread_id = scope_struct->thread_id;
 
@@ -296,8 +292,7 @@ extern "C" DT_tensor *tensor_tensor_mult(
 
 
 
-extern "C" DT_tensor *tensor_tensor_div(
-                          DT_tensor *tensor_x, DT_tensor *tensor_w, Scope_Struct *scope_struct) {
+extern "C" DT_tensor *tensor_tensor_div(Scope_Struct *scope_struct, DT_tensor *tensor_x, DT_tensor *tensor_w) {
                             
   int thread_id = scope_struct->thread_id;
   

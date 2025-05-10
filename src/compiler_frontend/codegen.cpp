@@ -86,7 +86,9 @@ Value *StringExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
-  return callret("CopyString", {global_str(Val)});
+  Value *_str = callret("CopyString", {global_str(Val)});
+  call("MarkToSweep_Mark", {scope_struct, _str, global_str("str")});
+  return _str;
 }
 
 Value *NullPtrExprAST::codegen(Value *scope_struct) {
@@ -186,23 +188,27 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     Value *initial_value = Init->codegen(scope_struct);
     
     std::string create_fn = Type + "_Create";    
-    std::string mark_to_sweep_fn  = Type + "_MarkToSweep";
     p2t("DataExpr Call create for " + create_fn);
 
-    initial_value = callret(create_fn, {var_name, scopeless_name, initial_value,
-                      notes_vector, scope_struct});
+    initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
     
     // p2t("DataExpr Dispose notes vector");
     // p2t("Dispose notes vector of " + Type + "/" + Name + "/" + std::to_string(is_self) + "/" + std::to_string(is_attr));
 
     call("Dispose_NotesVector", {notes_vector, scopeless_name});
 
-    // p2t("Call mark to sweep of " + mark_to_sweep_fn);
-    if(!(is_self||is_attr))
-      call(mark_to_sweep_fn, {scope_struct, var_name, initial_value});
-    else
-      call("str_Delete", {var_name});
-    
+    if(Type!="float")
+    {
+      if(!(is_self||is_attr))
+      {
+        call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
+      }
+      else
+      {
+        call("MarkToSweep_Unmark", {scope_struct, initial_value});
+      }
+    }
+    call("str_Delete", {var_name});
   }
 
 
@@ -392,7 +398,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
-  Value *CurVar = callret("float_Load", {var_name});
+  Value *CurVar = callret("float_Load", {scope_struct, var_name});
   Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar"); // Increment
 
   call("float_Store", {var_name, NextVar});
@@ -516,7 +522,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
   std::string load_fn = type + "_Load";
 
-  V = callret(load_fn, {var_name, scope_struct});
+  V = callret(load_fn, {scope_struct, var_name});
   call("str_Delete", {var_name});
 
   return V;
@@ -836,20 +842,26 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
 
-    if(!LHS->GetSelf()&&!LHS->GetIsAttribute())
+    if (LType!="float")
     {
-      std::string mark_to_sweep_fn = LType + "_MarkToSweep";
-      // if (!in_str(LType, {"float", "str"}))
-      // {
-      //   p2t("MARKING " + LType);
-      // }
-    //   p2t("MARK TO SWEEP OF " + LType);
-      call(mark_to_sweep_fn, {scope_struct, Lvar_name, Val});
+      if(!LHS->GetSelf()&&!LHS->GetIsAttribute())
+      { // Marked already
+
+        // if (!in_str(LType, {"float", "str"}))
+        // {
+        //   p2t("MARKING " + LType);
+        // }
+      //   p2t("MARK TO SWEEP OF " + LType);
+        
+        // call("MarkToSweep_Mark", {scope_struct, Val, global_str(LType)});
+      }
+      else
+      {  
+        
+        call("MarkToSweep_Unmark", {scope_struct, Val});
+      }
     }
-    else
-    {  
-      call("str_Delete", {Lvar_name});
-    }
+    call("str_Delete", {Lvar_name});
     
 
     seen_var_attr=false;
@@ -911,7 +923,20 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     // std::string msg = "Codegen for operation: " + Operation;
     // p2t(msg);
 
-    return callret(Operation, {L, R, scope_struct}); 
+
+    Value *ret = callret(Operation, {scope_struct, L, R});
+
+    if(ops_type_return.count(Elements)>0)
+    {
+      std::string return_type = ops_type_return[Elements];
+      // std::cout << "Operation of " << Elements << " has a return of " << return_type << ".\n";
+
+      if (return_type!="float")
+        call("MarkToSweep_Mark", {scope_struct, ret, global_str(return_type)});
+    }
+
+
+    return ret; 
   }
 
 
@@ -1052,32 +1077,27 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
     //std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
     if (Operand->GetType()=="tensor")
     {
-      Value *tensor_name = Builder->CreateGlobalString(Operand->GetName());
+      Value *tensor_name = global_str(Operand->GetName());
 
       std::string pre_dot = Operand->GetPreDot();
       bool is_self = Operand->GetSelf();
       bool is_attr = Operand->GetIsAttribute();
 
       if (is_attr) { // Gets from pre_dot if it is a class attribute
-        Value * object_name = Builder->CreateGlobalString(pre_dot);
+        Value * object_name = global_str(pre_dot);
 
-        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {object_name, tensor_name});
+        tensor_name = callret("ConcatStr", {object_name, tensor_name});
       }
       if (is_self)
-        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                          {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), tensor_name});
+        tensor_name = callret("ConcatStr", {callret("get_scope_first_arg", {scope_struct}), tensor_name});
       if (!(is_self||is_attr))
-        tensor_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), tensor_name});
+        tensor_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), tensor_name});
         
 
-      Value *tensorPtr = Builder->CreateCall(TheModule->getFunction("tensor_Load"),
-                                              {tensor_name, scope_struct});
+      Value *tensorPtr = callret("tensor_Load", {scope_struct, tensor_name});
       Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
 
-      return Builder->CreateCall(TheModule->getFunction("CudaScalarMult"),
-                                {tensorPtr, R, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})}, "cudascalarmult");
+      return callret("CudaScalarMult", {tensorPtr, R, callret("get_scope_thread_id", {scope_struct})});
     }
     return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
                               OperandV, "multmp");
@@ -1096,7 +1116,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
   Function *F = getFunction(std::string("unary") + Opcode);
   if (!F)
-    return LogErrorV("Operador unário desconhecido.");
+    return LogErrorV("Unknown unary operator.");
 
   return Builder->CreateCall(F, OperandV, "unop");
 }
@@ -1927,7 +1947,7 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(scope_struct);
 
-      arg = callret("tensor_Load", {arg, scope_struct});
+      arg = callret("tensor_Load", {scope_struct, arg});
     }
     else
     {
@@ -2083,7 +2103,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     {
       // scope_string = callret("RandomStrOnDemand", {});
       scope_string = global_str(Scope_Random_Str);
-      scope_string = callret("str_int_add", {scope_string, callret("get_scope_thread_id", {scope_struct})});
+      scope_string = callret("str_int_add", {scope_struct, scope_string, callret("get_scope_thread_id", {scope_struct})});
       call("set_scope_scope", {scope_struct_copy, scope_string});
     }
   }
@@ -2139,7 +2159,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
     std::string load_fn = Load_Type+"_Load";
-    Value *arg = callret(load_fn, {callret("get_scope_first_arg", {scope_struct_copy}), scope_struct_copy});  
+    Value *arg = callret(load_fn, {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});  
     ArgsV.push_back(arg);
   }
 

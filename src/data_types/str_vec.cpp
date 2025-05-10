@@ -15,7 +15,7 @@
 
 
 
-extern "C" void *str_vec_Create(char *name, char *scopeless_name, void *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" void *str_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
   if (init_val!=nullptr)
   { 
@@ -27,7 +27,7 @@ extern "C" void *str_vec_Create(char *name, char *scopeless_name, void *init_val
   return nullptr;
 }
 
-extern "C" void *str_vec_Load(char *object_var_name, Scope_Struct *scope_struct) {
+extern "C" void *str_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
   // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   void *ret = &ClassStrVecs[object_var_name];
@@ -42,11 +42,8 @@ extern "C" void str_vec_Store(char *name, std::vector<char *> value, Scope_Struc
   //delete[] name;
 }
 
-extern "C" void str_vec_MarkToSweep(Scope_Struct *scope_struct, char *name, void *value) {
-  scope_struct->mark_sweep_map->append(name, value, "str_vec");
-}
 
-void str_vec_Clean_Up(std::string name, void *data_ptr) {
+void str_vec_Clean_Up(void *data_ptr) {
   // ClassStrVecs.erase(name);
 }
 

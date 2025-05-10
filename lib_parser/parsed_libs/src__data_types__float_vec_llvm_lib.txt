@@ -1,4 +1,4 @@
-1821-05-09 19:45:41
+1821-05-09 23:49:05
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -21,19 +21,19 @@
 	);
 	TheModule->getOrInsertFunction("float_vec_Store", float_vec_StoreTy);
 
-	FunctionType *float_vec_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_MarkToSweep", float_vec_MarkToSweepTy);
-
 	FunctionType *float_vec_Store_IdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
+
+	FunctionType *float_vec_MarkTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Mark", float_vec_MarkTy);
 
 	FunctionType *PrintFloatVecTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

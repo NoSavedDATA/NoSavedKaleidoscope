@@ -17,7 +17,7 @@
 
 
 
-extern "C" float pinned_tensor_Create(char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector, Scope_Struct *scope_struct)
+extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector)
 {
 
   // std::cout << "PINNED TENSOR CREATE"  << ".\n";
@@ -177,3 +177,4 @@ extern "C" float pinned_tensor_CalculateIdx(char *tensor_name, float first_idx, 
 
   return idx_at;
 }
+

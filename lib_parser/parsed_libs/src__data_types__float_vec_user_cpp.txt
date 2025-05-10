@@ -1,1 +1,1 @@
-"float_vec_Create", "float_vec_Load", "float_vec_Store", "float_vec_MarkToSweep", "float_vec_Store_Idx", "PrintFloatVec", "zeros_vec", "ones_vec", "float_vec_Idx", "float_vec_CalculateIdx", "float_vec_first_nonzero", "float_vec_print", 
+"float_vec_Create", "float_vec_Load", "float_vec_Store", "float_vec_Store_Idx", "float_vec_Mark", "PrintFloatVec", "zeros_vec", "ones_vec", "float_vec_Idx", "float_vec_CalculateIdx", "float_vec_first_nonzero", "float_vec_print", 

@@ -1,4 +1,4 @@
-1821-05-06 21:10:37
+1821-05-09 23:49:13
 
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,
@@ -48,13 +48,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
-
-	FunctionType *list_MarkToSweepTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_MarkToSweep", list_MarkToSweepTy);
 
 	FunctionType *list_IdxTy= FunctionType::get(
 		int8PtrTy,
