@@ -273,7 +273,7 @@ void broadcast_lastdim_add_backward2(float *dx, float *dy, int x_size, int y_siz
   block_size = grid_block_mem_sizes[1];
 
 
-  sum_over_last_dim_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dy, dx, y_size, leading_dim);
+  sum_over_last_dim_kernel<<<grid_size, block_size, 0, main_stream>>>(dy, dx, y_size, leading_dim);
 }
 
 

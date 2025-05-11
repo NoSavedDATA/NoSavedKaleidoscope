@@ -520,8 +520,9 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
     call("PrintTensor", {scope_struct, var_name});
   
 
+  
+  // p2t("Variable load");
   std::string load_fn = type + "_Load";
-
   V = callret(load_fn, {scope_struct, var_name});
   call("str_Delete", {var_name});
 
@@ -1111,7 +1112,8 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
     return Builder->CreateCall(TheModule->getFunction("logical_not"), {OperandV});
   }
   if (Opcode=';')
-    return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
+    return OperandV;
+    // return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
   
 
   Function *F = getFunction(std::string("unary") + Opcode);
@@ -1133,8 +1135,8 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
     fnIndex++;
   
-  CudaStreams *thread_stream = AllocateStream(0);
-  ThreadsStream[fnIndex] = thread_stream->stream;
+  cudaStream_t thread_stream = createCudaStream();
+  ThreadsStream[fnIndex] = thread_stream;
 
   // Create function for this async function
   llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
@@ -1360,6 +1362,50 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
 
+
+Value *RetExprAST::codegen(Value *scope_struct) {
+  seen_var_attr=true;
+  call("set_scope_at_return", {scope_struct});
+  if(Vars.size()==1)
+  {
+    Value *ret = Vars[0]->codegen(scope_struct);
+    seen_var_attr=false;
+    call("set_scope_not_at_return", {scope_struct});
+    return ret;
+  }
+  
+  std::vector<Value *> values = {scope_struct};
+  for (int i=0; i<Vars.size(); i++)
+  {
+    Value *value = Vars[i]->codegen(scope_struct);
+    std::string type = Vars[i]->GetType();
+    values.push_back(global_str(type));
+    values.push_back(value);
+  }
+  values.push_back(global_str("TERMINATE_VARARG"));
+
+  seen_var_attr=false;
+  Value *ret = callret("list_New", values);
+  call("set_scope_not_at_return", {scope_struct});
+  return ret;
+
+  // for (int i=0; i<Values.size(); i++)
+  // {
+  //   std::string type = Values[i]->GetType();
+  //   Value *value = Values[i]->codegen(scope_struct);
+  //   if (!is_type)
+  //   {
+  //     if (type!="float")
+  //     {
+  //       std::string copy_fn = type + "_" + "Copy";
+  //       value = callret(copy_fn, {scope_struct, value});
+  //     }
+  //     is_type=true;
+  //   } else
+  //     is_type=false;
+  //   values.push_back(value);
+ 
+}
 
 Value *ReturnExprAST::codegen(Value *scope_struct) {
 
@@ -2185,6 +2231,13 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     //   p2t("Function value is");
     //   call("print_float", {ret});
     // }
+
+    if (Type!="float"&&Type!="")
+    {
+      // if (!begins_with(Callee, "Dataset"))
+      //   p2t("RETURN OF " + Callee + " is " + Type);
+      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+    }
     return ret;
   }
   else
@@ -2210,10 +2263,17 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
     }
     call("scope_struct_Delete", {scope_struct_copy});
+
+    
+      
+    if (Type!="float"&&Type!="")
+    {
+      // p2t("RETURN OF " + Callee + " is " + Type);
+      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+    }
     return ret;
   }
 
-  p2t("CallExpr clean scope"); 
   
 
 
@@ -2238,6 +2298,12 @@ Value *ChainCallExprAST::codegen(Value *scope_struct) {
   std::string call_fn = Call_Of;
   Value *ret = callret(call_fn, ArgsV);
 
+  if (Type!="float"&&Type!="")
+  {
+
+    p2t("RETURN OF CHAIN CALL " + call_fn + " is " + Type);
+    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+  }
 
   return ret;
 }

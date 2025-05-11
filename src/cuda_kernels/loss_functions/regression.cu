@@ -20,7 +20,7 @@ void MSEBackward(float *y_hat, float *y,
   grid_size  = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  mse_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, y_hat, y, scale, dims_prod);
+  mse_kernel<<<grid_size, block_size, 0, main_stream>>>(dloss, y_hat, y, scale, dims_prod);
 
   //PrintTensorF(dloss, 1, dims_prod);
 }
@@ -81,7 +81,7 @@ extern "C" DT_tensor *mse_with_priorities(int thread_id, DT_tensor *y_hat, DT_te
   block_size = grid_block_mem_sizes[1];
   
 
-  online_mse<<<grid_size, block_size, 0, main_stream->stream>>>(msed, y_hat->tensor_ptr, y->tensor_ptr, B, C);
+  online_mse<<<grid_size, block_size, 0, main_stream>>>(msed, y_hat->tensor_ptr, y->tensor_ptr, B, C);
 
   DT_tensor *new_tensor = createTensor(msed, {B}, B, false, "");
   new_tensor->AttrLNode(y_hat, detach_op);
@@ -110,7 +110,7 @@ void MSEWithPrioritiesBackward(DT_tensor *loss_tensor,
   block_size = grid_block_mem_sizes[1];
   
   //std::cout << "grid_size: " << grid_size << ", block_size: " << block_size << "\n";
-  mse_with_priorities_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, y_hat_tensor->tensor_ptr, y_tensor->tensor_ptr, is_w_tensor->tensor_ptr, scale, dims_prod);
+  mse_with_priorities_kernel<<<grid_size, block_size, 0, main_stream>>>(dloss, y_hat_tensor->tensor_ptr, y_tensor->tensor_ptr, is_w_tensor->tensor_ptr, scale, dims_prod);
 
   //PrintTensorF(dloss, 1, dims_prod);
 }

@@ -388,7 +388,7 @@ void hadamard_backward2(float *x, float *w, float *dx, float *dw, float *dy, flo
   int grid_size, block_size;
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
-  hadamard_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, w, dx, dw, dy, dims_prod);
+  hadamard_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(x, w, dx, dw, dy, dims_prod);
 }
 
 

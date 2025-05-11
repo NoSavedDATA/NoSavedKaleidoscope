@@ -72,33 +72,23 @@ extern "C" float list_Store(char *name, DT_list *vector, Scope_Struct *scope_str
   return 0;
 }
 
-
-extern "C" DT_list *list_Load(Scope_Struct *scope_struct, char *name){
-  std::cout << "list_Load"  << ".\n";
-  DT_list *ret = NamedVectors[name];
-  //delete[] tensor_name;
-  return ret;
-}
-
-
-
 extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
   // std::cout << "\n";
   list->print();
   return 0;
 }
 
-
-extern "C" float list_checkmate(Scope_Struct *scope_struct, DT_list *list) {
-  std::cout << "REACHED CHECKMATE" << ".\n";
-  return 0;
+extern "C" DT_list *list_Load(Scope_Struct *scope_struct, char *name){
+  std::cout << "list_Load of " << name << ".\n";
+  DT_list *ret = NamedVectors[name];
+  // list_print(scope_struct, ret);
+  return ret;
 }
 
 
-extern "C" float list_test(Scope_Struct *scope_struct, DT_list *list) {
-  std::cout << "REACHED list TEST" << ".\n";
-  return 0;
-}
+
+
+
 
 
 extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector)

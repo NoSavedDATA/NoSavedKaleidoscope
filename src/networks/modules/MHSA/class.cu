@@ -171,7 +171,7 @@ float *MHSA::Forward(DT_tensor *x, int B, int T, int thread_id)
 
 
   
-  //std::cout << "" << main_stream->stream==stream << "\n";
+  //std::cout << "" << main_stream==stream << "\n";
 
   if (_fp32)
   {
@@ -400,8 +400,8 @@ void MHSA::FirstBackward()
   dW = get_from_pool(0, 3*C*C, "MHSA dW");
   dW_proj = get_from_pool(0, C*C, "MHSA dW");
 
-  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 3*C*C);
-  set_to_zero_kernel<<<std::ceil((C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW_proj, C*C);
+  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, 3*C*C);
+  set_to_zero_kernel<<<std::ceil((C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW_proj, C*C);
 
   NamedParamGrads[Name+"W"] = dW;
   NamedParamGrads[Name+"W_proj"] = dW_proj;
@@ -443,12 +443,12 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
 
     
-    //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_proj_stream, main_stream);
     
 
 
-    //mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
-    //mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+    //mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+    //mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
 
 
     
@@ -475,7 +475,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
     //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
     //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
-    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
+    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream>>>(d_qkv, d_out, qkv, out, l, D,
                                                                                 B, nh, T, d, C, sqrtf(d),
                                                                                 Bc_back, Br_back, Tc_back, Tr_back,
                                                                                 warps_per_block, threads_per_block);
@@ -483,12 +483,12 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //PrintTensorF(d_qkv, 3, C);
     //PrintTensorF(d_qkv, T, 3*C);
     
-    //StreamAwaitStreamB(dw_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_stream, main_stream);
 
     dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
     dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C)/(float)TILE_SIZE));
-    //mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
-    //mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+    //mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+    //mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
     
     
     cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, 3*C, B*T, &one,
@@ -499,8 +499,8 @@ void MHSA::Backward(float *x, float *dx, float *dy)
                               dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
     
 
-    //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
-    //StreamAwaitStreamB(main_stream->stream, dw_stream);
+    //StreamAwaitStreamB(main_stream, dw_proj_stream);
+    //StreamAwaitStreamB(main_stream, dw_stream);
     //cudaStreamDestroy(dw_proj_stream);
     //cudaStreamDestroy(dw_stream);
   } else {
@@ -512,7 +512,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
 
     
-    //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_proj_stream, main_stream);
     
     constexpr int num_warps_x{4};
     constexpr int num_warps_y{4};
@@ -526,8 +526,8 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     dim3 grid_size_dx_proj(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
     dim3 grid_size_dw_proj(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((C + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx_proj, block_size, shared_mem_size, main_stream->stream>>>(d_out, W_proj, dy, B*T, C, C);
-    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw_proj, block_size, shared_mem_size, main_stream->stream>>>(dW_proj, out, dy, B*T, C, C);
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx_proj, block_size, shared_mem_size, main_stream>>>(d_out, W_proj, dy, B*T, C, C);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw_proj, block_size, shared_mem_size, main_stream>>>(dW_proj, out, dy, B*T, C, C);
     
     
 
@@ -542,7 +542,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
     //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
     //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
-    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
+    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream>>>(d_qkv, d_out, qkv, out, l, D,
                                                                                 B, nh, T, d, C, sqrtf(d),
                                                                                 Bc_back, Br_back, Tc_back, Tr_back,
                                                                                 warps_per_block, threads_per_block);
@@ -550,21 +550,21 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //PrintTensorF(d_qkv, 3, C);
     //PrintTensorF(d_qkv, T, 3*C);
     
-    //StreamAwaitStreamB(dw_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_stream, main_stream);
 
 
 
     dim3 grid_size_dx(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
     dim3 grid_size_dw(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((3*C + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(dx, W, d_qkv, B*T, C, 3*C);
-    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(dW, x, d_qkv, B*T, C, 3*C);
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(dx, W, d_qkv, B*T, C, 3*C);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(dW, x, d_qkv, B*T, C, 3*C);
     
     
   
 
-    //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
-    //StreamAwaitStreamB(main_stream->stream, dw_stream);
+    //StreamAwaitStreamB(main_stream, dw_proj_stream);
+    //StreamAwaitStreamB(main_stream, dw_stream);
     //cudaStreamDestroy(dw_proj_stream);
     //cudaStreamDestroy(dw_stream);
 
@@ -576,7 +576,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
 
 
-  //add_forward<<<std::ceil((B*T*C)/THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dx, dy, B*T*C);
+  //add_forward<<<std::ceil((B*T*C)/THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dx, dx, dy, B*T*C);
 
 
   // Clean-up

@@ -145,8 +145,13 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
 
 
 extern "C" DT_tensor *tensor_Load(Scope_Struct *scope_struct, char *tensor_name) {
+
+  
   // std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
   DT_tensor *ret = NamedTensorsT[tensor_name];
+
+  if(scope_struct->is_at_return && (nn_mode==eval_mode||scope_struct->thread_id!=0))
+    ret->leaf = false;
   //std::cout << "return load." << "\n";
 
   return ret;
@@ -234,13 +239,7 @@ inline DT_tensor *store_intermediate_result_tensor(DT_tensor *stored_tensor, DT_
 
 inline void clean_tensor(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   if (nn_mode==eval_mode||stored_tensor->thread_id!=0)
-  {
     CleanTreeNow(stored_tensor->thread_id, stored_tensor, stored_tensor->name);
-    // if(stored_tensor->thread_id==0)
-    //   move_to_pool(stored_tensor->thread_id, stored_tensor->dims_prod, stored_tensor->tensor_ptr, "z=x");
-    // else
-    //   ThreadedScopeTensorsToClean[stored_tensor->thread_id][scope].push_back(stored_tensor->name);
-  }
   // Else, save the tensor for the backrpop.
 }
 
@@ -311,7 +310,7 @@ extern "C" float tensor_Store(char *tensor_name, DT_tensor *tensor, Scope_Struct
   // Free current and point to operation result
   else if (tensor->name==""||!tensor->leaf) 
   {
-    clean_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);
+    clean_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope); // Remove current if evaluating
     stored_tensor = store_intermediate_result_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);
   }
   else {
@@ -319,7 +318,7 @@ extern "C" float tensor_Store(char *tensor_name, DT_tensor *tensor, Scope_Struct
     // Is Leaf
     if(tensor->op==tensor_leaf||tensor->op==create_tensor_op||nn_mode==eval_mode||thread_id!=0)
     {
-      clean_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);
+      clean_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope); // Remove current if evaluating
       stored_tensor = change_tensor_dims(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);
       stored_tensor = sync_and_copy_tensors(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);
       stored_tensor = store_leaf_backward(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);       
@@ -372,11 +371,8 @@ extern "C" DT_tensor *gpu(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tens
 
   
   Loader *loader=nullptr;
-  CudaStreams *cuda_stream=nullptr;
-  
-  
-  cuda_stream = AllocateStream(0);
-  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+  cudaStream_t cuda_stream = createCudaStream();
+  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
   //cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
   pinned_tensor->cuda_stream = cuda_stream;
   
@@ -434,16 +430,15 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
 
   
   Loader *loader=nullptr;
-  CudaStreams *cuda_stream=nullptr;
-  
+  cudaStream_t cuda_stream = nullptr;
   
   if (batchless_dims_prod<2000){
     cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
   }
   else// if (batchless_dims_prod<1000)
   {
-    cuda_stream = AllocateStream(0);
-    cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+    cuda_stream = createCudaStream();
+    cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
     //cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
     pinned_tensor->cuda_stream = cuda_stream;
   }
@@ -451,7 +446,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
   else
   {
     //cuda_stream = AllocateStream(0);
-    //cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+    //cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
     loader = new Loader();
     loader->Load(tensor_ptr, tensor_cpu, batchless_dims_prod);
   }

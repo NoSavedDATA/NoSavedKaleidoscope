@@ -106,6 +106,13 @@ extern "C" Scope_Struct *scope_struct_Dive(Scope_Struct *scope_struct) {
 
 
 
+extern "C" void set_scope_at_return(Scope_Struct *scope_struct) {
+    scope_struct->is_at_return = true;
+}
+extern "C" void set_scope_not_at_return(Scope_Struct *scope_struct) {
+    scope_struct->is_at_return = false;
+}
+
 extern "C" void set_scope_first_arg(Scope_Struct *scope_struct, char *first_arg) {
     // std::cout << "set_scope_first_arg: " << first_arg << ".\n";
     scope_struct->Set_First_Arg(first_arg);

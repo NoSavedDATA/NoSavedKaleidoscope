@@ -25,7 +25,7 @@
     
 //     unsigned long long seed = get_int_seed();
 
-//     dropout_mask_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, dropout_ptr, tensor->tensor_ptr, rate, scale, dims_prod, seed);
+//     dropout_mask_kernel<<<grid_size, block_size, 0, main_stream>>>(device_y, dropout_ptr, tensor->tensor_ptr, rate, scale, dims_prod, seed);
     
 //     DT_tensor *dropout_tensor = createTensor(dropout_ptr, tensor->dims, dims_prod, true, "");
 //     dropout_tensor->scopeless_name="";
@@ -45,5 +45,5 @@
 //   grid_size = grid_block_mem_sizes[0];
 //   block_size = grid_block_mem_sizes[1];
 
-//   dropout_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, mask, dy, dims_prod);
+//   dropout_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dx, mask, dy, dims_prod);
 // }

@@ -113,7 +113,10 @@ CudaStreams *parallel_streams[num_parallel_streams];
 cudaEvent_t parallel_events[num_parallel_streams];
 std::vector<cudaEvent_t> Registered_Events;
 int open_streams[num_parallel_streams];
-CudaStreams *main_stream, *backward_stream;
+
+// CudaStreams *main_stream, *backward_stream;
+cudaStream_t main_stream, backward_stream;
+
 std::map<int, cudaStream_t> ThreadsStream;
 std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops, weightless_ops;
 int nn_mode=training_mode;
@@ -2396,41 +2399,9 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("ConcatScopeStr", ConcatScopeStrTy);
   
 
-  //
-  FunctionType * ConcatScopeAtCallExprTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("ConcatScopeAtCallExpr", ConcatScopeAtCallExprTy);
+  
 
-  
-  //
-  FunctionType * AddToScopeCleanListTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("AddToScopeCleanList", AddToScopeCleanListTy);
-
-  
-  //
-  FunctionType * AddFloatToScopeCleanListTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("AddFloatToScopeCleanList", AddFloatToScopeCleanListTy);
-
-  
-  //
-  FunctionType *CleanScopeVarsTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("CleanScopeVars", CleanScopeVarsTy);
-  
+    
 
   //
   FunctionType * RandomStrOnDemandTy = FunctionType::get(
@@ -3041,23 +3012,25 @@ int main() {
 
 
   // Create Global CUDA Streams
-  for(int i=0; i<num_parallel_streams; i++)
-  {
-    CudaStreams *cuda_stream = new CudaStreams();
+//   for(int i=0; i<num_parallel_streams; i++)
+//   {
+//     CudaStreams *cuda_stream = new CudaStreams();
 
-    cudaStreamCreate(&cuda_stream->stream);
-    cuda_stream->idx = i;
-    parallel_streams[i] = cuda_stream;
+//     cudaStreamCreate(&cuda_stream);
+//     cuda_stream->idx = i;
+//     parallel_streams[i] = cuda_stream;
 
-    open_streams[i]=1;
-  }
+//     open_streams[i]=1;
+//   }
 
   
-  // Set the Main Stream
-  main_stream = AllocateStream(0);
-  cublasSetStream(cublas_handle, main_stream->stream);
-  cudnnSetStream(cudnn, main_stream->stream);
-  ThreadsStream[0] = main_stream->stream;
+//   // Set the Main Stream
+//   main_stream = AllocateStream(0);
+//   cublasSetStream(cublas_handle, main_stream);
+//   cudnnSetStream(cudnn, main_stream);
+//   ThreadsStream[0] = main_stream;
+
+  main_stream = createCudaStream();
 
 
 

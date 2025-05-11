@@ -40,6 +40,7 @@ enum Token {
     tok_unlock = -27,
     tok_tab = 9,
     tok_return = -32,
+    tok_ret = -41,
     tok_as = -33,
 
     // operators
@@ -56,24 +57,8 @@ enum Token {
 
 
     // var definition
-    tok_var = -15,
-    tok_tensor = -16,
-    tok_list = -42,
-    tok_pinned_tensor = -25,
-    tok_var_str = -17,
-    tok_str_vec = -24,
-    tok_float_vec = -31,
     tok_attr_var = -18,
     tok_attr_tensor = -19,
-    tok_conv2d = -21,
-    tok_pool2d = -41,
-    tok_batchnorm2d = -43,
-    tok_lstm = -47,
-    tok_embedding = -48,
-    tok_mhsa = -51,
-    tok_linear = -52,
-    tok_bn2drelu = -45,
-    tok_relu = -46,
     tok_vec = -37,
     tok_post_class_attr_attr = -38,
     tok_post_class_attr_identifier = -39,

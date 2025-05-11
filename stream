@@ -1,0 +1,11 @@
+toy.cu:    cudaStreamCreate(&cuda_stream->stream);
+toy.cu:    cuda_stream->idx = i;
+src/data_types/tensor.cu:    //cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+src/cuda_kernels/image_processing/codegen.cu:  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+src/cuda_kernels/image_processing/codegen.cu:  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+src/cuda_kernels/image_processing/codegen.cu:  normalize_img_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+src/cuda_threads/threads.cpp:  //                 cudaMemcpyHostToDevice, cuda_stream->stream);
+src/cuda_threads/threads.cpp:  // cudaEventRecord(memcpy_done_event, cuda_stream->stream);
+src/cuda_threads/threads.cpp:  //   //copyChunk(tensor_ptr, tensor_cpu, offset, size, cuda_stream->stream);
+src/cuda_threads/threads.cpp:  //   //threads.push_back(std::thread(copyChunk, tensor_ptr, tensor_cpu, offset, size, cuda_stream->stream));
+src/cuda_threads/threads.cpp:  //   cudaMemcpyAsync(tensor_ptr + (int)offset, tensor_cpu + (int)offset, size*sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);

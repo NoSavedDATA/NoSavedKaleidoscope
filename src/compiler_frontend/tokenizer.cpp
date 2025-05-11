@@ -7,6 +7,7 @@
 #include<string>
 #include<iostream>
 
+#include "../common/extension_functions.h"
 #include "tokenizer.h"
 
 
@@ -38,8 +39,6 @@ std::map<int, std::string> token_to_string = {
   { tok_identifier, "tok identifier" },
   { tok_number, "tok number" },
   { tok_str, "tok str `` ''" },
-  { tok_str_vec, "tok str vector" },
-  { tok_float_vec, "tok float vec" },
 
   
 
@@ -68,26 +67,12 @@ std::map<int, std::string> token_to_string = {
   { tok_post_class_attr_identifier, ".identifier"},
   
   // var definition
-  { tok_var, "float"},
-  { tok_tensor, "tensor"},
-  { tok_list, "list"},
-  { tok_var_str, "var str"},
   { tok_attr_var, "tok attr var"},
   { tok_attr_tensor, "tok attr tensor"},
-  { tok_conv2d, "Conv2d"},
-  { tok_lstm, "LSTM"},
-  { tok_embedding, "Embedding"},
-  { tok_pool2d, "Pool2d"},
-  { tok_batchnorm2d, "BatchNorm2d"},
-  { tok_bn2drelu, "BN2dRelu"},
-  { tok_relu, "Relu"},
 
   { tok_global, "global"},
   { tok_no_grad, "no_grad"},
 
-  { tok_mhsa, "MHSA"},
-  { tok_linear, "Linear"},
-  { tok_data, "data"},
   
 
   { 10, "tok space"},
@@ -160,6 +145,9 @@ std::map<int, std::string> token_to_string = {
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
 std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class};
 
+std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "str", "str_vec", "float_vec", "list", "dict", "MHSA", "LSTM", "Linear", 
+                                        "Embedding", "Conv2d", "Pool2d", "BatchNorm2d", "float"};
+
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number
@@ -170,7 +158,7 @@ std::string ReverseToken(int _char)
   if (_char>=48 && _char<=57) // Handle number
     return std::to_string(NumVal);
   */
-  if (_char==tok_identifier)
+  if (_char==tok_identifier||_char==tok_data)
     return IdentifierStr;
 
   return token_to_string[_char];
@@ -213,16 +201,12 @@ static int get_token() {
     LastChar = getchar();
     IdentifierStr = LastChar;
 
-    bool name_ok=true;
-    while (name_ok)
+    while (true)
     {
       LastChar = getchar();
-      
-      if(LastChar!='"')
-        IdentifierStr += LastChar;
-      else
-        name_ok = false;
-
+      if(LastChar=='"')
+        break;
+      IdentifierStr += LastChar;
     }
     LastChar = getchar();
     
@@ -270,84 +254,12 @@ static int get_token() {
         IdentifierStr += LastChar;
       else
         name_ok = false;
-      if (IdentifierStr == "data")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_data;
-      }
-      if (IdentifierStr == "list")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_list;
-      }
-      if (IdentifierStr == "tensor")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_tensor;
-      }
-      if (IdentifierStr == "pinned_tensor")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_pinned_tensor;
-      }
-      if (IdentifierStr == "Conv2d")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_conv2d;
-      }
-      if (IdentifierStr == "LSTM")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_lstm;
-      }
-      if (IdentifierStr == "MHSA")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_mhsa;
-      }
-      if (IdentifierStr == "Linear")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_linear;
-      }
-      if (IdentifierStr == "Embedding")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_embedding;
-      }
-      if (IdentifierStr == "Pool2d")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_pool2d;
-      }
-      if (IdentifierStr == "BatchNorm2d")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_batchnorm2d;
-      }
-      if (IdentifierStr == "BN2dRelu")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_bn2drelu;
-      }
-      if (IdentifierStr == "Relu")
-      {
-        LastChar = getchar();
-        if (!(isalnum(LastChar) || LastChar=='_'))
-          return tok_relu;
-      }
+      // if (in_str(IdentifierStr, data_tokens))
+      // {
+      //   LastChar = getchar();
+      //   if (!(isalnum(LastChar) || LastChar=='_'))
+      //     return tok_data;
+      // }
       if (LastChar=='.')
       {
         LastChar = getchar();
@@ -357,6 +269,9 @@ static int get_token() {
       }
     }
 
+
+    if (in_str(IdentifierStr, data_tokens))
+      return tok_data;
     if (IdentifierStr == "def")
       return tok_def;
     if (IdentifierStr == "class")
@@ -389,20 +304,14 @@ static int get_token() {
       return tok_binary;
     if (IdentifierStr == "unary")
       return tok_unary;
-    if (IdentifierStr == "float")
-      return tok_var;
     if (IdentifierStr == "glob")
       IdentifierStr = "_glob_b_";
     if (IdentifierStr == "sleep")
       IdentifierStr = "__slee_p_";
     if (IdentifierStr == "tanh")
       IdentifierStr = "_tanh";
-    if (IdentifierStr == "str")
-      return tok_var_str;
-    if (IdentifierStr == "str_vec")
-      return tok_str_vec;
-    if (IdentifierStr == "float_vec")
-      return tok_float_vec;
+    if (IdentifierStr == "ret")
+      return tok_ret;
     if (IdentifierStr == "return")
       return tok_return;
     if (IdentifierStr == "as")
@@ -412,7 +321,7 @@ static int get_token() {
     return tok_identifier;
   }
 
-  if (isdigit(LastChar) || LastChar == '.') { // Number: [-.]+[0-9.]+
+  if (isdigit(LastChar)) { // Number: [-.]+[0-9.]+
     
     std::string NumStr;
     if (LastChar == '-') { // Check for optional minus sign

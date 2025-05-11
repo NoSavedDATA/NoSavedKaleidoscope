@@ -177,7 +177,7 @@ void LinearCPP::FirstBackward()
 {
   dW = get_from_pool(0, OC*C, "MHSA dW");
 
-  set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+  set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C);
 
   NamedParamGrads[Name+"W"] = dW;
 
@@ -221,9 +221,9 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
 
     int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) +   (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
 
-    // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream->stream>>>(dx, W, dy, B, C, OC);
-    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(dx, W, dy, B, C, OC);
-    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(dW, x, dy, B, C, OC);
+    // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream>>>(dx, W, dy, B, C, OC);
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(dx, W, dy, B, C, OC);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(dW, x, dy, B, C, OC);
 
 
 

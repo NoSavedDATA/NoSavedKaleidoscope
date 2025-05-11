@@ -9,9 +9,12 @@ struct CudaStreams {
   int idx;
 };
 
-CudaStreams *AllocateStream(int line);
+CudaStreams *AllocateStream(int line=0);
 
-void SynchronizeStream(CudaStreams *cuda_stream);
+cudaStream_t createCudaStream();
+
+
+void SynchronizeStream(cudaStream_t cuda_stream);
 
 
 struct Loader {

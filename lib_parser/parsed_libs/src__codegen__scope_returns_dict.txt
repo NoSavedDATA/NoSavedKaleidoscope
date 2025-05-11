@@ -1,1 +1,1 @@
-{"ConcatScopeStr", "str"}, {"ConcatScopeAtCallExpr", "str"}, 
+{"ConcatScopeStr", "str"}, 

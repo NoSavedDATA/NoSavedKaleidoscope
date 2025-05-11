@@ -321,7 +321,7 @@ void matmul_backward2(
   dim3 grid_size(std::ceil(C/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
   int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   mult_backwarddx<<<grid_size, block_size, shared_mem_size>>>(weight, dinp, dout, TILE_SIZE, TILE_SIZE_SQ, B, C, OC);
 
@@ -335,7 +335,7 @@ void matmul_backward2(
 
   //PrintTensorF(dw, OC, C);
 
-  StreamAwaitStreamB(main_stream->stream, dx_stream);
+  StreamAwaitStreamB(main_stream, dx_stream);
   cudaStreamDestroy(dx_stream);
   */
 
@@ -364,7 +364,7 @@ void matmul_backward2(
             {dinp, C},
             {alpha, beta});
             
-  gemm_operator_dx(main_stream->stream);
+  gemm_operator_dx(main_stream);
   gemm_operator_dx(args);
 
 
@@ -389,7 +389,7 @@ void matmul_backward2(
             {dw, C},
             {alpha, beta});
             
-  gemm_operator_dw(main_stream->stream);
+  gemm_operator_dw(main_stream);
   gemm_operator_dw(args_dw);
   */
 }
@@ -475,7 +475,7 @@ void matmul_forward(float* out,
                               {out, OC},
                               {alpha, beta});
                               
-  gemm_operator(main_stream->stream);
+  gemm_operator(main_stream);
   gemm_operator(args);
   */
     

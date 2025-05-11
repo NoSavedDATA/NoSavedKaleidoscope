@@ -453,57 +453,68 @@ class ChainCallExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
 };
   
-  class ReturnExprAST : public ExprAST {
+
+class RetExprAST : public ExprAST {
+
+  public:
+    std::vector<std::unique_ptr<ExprAST>> Vars;
+    
+    RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+class ReturnExprAST : public ExprAST {
+
+  public:
+    std::vector<std::unique_ptr<ExprAST>> Vars;
+    std::vector<bool> IsAs;
+    std::vector<std::unique_ptr<ExprAST>> Destiny;
+    
+    ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
+                  std::vector<std::unique_ptr<ExprAST>> Destiny);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+/// IfExprAST - Expression class for if/then/else.
+class IfExprAST : public ExprAST {
+  std::unique_ptr<ExprAST> Cond;
+  std::vector<std::unique_ptr<ExprAST>> Then, Else;
+
+  public:
+    IfExprAST(std::unique_ptr<ExprAST> Cond,
+              std::vector<std::unique_ptr<ExprAST>> Then,
+              std::vector<std::unique_ptr<ExprAST>> Else);
+
+  Value *codegen(Value *scope_struct) override;
+};
   
-    public:
-      std::vector<std::unique_ptr<ExprAST>> Vars;
-      std::vector<bool> IsAs;
-      std::vector<std::unique_ptr<ExprAST>> Destiny;
-      
-      ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
-                    std::vector<std::unique_ptr<ExprAST>> Destiny);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  /// IfExprAST - Expression class for if/then/else.
-  class IfExprAST : public ExprAST {
-    std::unique_ptr<ExprAST> Cond;
-    std::vector<std::unique_ptr<ExprAST>> Then, Else;
-  
-    public:
-      IfExprAST(std::unique_ptr<ExprAST> Cond,
-                std::vector<std::unique_ptr<ExprAST>> Then,
-                std::vector<std::unique_ptr<ExprAST>> Else);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  /// ForExprAST - Expression class for for.
-  class ForExprAST : public ExprAST {
-    std::string VarName;
-    std::unique_ptr<ExprAST> Start, End, Step;
-    std::vector<std::unique_ptr<ExprAST>> Body;
-  
-    public:
-      ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
-                std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-                std::vector<std::unique_ptr<ExprAST>> Body);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  /// WhileExprAST - Expression class for while.
-  class WhileExprAST : public ExprAST {
-    std::unique_ptr<ExprAST> Cond;
-    std::vector<std::unique_ptr<ExprAST>> Body;
-  
-    public:
-      WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body);
-  
-    Value* codegen(Value *scope_struct) override;
-  };
+/// ForExprAST - Expression class for for.
+class ForExprAST : public ExprAST {
+  std::string VarName;
+  std::unique_ptr<ExprAST> Start, End, Step;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  public:
+    ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
+              std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
+              std::vector<std::unique_ptr<ExprAST>> Body);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+/// WhileExprAST - Expression class for while.
+class WhileExprAST : public ExprAST {
+  std::unique_ptr<ExprAST> Cond;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  public:
+    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body);
+
+  Value* codegen(Value *scope_struct) override;
+};
   
   
   /// AsyncExprAST - Expression class for async.

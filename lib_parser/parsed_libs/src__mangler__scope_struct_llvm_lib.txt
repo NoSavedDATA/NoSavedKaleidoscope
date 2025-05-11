@@ -1,4 +1,4 @@
-1821-05-09 23:25:00
+1821-05-10 22:56:56
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -27,6 +27,20 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
+
+	FunctionType *set_scope_at_returnTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("set_scope_at_return", set_scope_at_returnTy);
+
+	FunctionType *set_scope_not_at_returnTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("set_scope_not_at_return", set_scope_not_at_returnTy);
 
 	FunctionType *set_scope_first_argTy= FunctionType::get(
 		int8PtrTy,

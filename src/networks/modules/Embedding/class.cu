@@ -44,7 +44,7 @@ Embedding::Embedding(int C, int OC, std::string Init, std::string Name)
 
 
     dW = get_from_pool(0, OC*C, "embedding dW");
-    set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+    set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C);
 
     NamedTensorsT[Name] = tensor_W;
     NamedParamGrads[Name] = dW;
@@ -96,7 +96,7 @@ void Embedding::SetBackwardDescriptors()
 {
 
   dW = get_from_pool(0, B*OC, "embedding dW");
-  set_to_zero_kernel<<<std::ceil((B*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, B*OC);
+  set_to_zero_kernel<<<std::ceil((B*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, B*OC);
 
   changed_descriptors=false;
 }
@@ -107,7 +107,7 @@ void Embedding::Backward(float *x, float *dy)
   if(changed_descriptors)
     SetBackwardDescriptors();
   //dW = dy;
-  copy_tensor_kernel<<<std::ceil((B*OC)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW, dy, B*C);
+  copy_tensor_kernel<<<std::ceil((B*OC)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dW, dy, B*C);
   */
 
   
@@ -116,5 +116,5 @@ void Embedding::Backward(float *x, float *dy)
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
-  embedding_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
+  embedding_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
 }

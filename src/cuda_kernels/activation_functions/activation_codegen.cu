@@ -42,7 +42,7 @@ void relu_backward(float *inp, float dims_prod, float *out,
                      std::string module_name, DT_tensor *node) {
   int grid_size, block_size;
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
-  relu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(inp, dinp, dout, dims_prod);
+  relu_backward1<<<grid_size, block_size, 0, main_stream>>>(inp, dinp, dout, dims_prod);
 }
 
 
@@ -52,7 +52,7 @@ void gelu_backward(float *inp, float dims_prod, float *out,
                      std::string module_name, DT_tensor *node) {  
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
-  gelu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, inp, dout, dims_prod);  
+  gelu_backward1<<<grid_size, block_size, 0, main_stream>>>(dinp, inp, dout, dims_prod);  
 }
 
 extern "C" DT_tensor *gelu(Scope_Struct *scope_struct, DT_tensor *tensor)
@@ -90,7 +90,7 @@ void sigmoid_backward(float *inp, float dims_prod, float *out,
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
-  sigmoid_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
+  sigmoid_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dinp, out, dout, dims_prod);
   
 }
 
@@ -130,7 +130,7 @@ void tanh_backward(float *inp, float dims_prod, float *out,
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   
 
-  tanh_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
+  tanh_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dinp, out, dout, dims_prod);
   
 }
 

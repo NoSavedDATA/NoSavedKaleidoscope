@@ -54,7 +54,7 @@ inline void Acquire_Simple_Derivative(float *&d_ptr, float size, int op, bool fr
 
   d_ptr = get_from_pool(0, size, from);
   //TODO: remove this set to zero to improve performance (then, adjust gather op dx to be set to zero)
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(d_ptr, size);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(d_ptr, size);
 }
 
 
@@ -70,7 +70,7 @@ inline void Acquire_Weight_Gradient(float *&d_ptr, float size, std::string param
     float *new_grad_ptr;
     
     new_grad_ptr = get_from_pool(0, size, "weight grad pointer");
-    set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, size);
+    set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(new_grad_ptr, size);
     NamedParamGrads[param_name] = new_grad_ptr;
   }
   d_ptr = NamedParamGrads[param_name];

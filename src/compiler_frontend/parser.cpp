@@ -124,8 +124,6 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(std::string _class, std::s
   aux->SetPreDot(pre_dot);
   aux->SetIsVec(is_vec);
 
-  if (CurTok==tok_space)
-    getNextToken();
 
   return aux;
 }
@@ -253,8 +251,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
       Names.push_back(std::make_tuple(IdentifierStr, type_var, std::vector<std::unique_ptr<ExprAST>>{}));
     }
 
-    if(CurTok==tok_space)
-      getNextToken();
 
     std::cout << "RETURNTING VARIABLE LIST" << ".\n";
     aux = std::make_unique<VariableListExprAST>(std::move(IdentifierList));
@@ -294,8 +290,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
     }
     
     
-    if (CurTok==tok_space)
-      getNextToken();
 
     return std::move(aux);
   }
@@ -769,8 +763,6 @@ std::unique_ptr<ExprAST> ParseNewVector(std::string class_name) {
   getNextToken(); // ]
 
 
-  if (CurTok==tok_space)
-    getNextToken();
   
   Elements.push_back(std::make_unique<StringExprAST>("TERMINATE_VARARG"));
 
@@ -951,8 +943,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     aux->SetPreDot(pre_dot);
     
     
-    if (CurTok==tok_space)
-      getNextToken();
 
     return aux;
   }
@@ -1106,8 +1096,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   if (return_string)
     aux->SetType("str");
 
-  if (CurTok==tok_space)
-    getNextToken();
 
   if (is_self)
     aux->SetSelf(true);    
@@ -1115,12 +1103,9 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     aux->SetIsAttribute(true);
   aux->SetPreDot(pre_dot);
 
-  if (CurTok == tok_post_class_attr_identifier)
-  {
+  if (CurTok == tok_post_class_attr_identifier)  
     return ParseChainCallExpr(std::move(aux), class_name);
-  }
 
-  
   return aux;
 }
 
@@ -1149,6 +1134,9 @@ std::unique_ptr<ExprAST> ParseChainCallExpr(std::unique_ptr<ExprAST> previous_ca
   if (functions_return_type.count(call_of)>0)
     aux->SetType(functions_return_type[call_of]);
   
+
+  if (CurTok == tok_post_class_attr_identifier)  
+    return ParseChainCallExpr(std::move(aux), class_name);
 
 
   return std::move(aux);
@@ -1277,8 +1265,6 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
   aux->SetIsAttribute(is_attr);
   aux->SetPreDot(pre_dot);
   
-  if (CurTok==tok_space)
-    getNextToken();
   
 
   return aux;
@@ -1289,856 +1275,37 @@ std::unique_ptr<ExprAST> ParseDataExpr(std::string class_name) {
 
 
 
-//
-std::unique_ptr<ExprAST> ParseLSTMExpr() {
-  
-  getNextToken(); // eat the LSTM.
-  
-  if (CurTok != '[')
-    return LogError("LSTM declaration expected [");
-    getNextToken();
 
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu_relu";
-  //std::make_unique<NumberExprAST>(NumVal)
-  
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected tensor dimension number.");
-    
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
-    
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      dims.push_back(std::move(ParseSelfExpr()));
-    }
 
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
 
-  
 
-  if (CurTok != ']')
-    return LogError("Expected ].");
-    getNextToken();
 
-  if (dims.size()!=2 && dims.size()!=3)
-    return LogError("LSTM requires input and output hiddens count.");
 
 
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
 
-  if (CurTok != tok_identifier)
-    return LogError("Expected LSTM identifier name.");
 
 
 
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
 
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "LSTMForward";
 
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
 
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers after LSTM.");
-  }
 
 
 
-  auto aux = std::make_unique<LSTMExprAST>(std::move(VarNames), "lstm",
-                                             std::move(dims[0]), std::move(dims[1]),
-                                             init);
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
 
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
 
 
-std::unique_ptr<ExprAST> ParseEmbeddingExpr() {
-  
-  getNextToken(); // eat the Embedding.
-  
-  if (CurTok != '[')
-    return LogError("Embedding declaration expected [");
-    getNextToken();
 
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu_relu";
-  //std::make_unique<NumberExprAST>(NumVal)
-  
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected tensor dimension number.");
-    
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
-    
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      dims.push_back(std::move(ParseSelfExpr()));
-    }
 
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
 
-  
 
-  if (CurTok != ']')
-    return LogError("Expected ].");
-    getNextToken();
 
-  if (dims.size()!=2 && dims.size()!=3)
-    return LogError("Embedding requires input vocabulary size and output hiddens count.");
 
 
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
 
-  if (CurTok != tok_identifier)
-    return LogError("Expected Embedding identifier name.");
 
 
 
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
-
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "EmbeddingForward";
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers after Embedding.");
-  }
-
-
-
-  auto aux = std::make_unique<EmbeddingExprAST>(std::move(VarNames), "embedding",
-                                             std::move(dims[0]), std::move(dims[1]),
-                                             init);
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
-
-
-
-
-std::unique_ptr<ExprAST> ParseLinearExpr() {
-  
-  getNextToken(); // eat the Linear.
-  
-  if (CurTok != '[')
-    return LogError("Linear declaration expected [");
-    getNextToken();
-
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "xavu";
-  std::vector<int> notators_vec;
-  //std::make_unique<NumberExprAST>(NumVal)
-  
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected tensor dimension number.");
-    
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
-    
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else if (in_str(IdentifierStr, notators_str)){
-        notators_vec.push_back(NotatorsMap[IdentifierStr]);
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      dims.push_back(std::move(ParseSelfExpr()));
-    }
-
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
-
-
-  if (CurTok != ']')
-    return LogError("Expected ] at Linear.");
-    getNextToken();
-
-  if (dims.size()<2)
-    return LogError("Linear requires input and output dimensions.");
-
-
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
-
-  if (CurTok != tok_identifier)
-    return LogError("Expected Linear identifier name.");
-
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
-
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "LinearForward";
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers after Linear.");
-  }
-
-
-  auto aux = std::make_unique<LinearExprAST>(std::move(VarNames), "linear",
-                                             std::move(dims[0]), std::move(dims[1]),
-                                             std::move(notators_vec),
-                                             init);
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
-
-
-
-
-
-
-
-std::unique_ptr<ExprAST> ParseMHSAExpr() {
-  
-  getNextToken(); // eat the MHSA.
-  
-  if (CurTok != '[')
-    return LogError("MHSA declaration expected [");
-    getNextToken();
-
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "init_gpt";
-  std::vector<int> notators_vec;
-  //std::make_unique<NumberExprAST>(NumVal)
-  
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected tensor dimension number.");
-    
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
-    
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else if (in_str(IdentifierStr, notators_str)){
-        notators_vec.push_back(NotatorsMap[IdentifierStr]);
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      dims.push_back(std::move(ParseSelfExpr()));
-    }
-
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
-
-  
-
-  if (CurTok != ']')
-    return LogError("Expected ] at MHSA.");
-    getNextToken();
-
-  if (dims.size()!=3)
-    return LogError("MHSA requires input vocabulary size and output hiddens count.");
-
-
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
-
-  if (CurTok != tok_identifier)
-    return LogError("Expected MHSA identifier name.");
-
-
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
-
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "MHSAForward";
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers after MHSA.");
-  }
-
-
-
-  auto aux = std::make_unique<MHSAExprAST>(std::move(VarNames), "mhsa",
-                                             std::move(dims[0]), std::move(dims[1]), std::move(dims[2]),
-                                             std::move(notators_vec),
-                                             init);
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
-
-
-
-
-
-
-// //
-// std::unique_ptr<ExprAST> ParseMaxPool2dExpr() {
-//   std::string type;
-//   if (CurTok==tok_maxpool2d)
-//     type = "max";
-//   if (CurTok==tok_avgpool2d)
-//     type = "avg";
-
-//   getNextToken(); // eat the MaxPool2d.
-  
-//   if (CurTok != '[')
-//     return LogError("MaxPool2d declaration expected [");
-//     getNextToken();
-
-//   std::vector<std::unique_ptr<ExprAST>> dims;
-//   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-//   std::string init = "";
-//   //std::make_unique<NumberExprAST>(NumVal)
-  
-//   while (true) {
-//     if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-//       return LogError("Expected tensor dimension number.");
-    
-//     if (CurTok==tok_number)
-//     {
-//       if (std::fmod(NumVal, 1.0) != 0)
-//         LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
-    
-//       dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-//       getNextToken();
-//     } else if (CurTok==tok_identifier)
-//       if (in_str(IdentifierStr, tensor_inits))
-//       {
-//         init = IdentifierStr;
-//         getNextToken();
-//       } else
-//         dims.push_back(std::move(ParseIdentifierExpr()));
-//     else {
-//       dims.push_back(std::move(ParseSelfExpr()));
-//     }
-
-    
-//     if (CurTok != ',')
-//       break;
-//     getNextToken(); // eat the ','.
-//   }
-
-  
-
-//   if (CurTok != ']')
-//     return LogError("Expected ].");
-//     getNextToken();
-
-//   if (dims.size()<3)
-//     return LogError("MaxPool2d requires kernel size, stride and padding.");
-
-
-//   std::string pre_dot="";
-//   bool is_self = false;
-//   bool is_attr = false;
-//   if (CurTok == tok_self)
-//   {
-//     is_self=true;
-//     getNextToken();
-//   }
-//   if (CurTok == tok_class_attr)
-//   {
-//     is_attr=true;
-//     pre_dot = IdentifierStr;
-//     std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-//     getNextToken();
-//   }
-
-//   if (CurTok != tok_identifier)
-//     return LogError("Expected conv identifier name.");
-
-
-
-//   while (true) {
-//     std::string Name = IdentifierStr;
-    
-//     getNextToken(); // eat identifier.
-
-    
-//     std::unique_ptr<ExprAST> Init = nullptr;
-//     VarNames.push_back(std::make_pair(Name, std::move(Init)));
-//     functionVars[Name] = "MaxPoolForward2d";
-
-//     // End of var list, exit loop.
-//     if (CurTok != ',')
-//       break;
-//     getNextToken(); // eat the ','.
-
-//     if (CurTok != tok_identifier)
-//       return LogError("Esperado um ou mais identificadores após var.");
-//   }
-
-
-
-//   auto aux = std::make_unique<MaxPool2dExprAST>(std::move(VarNames), type,
-//                                              std::move(dims[0]), std::move(dims[1]), std::move(dims[2]));
-//   aux->SetSelf(is_self);
-//   aux->SetIsAttribute(is_attr);
-//   aux->SetPreDot(pre_dot);
-
-  
-//   if (CurTok==tok_space)
-//     getNextToken();
-  
-//   return aux;
-// }
-
-
-
-
-
-//
-std::unique_ptr<ExprAST> ParseBatchNorm2dExpr() {
-  std::string type;
-
-  getNextToken(); // eat the BatchNorm2d.
-  
-  if (CurTok != '[')
-    return LogError("BatchNorm2d declaration expected [");
-    getNextToken();
-
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "";
-  //std::make_unique<NumberExprAST>(NumVal)
-  
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected tensor dimension number.");
-    
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
-    
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      dims.push_back(std::move(ParseSelfExpr()));
-    }
-
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
-
-  
-
-  if (CurTok != ']')
-    return LogError("Expected ].");
-    getNextToken();
-
-  if (dims.size()<1)
-    return LogError("BatchNorm2d requires input channels, kernel size, stride and padding.");
-
-
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
-
-  if (CurTok != tok_identifier)
-    return LogError("Expected BatchNorm2d identifier name.");
-
-
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
-
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "BatchNormForward2d";
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers at BatchNorm2d.");
-  }
-
-
-
-  auto aux = std::make_unique<BatchNorm2dExprAST>(std::move(VarNames), type,
-                                             std::move(dims[0]));
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
-
-
-
-
-//
-std::unique_ptr<ExprAST> ParseBN2dReluExpr() {
-  std::string type;
-
-  getNextToken(); // eat the BatchNorm2d.
-  
-  if (CurTok != '[')
-    return LogError("BN2dRelu declaration expected [");
-    getNextToken();
-
-  std::vector<std::unique_ptr<ExprAST>> dims;
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::string init = "";
-  //std::make_unique<NumberExprAST>(NumVal)
-  
-  while (true) {
-    if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
-      return LogError("Expected tensor dimension number.");
-    
-    if (CurTok==tok_number)
-    {
-      if (std::fmod(NumVal, 1.0) != 0)
-        LogWarning("Tensor dimensions must be of type int. They are not supposed to be float.");
-    
-      dims.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
-      getNextToken();
-    } else if (CurTok==tok_identifier)
-      if (in_str(IdentifierStr, tensor_inits))
-      {
-        init = IdentifierStr;
-        getNextToken();
-      } else
-        dims.push_back(std::move(ParseIdentifierExpr()));
-    else {
-      dims.push_back(std::move(ParseSelfExpr()));
-    }
-
-    
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-  }
-
-  
-
-  if (CurTok != ']')
-    return LogError("Expected ].");
-    getNextToken();
-
-  if (dims.size()<1)
-    return LogError("BN2dRelu requires input channels, kernel size, stride and padding.");
-
-
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
-
-  if (CurTok != tok_identifier)
-    return LogError("Expected BatchNorm2d identifier name.");
-
-
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
-
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "BN2dReluForward";
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers at BN2dRelu.");
-  }
-
-
-
-  auto aux = std::make_unique<BN2dReluExprAST>(std::move(VarNames), type,
-                                             std::move(dims[0]));
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
-
-
-
-//
-std::unique_ptr<ExprAST> ParseReluExpr() {
-  std::string type;
-
-  getNextToken(); // eat the Relu.
-  
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  
-
-  std::string pre_dot="";
-  bool is_self = false;
-  bool is_attr = false;
-  if (CurTok == tok_self)
-  {
-    is_self=true;
-    getNextToken();
-  }
-  if (CurTok == tok_class_attr)
-  {
-    is_attr=true;
-    pre_dot = IdentifierStr;
-    std::cout << "Obj attr pinned_tensor: " << pre_dot << ".\n";
-    getNextToken();
-  }
-
-  if (CurTok != tok_identifier)
-    return LogError("Expected Relu identifier name.");
-
-
-
-  while (true) {
-    std::string Name = IdentifierStr;
-    
-    getNextToken(); // eat identifier.
-
-    
-    std::unique_ptr<ExprAST> Init = nullptr;
-    VarNames.push_back(std::make_pair(Name, std::move(Init)));
-    functionVars[Name] = "ReluForward";
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    if (CurTok != tok_identifier)
-      return LogError("Expected one or more identifiers at Relu.");
-  }
-
-
-
-  auto aux = std::make_unique<ReluExprAST>(std::move(VarNames), type);
-  aux->SetSelf(is_self);
-  aux->SetIsAttribute(is_attr);
-  aux->SetPreDot(pre_dot);
-
-  
-  if (CurTok==tok_space)
-    getNextToken();
-  
-  return aux;
-}
 
 
 
@@ -2242,6 +1409,32 @@ std::unique_ptr<ExprAST> ParseGlobalExpr(std::string class_name) {
 }
 
 
+std::unique_ptr<ExprAST> ParseRetExpr(std::string class_name) {
+  getNextToken(); //eat return
+
+  std::vector<std::unique_ptr<ExprAST>> Vars, Destiny;
+
+  std::unique_ptr<ExprAST> expr;
+  
+
+  if (CurTok != tok_identifier && CurTok != tok_class_attr && CurTok != tok_self)
+    return LogError("Expected identifier after return.");
+
+  
+  while(true) {
+
+    expr = ParseMustBeVar(class_name, "return");
+    
+    Vars.push_back(std::move(expr));
+    if(CurTok!=',')
+      break;
+    getNextToken(); // eat ,
+  }
+
+  return make_unique<RetExprAST>(std::move(Vars));
+}
+
+
 std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name) {
   getNextToken(); // eat return
   std::cout << "Parsing var expr\n";
@@ -2287,8 +1480,6 @@ std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name) {
     
   }
 
-  if (CurTok==tok_space)
-    getNextToken();
 
 
   return std::make_unique<ReturnExprAST>(std::move(Vars), std::move(IsAs), std::move(Destiny));
@@ -2320,12 +1511,6 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) 
     return ParseNumberExpr();
   case tok_str:
     return ParseStringExpr();
-  case tok_var_str:
-    return ParseDataExpr();
-  case tok_str_vec:
-    return ParseDataExpr();
-  case tok_float_vec:
-    return ParseDataExpr();
   case '(':
     return ParseParenExpr();
   case tok_if:
@@ -2342,38 +1527,14 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) 
     return ParseLockExpr(class_name);
   case tok_no_grad:
     return ParseNoGradExpr(class_name);
+  case tok_ret:
+    return ParseRetExpr(class_name);
   case tok_return:
     return ParseReturnExpr(class_name);
-  case tok_var:
-    return ParseDataExpr(class_name);
   case tok_data:
-    return ParseDataExpr(class_name);
-  case tok_list:
-    return ParseDataExpr(class_name);
-  case tok_tensor:
-    return ParseDataExpr(class_name);
-  case tok_pinned_tensor:
-    return ParseDataExpr(class_name);
-  case tok_conv2d:
     return ParseDataExpr(class_name);
   case tok_global:
     return ParseGlobalExpr();
-  case tok_lstm:
-    return ParseLSTMExpr();
-  case tok_embedding:
-    return ParseEmbeddingExpr();
-  case tok_mhsa:
-    return ParseMHSAExpr();
-  case tok_linear:
-    return ParseDataExpr(class_name);
-  case tok_pool2d:
-    return ParseDataExpr();
-  case tok_batchnorm2d:
-    return ParseDataExpr();
-  case tok_bn2drelu:
-    return ParseBN2dReluExpr();
-  case tok_relu:
-    return ParseReluExpr();
   case '[':
     return ParseNewVector(class_name);
   case tok_space:
@@ -2387,8 +1548,6 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) 
 ///   ::= '!' unary
 std::unique_ptr<ExprAST> ParseUnary(std::string class_name, bool can_be_list) {
   // std::cout <<"Parse unary got can_be_list: " << can_be_list <<  "\n";
-  if(CurTok==tok_space)
-    getNextToken();
   // If the current token is not an operator, it must be a primary expr.
   
   //std::cout << "Unary current token " << ReverseToken(CurTok) << "\n";
@@ -2403,6 +1562,7 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name, bool can_be_list) {
   int Opc = CurTok;
   
   //std::cout << "Unary expr\n";
+  
   getNextToken();
   if (auto Operand = ParseUnary(class_name, can_be_list))
   {    
@@ -2682,10 +1842,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
 
   std::string return_type;
 
-  if (CurTok==tok_var)
-    return_type = "float";
-  else
-    return_type = "void*";
+  if (CurTok==tok_data) {
+    return_type = IdentifierStr;
+  }
 
   
   // std::cout << "Token " << ReverseToken(CurTok) << ".\n";
@@ -2820,6 +1979,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
     LogError("Post prototype parsing requires a line break.");
   getNextToken();
 
+  functions_return_type[FnName] = return_type;
 
   return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
                                          BinaryPrecedence);
