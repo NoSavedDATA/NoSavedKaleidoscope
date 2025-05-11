@@ -204,8 +204,8 @@ void BatchNorm2dCPP::FirstBackward() {
     dB = get_from_pool(0, C, "BatchNorm2d dB");
 
     
-    set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, C);
-    set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dB, C);
+    set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, C);
+    set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dB, C);
 
     NamedParamGrads[Name+"W"] = dW;
     NamedParamGrads[Name+"B"] = dB;

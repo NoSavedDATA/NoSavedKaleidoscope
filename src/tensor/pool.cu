@@ -48,7 +48,7 @@ float *get_from_pool(int thread_id, float dims_prod, std::string from, bool is_n
   if (dims_prod==0)
     return nullptr;
 
-  // if (dims_prod==400)
+  // if (dims_prod==393216)
   //   std::cout << "*************Get " << from << ".\n";
 
 
@@ -80,7 +80,7 @@ void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string
   //if (dims_prod==50*256)
   //  std::cout << "push B*OC of " << from << "\n";
 
-  // if (dims_prod==400)
+  // if (dims_prod==393216)
   //   std::cout << "-------------Move " << from << ".\n";
 
   if (dims_prod==0)

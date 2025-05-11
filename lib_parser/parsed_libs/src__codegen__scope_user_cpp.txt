@@ -1,1 +1,1 @@
-"ConcatScopeStr", "ConcatScopeAtCallExpr", "AddFloatToScopeCleanList", "AddToScopeCleanList", "CleanScopeVars", "RemoveTensorScope", "RemoveTensorScopeAttrOnIndex", 
+"ConcatScopeStr", "RemoveTensorScope", "RemoveTensorScopeAttrOnIndex", 

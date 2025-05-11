@@ -22,6 +22,8 @@ struct Scope_Struct {
 
     int code_line = 0;
 
+    bool is_at_return = false;
+
 
     Scope_Struct();
 

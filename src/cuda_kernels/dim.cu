@@ -340,7 +340,7 @@ void mean_over_semilast_dim_backward(float *inp, float size, float *out,
   float y_dims_prod = node->dims_prod;
 
 
-  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dinp, dout,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
+  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dinp, dout,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
 }
 
 extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
@@ -646,7 +646,7 @@ void gather_last_dim_backward(float *inp, float size, float *out,
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
 
-  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, dout, idx, leading_dim, dims_prod);
+  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dinp, dout, idx, leading_dim, dims_prod);
 
   //PrintTensorF(idx, 1, node->R_Node->dims_prod);
   //PrintTensorF(dx, dims[0], dims[1]);

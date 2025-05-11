@@ -367,6 +367,20 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
 
+	FunctionType *set_scope_at_returnTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("set_scope_at_return", set_scope_at_returnTy);
+
+	FunctionType *set_scope_not_at_returnTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("set_scope_not_at_return", set_scope_not_at_returnTy);
+
 	FunctionType *set_scope_first_argTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -724,34 +738,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("ConcatScopeStr", ConcatScopeStrTy);
 
-	FunctionType *ConcatScopeAtCallExprTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("ConcatScopeAtCallExpr", ConcatScopeAtCallExprTy);
-
-	FunctionType *AddFloatToScopeCleanListTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("AddFloatToScopeCleanList", AddFloatToScopeCleanListTy);
-
-	FunctionType *AddToScopeCleanListTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("AddToScopeCleanList", AddToScopeCleanListTy);
-
-	FunctionType *CleanScopeVarsTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("CleanScopeVars", CleanScopeVarsTy);
-
 	FunctionType *RemoveTensorScopeTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
@@ -815,13 +801,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_Store", list_StoreTy);
 
-	FunctionType *list_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Load", list_LoadTy);
-
 	FunctionType *list_printTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy},
@@ -829,19 +808,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_print", list_printTy);
 
-	FunctionType *list_checkmateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+	FunctionType *list_LoadTy= FunctionType::get(
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("list_checkmate", list_checkmateTy);
-
-	FunctionType *list_testTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_test", list_testTy);
+	TheModule->getOrInsertFunction("list_Load", list_LoadTy);
 
 	FunctionType *list_CreateTy= FunctionType::get(
 		int8PtrTy,

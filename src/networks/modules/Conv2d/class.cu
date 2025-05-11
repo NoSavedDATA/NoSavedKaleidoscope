@@ -266,7 +266,7 @@ void Conv2dCPP::FirstBackward()
   if (first_backward)
   {
     dW = get_from_pool(0, OC*C*ks*ks, "conv2d gradient");
-    set_to_zero_kernel<<<std::ceil((OC*C*ks*ks)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C*ks*ks);
+    set_to_zero_kernel<<<std::ceil((OC*C*ks*ks)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C*ks*ks);
 
     NamedParamGrads[Name+"W"] = dW;
     first_backward = false;

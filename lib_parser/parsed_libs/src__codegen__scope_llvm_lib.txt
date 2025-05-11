@@ -1,4 +1,4 @@
-1821-05-06 21:10:37
+1821-05-10 22:56:56
 
 	FunctionType *ConcatScopeStrTy= FunctionType::get(
 		int8PtrTy,
@@ -6,34 +6,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("ConcatScopeStr", ConcatScopeStrTy);
-
-	FunctionType *ConcatScopeAtCallExprTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("ConcatScopeAtCallExpr", ConcatScopeAtCallExprTy);
-
-	FunctionType *AddFloatToScopeCleanListTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("AddFloatToScopeCleanList", AddFloatToScopeCleanListTy);
-
-	FunctionType *AddToScopeCleanListTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("AddToScopeCleanList", AddToScopeCleanListTy);
-
-	FunctionType *CleanScopeVarsTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("CleanScopeVars", CleanScopeVarsTy);
 
 	FunctionType *RemoveTensorScopeTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

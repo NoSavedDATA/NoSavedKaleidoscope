@@ -92,7 +92,7 @@ void LSTM::SetDescriptors(int B, int T, int thread_id)
   block_size = grid_block_mem_sizes[1];
 
 
-  //set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(all_ht, B*T*OC);
+  //set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(all_ht, B*T*OC);
 
 
   this->B=B;
@@ -115,7 +115,7 @@ float *LSTM::Forward(DT_tensor *tensor_x, DT_tensor *tensor_ht, DT_tensor *tenso
     SetDescriptors(B,T,thread_id);
   
   cudaStream_t stream = ThreadsStream[thread_id];
-  //cudaStream_t stream = main_stream->stream;
+  //cudaStream_t stream = main_stream;
 
 
 
@@ -209,9 +209,9 @@ void LSTM::FirstBackward()
   dU = get_from_pool(0, 4*OC* C, "lstm dU");
   dB = get_from_pool(0, 4*OC,    "lstm dB");
 
-  set_to_zero_kernel<<<std::ceil((4*OC*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 4*OC*OC);
-  set_to_zero_kernel<<<std::ceil((4*OC* C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
-  set_to_zero_kernel<<<std::ceil((4*OC)   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dB, 4*OC);
+  set_to_zero_kernel<<<std::ceil((4*OC*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, 4*OC*OC);
+  set_to_zero_kernel<<<std::ceil((4*OC* C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dU, 4*OC*C);
+  set_to_zero_kernel<<<std::ceil((4*OC)   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dB, 4*OC);
 
   NamedParamGrads[Name+"W"] = dW;
   NamedParamGrads[Name+"U"] = dU;
@@ -236,9 +236,9 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   
 
   //std::cout << "Copy dy to d_ht" << "\n";
-  copy_tensor_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ht, dy, B*OC);
-  set_to_zero_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
-  set_to_zero_kernel<<<std::ceil(((float)T*(float)B*4*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ifoc, T*B*4*OC);
+  copy_tensor_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(d_ht, dy, B*OC);
+  set_to_zero_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
+  set_to_zero_kernel<<<std::ceil(((float)T*(float)B*4*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(d_ifoc, T*B*4*OC);
 
 
   
@@ -263,7 +263,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
     
     //std::cout << "backward t: " << t << ", reversed t: " << reversed_t_ << "\n";
 
-    lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, shared_mem_size, main_stream->stream>>>(fused_out,
+    lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, shared_mem_size, main_stream>>>(fused_out,
                                                                                       all_ct,
                                                                                       d_ht, d_ct, d_ifoc, dB,
                                                                                       W,
@@ -275,7 +275,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
     //PrintTensorF(fused_out+reversed_t_*B*4*OC, B, 4*OC);
     //PrintTensorF(d_ifoc, B, OC);
     /*
-    lstm_single_step_backward_dht_kernel<<<grid_size_d_ht, block_size, shared_mem_size, main_stream->stream>>>(d_ifoc,
+    lstm_single_step_backward_dht_kernel<<<grid_size_d_ht, block_size, shared_mem_size, main_stream>>>(d_ifoc,
                                                                                       d_ht, W,
                                                                                       t, reversed_t_, T,
                                                                                       TILE_SIZE, TILE_SIZE_SQ,
@@ -307,7 +307,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   cudaStreamCreate(&dx_stream);
   cudaStreamCreate(&dw_stream);
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   
   lstm_backward_dx_kernel<<<grid_size_dx, block_size, shared_mem_size, dx_stream>>>(d_ifoc, dx, U,
@@ -321,7 +321,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   RegisterEvent(dw_stream);
 
   
-  mult_backwarddw<<<grid_size_du, block_size, shared_mem_size, main_stream->stream>>>(x, dU, d_ifoc, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
+  mult_backwarddw<<<grid_size_du, block_size, shared_mem_size, main_stream>>>(x, dU, d_ifoc, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
 
   WaitForAllEvents();
   cudaStreamDestroy(dx_stream);

@@ -202,7 +202,7 @@ void CleanTree_Backprop(DT_tensor *back_node) {
   CleanTree_Backprop(back_node->R_Node);
 
   float dims_prod = back_node->dims_prod;
-  to_pool(dims_prod, back_node->tensor_ptr, "leaf tensor"); 
+  to_pool(dims_prod, back_node->tensor_ptr, "CleanTree leaf tensor"); 
 
   if (!back_node->is_last_version)
     to_free_tensor(back_node);
@@ -222,5 +222,5 @@ void CleanTreeNow(int thread_id, DT_tensor *tensor, std::string root_name) {
   float dims_prod = tensor->dims_prod;
 
   move_to_pool(thread_id, tensor->dims_prod, tensor->tensor_ptr, "eval/thread_id!=0 cleaning");
-  delete tensor;
+  free(tensor);
 }

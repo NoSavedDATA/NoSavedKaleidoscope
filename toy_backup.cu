@@ -2912,7 +2912,7 @@ CudaStreams *AllocateStream()
 void SynchronizeStream(CudaStreams *cuda_stream)
 {
   //std::cout << "Synchronizing stream " << cuda_stream->idx << "\n";
-  cudaStreamSynchronize(cuda_stream->stream);
+  cudaStreamSynchronize(cuda_stream);
   open_streams[cuda_stream->idx] = 1;
 }
 
@@ -2938,7 +2938,7 @@ void WaitForAllEvents()
     cudaEvent_t event = Registered_Events.back();
     Registered_Events.pop_back();
 
-    cudaStreamWaitEvent(main_stream->stream, event, 0);
+    cudaStreamWaitEvent(main_stream, event, 0);
     cudaEventDestroy(event);
   }
 }
@@ -2988,10 +2988,10 @@ struct Loader {
         size = dims_prods[i];
         CudaStreams *cuda_stream = AllocateStream();
 
-        //copyChunk(tensor_ptr, tensor_cpu, offset, size, cuda_stream->stream);
-        //threads.push_back(std::thread(copyChunk, tensor_ptr, tensor_cpu, offset, size, cuda_stream->stream));
+        //copyChunk(tensor_ptr, tensor_cpu, offset, size, cuda_stream);
+        //threads.push_back(std::thread(copyChunk, tensor_ptr, tensor_cpu, offset, size, cuda_stream));
 
-        cudaMemcpyAsync(tensor_ptr + (int)offset, tensor_cpu + (int)offset, size*sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+        cudaMemcpyAsync(tensor_ptr + (int)offset, tensor_cpu + (int)offset, size*sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
 
         streams.push_back(cuda_stream);
         offset += size;
@@ -7124,7 +7124,7 @@ extern "C" void *gpu(int thread_id, Tensor *tensor, Tensor *pinned_tensor)
   
   
   cuda_stream = AllocateStream();
-  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+  cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
   //cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod * sizeof(float), cudaMemcpyHostToDevice);
   pinned_tensor->cuda_stream = cuda_stream;
   
@@ -7189,7 +7189,7 @@ extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, floa
   else// if (batchless_dims_prod<1000)
   {
     cuda_stream = AllocateStream();
-    cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+    cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
     //cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
     pinned_tensor->cuda_stream = cuda_stream;
   }
@@ -7197,7 +7197,7 @@ extern "C" float gpuw(int thread_id, Tensor *tensor, Tensor *pinned_tensor, floa
   else
   {
     //cuda_stream = AllocateStream();
-    //cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream->stream);
+    //cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
     loader = new Loader();
     loader->Load(tensor_ptr, tensor_cpu, batchless_dims_prod);
   }
@@ -11347,7 +11347,7 @@ void matmul_backward(float *inp,  float *weight,
   dim3 grid_size(std::ceil(C/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
   int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   mult_backwarddx<<<grid_size, block_size, shared_mem_size>>>(weight, dinp, dout, TILE_SIZE, TILE_SIZE_SQ, B, C, OC);
   
@@ -11361,7 +11361,7 @@ void matmul_backward(float *inp,  float *weight,
 
   //PrintTensorF(dw, OC, C);
 
-  StreamAwaitStreamB(main_stream->stream, dx_stream);
+  StreamAwaitStreamB(main_stream, dx_stream);
   cudaStreamDestroy(dx_stream);
   */
 
@@ -11390,7 +11390,7 @@ void matmul_backward(float *inp,  float *weight,
                               {dinp, C},
                               {alpha, beta});
                               
-  gemm_operator_dx(main_stream->stream);
+  gemm_operator_dx(main_stream);
   gemm_operator_dx(args);
 
 
@@ -11415,7 +11415,7 @@ void matmul_backward(float *inp,  float *weight,
                               {dw, C},
                               {alpha, beta});
                               
-  gemm_operator_dw(main_stream->stream);
+  gemm_operator_dw(main_stream);
   gemm_operator_dw(args_dw);
   */
 }
@@ -13508,7 +13508,7 @@ void matmul_forward(float* out,
                               {out, OC},
                               {alpha, beta});
                               
-  gemm_operator(main_stream->stream);
+  gemm_operator(main_stream);
   gemm_operator(args);
   */
     
@@ -14208,7 +14208,7 @@ void broadcast_lastdim_add_backward(float *dx, float *dy, int x_size, int y_size
   block_size = grid_block_mem_sizes[1];
 
 
-  sum_over_last_dim_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dy, dx, y_size, leading_dim);
+  sum_over_last_dim_kernel<<<grid_size, block_size, 0, main_stream>>>(dy, dx, y_size, leading_dim);
 }
 
 
@@ -14961,7 +14961,7 @@ void mean_over_semilast_dim_backward(float *dx, float *dy, Tensor *node)
   float y_dims_prod = node->dims_prod;
 
 
-  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dy,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
+  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dx, dy,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
 }
 
 
@@ -15805,7 +15805,7 @@ void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* 
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = grid_block_mem_sizes[2];
 
-  gelu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, inp, dout, dims_prod);
+  gelu_backward1<<<grid_size, block_size, 0, main_stream>>>(dinp, inp, dout, dims_prod);
   
 }
 
@@ -15869,7 +15869,7 @@ void sigmoid_backward(const float* out, float dims_prod, float* dinp, const floa
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = grid_block_mem_sizes[2];
 
-  sigmoid_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
+  sigmoid_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dinp, out, dout, dims_prod);
   
 }
 
@@ -16008,7 +16008,7 @@ extern "C" void *sigmoid_add2weights(int thread_id, Tensor *tensor_xl, Tensor *t
   
 
   //std::cout << "PRE SIGMOID KERNEL" << "\n";
-  sigmoid_add2weights_kernel<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>
+  sigmoid_add2weights_kernel<<<grid_size, block_size, shared_mem_size, main_stream>>>
           (
             device_xl, device_wl, device_xr, device_wr,
             out,
@@ -16130,7 +16130,7 @@ void tanh_backward(const float* out, float dims_prod, float* dinp, const float* 
   block_size = grid_block_mem_sizes[1];
   
 
-  tanh_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, out, dout, dims_prod);
+  tanh_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dinp, out, dout, dims_prod);
   
 }
 
@@ -16225,7 +16225,7 @@ void relu_backward(float* inp, float dims_prod, float* dinp, float* dout) {
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  relu_backward1<<<grid_size, block_size, 0, main_stream->stream>>>(inp, dinp, dout, dims_prod);
+  relu_backward1<<<grid_size, block_size, 0, main_stream>>>(inp, dinp, dout, dims_prod);
   
 }
 
@@ -16598,7 +16598,7 @@ void gather_last_dim_backward(float *dx, float *dy, Tensor *node)
   block_size = grid_block_mem_sizes[1];
 
 
-  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, idx, leading_dim, dims_prod);
+  gather_last_dim_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dx, dy, idx, leading_dim, dims_prod);
 
   //PrintTensorF(idx, 1, node->R_Node->dims_prod);
   //PrintTensorF(dx, dims[0], dims[1]);
@@ -16865,7 +16865,7 @@ class Embedding
 
 
       dW = get_from_pool(0, OC*C, "embedding dW");
-      set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+      set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C);
 
       NamedTensorsT[Name] = tensor_W;
       NamedParamGrads[Name] = dW;
@@ -18086,7 +18086,7 @@ float *MHSA::Forward(Tensor *x, int B, int T, int thread_id)
 
 
   
-  //std::cout << "" << main_stream->stream==stream << "\n";
+  //std::cout << "" << main_stream==stream << "\n";
 
   if (_fp32)
   {
@@ -18664,8 +18664,8 @@ void MHSA::FirstBackward()
   dW = get_from_pool(0, 3*C*C, "MHSA dW");
   dW_proj = get_from_pool(0, C*C, "MHSA dW");
 
-  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 3*C*C);
-  set_to_zero_kernel<<<std::ceil((C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW_proj, C*C);
+  set_to_zero_kernel<<<std::ceil((3*C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, 3*C*C);
+  set_to_zero_kernel<<<std::ceil((C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW_proj, C*C);
 
   NamedParamGrads[Name+"W"] = dW;
   NamedParamGrads[Name+"W_proj"] = dW_proj;
@@ -18707,12 +18707,12 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
 
     
-    //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_proj_stream, main_stream);
     
 
 
-    //mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
-    //mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream->stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+    //mult_backwarddw<<<grid_size_dwproj, block_size, shared_mem_size, main_stream>>>(out, dW_proj, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
+    //mult_backwarddx<<<grid_size_dwproj, block_size, shared_mem_size, main_stream>>>(W_proj, d_out, dy, TILE_SIZE, TILE_SIZE_SQ, B*T, C, C);
 
 
     
@@ -18739,7 +18739,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
     //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
     //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
-    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
+    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream>>>(d_qkv, d_out, qkv, out, l, D,
                                                                                 B, nh, T, d, C, sqrtf(d),
                                                                                 Bc_back, Br_back, Tc_back, Tr_back,
                                                                                 warps_per_block, threads_per_block);
@@ -18747,12 +18747,12 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //PrintTensorF(d_qkv, 3, C);
     //PrintTensorF(d_qkv, T, 3*C);
     
-    //StreamAwaitStreamB(dw_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_stream, main_stream);
 
     dim3 grid_size_dx(std::ceil(C/(float)TILE_SIZE), std::ceil((B*T)/(float)TILE_SIZE));
     dim3 grid_size_dw(std::ceil(C/(float)TILE_SIZE), std::ceil((3*C)/(float)TILE_SIZE));
-    //mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
-    //mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+    //mult_backwarddw<<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(x, dW, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
+    //mult_backwarddx<<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(W, dx, d_qkv, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 3*C);
     
     
     cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, 3*C, B*T, &one,
@@ -18763,8 +18763,8 @@ void MHSA::Backward(float *x, float *dx, float *dy)
                               dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
     
 
-    //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
-    //StreamAwaitStreamB(main_stream->stream, dw_stream);
+    //StreamAwaitStreamB(main_stream, dw_proj_stream);
+    //StreamAwaitStreamB(main_stream, dw_stream);
     //cudaStreamDestroy(dw_proj_stream);
     //cudaStreamDestroy(dw_stream);
   } else {
@@ -18776,7 +18776,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
 
     
-    //StreamAwaitStreamB(dw_proj_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_proj_stream, main_stream);
     
     constexpr int num_warps_x{4};
     constexpr int num_warps_y{4};
@@ -18790,8 +18790,8 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     dim3 grid_size_dx_proj(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
     dim3 grid_size_dw_proj(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((C + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx_proj, block_size, shared_mem_size, main_stream->stream>>>(d_out, W_proj, dy, B*T, C, C);
-    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw_proj, block_size, shared_mem_size, main_stream->stream>>>(dW_proj, out, dy, B*T, C, C);
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx_proj, block_size, shared_mem_size, main_stream>>>(d_out, W_proj, dy, B*T, C, C);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw_proj, block_size, shared_mem_size, main_stream>>>(dW_proj, out, dy, B*T, C, C);
     
     
 
@@ -18806,7 +18806,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //int last_id = ((4*Bc_back + 4*Br_back)*d + 3*Br_back*Bc_back + 2*Br_back)*sizeof(float);
     //std::cout << "backward last_id: " << last_id << ", M: " << M << "\n";
     //std::cout << "Bc: " << Bc_back << ", Br: " << Br_back << ", Tc: " << Tc_back << ", Tr: " << Tr_back << "\n";
-    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream->stream>>>(d_qkv, d_out, qkv, out, l, D,
+    flash_attn_backward_kernel<<<grid_size_mhsa, block_size_mhsa, M, main_stream>>>(d_qkv, d_out, qkv, out, l, D,
                                                                                 B, nh, T, d, C, sqrtf(d),
                                                                                 Bc_back, Br_back, Tc_back, Tr_back,
                                                                                 warps_per_block, threads_per_block);
@@ -18814,21 +18814,21 @@ void MHSA::Backward(float *x, float *dx, float *dy)
     //PrintTensorF(d_qkv, 3, C);
     //PrintTensorF(d_qkv, T, 3*C);
     
-    //StreamAwaitStreamB(dw_stream, main_stream->stream);
+    //StreamAwaitStreamB(dw_stream, main_stream);
 
 
 
     dim3 grid_size_dx(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B*T + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
     dim3 grid_size_dw(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((3*C + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
-    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(dx, W, d_qkv, B*T, C, 3*C);
-    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(dW, x, d_qkv, B*T, C, 3*C);
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(dx, W, d_qkv, B*T, C, 3*C);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(dW, x, d_qkv, B*T, C, 3*C);
     
     
   
 
-    //StreamAwaitStreamB(main_stream->stream, dw_proj_stream);
-    //StreamAwaitStreamB(main_stream->stream, dw_stream);
+    //StreamAwaitStreamB(main_stream, dw_proj_stream);
+    //StreamAwaitStreamB(main_stream, dw_stream);
     //cudaStreamDestroy(dw_proj_stream);
     //cudaStreamDestroy(dw_stream);
 
@@ -18840,7 +18840,7 @@ void MHSA::Backward(float *x, float *dx, float *dy)
 
 
 
-  //add_forward<<<std::ceil((B*T*C)/THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dx, dx, dy, B*T*C);
+  //add_forward<<<std::ceil((B*T*C)/THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dx, dx, dy, B*T*C);
 
 
   // Clean-up
@@ -19047,7 +19047,7 @@ void Linear::FirstBackward()
 {
   dW = get_from_pool(0, OC*C, "MHSA dW");
 
-  set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, OC*C);
+  set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C);
 
   NamedParamGrads[Name+"W"] = dW;
 
@@ -19093,9 +19093,9 @@ void Linear::Backward(float *x, float *dx, float *dy)
 
     int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) +   (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
 
-    // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream->stream>>>(dx, W, dy, B, C, OC);
-    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream->stream>>>(dx, W, dy, B, C, OC);
-    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream->stream>>>(dW, x, dy, B, C, OC);
+    // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream>>>(dx, W, dy, B, C, OC);
+    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(dx, W, dy, B, C, OC);
+    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(dW, x, dy, B, C, OC);
 
 
 
@@ -19351,7 +19351,7 @@ void LSTM::SetDescriptors(int B, int T, int thread_id)
   block_size = grid_block_mem_sizes[1];
 
 
-  //set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(all_ht, B*T*OC);
+  //set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(all_ht, B*T*OC);
 
 
   this->B=B;
@@ -19374,7 +19374,7 @@ float *LSTM::Forward(Tensor *tensor_x, Tensor *tensor_ht, Tensor *tensor_ct, int
     SetDescriptors(B,T,thread_id);
   
   cudaStream_t stream = ThreadsStream[thread_id];
-  //cudaStream_t stream = main_stream->stream;
+  //cudaStream_t stream = main_stream;
 
 
 
@@ -19758,9 +19758,9 @@ void LSTM::FirstBackward()
   dU = get_from_pool(0, 4*OC* C, "lstm dU");
   dB = get_from_pool(0, 4*OC,    "lstm dB");
 
-  set_to_zero_kernel<<<std::ceil((4*OC*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, 4*OC*OC);
-  set_to_zero_kernel<<<std::ceil((4*OC* C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dU, 4*OC*C);
-  set_to_zero_kernel<<<std::ceil((4*OC)   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dB, 4*OC);
+  set_to_zero_kernel<<<std::ceil((4*OC*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, 4*OC*OC);
+  set_to_zero_kernel<<<std::ceil((4*OC* C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dU, 4*OC*C);
+  set_to_zero_kernel<<<std::ceil((4*OC)   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dB, 4*OC);
 
   NamedParamGrads[Name+"W"] = dW;
   NamedParamGrads[Name+"U"] = dU;
@@ -19785,9 +19785,9 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   
 
   //std::cout << "Copy dy to d_ht" << "\n";
-  copy_tensor_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ht, dy, B*OC);
-  set_to_zero_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
-  set_to_zero_kernel<<<std::ceil(((float)T*(float)B*4*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(d_ifoc, T*B*4*OC);
+  copy_tensor_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(d_ht, dy, B*OC);
+  set_to_zero_kernel<<<std::ceil(((float)B*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(d_ct,     B*OC); // TODO: check if removing this one is safe
+  set_to_zero_kernel<<<std::ceil(((float)T*(float)B*4*(float)OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(d_ifoc, T*B*4*OC);
 
 
   
@@ -19812,7 +19812,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
     
     //std::cout << "backward t: " << t << ", reversed t: " << reversed_t_ << "\n";
 
-    lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, shared_mem_size, main_stream->stream>>>(fused_out,
+    lstm_elementwise_ops_backward_kernel<<<grid_size_elementwises, block_size, shared_mem_size, main_stream>>>(fused_out,
                                                                                       all_ct,
                                                                                       d_ht, d_ct, d_ifoc, dB,
                                                                                       W,
@@ -19824,7 +19824,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
     //PrintTensorF(fused_out+reversed_t_*B*4*OC, B, 4*OC);
     //PrintTensorF(d_ifoc, B, OC);
     /*
-    lstm_single_step_backward_dht_kernel<<<grid_size_d_ht, block_size, shared_mem_size, main_stream->stream>>>(d_ifoc,
+    lstm_single_step_backward_dht_kernel<<<grid_size_d_ht, block_size, shared_mem_size, main_stream>>>(d_ifoc,
                                                                                       d_ht, W,
                                                                                       t, reversed_t_, T,
                                                                                       TILE_SIZE, TILE_SIZE_SQ,
@@ -19856,7 +19856,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   cudaStreamCreate(&dx_stream);
   cudaStreamCreate(&dw_stream);
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   
   lstm_backward_dx_kernel<<<grid_size_dx, block_size, shared_mem_size, dx_stream>>>(d_ifoc, dx, U,
@@ -19870,7 +19870,7 @@ void LSTM::Backward(float *x, float *dx, float *dy)
   RegisterEvent(dw_stream);
 
   
-  mult_backwarddw<<<grid_size_du, block_size, shared_mem_size, main_stream->stream>>>(x, dU, d_ifoc, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
+  mult_backwarddw<<<grid_size_du, block_size, shared_mem_size, main_stream>>>(x, dU, d_ifoc, TILE_SIZE, TILE_SIZE_SQ, B*T, C, 4*OC);
 
   WaitForAllEvents();
   cudaStreamDestroy(dx_stream);
@@ -20085,7 +20085,7 @@ void Embedding::SetBackwardDescriptors()
 {
 
   dW = get_from_pool(0, B*OC, "embedding dW");
-  set_to_zero_kernel<<<std::ceil((B*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream->stream>>>(dW, B*OC);
+  set_to_zero_kernel<<<std::ceil((B*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, B*OC);
 
   changed_descriptors=false;
 }
@@ -20096,7 +20096,7 @@ void Embedding::Backward(float *x, float *dy)
   if(changed_descriptors)
     SetBackwardDescriptors();
   //dW = dy;
-  copy_tensor_kernel<<<std::ceil((B*OC)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream->stream>>>(dW, dy, B*C);
+  copy_tensor_kernel<<<std::ceil((B*OC)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dW, dy, B*C);
   */
 
   
@@ -20105,7 +20105,7 @@ void Embedding::Backward(float *x, float *dy)
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
-  embedding_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
+  embedding_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
 }
 
 
@@ -21773,7 +21773,7 @@ extern "C" void *RandomCrop(int thread_id, Tensor *tensor, float padding)
   cudaCheck(cudaGetLastError());
 
 
-  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream>>>(
     tensor_ptr,
     cropped,
     B,
@@ -21856,7 +21856,7 @@ extern "C" void *RandomHorizontalFlip(int thread_id, Tensor *tensor)
 
   //std::cout << "B " << B << ", C " << C << ", H " << H << ", W " << W << "\n";
 
-  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream>>>(
     tensor_ptr,
     flipped,
     B,
@@ -21922,7 +21922,7 @@ extern "C" void *NormalizeImg(int thread_id, Tensor *tensor, Tensor *mean, Tenso
   dim3 threadsPerBlock(block_size);
   cudaCheck(cudaGetLastError());
 
-  normalize_img_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+  normalize_img_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream>>>(
     normalized,
     tensor_ptr,
     mean->tensor_ptr,
@@ -22000,7 +22000,7 @@ void scalarmult_backward(float *dx, float *dy, float scalar, float dims_prod)
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, dy, scalar, dims_prod);
+  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dx, dy, scalar, dims_prod);
 }
 
 
@@ -22025,7 +22025,7 @@ void hadamard_backward(float *x, float *w, float *dx, float *dw, float *dy, floa
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  hadamard_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(x, w, dx, dw, dy, dims_prod);
+  hadamard_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(x, w, dx, dw, dy, dims_prod);
 }
 
 
@@ -22067,7 +22067,7 @@ extern "C" void *dropout(int thread_id, Tensor *tensor, float rate)
     
     unsigned long long seed = get_int_seed();
 
-    dropout_mask_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_y, dropout_ptr, tensor->tensor_ptr, rate, scale, dims_prod, seed);
+    dropout_mask_kernel<<<grid_size, block_size, 0, main_stream>>>(device_y, dropout_ptr, tensor->tensor_ptr, rate, scale, dims_prod, seed);
     
     Tensor *dropout_tensor = createTensor(dropout_ptr, tensor->dims, dims_prod, true, "");
     dropout_tensor->scopeless_name="";
@@ -22094,7 +22094,7 @@ void dropout_backward(float *dx, float *mask, float *dy, float dims_prod)
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  dropout_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dx, mask, dy, dims_prod);
+  dropout_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dx, mask, dy, dims_prod);
 }
 
 
@@ -22153,7 +22153,7 @@ void CrossEntropyBackward(float *y_hat,
   grid_size  = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(probs, B*C);
 
 
   /*
@@ -22161,7 +22161,7 @@ void CrossEntropyBackward(float *y_hat,
   grid_size  = B*32;
   block_size = grid_block_mem_sizes[1];
   
-  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(y_hat, probs, B, C);
+  online_softmax<<<grid_size, block_size, 0, main_stream>>>(y_hat, probs, B, C);
   */
   
   
@@ -22173,7 +22173,7 @@ void CrossEntropyBackward(float *y_hat,
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(y_hat, probs, B, C);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream>>>(y_hat, probs, B, C);
   
   
 
@@ -22184,7 +22184,7 @@ void CrossEntropyBackward(float *y_hat,
   block_size = grid_block_mem_sizes[1];
 
   
-  crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C, scale);
+  crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream>>>(dloss, probs, y, B, C, scale);
   move_to_pool(0, B*C, probs,"ce probs");
 
   
@@ -22254,7 +22254,7 @@ void CrossEntropyIdxBackward(float *y_hat,
   grid_size  = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(probs, B*C);
 
 
   
@@ -22265,13 +22265,13 @@ void CrossEntropyIdxBackward(float *y_hat,
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(y_hat, probs, B, C);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream>>>(y_hat, probs, B, C);
   */
   grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(y_hat, probs, B, C);
+  online_softmax<<<grid_size, block_size, 0, main_stream>>>(y_hat, probs, B, C);
   
   
 
@@ -22282,7 +22282,7 @@ void CrossEntropyIdxBackward(float *y_hat,
   block_size = grid_block_mem_sizes[1];
 
   
-  crossentropy_idx_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C, scale);
+  crossentropy_idx_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dloss, probs, y, B, C, scale);
   move_to_pool(0, B*C, probs,"ce probs");
 }
 
@@ -22330,7 +22330,7 @@ void MSEBackward(float *y_hat, float *y,
   grid_size  = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
   
-  mse_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, y_hat, y, scale, dims_prod);
+  mse_kernel<<<grid_size, block_size, 0, main_stream>>>(dloss, y_hat, y, scale, dims_prod);
 
   //PrintTensorF(dloss, 1, dims_prod);
 }
@@ -22445,7 +22445,7 @@ extern "C" void *mse_with_priorities(int thread_id, Tensor *y_hat, Tensor *y, fl
   block_size = grid_block_mem_sizes[1];
   
 
-  online_mse<<<grid_size, block_size, 0, main_stream->stream>>>(msed, y_hat->tensor_ptr, y->tensor_ptr, B, C);
+  online_mse<<<grid_size, block_size, 0, main_stream>>>(msed, y_hat->tensor_ptr, y->tensor_ptr, B, C);
 
   Tensor *new_tensor = createTensor(msed, {B}, B, false, "");
   new_tensor->AttrLNode(y_hat, detach_op);
@@ -22482,7 +22482,7 @@ void MSEWithPrioritiesBackward(Tensor *loss_tensor,
   block_size = grid_block_mem_sizes[1];
   
   //std::cout << "grid_size: " << grid_size << ", block_size: " << block_size << "\n";
-  mse_with_priorities_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, y_hat_tensor->tensor_ptr, y_tensor->tensor_ptr, is_w_tensor->tensor_ptr, scale, dims_prod);
+  mse_with_priorities_kernel<<<grid_size, block_size, 0, main_stream>>>(dloss, y_hat_tensor->tensor_ptr, y_tensor->tensor_ptr, is_w_tensor->tensor_ptr, scale, dims_prod);
 
   //PrintTensorF(dloss, 1, dims_prod);
 }
@@ -22747,7 +22747,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
           {
             
             new_grad_ptr = get_from_pool(0, w_size, "weight grad pointer");
-            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, w_size);
+            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(new_grad_ptr, w_size);
             NamedParamGrads[param_name] = new_grad_ptr;
           }
           device_dw = NamedParamGrads[param_name];
@@ -22765,7 +22765,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
             block_size_b = grid_block_mem_sizes[1];
             
             new_grad_ptr = get_from_pool(0, w_size, "bias grad pointer");
-            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(new_grad_ptr, b_size);
+            set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(new_grad_ptr, b_size);
             NamedParamGrads[bias_name] = new_grad_ptr;
           }
           device_db = NamedParamGrads[bias_name];
@@ -22784,7 +22784,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
           */
           std::string from = "dw of " + std::to_string(op);
           device_dw = get_from_pool(0, w_size, from);
-          set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dw, w_size);
+          set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(device_dw, w_size);
         }
       }
     }
@@ -22804,7 +22804,7 @@ void TraversePreOrder(Tensor *back_node, float *device_dy, bool from_gradless, b
       device_dx = get_from_pool(0, x_size, from);
 
       //TODO: remove this set to zero to improve performance (then, adjust gather op dx to be set to zero)
-      set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(device_dx, x_size);
+      set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(device_dx, x_size);
     }
     
 
@@ -23308,10 +23308,10 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   {
 
     cudaStreamCreate(&streams[i]);
-    //StreamAwaitStreamB(streams[i], main_stream->stream);
+    //StreamAwaitStreamB(streams[i], main_stream);
   }
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   int i=0;
   for (auto& pair : NamedParamGrads)
@@ -23356,12 +23356,12 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   for (int i = 0; i < num_streams; ++i)
   {
     cudaStreamSynchronize(streams[i]);
-    //StreamAwaitStreamB(main_stream->stream, streams[i]);
+    //StreamAwaitStreamB(main_stream, streams[i]);
   }
   for (int i = 0; i < num_streams; ++i)
     cudaStreamDestroy(streams[i]);
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   return std::move(optimizer);
 }
@@ -28749,7 +28749,7 @@ int main() {
   {
     CudaStreams *cuda_stream = new CudaStreams();
 
-    cudaStreamCreate(&cuda_stream->stream);
+    cudaStreamCreate(&cuda_stream);
     cuda_stream->idx = i;
     parallel_streams[i] = cuda_stream;
 
@@ -28759,9 +28759,9 @@ int main() {
   
   // Set the Main Stream
   main_stream = AllocateStream();
-  cublasSetStream(cublas_handle, main_stream->stream);
-  cudnnSetStream(cudnn, main_stream->stream);
-  ThreadsStream[0] = main_stream->stream;
+  cublasSetStream(cublas_handle, main_stream);
+  cudnnSetStream(cudnn, main_stream);
+  ThreadsStream[0] = main_stream;
 
 
 

@@ -267,7 +267,7 @@ void scalarmult_backward(float *inp, float dims_prod, float *out,
   int grid_size, block_size;
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
-  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dinp, dout, node->scalar, dims_prod);
+  scalarmult_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dinp, dout, node->scalar, dims_prod);
 }
 
 

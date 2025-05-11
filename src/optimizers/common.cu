@@ -19,10 +19,10 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   {
 
     cudaStreamCreate(&streams[i]);
-    //StreamAwaitStreamB(streams[i], main_stream->stream);
+    //StreamAwaitStreamB(streams[i], main_stream);
   }
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   int i=0;
   for (auto& pair : NamedParamGrads)
@@ -67,12 +67,12 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   for (int i = 0; i < num_streams; ++i)
   {
     cudaStreamSynchronize(streams[i]);
-    //StreamAwaitStreamB(main_stream->stream, streams[i]);
+    //StreamAwaitStreamB(main_stream, streams[i]);
   }
   for (int i = 0; i < num_streams; ++i)
     cudaStreamDestroy(streams[i]);
 
-  cudaStreamSynchronize(main_stream->stream);
+  cudaStreamSynchronize(main_stream);
 
   return std::move(optimizer);
 }

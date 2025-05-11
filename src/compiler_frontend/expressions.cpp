@@ -358,6 +358,11 @@ ChainCallExprAST::ChainCallExprAST(const std::string &Call_Of,
   SetType("float");
 }
   
+
+
+RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars)
+    : Vars(std::move(Vars)) {}
+    
   
 ReturnExprAST::ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
               std::vector<std::unique_ptr<ExprAST>> Destiny)

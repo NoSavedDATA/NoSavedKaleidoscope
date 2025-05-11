@@ -40,7 +40,7 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   grid_size  = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(probs, B*C);
 
 
   /*
@@ -48,7 +48,7 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   grid_size  = B*32;
   block_size = grid_block_mem_sizes[1];
   
-  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(y_hat, probs, B, C);
+  online_softmax<<<grid_size, block_size, 0, main_stream>>>(y_hat, probs, B, C);
   */
   
   
@@ -60,7 +60,7 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(y_hat, probs, B, C);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream>>>(y_hat, probs, B, C);
   
   
 
@@ -71,7 +71,7 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   block_size = grid_block_mem_sizes[1];
 
   
-  crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C, scale);
+  crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream>>>(dloss, probs, y, B, C, scale);
   move_to_pool(0, B*C, probs,"ce probs");
 
   
@@ -113,7 +113,7 @@ void CrossEntropyIdxBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   grid_size  = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(probs, B*C);
+  set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(probs, B*C);
 
 
   
@@ -124,13 +124,13 @@ void CrossEntropyIdxBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   block_size = grid_block_mem_sizes[1];
   shared_mem_size = 2 * block_size / 32 * sizeof(float);
 
-  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream->stream>>>(y_hat, probs, B, C);
+  softmax_forward_kernel4<<<grid_size, block_size, shared_mem_size, main_stream>>>(y_hat, probs, B, C);
   */
   grid_block_mem_sizes = CalculateSimpleWarpGridAndBlockSizes(B);
   grid_size = grid_block_mem_sizes[0];
   block_size = grid_block_mem_sizes[1];
 
-  online_softmax<<<grid_size, block_size, 0, main_stream->stream>>>(y_hat, probs, B, C);
+  online_softmax<<<grid_size, block_size, 0, main_stream>>>(y_hat, probs, B, C);
   
   
 
@@ -141,7 +141,7 @@ void CrossEntropyIdxBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   block_size = grid_block_mem_sizes[1];
 
   
-  crossentropy_idx_backward_kernel<<<grid_size, block_size, 0, main_stream->stream>>>(dloss, probs, y, B, C, scale);
+  crossentropy_idx_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(dloss, probs, y, B, C, scale);
   move_to_pool(0, B*C, probs,"ce probs");
 }
 

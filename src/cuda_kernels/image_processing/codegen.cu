@@ -35,7 +35,7 @@ extern "C" DT_tensor *RandomCrop(int thread_id, DT_tensor *tensor, float padding
   cudaCheck(cudaGetLastError());
 
 
-  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+  random_padding_cropping_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream>>>(
     tensor_ptr,
     cropped,
     B,
@@ -85,7 +85,7 @@ extern "C" DT_tensor *RandomHorizontalFlip(int thread_id, DT_tensor *tensor)
 
   //std::cout << "B " << B << ", C " << C << ", H " << H << ", W " << W << "\n";
 
-  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+  random_horizontal_flip_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream>>>(
     tensor_ptr,
     flipped,
     B,
@@ -135,7 +135,7 @@ extern "C" DT_tensor *NormalizeImg(int thread_id, DT_tensor *tensor, DT_tensor *
   dim3 threadsPerBlock(block_size);
   cudaCheck(cudaGetLastError());
 
-  normalize_img_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream->stream>>>(
+  normalize_img_kernel<<<numBlocks, threadsPerBlock, 0, tensor->cuda_stream>>>(
     normalized,
     tensor_ptr,
     mean->tensor_ptr,
