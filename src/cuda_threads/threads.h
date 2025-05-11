@@ -39,4 +39,3 @@ void WaitForAllEvents();
 
 
 void StreamAwaitStreamB(cudaStream_t A, cudaStream_t B);
-

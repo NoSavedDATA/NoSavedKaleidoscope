@@ -1,7 +1,12 @@
+#include <mutex>
+#include <set>
+
 #include "../char_pool/include.h"
 #include "../codegen/string.h"
+#include "../codegen/time.h"
 #include "../data_types/include.h" 
 #include "../mark_sweep/include.h" 
+#include "../threads/include.h"
 
 #include "scope_struct.h"
 
@@ -154,12 +159,43 @@ extern "C" char *get_scope_previous_scope(Scope_Struct *scope_struct) {
     return scope_struct->previous_scope;
 }
 extern "C" int get_scope_thread_id(Scope_Struct *scope_struct) {
-    // std:cout << "get_scope_thread_id" << ".\n";
+    // std::cout << "get_scope_thread_id " << scope_struct->thread_id << ".\n";
     return scope_struct->thread_id;
 }
 extern "C" int get_scope_has_grad(Scope_Struct *scope_struct) {
     // std::cout << "get_scope_has_grad" << ".\n";
     return scope_struct->has_grad;
+}
+
+
+std::set<int> assigned_ids;
+std::mutex id_mutex;
+
+extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
+    // std::cout << "get_scope_has_grad" << ".\n";
+    // pthread_mutex_lock(&create_thread_mutex);
+    int thread_id = 0;
+
+    // main_mutex.lock();
+    
+    std::lock_guard<std::mutex> lock(id_mutex);
+    int candidate;
+    candidate = 1;
+    while (assigned_ids.count(candidate)) {
+        candidate++;
+    }
+    assigned_ids.insert(candidate);
+    
+
+
+    scope_struct->thread_id = candidate;
+    // std::cout << "INCREMENT SCOPE STRUCT THREAD ID " << scope_struct->thread_id << ".\n";
+
+    // main_mutex.unlock();
+    // pthread_mutex_unlock(&create_thread_mutex);
+    // return scope_struct->has_grad;
+    // std::exit(0);
+    return 0;
 }
 
 
@@ -171,6 +207,7 @@ extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn
     
     NamedScopeStructs[fn_name] = scope_struct_copy;
 }
+
 extern "C" Scope_Struct *scope_struct_Load_for_Async(char *fn_name)
 {
     return NamedScopeStructs[fn_name];
@@ -184,7 +221,7 @@ extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thread_id, int has_grad) {
-    // std::cout << "SET ASYNC SCOPE" << ".\n";
+    // std::exit(0);
     scope_struct->scope = GetEmptyChar();
     scope_struct->thread_id = thread_id;
     scope_struct->has_grad = has_grad;
@@ -225,10 +262,14 @@ inline void delete_scope(Scope_Struct *scope_struct) {
 
 
 extern "C" float tid(Scope_Struct *scope_struct) {
-    float thread_id = scope_struct->thread_id;
+    float thread_id = scope_struct->thread_id-1;
     return thread_id;
 }
 
+
+extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
+    scope_struct->mark_sweep_map->clean_up();
+}  
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     if (strcmp(scope_struct->function_name,"")==0)
@@ -241,9 +282,7 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     //     // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
     //     scope_struct->mark_sweep_map->delete_type(pair.first);
     // }
-
     scope_struct->mark_sweep_map->clean_up();
-
     delete_scope(scope_struct);
 }
 

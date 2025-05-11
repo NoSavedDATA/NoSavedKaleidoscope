@@ -49,6 +49,7 @@ std::map<int, std::string> token_to_string = {
   { tok_for, "for" },
   { tok_while, "while" },
   { tok_async, "async" },
+  { tok_asyncs, "asyncs" },
   { tok_async_finish, "finish" },
   { tok_tab, "tok tab" },
   { tok_return, "tok return"},
@@ -290,6 +291,8 @@ static int get_token() {
       return tok_while;
     if (IdentifierStr == "async")
       return tok_async;
+    if (IdentifierStr == "asyncs")
+      return tok_asyncs;
     if (IdentifierStr == "finish")
       return tok_async_finish;
     if (IdentifierStr == "global")

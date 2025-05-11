@@ -205,7 +205,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       }
       else
       {
-        call("MarkToSweep_Unmark", {scope_struct, initial_value});
+        call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
       }
     }
     call("str_Delete", {var_name});
@@ -315,7 +315,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
   // Create an alloca for the variable in the entry block.
-  AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+  // AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
 
   // Emit the start code first, without 'variable' in scope.
   Value *StartVal = Start->codegen(scope_struct);
@@ -328,8 +328,11 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   Value *var_name = global_str(VarName);
   var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
-
   call("float_Store", {var_name, StartVal});
+
+
+  // Builder->CreateStore(StartVal, control_var_alloca);
+
 
   // Store the value into the alloca.
   //Builder->CreateStore(StartVal, Alloca);
@@ -347,6 +350,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   
   Builder->SetInsertPoint(CondBB);
+
+
 
   // Within the loop, the variable is defined equal to the PHI node.  If it
   // shadows an existing variable, we have to restore it outside this scope
@@ -395,14 +400,18 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   int j=0;
   for (auto &body : Body)
     body->codegen(scope_struct);
+  call("scope_struct_Sweep", {scope_struct});
+
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
-  Value *CurVar = callret("float_Load", {scope_struct, var_name});
-  Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar"); // Increment
+  Value *CurVal = callret("float_Load", {scope_struct, var_name});
+  // Value *CurVal = Builder->CreateLoad(Type::getFloatTy(*TheContext), control_var_alloca, VarName.c_str());
+  Value *NextVal = Builder->CreateFAdd(CurVal, StepVal, "nextvar"); // Increment  
+  // Builder->CreateStore(NextVal, control_var_alloca);
+  call("float_Store", {var_name, NextVal});
 
-  call("float_Store", {var_name, NextVar});
-
+  // call("print", {callret("str_float_add", {scope_struct, global_str("i is: "), NextVal})});
   
   
   Builder->CreateBr(CondBB);
@@ -414,7 +423,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   TheFunction->insert(TheFunction->end(), AfterBB);
   Builder->SetInsertPoint(AfterBB);
 
-  Builder->CreateCall(TheModule->getFunction("FreeChar"), {var_name});
+  // Builder->CreateCall(TheModule->getFunction("FreeChar"), {var_name});
   // Restore the unshadowed variable.
   //if (OldVal)
   //  NamedValues[VarName] = OldVal;
@@ -461,6 +470,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
   // Generate the loop body code
   for (auto &body : Body)
     body->codegen(scope_struct);
+  call("scope_struct_Sweep", {scope_struct});
 
   // After the loop body, go back to the condition check
   Builder->CreateBr(CondBB);
@@ -839,27 +849,23 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       call(store_op, {Lvar_name, idx, Val, scope_struct});
 
     } else
+    {
+      // if (LType!="float")
+      //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
       call(store_op, {Lvar_name, Val, scope_struct});
+    }
 
 
 
     if (LType!="float")
     {
       if(!LHS->GetSelf()&&!LHS->GetIsAttribute())
-      { // Marked already
-
-        // if (!in_str(LType, {"float", "str"}))
-        // {
-        //   p2t("MARKING " + LType);
-        // }
-      //   p2t("MARK TO SWEEP OF " + LType);
-        
-        // call("MarkToSweep_Mark", {scope_struct, Val, global_str(LType)});
-      }
+      {
+        call("MarkToSweep_Unmark_Scopeful", {scope_struct, Val});
+      } 
       else
-      {  
-        
-        call("MarkToSweep_Unmark", {scope_struct, Val});
+      {
+        call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val});
       }
     }
     call("str_Delete", {Lvar_name});
@@ -1221,9 +1227,9 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
                    void *(*function_ptr) (void *arg), void *arg)
 {
-  std::cout << "Creating thread" << "\n";
+  // std::cout << "Creating thread" << "\n";
   pthread_create(thread, attr, function_ptr, arg);
-  std::cout << "Created" << "\n";
+  // std::cout << "Created" << "\n";
 }
 
 
@@ -1236,10 +1242,6 @@ extern "C" void pthread_join_aux(pthread_t thread)
   pthread_join(thread, value_ptr);
   std::cout << "Joined: " << thread << "\n";
 }
-
-
-
-
 
 Value *AsyncExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
@@ -1259,7 +1261,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
 
-  Function *asyncFun = codegenAsyncFunction(std::ref(Body), scope_struct);
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1293,6 +1295,63 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
   return pthreadPtr;
 }
 
+Value *AsyncsExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  
+  // Create/Spawn Threads
+
+  // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct});   
+  
+  //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
+  BasicBlock *CurrentBB = Builder->GetInsertBlock();
+
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct);
+
+
+  Builder->SetInsertPoint(CurrentBB);
+
+  
+
+  for(int i=0; i<AsyncsCount; i++) 
+  {
+    PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+    Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
+    
+    Value *voidPtrNull = Constant::getNullValue(
+        Type::getInt8Ty(*TheContext)->getPointerTo());
+    
+    call("pthread_create_aux",
+      {pthreadPtr,
+      voidPtrNull,
+      asyncFun,
+      voidPtrNull}
+    );
+  
+    p2t("AsyncExpr Created join call");
+
+
+    thread_pointers.push_back(pthreadPtr);
+  }
+
+  // return pthreadPtr;
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+Value *IncThreadIdExprAST::codegen(Value *scope_struct) {
+  call("scope_struct_Increment_Thread", {scope_struct});
+  return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+Value *SplitParallelExprAST::codegen(Value *scope_struct) {
+  // call("scope_struct_Increment_Thread", {scope_struct});
+
+  std::cout << "SPLIT PARALLEL CODEGEN" << ".\n";
+  // return ConstantFP::get(*TheContext, APFloat(0.0f));
+  return callret("nullptr_get", {});
+}
 
 
 Value *FinishExprAST::codegen(Value *scope_struct) {
@@ -1369,6 +1428,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   if(Vars.size()==1)
   {
     Value *ret = Vars[0]->codegen(scope_struct);
+    call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
     seen_var_attr=false;
     call("set_scope_not_at_return", {scope_struct});
     return ret;
@@ -1378,6 +1438,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   for (int i=0; i<Vars.size(); i++)
   {
     Value *value = Vars[i]->codegen(scope_struct);
+    call("MarkToSweep_Unmark_Scopeless", {scope_struct, value});
     std::string type = Vars[i]->GetType();
     values.push_back(global_str(type));
     values.push_back(value);
@@ -1610,123 +1671,12 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *MaxPool2dExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing MaxPool2d var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateMaxPool2dOnDemand"),
-                                              {var_name, type,
-                                               Ks->codegen(scope_struct),
-                                               Stride->codegen(scope_struct),
-                                               Padding->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-Value *BatchNorm2dExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing BatchNorm2d var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateBatchNorm2dOnDemand"),
-                                              {var_name, 
-                                               C->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
 
 
 
 
-Value *BN2dReluExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
 
 
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing BN2dRelu var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateBN2dReluOnDemand"),
-                                              {var_name, C->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
 
 
 Value *LSTMExprAST::codegen(Value *scope_struct) {
@@ -1952,12 +1902,12 @@ Function *PrototypeAST::codegen() {
 
   for (auto &type : Types)
   {
-    if (type=="s"||type=="t"||type=="c")
-      types.push_back(int8PtrTy);
+    if (type=="f"||type=="float")
+      types.push_back(Type::getFloatTy(*TheContext));
     else if(type=="i")
       types.push_back(Type::getInt32Ty(*TheContext));
     else
-      types.push_back(Type::getFloatTy(*TheContext));
+      types.push_back(int8PtrTy);
   }
   
   FunctionType *FT;
@@ -2077,7 +2027,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     size_t pos = copy.find(prefix);
     copy.erase(pos, prefix.length());
     thread = std::stoi(copy);
-    thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
+    // thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
+    thread_id = callret("get_scope_thread_id", {scope_struct});
     has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
     
     p2t("New async pre");
@@ -2234,8 +2185,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     if (Type!="float"&&Type!="")
     {
-      // if (!begins_with(Callee, "Dataset"))
-      //   p2t("RETURN OF " + Callee + " is " + Type);
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
     }
     return ret;
@@ -2243,7 +2192,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   else
   {
     
-    std::cout << "Calling " << CalleeOverride << ".\n";
+    // std::cout << "Calling " << CalleeOverride << ".\n";
     if (in_str(CalleeOverride, native_modules))
     {
       CalleeF = getFunction(CalleeOverride);
@@ -2268,7 +2217,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       
     if (Type!="float"&&Type!="")
     {
-      // p2t("RETURN OF " + Callee + " is " + Type);
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
     }
     return ret;

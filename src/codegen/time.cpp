@@ -29,6 +29,22 @@ extern "C" void __slee_p_(Scope_Struct *scope_struct, float id)
 }
 
 
+extern "C" void random_sleep(Scope_Struct *scope_struct, float start, float finish)
+{
+  std::random_device rd;
+  std::mt19937 gen(rd());
+
+  std::uniform_int_distribution<> dis(start, finish); // Generate between 1 and 100
+  int random_number = dis(gen);
+
+  //std::this_thread::sleep_for(std::chrono::seconds(random_number));
+  std::this_thread::sleep_for(std::chrono::seconds(random_number));
+
+
+  //return id;
+}
+
+
 extern "C" float silent_sleep(Scope_Struct *scope_struct, float id)
 {
   std::random_device rd;

@@ -327,7 +327,15 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
     if (CurTok != ')') {
       while (true) {
         
-        if (auto Arg = ParseExpression(class_name, false))
+        if (CurTok=='>')
+        {
+          getNextToken(); // eat >
+          auto inner_vec = ParseExpression(class_name, false);
+          
+          auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
+          Args.push_back(std::move(Arg));
+        }
+        else if (auto Arg = ParseExpression(class_name, false))
           Args.push_back(std::move(Arg));
         else
           return nullptr;
@@ -337,7 +345,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
           break;
 
         if (CurTok != ',')
-          return LogError("Esperado ')' ou ',' na lista de argumentos");
+          return LogError("Expected ')' or ',' on argument list");
         getNextToken();
       }
     }
@@ -646,6 +654,7 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(std::string class_name) {
   
   //std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
 
+  Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(class_name)));
   else
@@ -656,6 +665,38 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(std::string class_name) {
   //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
 
   return std::make_unique<AsyncExprAST>(std::move(Bodies));
+}
+
+std::unique_ptr<ExprAST> ParseAsyncsExpr(std::string class_name) {
+
+  int cur_level_tabs = SeenTabs;
+
+  getNextToken(); // eat the async.
+
+
+  if (CurTok!=tok_number)
+    LogError("asyncs expression expect the number of asynchrnonous functions.");
+
+  int async_count = NumVal;
+  getNextToken();
+  std::cout << "Cur tok is " << ReverseToken(CurTok) << ".\n";
+  // std::exit(0);
+  
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  
+  //std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
+
+  Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
+  if (CurTok != tok_space)
+    Bodies.push_back(std::move(ParseExpression(class_name)));
+  else
+    Bodies = ParseIdentedBodies(cur_level_tabs, class_name);
+  
+  
+  
+  //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
+
+  return std::make_unique<AsyncsExprAST>(std::move(Bodies), async_count);
 }
 
 
@@ -991,7 +1032,15 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
     while (true) {
-      if (auto Arg = ParseExpression(class_name, false))
+      if (CurTok=='>')
+      {
+        getNextToken();
+        auto inner_vec = ParseExpression(class_name, false);
+        
+        auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
+        Args.push_back(std::move(Arg));
+      }
+      else if (auto Arg = ParseExpression(class_name, false))
       {
         //std::cout << "Parsed arg " << Arg->GetName() << "\n";
         Args.push_back(std::move(Arg));
@@ -1417,13 +1466,19 @@ std::unique_ptr<ExprAST> ParseRetExpr(std::string class_name) {
   std::unique_ptr<ExprAST> expr;
   
 
-  if (CurTok != tok_identifier && CurTok != tok_class_attr && CurTok != tok_self)
+  if (CurTok != tok_identifier && CurTok != tok_class_attr && CurTok != tok_self && CurTok != tok_number)
     return LogError("Expected identifier after return.");
 
   
   while(true) {
-
-    expr = ParseMustBeVar(class_name, "return");
+    
+    if (CurTok==tok_number)
+    {
+      expr = std::make_unique<NumberExprAST>(NumVal);
+      getNextToken();
+    }
+    else
+      expr = ParseMustBeVar(class_name, "return");
     
     Vars.push_back(std::move(expr));
     if(CurTok!=',')
@@ -1523,6 +1578,8 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) 
     return ParseFinishExpr(class_name);
   case tok_async:
     return ParseAsyncExpr(class_name);
+  case tok_asyncs:
+    return ParseAsyncsExpr(class_name);
   case tok_lock:
     return ParseLockExpr(class_name);
   case tok_no_grad:
@@ -1551,9 +1608,14 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name, bool can_be_list) {
   // If the current token is not an operator, it must be a primary expr.
   
   //std::cout << "Unary current token " << ReverseToken(CurTok) << "\n";
-  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[')
+  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok=='>')
   {
     //std::cout << "Returning, non-ascii found.\n";
+    // if(CurTok=='>'||CurTok=='^')
+    // {
+    //   std::cout << "PARALELIZE VECTOR AT UNARY" << ".\n";
+    //   std::exit(0);
+    // }
     return ParsePrimary(class_name, can_be_list);
   }
   
@@ -1924,32 +1986,24 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
 
   while (CurTok != ')')
   {
-    type="str";
-    if (IdentifierStr=="t")
+    if (IdentifierStr=="s")
+      type="str";
+    else if (IdentifierStr=="t")
       type="tensor";
-    if (IdentifierStr=="c")
-      type="function";
-    if (IdentifierStr=="f")
+    else if (IdentifierStr=="f")
       type="float";
+    else
+      type=IdentifierStr;
 
-    if (IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="s" && IdentifierStr!="c")
-      LogErrorP_to_comma("Prototype var type must be t, f, s or c");
+    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && (!in_str(IdentifierStr, data_tokens)))
+      LogErrorP_to_comma("Prototype var type must be t, f or a data type. Got " + IdentifierStr);
     else {
       Types.push_back(IdentifierStr);
       getNextToken(); // eat arg type
 
       ArgNames.push_back(IdentifierStr);
 
-      if (type=="float" || type=="tensor")
-      {
-        // std::cout << "Attributing " << type << " for " << IdentifierStr << ".\n";
-        typeVars[IdentifierStr] = type;
-      }
-
-      else if (type=="function")
-        functionVars[IdentifierStr] = "ConvForward2d";
-      else
-        typeVars[IdentifierStr] = "str";
+      typeVars[IdentifierStr] = type;
       
       getNextToken(); // eat arg name
     }
