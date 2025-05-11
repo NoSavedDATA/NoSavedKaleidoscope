@@ -1,4 +1,4 @@
-1821-05-10 22:56:56
+1821-05-11 19:06:08
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -119,6 +119,13 @@
 	);
 	TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
 
+	FunctionType *scope_struct_Increment_ThreadTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Increment_Thread", scope_struct_Increment_ThreadTy);
+
 	FunctionType *scope_struct_Save_for_AsyncTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -167,6 +174,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("tid", tidTy);
+
+	FunctionType *scope_struct_SweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Sweep", scope_struct_SweepTy);
 
 	FunctionType *scope_struct_Clean_ScopeTy= FunctionType::get(
 		int8PtrTy,

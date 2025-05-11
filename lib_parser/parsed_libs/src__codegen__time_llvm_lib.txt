@@ -1,4 +1,4 @@
-1821-05-10 22:56:56
+1821-05-11 18:30:47
 
 	FunctionType *__slee_p_Ty= FunctionType::get(
 		int8PtrTy,
@@ -6,6 +6,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("__slee_p_", __slee_p_Ty);
+
+	FunctionType *random_sleepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("random_sleep", random_sleepTy);
 
 	FunctionType *silent_sleepTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

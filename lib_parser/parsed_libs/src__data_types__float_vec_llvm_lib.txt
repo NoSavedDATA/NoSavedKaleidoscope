@@ -1,4 +1,4 @@
-1821-05-10 22:56:56
+1821-05-11 19:44:23
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -41,6 +41,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("PrintFloatVec", PrintFloatVecTy);
+
+	FunctionType *arange_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
 
 	FunctionType *zeros_vecTy= FunctionType::get(
 		int8PtrTy,

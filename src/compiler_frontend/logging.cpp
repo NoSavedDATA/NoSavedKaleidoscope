@@ -117,7 +117,7 @@ std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
 }
 
 
-std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str) {
+std::unique_ptr<PrototypeAST> LogErrorP_to_comma(std::string Str) {
   LogError(Str);
   while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
   {

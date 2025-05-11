@@ -43,3 +43,25 @@ inline Value *global_str(std::string _string) {
 inline Value *const_int(int val) {
     return ConstantInt::get(Type::getInt32Ty(*TheContext), val);
 }
+inline Value *const_float(float val) {
+    return ConstantFP::get(*TheContext, APFloat(val));
+}
+
+
+inline AllocaInst *int_alloca() {
+    return Builder->CreateAlloca(Type::getInt32Ty(*TheContext), nullptr);
+}
+inline AllocaInst *float_alloca() {
+    return Builder->CreateAlloca(Type::getFloatTy(*TheContext), nullptr);
+}
+
+inline void store_alloca(AllocaInst *alloca, Value *val) {
+    Builder->CreateStore(val, alloca);
+}
+
+inline Value *load_int(AllocaInst *alloca) {
+    Builder->CreateLoad(Type::getInt32Ty(*TheContext), alloca, "loaded");
+}
+inline Value *load_float(AllocaInst *alloca) {
+    Builder->CreateLoad(Type::getFloatTy(*TheContext), alloca, "loaded");
+}

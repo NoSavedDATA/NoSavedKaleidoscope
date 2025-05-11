@@ -22,7 +22,8 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok);
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str); 
 
 
-std::unique_ptr<PrototypeAST> LogErrorP_to_comma(const char *Str); 
+
+std::unique_ptr<PrototypeAST> LogErrorP_to_comma(std::string Str);
 
 Value *LogErrorV(std::string Str); 
 

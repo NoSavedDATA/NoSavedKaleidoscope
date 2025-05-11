@@ -332,12 +332,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("MarkToSweep_Mark", MarkToSweep_MarkTy);
 
-	FunctionType *MarkToSweep_UnmarkTy= FunctionType::get(
+	FunctionType *MarkToSweep_Unmark_ScopefulTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("MarkToSweep_Unmark", MarkToSweep_UnmarkTy);
+	TheModule->getOrInsertFunction("MarkToSweep_Unmark_Scopeful", MarkToSweep_Unmark_ScopefulTy);
+
+	FunctionType *MarkToSweep_Unmark_ScopelessTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("MarkToSweep_Unmark_Scopeless", MarkToSweep_Unmark_ScopelessTy);
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -458,6 +465,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
 
+	FunctionType *scope_struct_Increment_ThreadTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Increment_Thread", scope_struct_Increment_ThreadTy);
+
 	FunctionType *scope_struct_Save_for_AsyncTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -506,6 +520,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("tid", tidTy);
+
+	FunctionType *scope_struct_SweepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Sweep", scope_struct_SweepTy);
 
 	FunctionType *scope_struct_Clean_ScopeTy= FunctionType::get(
 		int8PtrTy,
@@ -642,7 +663,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *_exitTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("_exit", _exitTy);
@@ -1010,6 +1031,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("PrintFloatVec", PrintFloatVecTy);
+
+	FunctionType *arange_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
 
 	FunctionType *zeros_vecTy= FunctionType::get(
 		int8PtrTy,
@@ -1571,6 +1599,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("UnlockMutex", UnlockMutexTy);
 
+	FunctionType *_tidTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("_tid", _tidTy);
+
 	FunctionType *minTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -1661,6 +1696,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("__slee_p_", __slee_p_Ty);
+
+	FunctionType *random_sleepTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("random_sleep", random_sleepTy);
 
 	FunctionType *silent_sleepTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

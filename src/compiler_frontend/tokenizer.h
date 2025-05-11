@@ -35,6 +35,7 @@ enum Token {
     tok_for = -9,
     tok_while = -10,
     tok_async = -22,
+    tok_asyncs = -30,
     tok_async_finish = -23,
     tok_lock = -26,
     tok_unlock = -27,
@@ -88,6 +89,7 @@ extern int LineCounter;
 extern int SeenTabs;
 extern int LastSeenTabs;
 
+extern std::vector<std::string> data_tokens;
 
 
 /// CurTok/getNextToken - Provide a simple token buffer.  CurTok is the current

@@ -1,0 +1,8 @@
+1821-05-11 18:01:45
+
+	FunctionType *_tidTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("_tid", _tidTy);

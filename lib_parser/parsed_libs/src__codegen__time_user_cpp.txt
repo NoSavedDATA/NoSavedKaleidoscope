@@ -1,1 +1,1 @@
-"__slee_p_", "silent_sleep", "start_timer", "end_timer", 
+"__slee_p_", "random_sleep", "silent_sleep", "start_timer", "end_timer", 

@@ -244,44 +244,6 @@ class VecIdxExprAST : public ExprAST {
   
   
   
-  class MaxPool2dExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> Ks, Stride, Padding;
-  
-      MaxPool2dExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> Ks,
-        std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  class BatchNorm2dExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> C;
-  
-      BatchNorm2dExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> C);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  class BN2dReluExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> C;
-  
-      BN2dReluExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> C);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
   
   
   
@@ -517,43 +479,72 @@ class WhileExprAST : public ExprAST {
 };
   
   
-  /// AsyncExprAST - Expression class for async.
-  class AsyncExprAST : public ExprAST {
-    std::vector<std::unique_ptr<ExprAST>> Body;
+/// AsyncExprAST - Expression class for async.
+class AsyncExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  public:
+    AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body);
+
+  Value* codegen(Value *scope_struct) override;
+};
+
+
+
+/// FinishExprAST - Expression class for finish/async.
+class FinishExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::vector<bool> IsAsync;
+
+  public:
+    FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
+                  std::vector<bool> IsAsync);
+
+
+  Value* codegen(Value *scope_struct) override;
+};
+
+
+class AsyncsExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Body;
+  int AsyncsCount;
+
+  public:
+    AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount);
+
+  Value* codegen(Value *scope_struct) override;
+};
   
-    public:
-      AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body);
-  
-    Value* codegen(Value *scope_struct) override;
-  };
-  
-  
-  /// FinishExprAST - Expression class for finish/async.
-  class FinishExprAST : public ExprAST {
-    std::vector<std::unique_ptr<ExprAST>> Bodies;
-    std::vector<bool> IsAsync;
-  
-    public:
-      FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
-                    std::vector<bool> IsAsync);
-  
-  
-    Value* codegen(Value *scope_struct) override;
-  };
-  
+
+
+class IncThreadIdExprAST : public ExprAST {
+  public:
+    IncThreadIdExprAST();
+  Value* codegen(Value *scope_struct) override;
+};
   
   /// LockExprAST
-  class LockExprAST : public ExprAST {
-    std::vector<std::unique_ptr<ExprAST>> Bodies;
-    std::string Name;
-  
-    public:
-      LockExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
-                  std::string Name);
-  
-  
-    Value* codegen(Value *scope_struct) override;
-  };
+class LockExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::string Name;
+
+  public:
+    LockExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
+                std::string Name);
+
+
+  Value* codegen(Value *scope_struct) override;
+};
+
+
+class SplitParallelExprAST : public ExprAST {
+  std::unique_ptr<ExprAST> Inner_Vec;
+  public:
+    SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec);
+  Value* codegen(Value *scope_struct) override;
+};
+
+
   /// NoGradExprAST
   class NoGradExprAST : public ExprAST {
     std::vector<std::unique_ptr<ExprAST>> Bodies;

@@ -26,7 +26,7 @@ extern "C" std::vector<float> *float_vec_Create(Scope_Struct *scope_struct, char
 }
 
 extern "C" std::vector<float> *float_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
-  // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+  std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
   
   std::vector<float> *ret = &ClassFloatVecs[object_var_name];
   return ret;
@@ -71,6 +71,26 @@ extern "C" float PrintFloatVec(std::vector<float> vec)
   std::cout << "]\n\n";
 
   return 0;
+}
+
+
+
+extern "C" std::vector<float> * arange_float(Scope_Struct *scope_struct, float begin, float end) {
+  // TODO: turn into python like expression [0]*size
+
+  std::vector<float> vec;
+  for(int i=begin; i<end; ++i)
+    vec.push_back(i);
+
+  // std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 0.0f);
+  
+
+  // Aux to not lose pointers
+  std::string random_str = RandomString(15);
+  FloatVecAuxHash[random_str] = vec;
+  AuxRandomStrs[random_str] = "float_vec";
+    
+  return &FloatVecAuxHash[random_str];
 }
 
 

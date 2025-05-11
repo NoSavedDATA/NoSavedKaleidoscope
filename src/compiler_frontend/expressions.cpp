@@ -214,35 +214,6 @@ DataExprAST::DataExprAST(
   
   
   
-MaxPool2dExprAST::MaxPool2dExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> Ks,
-  std::unique_ptr<ExprAST> Stride, std::unique_ptr<ExprAST> Padding)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                Ks(std::move(Ks)),
-                Stride(std::move(Stride)), Padding(std::move(Padding)) {}
-
-  
-  
-BatchNorm2dExprAST::BatchNorm2dExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> C)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                C(std::move(C)) {}
-
-  
-  
-BN2dReluExprAST::BN2dReluExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> C)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                C(std::move(C)) {}
-  
-  
-  
   
 LSTMExprAST::LSTMExprAST(
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
@@ -395,7 +366,13 @@ WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::uniqu
 AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
   : Body(std::move(Body)) {}
   
-  
+AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount)
+  : Body(std::move(Body)), AsyncsCount(AsyncsCount) {}
+
+IncThreadIdExprAST::IncThreadIdExprAST()
+{}
+
+SplitParallelExprAST::SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {}
   
   /// FinishExprAST - Expression class for finish/async.
 FinishExprAST::FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,

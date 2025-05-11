@@ -15,11 +15,17 @@ MarkSweepAtom::MarkSweepAtom(const std::string & data_type, bool marked) {
 }
 
 void MarkSweepAtom::inc() {
-    this->references+=1;
+    this->scope_refs+=1;
+}
+void MarkSweepAtom::inc_scopeless() {
+    this->scope_refs+=1;
+    this->scopeless_refs+=1;
 }
 void MarkSweepAtom::dec() {
-    if(this->references>0)
-        this->references-=1;
+    if(this->scopeless_refs>0)
+        this->scopeless_refs-=1;
+    if(this->scope_refs>0)
+        this->scope_refs-=1;
 }
 
 
@@ -39,12 +45,26 @@ void MarkSweep::append(void *data_ptr, std::string data_type) {
 }
 
 
-void MarkSweep::unmark(void *data_ptr) {
+void MarkSweep::unmark_scopeful(void *data_ptr) {
 
     auto it = mark_sweep_map.find(data_ptr);
 
     if (it!=mark_sweep_map.end())
+    {
+        // std::cout << "INCREMENT" << ".\n";
         it->second->inc();
+    }
+}
+
+void MarkSweep::unmark_scopeless(void *data_ptr) {
+
+    auto it = mark_sweep_map.find(data_ptr);
+
+    if (it!=mark_sweep_map.end())
+    {
+        // std::cout << "INCREMENT" << ".\n";
+        it->second->inc_scopeless();
+    }
 }
 
 
@@ -52,13 +72,17 @@ void MarkSweep::clean_up() {
     // std::cout << "clean_up" << ".\n";
 
 
-    for (auto &it : mark_sweep_map)
-    {
-        // if(it.second->data_type!="str")
-        //     std::cout << "IT TYPE IS " << it.second->data_type << ".\n";
-        if(it.second->references==0)
-            clean_up_functions[it.second->data_type](it.first);
-        free(it.second);
+    for (auto it = mark_sweep_map.begin(); it != mark_sweep_map.end(); ) {
+        MarkSweepAtom *atom = it->second;
+
+        if (atom->scope_refs==0 && atom->scopeless_refs==0) {
+            // std::cout << "delete " << it->first << ".\n";
+            clean_up_functions[atom->data_type](it->first);
+            delete atom;
+            it = mark_sweep_map.erase(it); // erase returns the next valid iterator
+        } else {
+            ++it;
+        }
     }
 }
 
@@ -72,9 +96,16 @@ extern "C" void MarkToSweep_Mark(Scope_Struct *scope_struct, void *value, char *
 }
 
 
-extern "C" void MarkToSweep_Unmark(Scope_Struct *scope_struct, void *value) {
+extern "C" void MarkToSweep_Unmark_Scopeful(Scope_Struct *scope_struct, void *value) {
     if (value==nullptr)
         return;
-    // std::cout << "Mark to sweep of " << data_type << ".\n";
-    scope_struct->mark_sweep_map->unmark(value);
+    // std::cout << "Unmark " << value << ".\n";
+    scope_struct->mark_sweep_map->unmark_scopeful(value);
+}
+
+extern "C" void MarkToSweep_Unmark_Scopeless(Scope_Struct *scope_struct, void *value) {
+    if (value==nullptr)
+        return;
+    // std::cout << "Unmark " << value << ".\n";
+    scope_struct->mark_sweep_map->unmark_scopeless(value);
 }

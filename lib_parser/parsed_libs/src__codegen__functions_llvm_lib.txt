@@ -1,8 +1,8 @@
-1821-05-10 22:56:56
+1821-05-11 17:30:00
 
 	FunctionType *_exitTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("_exit", _exitTy);
