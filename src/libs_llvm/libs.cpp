@@ -486,6 +486,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Load_for_Async", scope_struct_Load_for_AsyncTy);
 
+	FunctionType *scope_struct_Store_Asyncs_CountTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Store_Asyncs_Count", scope_struct_Store_Asyncs_CountTy);
+
 	FunctionType *scope_struct_PrintTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
@@ -1080,6 +1087,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_print", float_vec_printTy);
+
+	FunctionType *float_vec_Split_ParallelTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Split_Parallel", float_vec_Split_ParallelTy);
 
 	FunctionType *print_randomsTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

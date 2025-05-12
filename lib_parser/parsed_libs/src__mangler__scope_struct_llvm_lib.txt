@@ -1,4 +1,4 @@
-1821-05-11 19:06:08
+1821-05-12 14:16:54
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -139,6 +139,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Load_for_Async", scope_struct_Load_for_AsyncTy);
+
+	FunctionType *scope_struct_Store_Asyncs_CountTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Store_Asyncs_Count", scope_struct_Store_Asyncs_CountTy);
 
 	FunctionType *scope_struct_PrintTy= FunctionType::get(
 		int8PtrTy,

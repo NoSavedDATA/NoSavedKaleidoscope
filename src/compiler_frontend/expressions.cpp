@@ -372,7 +372,9 @@ AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int Asy
 IncThreadIdExprAST::IncThreadIdExprAST()
 {}
 
-SplitParallelExprAST::SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {}
+SplitParallelExprAST::SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {
+  // Type = Inner_Vec->GetType();
+}
   
   /// FinishExprAST - Expression class for finish/async.
 FinishExprAST::FinishExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies,
