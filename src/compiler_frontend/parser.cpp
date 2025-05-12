@@ -914,13 +914,12 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     is_vec=false;
     if (CurTok==tok_identifier||CurTok==tok_post_class_attr_identifier) // Need to handle vector
     {
-      std::cout << "OVERWRITE PREV NAME WITH " << IdName << ".\n";
+      // std::cout << "OVERWRITE PREV NAME WITH " << IdName << ".\n";
       if(IdName!="")
         Prev_IdName = IdName;
       IdName = IdentifierStr;
     } 
 
-    //std::cout << "\n\ntok pre vec: " << ReverseToken(CurTok) << "\n";
 
     getNextToken(); // eat attr/identifier
 
@@ -1124,11 +1123,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   if (in_str(call_of, vararg_methods))
     Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
 
-  std::cout << "\nCalling method: " << IdName << "/" << callee << " for pre-dot: " << pre_dot << "\n\n";
-
-  //if (IdName == "len")
-
-  std::cout << "LOAD TYPE IS: " << load_type << ".\n";
+  // std::cout << "\nCalling method: " << IdName << "/" << callee << " for pre-dot: " << pre_dot << "\n\n";
+  // std::cout << "LOAD TYPE IS: " << load_type << ".\n";
 
   std::string scope_random_string = RandomString(14);
 
@@ -1986,16 +1982,18 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
 
   while (CurTok != ')')
   {
-    if (IdentifierStr=="s")
+    if (IdentifierStr=="s"||IdentifierStr=="str")
       type="str";
-    else if (IdentifierStr=="t")
+    else if (IdentifierStr=="t"||IdentifierStr=="tensor")
       type="tensor";
-    else if (IdentifierStr=="f")
+    else if (IdentifierStr=="i"||IdentifierStr=="int")
+      type="int";
+    else if (IdentifierStr=="f"||IdentifierStr=="float")
       type="float";
     else
       type=IdentifierStr;
 
-    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && (!in_str(IdentifierStr, data_tokens)))
+    if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens)))
       LogErrorP_to_comma("Prototype var type must be t, f or a data type. Got " + IdentifierStr);
     else {
       Types.push_back(IdentifierStr);

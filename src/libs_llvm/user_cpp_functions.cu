@@ -66,7 +66,7 @@ void set_user_functions() {
 		"cross_entropy", "cross_entropy_idx", 
 		"btc_mult", "btc_multT", 
 		"PrintDims", "NewDimsOnIdx", "StoreDimsOnDemand", "CalculateIdxOffset", "tensor_shape", 
-		"scope_struct_Create", "scope_struct_Copy", "scope_struct_Overwrite", "scope_struct_Dive", "set_scope_at_return", "set_scope_not_at_return", "set_scope_first_arg", "set_scope_scope", "set_scope_previous_scope", "set_scope_thread_id", "set_scope_has_grad", "set_scope_function_name", "get_scope_first_arg", "get_scope_scope", "get_scope_previous_scope", "get_scope_thread_id", "get_scope_has_grad", "scope_struct_Increment_Thread", "scope_struct_Save_for_Async", "scope_struct_Load_for_Async", "scope_struct_Print", "scope_struct_Get_Async_Scope", "scope_struct_Alloc_MarkSweepMap", "scope_struct_Copy_MarkSweepMap", "tid", "scope_struct_Sweep", "scope_struct_Clean_Scope", "scope_struct_Delete", 
+		"scope_struct_Create", "scope_struct_Copy", "scope_struct_Overwrite", "scope_struct_Dive", "set_scope_at_return", "set_scope_not_at_return", "set_scope_first_arg", "set_scope_scope", "set_scope_previous_scope", "set_scope_thread_id", "set_scope_has_grad", "set_scope_function_name", "get_scope_first_arg", "get_scope_scope", "get_scope_previous_scope", "get_scope_thread_id", "get_scope_has_grad", "scope_struct_Increment_Thread", "scope_struct_Save_for_Async", "scope_struct_Load_for_Async", "scope_struct_Store_Asyncs_Count", "scope_struct_Print", "scope_struct_Get_Async_Scope", "scope_struct_Alloc_MarkSweepMap", "scope_struct_Copy_MarkSweepMap", "tid", "scope_struct_Sweep", "scope_struct_Clean_Scope", "scope_struct_Delete", 
 		"print_codegen", 
 		"logE", "logE2", "clip", 
 		"PrintFloat", "UnbugFloat", "print_float", "float_Create", "float_Load", "float_Store", 
@@ -75,6 +75,7 @@ void set_user_functions() {
 		"dir_exists", "path_exists", 
 		"SGD", 
 		"clean_forward", 
+		"float_vec_Split_Parallel", 
 		"_exit", 
 		"dictionary_Create", "dictionary_Dispose", 
 

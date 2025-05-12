@@ -65,6 +65,7 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     has_grad = scope_to_copy->has_grad;
     code_line = scope_to_copy->code_line;
 
+    asyncs_count = scope_to_copy->asyncs_count;
     
 }
 
@@ -213,6 +214,9 @@ extern "C" Scope_Struct *scope_struct_Load_for_Async(char *fn_name)
     return NamedScopeStructs[fn_name];
 }
 
+extern "C" void scope_struct_Store_Asyncs_Count(Scope_Struct *scope_struct, int asyncs_count) {
+    scope_struct->asyncs_count = asyncs_count;
+}
 
 extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
     std::cout << "Printing scope:" << ".\n";

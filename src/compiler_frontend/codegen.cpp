@@ -1302,6 +1302,8 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
   // Create/Spawn Threads
 
   // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct});   
+
+  call("scope_struct_Store_Asyncs_Count", {scope_struct, const_int(AsyncsCount)});
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
@@ -1347,10 +1349,12 @@ Value *IncThreadIdExprAST::codegen(Value *scope_struct) {
 
 Value *SplitParallelExprAST::codegen(Value *scope_struct) {
   // call("scope_struct_Increment_Thread", {scope_struct});
-
+  
+  Value *inner_vec = Inner_Vec->codegen(scope_struct);
   std::cout << "SPLIT PARALLEL CODEGEN" << ".\n";
   // return ConstantFP::get(*TheContext, APFloat(0.0f));
-  return callret("nullptr_get", {});
+  // return callret("nullptr_get", {});
+  return callret("float_vec_Split_Parallel", {scope_struct, inner_vec});
 }
 
 
@@ -1904,7 +1908,7 @@ Function *PrototypeAST::codegen() {
   {
     if (type=="f"||type=="float")
       types.push_back(Type::getFloatTy(*TheContext));
-    else if(type=="i")
+    else if(type=="i"||type=="int")
       types.push_back(Type::getInt32Ty(*TheContext));
     else
       types.push_back(int8PtrTy);

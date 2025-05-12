@@ -21,6 +21,7 @@ struct Scope_Struct {
     int has_grad=1;
 
     int code_line = 0;
+    int asyncs_count = 0;
 
     bool is_at_return = false;
 
