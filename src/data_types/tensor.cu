@@ -151,8 +151,7 @@ extern "C" DT_tensor *tensor_Load(Scope_Struct *scope_struct, char *tensor_name)
   DT_tensor *ret = NamedTensorsT[tensor_name];
 
   if(scope_struct->is_at_return && (nn_mode==eval_mode||scope_struct->thread_id!=0))
-    ret->leaf = false;
-  //std::cout << "return load." << "\n";
+    ret->leaf = false; // Marks to clean
 
   return ret;
 }
@@ -196,7 +195,6 @@ extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   DT_tensor *new_tensor = createTensor(arg_tensor, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
   new_tensor->scopeless_name = tensor->scopeless_name;
-  new_tensor->from_grad_or_load = tensor->from_grad_or_load;
 
   
   if(nn_mode==eval_mode)//
@@ -230,7 +228,6 @@ inline DT_tensor *store_intermediate_result_tensor(DT_tensor *stored_tensor, DT_
 
   std::string scopeless_name = stored_tensor->scopeless_name;
   stored_tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, tensor->cuda_stream, tensor->loader);
-  stored_tensor->from_grad_or_load = tensor->from_grad_or_load;
   stored_tensor->scopeless_name = scopeless_name;
 
   return stored_tensor;
@@ -280,7 +277,6 @@ inline DT_tensor *store_leaf_backward(DT_tensor *stored_tensor, DT_tensor *tenso
     std::string scopeless_name = stored_tensor->scopeless_name;
     stored_tensor = createTensor(stored_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, stored_tensor->cuda_stream, stored_tensor->loader);
     
-    stored_tensor->from_grad_or_load = tensor->from_grad_or_load;
     stored_tensor->scopeless_name = scopeless_name;
   }
 
@@ -392,7 +388,6 @@ extern "C" DT_tensor *gpu(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tens
   }
 
   tensor->AttrTensor(tensor_ptr, dims, dims_prod, cuda_stream, loader);
-  tensor->from_grad_or_load = true;
 
   return 0;
 }
@@ -438,8 +433,8 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
   else// if (batchless_dims_prod<1000)
   {
     cuda_stream = createCudaStream();
-    cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
-    //cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
+    // cudaMemcpyAsync(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice, cuda_stream);
+    cudaMemcpy(tensor_ptr, tensor_cpu, batchless_dims_prod * sizeof(float), cudaMemcpyHostToDevice);
     pinned_tensor->cuda_stream = cuda_stream;
   }
   /*
@@ -467,7 +462,6 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
   }
 
   tensor->AttrTensor(tensor_ptr, batchless_dims, batchless_dims_prod, cuda_stream, loader);
-  tensor->from_grad_or_load = true;
   tensor->leaf=true;
 
 
@@ -799,4 +793,11 @@ extern "C" DT_tensor *zeros_like(Scope_Struct *scope_struct, DT_tensor *tensor) 
   set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(y, dims_prod);
 
   return customOpTensor(y, dims, DimsProd(dims), "set_to_zero", "", tensor);
+}
+
+
+extern "C" float tensor_print(Scope_Struct *scope_struct, DT_tensor *tensor) {
+  char *tensor_name = tensor->name.data();
+  PrintTensor(scope_struct, tensor_name);
+  return 0;
 }

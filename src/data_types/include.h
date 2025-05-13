@@ -20,7 +20,7 @@ using namespace llvm;
 extern std::map<std::string, Value *> NamedValues;
 extern std::map<std::string, char *> NamedStrs;
 extern std::map<std::string, std::vector<char *>> ClassStrVecs;
-extern std::map<std::string, std::vector<float>> ClassFloatVecs;
+extern std::map<std::string, DT_float_vec *> ClassFloatVecs;
 extern std::map<std::string, float> NamedClassValues;
 extern std::map<std::string, std::string> NamedObjects;
 extern std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;

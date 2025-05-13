@@ -215,7 +215,7 @@ ExitOnError ExitOnErr;
 std::map<std::string, Value *> NamedValues;
 std::map<std::string, char *> NamedStrs;
 std::map<std::string, std::vector<char *>> ClassStrVecs;
-std::map<std::string, std::vector<float>> ClassFloatVecs;
+std::map<std::string, DT_float_vec *> ClassFloatVecs;
 std::map<std::string, float> NamedClassValues;
 std::map<std::string, std::string> NamedObjects;
 std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
@@ -449,7 +449,6 @@ extern "C" float eval(Scope_Struct *scope_struct)
   {
     std::cout << "Erasing gradient memory of: " << pair.first << "\n";
     cudaCheck(cudaFree(pair.second));
-    NamedParamGrads.erase(pair.first);
   }
 
   NamedParamGrads.clear();
@@ -552,7 +551,7 @@ Function *FunctionAST::codegen() {
 
   
   // Record the function arguments in the NamedValues map.
-  Value *first_arg, *scope_string, *previous_scope, *thread_id, *has_grad, *scope_struct, *incoming_scope_struct;
+  Value *scope_string, *thread_id, *has_grad, *scope_struct;
 
   
   scope_struct = callret("scope_struct_Create", {});
@@ -574,10 +573,6 @@ Function *FunctionAST::codegen() {
   std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
 
   NamedValues.clear();
-
-  bool has_self = false; 
-  bool has_scope = false;
-  bool has_previous_scope = false;
 
   
   
@@ -610,13 +605,7 @@ Function *FunctionAST::codegen() {
 
         scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
 
-        first_arg = callret("get_scope_first_arg", {scope_struct}); 
-        scope_string = callret("get_scope_scope", {scope_struct}); 
-        previous_scope = callret("get_scope_previous_scope", {scope_struct}); 
-        thread_id = callret("get_scope_thread_id", {scope_struct}); 
-        has_grad = callret("get_scope_has_grad", {scope_struct}); 
-      
-        
+        scope_string = callret("get_scope_scope", {scope_struct});        
     } else { 
         std::string type = "";
         if (typeVars.find(arg_name) != typeVars.end())
@@ -637,11 +626,9 @@ Function *FunctionAST::codegen() {
 
         } else {
             call("CopyArgTensor",
-                            {&Arg,
-                            global_str(arg_name),
-                            previous_scope,
-                            scope_string,
-                            thread_id});
+                            {scope_struct,
+                            &Arg,
+                            global_str(arg_name)});
         }
     }
     // else if (type!="tensor")
@@ -657,7 +644,6 @@ Function *FunctionAST::codegen() {
   
 
   p2t("FunctionAST");
-  // call("scope_struct_Print", {scope_struct});
 
 
 
@@ -2698,66 +2684,14 @@ static void InitializeModule() {
 
 
 
-  //
-  FunctionType *CopyArgTensorTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)}, 
-      false 
-  );
-  TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);
 
   
-  //
-  FunctionType *RemoveTensorScopeTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("RemoveTensorScope", RemoveTensorScopeTy);
-
-
-  //
-  FunctionType *RemoveTensorScopeAttrOnIndexTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy,
-       int8PtrTy,
-       int8PtrTy,
-       Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("RemoveTensorScopeAttrOnIndex", RemoveTensorScopeAttrOnIndexTy);
 
 
 
 
-  FunctionType *AttrTensorNoFreeTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, floatPtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
-  
 
-  //
-  FunctionType *AttrTensorOnIdxTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy,
-       int8PtrTy,
-       Type::getFloatTy(*TheContext),
-       Type::getInt32Ty(*TheContext)}, 
-      false 
-  );
-  TheModule->getOrInsertFunction("AttrTensorOnIdx", AttrTensorOnIdxTy);
-  
 
-  //
-  FunctionType *AttrTensorOnIdxTensorTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("AttrTensorOnIdxTensor", AttrTensorOnIdxTensorTy);
   
 
   //

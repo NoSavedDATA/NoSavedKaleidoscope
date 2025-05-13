@@ -335,9 +335,6 @@ RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars)
     : Vars(std::move(Vars)) {}
     
   
-ReturnExprAST::ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
-              std::vector<std::unique_ptr<ExprAST>> Destiny)
-    : Vars(std::move(Vars)), IsAs(std::move(IsAs)), Destiny(std::move(Destiny)) {}
   
   
   

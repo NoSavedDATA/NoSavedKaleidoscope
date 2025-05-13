@@ -766,20 +766,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("ConcatScopeStr", ConcatScopeStrTy);
 
-	FunctionType *RemoveTensorScopeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("RemoveTensorScope", RemoveTensorScopeTy);
-
-	FunctionType *RemoveTensorScopeAttrOnIndexTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("RemoveTensorScopeAttrOnIndex", RemoveTensorScopeAttrOnIndexTy);
-
 	FunctionType *pinned_tensor_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -1025,20 +1011,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
 
-	FunctionType *float_vec_MarkTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Mark", float_vec_MarkTy);
-
-	FunctionType *PrintFloatVecTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("PrintFloatVec", PrintFloatVecTy);
-
 	FunctionType *arange_floatTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -1207,6 +1179,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("zeros_like", zeros_likeTy);
 
+	FunctionType *tensor_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_print", tensor_printTy);
+
 	FunctionType *clean_forwardTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy},
@@ -1342,7 +1321,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *CopyArgTensorTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);

@@ -117,6 +117,9 @@ struct DT_tensor {
   bool is_pinned;
   bool is_last_version = false;
 
+  int scope_refs=0;
+  int scopeless_refs=0;
+
 
   // CudaStreams *cuda_stream = nullptr;
   cudaStream_t cuda_stream = nullptr;

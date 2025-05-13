@@ -157,7 +157,6 @@ std::unique_ptr<ExprAST> ParseMustBeVar(std::string class_name="", std::string e
   
 std::unique_ptr<ExprAST> ParseGlobalExpr(std::string class_name=""); 
     
-std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name=""); 
   
   
   

@@ -1,4 +1,4 @@
-1821-05-10 23:09:28
+1821-05-12 17:24:05
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -97,3 +97,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("zeros_like", zeros_likeTy);
+
+	FunctionType *tensor_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_print", tensor_printTy);

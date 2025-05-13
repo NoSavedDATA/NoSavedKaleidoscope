@@ -1,8 +1,8 @@
-1821-05-10 23:09:17
+1821-05-12 17:50:16
 
 	FunctionType *CopyArgTensorTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);

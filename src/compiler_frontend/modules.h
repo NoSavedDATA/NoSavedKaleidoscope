@@ -11,6 +11,7 @@
 
 
 #include "../KaleidoscopeJIT.h"
+#include "logging.h"
 
 
 
@@ -26,12 +27,21 @@ extern std::unique_ptr<Module> TheModule;
 extern std::unique_ptr<Module> GlobalModule;
 
 
+inline Function *getFunctionCheck(std::string Name) {
+  // First, see if the function has already been added to the current module.
+  if (auto *F = TheModule->getFunction(Name))
+    return F;
+
+  LogError("The function " + Name + " was not found.");
+  // If no existing prototype exists, return null.
+  return nullptr;
+}
 
 inline void call(std::string fn, std::vector<Value *> args) {
-    Builder->CreateCall(TheModule->getFunction(fn), args);
+    Builder->CreateCall(getFunctionCheck(fn), args);
 }
 inline Value *callret(std::string fn, std::vector<Value *> args) {
-    return Builder->CreateCall(TheModule->getFunction(fn), args);
+    return Builder->CreateCall(getFunctionCheck(fn), args);
 }
 
 

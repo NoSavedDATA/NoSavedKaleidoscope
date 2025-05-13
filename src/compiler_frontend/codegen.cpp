@@ -1354,7 +1354,10 @@ Value *SplitParallelExprAST::codegen(Value *scope_struct) {
   std::cout << "SPLIT PARALLEL CODEGEN" << ".\n";
   // return ConstantFP::get(*TheContext, APFloat(0.0f));
   // return callret("nullptr_get", {});
-  return callret("float_vec_Split_Parallel", {scope_struct, inner_vec});
+
+  std::string split_fn = Inner_Vec->GetType() + "_Split_Parallel";
+
+  return callret(split_fn, {scope_struct, inner_vec});
 }
 
 
@@ -1472,98 +1475,6 @@ Value *RetExprAST::codegen(Value *scope_struct) {
  
 }
 
-Value *ReturnExprAST::codegen(Value *scope_struct) {
-
-  for (int i=0; i<Destiny.size(); i++)
-  {
-    //TODO: add self and attr to return
-    
-    std::string name, type, l_name, l_type;
-    bool is_vec, l_is_vec;
-
-    name   = Destiny[i]->GetName();
-    type   = Destiny[i]->GetType();
-    is_vec = Destiny[i]->GetIsVec();
-
-    Value *_name = Builder->CreateGlobalString(name);
-
-    std::cout << "\nRETURNING: " << name << ", type: " << type << ", is vec: " << is_vec <<  "\n\n";
-
-    if (!IsAs[i])
-    {
-      if(type=="tensor")
-      {
-        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
-        destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(scope_struct);
-
-        Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                            {_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
-                                             _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
-                                             Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      }
-    } else {
-      l_name   = Vars[i]->GetName();
-      l_type   = Vars[i]->GetType();
-      l_is_vec = Vars[i]->GetIsVec();
-
-      std::cout << "l_name: " << l_name << " l_type: " << l_type << ", l_is_vec: " << l_is_vec << "\n";
-
-      if (!is_vec)
-      {
-        
-
-
-        VariableExprAST *destiny = static_cast<VariableExprAST *>(Destiny[i].get());
-        destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(scope_struct);
-
-
-        VariableExprAST *var = static_cast<VariableExprAST *>(Vars[i].get());
-        var->NameSolver->SetSolverIncludeScope(false);
-        Value *_l_name = var->NameSolver->codegen(scope_struct);
-
-        
-        
-        
-
-        if (l_type=="tensor"||type=="tensor")
-        {
-          Builder->CreateCall(TheModule->getFunction("RemoveTensorScope"),
-                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
-                                               _name,   Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
-                                               Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-        }
-      } else {
-
-        VecIdxExprAST *destiny = static_cast<VecIdxExprAST *>(Destiny[i].get());
-        if (!destiny)
-          return LogErrorV("Could not deal with return expression");
-        destiny->NameSolver->SetSolverIncludeScope(false);
-        _name = destiny->NameSolver->codegen(scope_struct);
-        
-
-        std::vector<Value *> idx_calc_args;
-        idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}), _name}));
-        for (int i=0; i<destiny->Idx.size(); i++)
-          idx_calc_args.push_back(destiny->Idx[i]->codegen(scope_struct));
-        Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                              idx_calc_args);
-
-        
-        
-        Value *_l_name = Builder->CreateGlobalString(l_name);
-        Builder->CreateCall(TheModule->getFunction("RemoveTensorScopeAttrOnIndex"),
-                                              {_l_name, Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}),
-                                               _name, Builder->CreateCall(TheModule->getFunction("get_scope_previous_scope"), {scope_struct}),
-                                               idx_at, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      }
-    }
-  }
-
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
 
 
 
@@ -2035,9 +1946,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     thread_id = callret("get_scope_thread_id", {scope_struct});
     has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
     
-    p2t("New async pre");
     call("scope_struct_Get_Async_Scope", {scope_struct_copy, thread_id, has_grad}); // Also sets scope_string to empty.
-    p2t("New async post");
     //todo: Solve scope_string discontinuity on async functions
   }
   
