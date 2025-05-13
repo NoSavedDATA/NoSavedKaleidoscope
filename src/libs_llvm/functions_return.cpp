@@ -31,7 +31,7 @@ void set_functions_return_type() {
 						{"btc_mult", "tensor"}, {"btc_multT", "tensor"}, 
 						{"repeat_interleave", "tensor"}, {"mean_tensor", "tensor"}, {"sum", "tensor"}, {"prod", "tensor"}, {"gather", "tensor"}, 
 						{"tensor_float_mult", "tensor"}, {"tensor_float_div", "tensor"}, {"tensor_float_add", "tensor"}, {"tensor_float_sub", "tensor"}, {"tensor_float_equal", "tensor"}, {"tensor_float_diff", "tensor"}, {"tensor_float_minor", "tensor"}, {"tensor_float_minor_eq", "tensor"}, {"tensor_float_higher", "tensor"}, {"tensor_float_higher_eq", "tensor"}, 
-						{"float_vec_Load", "float_vec"}, {"arange_float", "float_vec"}, {"zeros_vec", "float_vec"}, {"ones_vec", "float_vec"}, {"float_vec_Split_Parallel", "float_vec"}, 
+						{"float_vec_Load", "float_vec"}, {"arange_float", "float_vec"}, {"zeros_vec", "float_vec"}, {"ones_vec", "float_vec"}, {"float_vec_Split_Parallel", "float_vec"}, {"float_vec_Split_Strided_Parallel", "float_vec"}, 
 						{"scope_struct_Create", ""}, {"scope_struct_Copy", ""}, {"scope_struct_Overwrite", ""}, {"scope_struct_Dive", ""}, {"get_scope_first_arg", "str"}, {"get_scope_scope", "str"}, {"get_scope_thread_id", ""}, {"get_scope_has_grad", ""}, {"scope_struct_Load_for_Async", ""}, 
 						{"tensor_onehot", "tensor"}, {"tmax", "tensor"}, {"tensor_argmax", "tensor"}, {"topk", "tensor"}, 
 						{"relu", "tensor"}, {"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"softmax", "tensor"}, 

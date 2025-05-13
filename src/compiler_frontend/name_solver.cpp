@@ -82,7 +82,7 @@ Value *NameSolverAST::codegen(Value *scope_struct) {
 
 
   if(Names.size()==1)// Concat scope only
-    if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str")&&include_scope)
+    if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str"||Type=="float_vec")&&include_scope)
       var_name = callret("ConcatScopeStr", {var_name, callret("get_scope_scope", {scope_struct})});
 
 

@@ -335,6 +335,14 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
           auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
           Args.push_back(std::move(Arg));
         }
+        else if (CurTok==':')
+        {
+          getNextToken(); // eat >
+          auto inner_vec = ParseExpression(class_name, false);
+          
+          auto Arg = std::make_unique<SplitStridedParallelExprAST>(std::move(inner_vec));
+          Args.push_back(std::move(Arg));
+        }
         else if (auto Arg = ParseExpression(class_name, false))
           Args.push_back(std::move(Arg));
         else
@@ -564,26 +572,10 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(int cur_level_tabs, std
 }
 
 
-/// forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
-std::unique_ptr<ExprAST> ParseForExpr(std::string class_name) {
-
-  int cur_level_tabs = SeenTabs;
-
-  //std::cout << "\nSeen tabs on for: " << SeenTabs << "\n\n";
-
-  getNextToken(); // eat the for.
 
 
-  if (CurTok != tok_identifier)
-    return LogError("Expected for's control variable identifier.");
 
-  std::string IdName = IdentifierStr;
-  getNextToken(); // eat identifier.
-
-  typeVars[IdName] = "float";
-
-  if (CurTok != '=')
-    return LogError("Expected for's control variable initial value.");
+std::unique_ptr<ExprAST> ParseStandardForExpr(std::string class_name, int cur_level_tabs, std::string IdName) {
   getNextToken(); // eat '='.
 
   auto Start = ParseExpression(class_name);
@@ -616,6 +608,50 @@ std::unique_ptr<ExprAST> ParseForExpr(std::string class_name) {
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body));
+}
+
+
+std::unique_ptr<ExprAST> ParseForEachExpr(std::string class_name, int cur_level_tabs, std::string IdName) {
+  getNextToken(); // eat "in".
+
+
+  auto Vec = ParseExpression(class_name);
+  if (!Vec)
+    return nullptr;
+
+  
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  Body = ParseIdentedBodies(cur_level_tabs, class_name);
+
+  return std::make_unique<ForEachExprAST>(IdName, std::move(Vec), std::move(Body));
+}
+
+
+/// forexpr ::= 'for' identifier '=' expr ',' expr (',' expr)? 'in' expression
+std::unique_ptr<ExprAST> ParseForExpr(std::string class_name) {
+
+  int cur_level_tabs = SeenTabs;
+
+  //std::cout << "\nSeen tabs on for: " << SeenTabs << "\n\n";
+
+  getNextToken(); // eat the for.
+
+
+  if (CurTok != tok_identifier)
+    return LogError("Expected for's control variable identifier.");
+
+  std::string IdName = IdentifierStr;
+  getNextToken(); // eat identifier.
+
+  typeVars[IdName] = "float";
+
+  if (CurTok=='=')
+    return ParseStandardForExpr(class_name, cur_level_tabs, IdName);
+  else if(CurTok==tok_in)
+    return ParseForEachExpr(class_name, cur_level_tabs, IdName);
+  else
+    return LogError("Expected for's control variable initial value.");
 }
 
 
@@ -1037,6 +1073,14 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
         auto inner_vec = ParseExpression(class_name, false);
         
         auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
+        Args.push_back(std::move(Arg));
+      }
+      else if (CurTok==':')
+      {
+        getNextToken(); // eat >
+        auto inner_vec = ParseExpression(class_name, false);
+        
+        auto Arg = std::make_unique<SplitStridedParallelExprAST>(std::move(inner_vec));
         Args.push_back(std::move(Arg));
       }
       else if (auto Arg = ParseExpression(class_name, false))
@@ -1553,7 +1597,7 @@ std::unique_ptr<ExprAST> ParseUnary(std::string class_name, bool can_be_list) {
   // If the current token is not an operator, it must be a primary expr.
   
   //std::cout << "Unary current token " << ReverseToken(CurTok) << "\n";
-  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok=='>')
+  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok=='>' || CurTok==':')
   {
     //std::cout << "Returning, non-ascii found.\n";
     // if(CurTok=='>'||CurTok=='^')

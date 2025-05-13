@@ -353,6 +353,12 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
     : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
       Step(std::move(Step)), Body(std::move(Body)) {}
   
+
+/// ForExprAST - Expression class for for.
+ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
+          std::vector<std::unique_ptr<ExprAST>> Body)
+    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)) {}
+
   
   /// WhileExprAST - Expression class for while.
 WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
@@ -371,6 +377,11 @@ IncThreadIdExprAST::IncThreadIdExprAST()
 {}
 
 SplitParallelExprAST::SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {
+  // Type = Inner_Vec->GetType();
+}
+
+
+SplitStridedParallelExprAST::SplitStridedParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {
   // Type = Inner_Vec->GetType();
 }
   

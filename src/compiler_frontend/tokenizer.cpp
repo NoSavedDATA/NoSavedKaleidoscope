@@ -55,6 +55,7 @@ std::map<int, std::string> token_to_string = {
   { tok_return, "tok return"},
   { tok_as, "tok as"},
   { tok_vec, "tok vec"},
+  { tok_in, "tok in"},
 
 
   // operators
@@ -295,6 +296,8 @@ static int get_token() {
       return tok_asyncs;
     if (IdentifierStr == "finish")
       return tok_async_finish;
+    if (IdentifierStr == "in")
+      return tok_in;
     if (IdentifierStr == "global")
       return tok_global;
     if (IdentifierStr == "no_grad")
