@@ -19,6 +19,10 @@ using namespace llvm;
 
 
 
+std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
+std::string current_codegen_function;
+
+
 std::vector<Value *> thread_pointers;
 
 PointerType *floatPtrTy, *int8PtrTy;
@@ -175,7 +179,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         notes_vector = callret("Add_Float_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
       }
       else {
-        std::cout << "Could not find the data type of a note in DataExpr of " << Name << " \n";
+        std::cout << "Could not find the data type of a note in DataExpr of " << VarName << " \n";
       }
 
     }
@@ -185,13 +189,22 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
     
+    
     Value *initial_value = Init->codegen(scope_struct);
-    
-    std::string create_fn = Type + "_Create";    
-    p2t("DataExpr Call create for " + create_fn);
 
-    initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
-    
+    if(Type=="float"&&!(is_self||is_attr))
+    { 
+      std::cout << "STORE OF " << current_codegen_function << "/" << VarName << ".\n";
+      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name);
+      Builder->CreateStore(initial_value, alloca);
+      function_allocas[current_codegen_function][VarName] = alloca;
+    } else {
+      std::string create_fn = Type + "_Create";    
+      p2t("DataExpr Call create for " + create_fn);
+      
+      initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
+    }
+      
     // p2t("DataExpr Dispose notes vector");
     // p2t("Dispose notes vector of " + Type + "/" + Name + "/" + std::to_string(is_self) + "/" + std::to_string(is_attr));
 
@@ -315,7 +328,9 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
   // Create an alloca for the variable in the entry block.
-  // AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+
+  function_allocas[current_codegen_function][VarName] = control_var_alloca;
 
   // Emit the start code first, without 'variable' in scope.
   Value *StartVal = Start->codegen(scope_struct);
@@ -324,18 +339,21 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
 
+  std::cout << "CURRENT FUNCTION ON CODEGEN " << current_codegen_function << ".\n";
 
 
-  Value *var_name = global_str(VarName);
-  var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
-  call("float_Store", {var_name, StartVal});
 
 
-  // Builder->CreateStore(StartVal, control_var_alloca);
+
+  // Value *var_name = global_str(VarName);
+  // var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
+  // call("float_Store", {var_name, StartVal});
 
 
-  // Store the value into the alloca.
-  //Builder->CreateStore(StartVal, Alloca);
+  Builder->CreateStore(StartVal, control_var_alloca);
+
+
+
 
   // Make the new basic block for the loop header, inserting after current
   // block.
@@ -405,11 +423,12 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
-  Value *CurVal = callret("float_Load", {scope_struct, var_name});
-  // Value *CurVal = Builder->CreateLoad(Type::getFloatTy(*TheContext), control_var_alloca, VarName.c_str());
+  // Value *CurVal = callret("float_Load", {scope_struct, var_name});
+  Value *CurVal = Builder->CreateLoad(Type::getFloatTy(*TheContext), control_var_alloca, VarName.c_str());
   Value *NextVal = Builder->CreateFAdd(CurVal, StepVal, "nextvar"); // Increment  
-  // Builder->CreateStore(NextVal, control_var_alloca);
-  call("float_Store", {var_name, NextVal});
+  Builder->CreateStore(NextVal, control_var_alloca);
+  // call("float_Store", {var_name, NextVal, scope_struct});
+  // call("float_Store", {var_name, NextVal, scope_struct});
 
   // call("print", {callret("str_float_add", {scope_struct, global_str("i is: "), NextVal})});
   
@@ -494,17 +513,27 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   //std::string functionName = TheFunction->getName().str();
   
   //std::cout << "Create value V" << "\n";
-  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *V, *var_name;
+  Value *V;
 
   std::string type = GetType();
   std::string pre_dot = GetPreDot();
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
-  
+    
   //std::string __print = "\n\nLOAD OF " + std::string(Name) + " ";
   //Builder->CreateCall(TheModule->getFunction("print"),
   //    {Builder->CreateGlobalString(__print), ConstantFP::get(*TheContext, APFloat(0.0f))});
+
+  if (type=="float"&&!(is_self||is_attr))
+  {
+    std::cout << "LOAD OF " << current_codegen_function << "/" << Name << ".\n";
+    AllocaInst *alloca = function_allocas[current_codegen_function][Name];
+    V = Builder->CreateLoad(Type::getFloatTy(*TheContext), alloca, Name.c_str());
+
+    return V;
+  }
+
+  Value *var_name;
 
   var_name = NameSolver->codegen(scope_struct);
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
@@ -521,7 +550,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
     {
       std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
       if (ends_with(entry.first, Name))
-        return ret;
+        return ConstantFP::get(*TheContext, APFloat(0.0f));
     } 
   }
   if (type=="object")
@@ -797,11 +826,15 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     }
 
     VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    Value *Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-
     NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+
     std::string Lname = std::get<0>(name_solver->Names[0]);
     std::string LType = LHS->GetType();
+
+    Value *Lvar_name;
+    if (!(LType=="float"&&!LHS->GetSelf()&&!LHS->GetIsAttribute()))
+      Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+
 
 
 
@@ -850,9 +883,20 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     } else
     {
+
       // if (LType!="float")
       //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
-      call(store_op, {Lvar_name, Val, scope_struct});
+      if (LType=="float"&&!LHS->GetSelf()&&!LHS->GetIsAttribute())
+      {
+        AllocaInst *alloca = function_allocas[current_codegen_function][Lname];
+        Builder->CreateStore(Val, alloca);
+        return ConstantFP::get(*TheContext, APFloat(0.0f));
+      } else
+      {
+        // std::cout << "HEAP STORE FOR " << Lname << ".\n";
+        // call("print", {scope_struct, Lvar_name});
+        call(store_op, {Lvar_name, Val, scope_struct});
+      }
     }
 
 
@@ -1438,6 +1482,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
     seen_var_attr=false;
     call("set_scope_not_at_return", {scope_struct});
+    // Builder->CreateRet(ret);
     return ret;
   }
   
@@ -1812,6 +1857,7 @@ Function *PrototypeAST::codegen() {
     return nullptr;
   // Make the function type:  float(float,float) etc.
 
+
   std::vector<Type *> types;
 
 
@@ -1839,7 +1885,7 @@ Function *PrototypeAST::codegen() {
   unsigned Idx = 0;
   for (auto &Arg : F->args())
     Arg.setName(Args[Idx++]);
-  
+
 
   return F;
 }

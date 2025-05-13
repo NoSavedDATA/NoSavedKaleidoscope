@@ -69,10 +69,10 @@ void MarkSweep::unmark_scopeless(void *data_ptr) {
 
 
 void MarkSweep::clean_up() {
-    // std::cout << "clean_up" << ".\n";
-
+    // std::cout << "clean_up" << ".\n";;
 
     for (auto it = mark_sweep_map.begin(); it != mark_sweep_map.end(); ) {
+        // std::cout << "cleaning" << ".\n";
         MarkSweepAtom *atom = it->second;
 
         if (atom->scope_refs==0 && atom->scopeless_refs==0) {
