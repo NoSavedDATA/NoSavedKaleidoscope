@@ -137,7 +137,8 @@ VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<ExprAST>> E
 
   
   /// VariableExprAST - Expression class for referencing a variable, like "a".
-VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type) {
+VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name) : Name(Name) {
+
   this->isVarLoad = true;
   this->NameSolver = std::move(NameSolver);
   this->SetType(Type);

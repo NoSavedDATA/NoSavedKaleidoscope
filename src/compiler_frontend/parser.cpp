@@ -228,7 +228,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
       {
         std::cout << "add variable of type " << type << ".\n";
         auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-        aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
+        aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName);
       } else {
         if(!can_be_string)
         {
@@ -277,7 +277,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
     if (type!="none")
     {
       auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-      aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
+      aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName);
     } else {
       if(!can_be_string)
       {
@@ -976,7 +976,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     std::cout << "Var type: " << type << "\n";
 
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-    auto aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type);
+    auto aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName);
 
     aux->SetSelf(is_self);
     aux->SetIsAttribute(is_class_attr);

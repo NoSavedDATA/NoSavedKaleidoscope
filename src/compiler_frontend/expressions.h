@@ -131,7 +131,8 @@ class VariableExprAST : public ExprAST {
 
   public:
     std::unique_ptr<ExprAST> NameSolver;
-    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type); 
+    std::string Name;
+    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name);
 
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const; 

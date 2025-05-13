@@ -566,6 +566,7 @@ Function *FunctionAST::codegen() {
   call("set_scope_has_grad", {scope_struct, has_grad});
   
 
+  current_codegen_function = function_name;
 
 
 
@@ -613,7 +614,13 @@ Function *FunctionAST::codegen() {
         // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
         // Coder args
-        if (type!="tensor")
+        if (type=="float") {
+            std::cout << "STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
+            AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name);
+            Builder->CreateStore(&Arg, arg_alloca);
+            function_allocas[current_codegen_function][arg_name] = arg_alloca;
+        }
+        else if (type!="tensor")
         {
             Value *var_name = global_str(arg_name);
             var_name = callret("ConcatStr", {scope_string, var_name});

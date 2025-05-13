@@ -10,6 +10,7 @@
 std::vector<std::string> scopes;
 
 char *RandomString(size_t length) {
+  // std::cout << "RandomString"  << ".\n";
   //unsigned int seed = generate_custom_seed();
 
   const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -50,6 +51,7 @@ extern "C" char * RandomStrOnDemand()
 
 extern "C" char *GetEmptyChar()
 {
+  // std::cout << "GetEmptyChar"  << ".\n";
   char *empty_char = get_from_char_pool(1,"get empty char");
   empty_char[0] = '\0';
   return empty_char;
@@ -104,6 +106,8 @@ extern "C" char * ConcatStr(char *lc, char *rc)
 
 extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 {
+  // std::cout << "ConcatStrFreeLeft"  << ".\n";
+
   size_t length_lc = strlen(lc);
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
   //char* result_cstr = new char[length_lc+length_rc];
@@ -123,6 +127,7 @@ extern "C" char * ConcatStrFreeLeft(char *lc, char *rc)
 
 extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 {
+  // std::cout << "ConcatStrFreeRight"  << ".\n";
   size_t length_lc = strlen(lc);
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
   //char* result_cstr = new char[length_lc+length_rc];
@@ -141,6 +146,7 @@ extern "C" char * ConcatStrFreeRight(char *lc, char *rc)
 
 extern "C" char * ConcatStrFree(char *lc, char *rc)
 {
+  // std::cout << "ConcatStrFree"  << ".\n";
   size_t length_lc = strlen(lc);
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
   char* result_cstr = new char[length_lc+length_rc]; 
@@ -160,6 +166,7 @@ extern "C" char * ConcatStrFree(char *lc, char *rc)
 
 extern "C" char * ConcatFloatToStr(char *lc, float r)
 {
+  // std::cout << "ConcatFloatToStr"  << ".\n";
 
   //TODO: Change and test the function below
   /*
@@ -191,7 +198,7 @@ extern "C" char * ConcatFloatToStr(char *lc, float r)
 
 extern "C" char * ConcatNumToStrFree(char *lc, float r)
 {
-  //std::cout << "\nCONCAT NUM TO STR " << lc << " & " << std::to_string(r) << "\n";
+  // std::cout << "\nCONCAT NUM TO STR " << lc << " & " << std::to_string(r) << "\n";
 
   //TODO: Change and test the function below
   /*

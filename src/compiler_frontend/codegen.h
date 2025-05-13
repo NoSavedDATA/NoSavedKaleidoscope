@@ -21,6 +21,8 @@ using namespace llvm;
 
 
 extern std::vector<Value *> thread_pointers;
+extern std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
+extern std::string current_codegen_function;
 
 
 
