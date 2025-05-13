@@ -1,4 +1,4 @@
-1821-05-12 14:16:54
+1821-05-13 16:27:22
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -56,13 +56,6 @@
 	);
 	TheModule->getOrInsertFunction("set_scope_scope", set_scope_scopeTy);
 
-	FunctionType *set_scope_previous_scopeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_previous_scope", set_scope_previous_scopeTy);
-
 	FunctionType *set_scope_thread_idTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
@@ -97,13 +90,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("get_scope_scope", get_scope_scopeTy);
-
-	FunctionType *get_scope_previous_scopeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_previous_scope", get_scope_previous_scopeTy);
 
 	FunctionType *get_scope_thread_idTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

@@ -7,7 +7,10 @@ void move_to_char_pool(size_t length, char *char_ptr, std::string from)
   return;
   
   if (length==0)
+  {
+    // std::cout << "RETURNING FROM CHAR POOL CAUSE SIZE 0" << ".\n";
     return;
+  }
   //std::cout << "\nmove_to_char_pool from: " << from << "\n";
   
 
@@ -17,10 +20,13 @@ void move_to_char_pool(size_t length, char *char_ptr, std::string from)
   {
     //if(!(chars_in_pool.size()<30&&length==1))
     if(chars_in_pool.size()<270)
+    {
+      // std::cout << "MOVE TO CHAR OF SIZE " << length << " TO THE POOL.\n";
       CharPool[length].push_back(char_ptr);
+    }
     else
     {
-      std::cout << "FREEING CHAR WITH length: " << length << " from: " << from <<  "\n";
+      // std::cout << "FREEING CHAR WITH length: " << length << " from: " << from <<  "\n";
       delete[] char_ptr;
     }
   } 
@@ -31,11 +37,13 @@ char *get_from_char_pool(size_t length, std::string from)
 {
   if (length==0)
     return nullptr;
-
-
   char *char_ptr;
+
+
   char_ptr = (char*)malloc(length);
   return char_ptr;
+
+  // std::cout << "GETTING CHAR OF SIZE " << length << " TO POOL.\n";
 
   
   pthread_mutex_lock(&char_pool_mutex);
@@ -53,7 +61,7 @@ char *get_from_char_pool(size_t length, std::string from)
   }
   pthread_mutex_unlock(&char_pool_mutex);
 
-  //std::cout << "\nMalloc new CHAR from " << from << " of size: " << length << "\n";
+  // std::cout << "\nMalloc new CHAR from " << from << " of size: " << length << "\n";
 
   char_ptr = (char*)malloc(length);
   return char_ptr;

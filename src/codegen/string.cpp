@@ -43,7 +43,7 @@ char *RandomString(size_t length) {
   return random_string;
 }
 
-extern "C" char * RandomStrOnDemand()
+extern "C" char *RandomStrOnDemand()
 { 
   return RandomString(14);
 }

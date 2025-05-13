@@ -15,7 +15,6 @@ extern "C" float CopyArgTensor(Scope_Struct *scope_struct, DT_tensor *tensor, ch
   char *scope = scope_struct->scope;
   int thread_id = scope_struct->thread_id;
   std::string tensor_name = tensor->name;
-  //std::cout << "\n\n\nCOPY ARG TENSOR OF " << previous_scope << tensor_name << " into " << scope<<new_tensor_name  << " at thread: " << thread_id << "\n";
 
   
   
@@ -46,10 +45,9 @@ extern "C" float CopyArgTensor(Scope_Struct *scope_struct, DT_tensor *tensor, ch
 
 
 
-// extern "C" float CopyArgTensor(DT_tensor *tensor, char *new_tensor_name, char *previous_scope, char *scope, int thread_id)
+// extern "C" float CopyArgTensor(Scope_Struct *scope_struct, DT_tensor *tensor)
 // {
 //   std::string tensor_name = tensor->name;
-//   // std::cout << "\n\n\nCOPY ARG TENSOR OF " << previous_scope << tensor_name << " into " << scope<<new_tensor_name  << " at thread: " << thread_id << "\n";
 
   
   

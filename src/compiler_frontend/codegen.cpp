@@ -134,17 +134,29 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     const std::string &VarName = VarNames[i].first; 
     ExprAST *Init = VarNames[i].second.get();
     
-    Value *var_name, *scopeless_name, *init;
     
+    Value *init;
 
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
 
+    Value *initial_value = Init->codegen(scope_struct);
+
+    if(Type=="float"&&!(is_self||is_attr))
+    { 
+      std::cout << "STORE OF " << current_codegen_function << "/" << VarName << ".\n";
+      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name);
+      Builder->CreateStore(initial_value, alloca);
+      function_allocas[current_codegen_function][VarName] = alloca;
+      continue;
+    }
+
+    Value *var_name, *scopeless_name;
 
     // --- Name Solving --- //
     p2t("DataExpr get var name");
     var_name = callret("CopyString", {global_str(VarName)});
 
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
     p2t("DataExpr name mangle");
 
 
@@ -185,25 +197,12 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     }
     
 
+ 
 
-
-
+    std::string create_fn = Type + "_Create";    
+    p2t("DataExpr Call create for " + create_fn);
     
-    
-    Value *initial_value = Init->codegen(scope_struct);
-
-    if(Type=="float"&&!(is_self||is_attr))
-    { 
-      std::cout << "STORE OF " << current_codegen_function << "/" << VarName << ".\n";
-      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name);
-      Builder->CreateStore(initial_value, alloca);
-      function_allocas[current_codegen_function][VarName] = alloca;
-    } else {
-      std::string create_fn = Type + "_Create";    
-      p2t("DataExpr Call create for " + create_fn);
-      
-      initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
-    }
+    initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
       
     // p2t("DataExpr Dispose notes vector");
     // p2t("Dispose notes vector of " + Type + "/" + Name + "/" + std::to_string(is_self) + "/" + std::to_string(is_attr));
@@ -891,6 +890,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         AllocaInst *alloca = function_allocas[current_codegen_function][Lname];
         Builder->CreateStore(Val, alloca);
         return ConstantFP::get(*TheContext, APFloat(0.0f));
+        // return nullptr;
       } else
       {
         // std::cout << "HEAP STORE FOR " << Lname << ".\n";
@@ -1476,13 +1476,18 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 Value *RetExprAST::codegen(Value *scope_struct) {
   seen_var_attr=true;
   call("set_scope_at_return", {scope_struct});
+
+
   if(Vars.size()==1)
   {
     Value *ret = Vars[0]->codegen(scope_struct);
-    call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
+    std::cout << "RETURN TYPE IS " << Vars[0]->GetType() << "-------------------.\n";
+    if(Vars[0]->GetType()!="float")
+      call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
     seen_var_attr=false;
     call("set_scope_not_at_return", {scope_struct});
-    // Builder->CreateRet(ret);
+    call("scope_struct_Clean_Scope", {scope_struct}); 
+    Builder->CreateRet(ret);
     return ret;
   }
   
@@ -1490,7 +1495,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   for (int i=0; i<Vars.size(); i++)
   {
     Value *value = Vars[i]->codegen(scope_struct);
-    call("MarkToSweep_Unmark_Scopeless", {scope_struct, value});
+    if(Vars[i]->GetType()!="float")
+      call("MarkToSweep_Unmark_Scopeless", {scope_struct, value});
     std::string type = Vars[i]->GetType();
     values.push_back(global_str(type));
     values.push_back(value);
@@ -1500,6 +1506,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   seen_var_attr=false;
   Value *ret = callret("list_New", values);
   call("set_scope_not_at_return", {scope_struct});
+  call("scope_struct_Clean_Scope", {scope_struct}); 
+  Builder->CreateRet(ret);
   return ret;
 
   // for (int i=0; i<Values.size(); i++)
@@ -1974,7 +1982,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
   Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
-  Value *first_arg, *scope_string, *previous_scope, *thread_id, *has_grad;
+  Value *first_arg, *scope_string, *thread_id, *has_grad;
 
 
   if (starts_with(functionName.c_str(), "__async_"))
@@ -2008,8 +2016,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
 
-  previous_scope = callret("CopyString", {callret("get_scope_scope", {scope_struct_copy})});
-  call("set_scope_previous_scope", {scope_struct_copy, previous_scope});
 
 
   
