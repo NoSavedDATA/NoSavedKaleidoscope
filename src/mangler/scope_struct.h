@@ -11,7 +11,6 @@
 struct Scope_Struct { 
     char *first_arg = nullptr;
     char *scope = nullptr;
-    char *previous_scope = nullptr;
     char *function_name = nullptr;
 
     // MarkSweep *mark_sweep_map = nullptr;
@@ -30,7 +29,6 @@ struct Scope_Struct {
 
     void Set_First_Arg(char *);
     void Set_Scope(char *);
-    void Set_Previous_Scope(char *);
     void Set_Function_Name(char *);
     void Set_Thread_Id(int);
     void Set_Has_Grad(int);

@@ -665,7 +665,7 @@ Function *FunctionAST::codegen() {
   }
 
 
-  call("scope_struct_Clean_Scope", {scope_struct}); 
+//   call("scope_struct_Clean_Scope", {scope_struct}); 
 
 
   
@@ -2474,12 +2474,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("set_scope_scope", set_scope_scopeTy);
   
-  FunctionType *set_scope_previous_scopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("set_scope_previous_scope", set_scope_previous_scopeTy);
 
 
   FunctionType *set_scope_thread_idTy = FunctionType::get(
@@ -2510,12 +2504,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("get_scope_scope", get_scope_scopeTy);
 
-  FunctionType *get_scope_previous_scopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("get_scope_previous_scope", get_scope_previous_scopeTy);
 
   FunctionType *get_scope_thread_idTy = FunctionType::get(
       Type::getInt32Ty(*TheContext),

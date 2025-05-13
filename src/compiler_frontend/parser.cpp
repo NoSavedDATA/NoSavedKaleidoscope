@@ -1910,20 +1910,6 @@ std::unique_ptr<PrototypeAST> ParsePrototype(std::string class_name) {
   std::vector<std::string> ArgNames, Types;
 
 
-  // if (class_name!="") // If it is a class method, add self
-  // {
-  //   Types.push_back("s");
-  //   ArgNames.push_back("self");
-  // }
-  
-  // Types.push_back("s");
-  // ArgNames.push_back("scope_string");
-  // Types.push_back("s");
-  // ArgNames.push_back("previous_scope");
-  // Types.push_back("i");
-  // ArgNames.push_back("thread_id");
-  // Types.push_back("i");
-  // ArgNames.push_back("has_grad");
 
   Types.push_back("s");
   ArgNames.push_back("scope_struct");
