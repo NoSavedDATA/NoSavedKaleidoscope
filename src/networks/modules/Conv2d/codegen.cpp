@@ -41,10 +41,6 @@ void conv2d_backward(float *inp, float size, float *out,
 
 extern "C" void *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
-  //TODO: remove self arg and concatenate it instead during the function call
-  
-  
-
   std::string conv_name = scope_struct->first_arg;
   int thread_id = scope_struct->thread_id;
 
@@ -53,10 +49,8 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   // std::cout << "Conv forward for conv: " << conv_name <<"\n";
   
 
-  float *tensor_ptr, *output, *d_filter;
-  tensor_ptr = tensor->tensor_ptr;
+  float *output;
   std::vector<float> dims = tensor->dims;
-  float input_dims_prod = DimsProd(dims);
 
   float B = dims[0];
   float C = dims[dims.size()-3];

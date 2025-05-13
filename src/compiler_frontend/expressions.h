@@ -426,18 +426,6 @@ class RetExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
 };
 
-class ReturnExprAST : public ExprAST {
-
-  public:
-    std::vector<std::unique_ptr<ExprAST>> Vars;
-    std::vector<bool> IsAs;
-    std::vector<std::unique_ptr<ExprAST>> Destiny;
-    
-    ReturnExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, std::vector<bool> IsAs,
-                  std::vector<std::unique_ptr<ExprAST>> Destiny);
-
-  Value *codegen(Value *scope_struct) override;
-};
 
 
 /// IfExprAST - Expression class for if/then/else.

@@ -29,7 +29,6 @@ void DT_tensor::NewNullTensor()
   dy=nullptr;
   visited=false;
   weight=false;
-  from_grad_or_load=false;
   cuda_stream = nullptr;
   loader = nullptr;
   from_cudnn = "";
@@ -54,7 +53,6 @@ void DT_tensor::NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, fl
   visited=false;
   weight=false;
   op=tensor_leaf;
-  from_grad_or_load=false;
   cuda_stream = cuda_stream;
   loader = _loader;
   from_cudnn = "";
@@ -78,7 +76,6 @@ void DT_tensor::NewTensor(half *new_tensor_ptr, std::vector<float> new_dims, flo
   visited=false;
   weight=false;
   op=tensor_leaf;
-  from_grad_or_load=false;
   cuda_stream = cuda_stream;
   loader = _loader;
   from_cudnn = "";
@@ -98,7 +95,6 @@ void DT_tensor::NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
   leaf = new_is_leaf;
   name = new_name;
   weight=false;
-  from_grad_or_load=true;
   is_pinned=true;
   thread_id = 0;
   Sparse_Idx_Tensor=nullptr;
@@ -123,7 +119,6 @@ void DT_tensor::AttrNodes(DT_tensor *new_L_Tensor, DT_tensor *new_R_Tensor, int 
   visited=false;
   dy=nullptr;
   weight=false;
-  from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load||new_R_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
   is_pinned=false;
 }
 
@@ -136,7 +131,6 @@ void DT_tensor::AttrLNode(DT_tensor *new_L_Tensor, int op_type)
   visited=false;
   dy=nullptr;
   weight=false;
-  from_grad_or_load = ((from_grad_or_load||new_L_Tensor->from_grad_or_load)&&!in_int(op, gradless_ops));
   is_pinned=false;
 }
 
@@ -156,9 +150,9 @@ void DT_tensor::AttributionBackwardNode(std::string _name, DT_tensor *new_R_Tens
 void DT_tensor::SetIsWeight()
 {
   weight=true;
-  from_grad_or_load=true;
   is_pinned=false;
 }
+
 void DT_tensor::SetBias(float *b, int b_size)
 {
   this->b=b;

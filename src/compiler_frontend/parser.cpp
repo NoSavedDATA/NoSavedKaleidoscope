@@ -1486,55 +1486,6 @@ std::unique_ptr<ExprAST> ParseRetExpr(std::string class_name) {
 }
 
 
-std::unique_ptr<ExprAST> ParseReturnExpr(std::string class_name) {
-  getNextToken(); // eat return
-  std::cout << "Parsing var expr\n";
-
-  std::vector<std::unique_ptr<ExprAST>> Vars, Destiny;
-  std::vector<bool> IsAs;
-
-  // At least one variable name is required.
-  if (CurTok != tok_identifier)
-    return LogError("Expected identifier after return.");
-
-  while (true) {
-    std::unique_ptr<ExprAST> expr, aux;
-
-
-    expr = ParseMustBeVar(class_name, "return");
-
-    
-    if (CurTok == tok_as)
-    {
-      getNextToken(); // eat as
-      aux = std::move(expr);
-
-      expr = ParseMustBeVar(class_name, "return");
-
-      IsAs.push_back(true);
-      Vars.push_back(std::move(aux));
-      Destiny.push_back(std::move(expr));
-
-    } else {
-      Destiny.push_back(std::move(expr));
-
-      expr = std::make_unique<NumberExprAST>(0.0f);
-      IsAs.push_back(false);
-      Vars.push_back(std::move(expr));
-    }
-
-    // End of var list, exit loop.
-    if (CurTok != ',')
-      break;
-    getNextToken(); // eat the ','.
-
-    
-  }
-
-
-
-  return std::make_unique<ReturnExprAST>(std::move(Vars), std::move(IsAs), std::move(Destiny));
-}
 
 
 
@@ -1582,8 +1533,6 @@ std::unique_ptr<ExprAST> ParsePrimary(std::string class_name, bool can_be_list) 
     return ParseNoGradExpr(class_name);
   case tok_ret:
     return ParseRetExpr(class_name);
-  case tok_return:
-    return ParseReturnExpr(class_name);
   case tok_data:
     return ParseDataExpr(class_name);
   case tok_global:

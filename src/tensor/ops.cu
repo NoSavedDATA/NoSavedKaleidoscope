@@ -48,7 +48,6 @@ extern "C" float AttrTensorNoFree(char *tensor_name, DT_tensor *tensor, int thre
 
 
   tgt_tensor->AttrTensor(new_tensor, new_dims, dims_prod);
-  tgt_tensor->from_grad_or_load = tensor->from_grad_or_load;
   
   
 
@@ -308,7 +307,6 @@ extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, DT_tensor *Rtensor
 
 
   DT_tensor *indexed = createTensor(new_tensor, new_dims, R_dims_prod, true, "");
-  indexed->from_grad_or_load = tensor->from_grad_or_load;
   */
   return 0;
 }
@@ -415,7 +413,6 @@ extern "C" void *IdxTensor(char *tensor_name, char *scope, int thread_id, float 
     ForwardCleanupToPool(tensor, scope);
 
   DT_tensor *indexed = createTensor(new_tensor, new_dims, new_dims_prod, true, "");
-  indexed->from_grad_or_load = tensor->from_grad_or_load;
   return indexed;
 }
 

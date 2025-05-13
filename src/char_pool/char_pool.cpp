@@ -5,6 +5,7 @@ void move_to_char_pool(size_t length, char *char_ptr, std::string from)
 {
   delete[] char_ptr;
   return;
+  
   if (length==0)
     return;
   //std::cout << "\nmove_to_char_pool from: " << from << "\n";

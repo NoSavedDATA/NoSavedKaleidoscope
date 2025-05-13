@@ -7,32 +7,34 @@
 #include "include.h"
 
 
-std::map<std::string, std::vector<float>> FloatVecAuxHash;
+
+DT_float_vec::DT_float_vec(int size) : size(size) {
+  vec = (float*)malloc(size*sizeof(float));
+}
 
 
-
-extern "C" std::vector<float> *float_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
+extern "C" void *float_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
   // std::cout << "float_vec_Create" << ".\n";
 
   if (init_val!=nullptr)
   {
-    std::vector<float> vec = *static_cast<std::vector<float>*>(init_val);
+    DT_float_vec *vec = static_cast<DT_float_vec *>(init_val);
     ClassFloatVecs[name] = vec;
   }
 
 
-  return nullptr;
+  return init_val;
 }
 
-extern "C" std::vector<float> *float_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
-  std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
+extern "C" DT_float_vec *float_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
+  // std::cout << "Load float_vec On Demand var to load: " << object_var_name << "\n";
   
-  std::vector<float> *ret = &ClassFloatVecs[object_var_name];
+  DT_float_vec *ret = ClassFloatVecs[object_var_name];
   return ret;
 }
 
-extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Struct *scope_struct){
+extern "C" float float_vec_Store(char *name, DT_float_vec *value, Scope_Struct *scope_struct){
   // std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
 
   ClassFloatVecs[name] = value;
@@ -41,7 +43,7 @@ extern "C" float float_vec_Store(char *name, std::vector<float> value, Scope_Str
 
  
 void float_vec_Clean_Up(void *data_ptr) {
-  // ClassFloatVecs.erase(name);
+
 }
 
 
@@ -49,77 +51,49 @@ extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_S
   // std::cout << "float_vec_Store_Idx" << ".\n";
   //std::cout << "STORING " << self << "." << object_var_name << " on demand as float vec type" << ".\n";
 
-  ClassFloatVecs[name][(int)idx] = value;
-  return 0;
-}
-
-
-
-extern "C" void float_vec_Mark(std::vector<float> vec) {
-  return;
-}
-
-
-
-extern "C" float PrintFloatVec(std::vector<float> vec)
-{
-
-  std::cout << "Float vector:\n[";
-  for (int i=0; i<vec.size()-1; i++)
-    std::cout << "" << vec[i] << ", ";
-  std::cout << "" << vec[vec.size()-1];
-  std::cout << "]\n\n";
+  DT_float_vec *vec = ClassFloatVecs[name];
+  vec->vec[(int)idx] = value;
 
   return 0;
 }
 
 
 
-extern "C" std::vector<float> * arange_float(Scope_Struct *scope_struct, float begin, float end) {
+
+
+
+
+extern "C" DT_float_vec *arange_float(Scope_Struct *scope_struct, float begin, float end) {
   // TODO: turn into python like expression [0]*size
 
-  std::vector<float> vec;
+  DT_float_vec *vec = new DT_float_vec(end-begin);
+  int c=0;
   for(int i=begin; i<end; ++i)
-    vec.push_back(i);
-
-  // std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 0.0f);
-  
-
-  // Aux to not lose pointers
-  std::string random_str = RandomString(15);
-  FloatVecAuxHash[random_str] = vec;
-  AuxRandomStrs[random_str] = "float_vec";
-    
-  return &FloatVecAuxHash[random_str];
+  {
+    vec->vec[c] = i;
+    c++;
+  }
+  return vec; 
 }
 
 
-extern "C" std::vector<float> * zeros_vec(Scope_Struct *scope_struct, float size) {
-  // TODO: turn into python like expression [0]*size
+extern "C" DT_float_vec *zeros_vec(Scope_Struct *scope_struct, float size) {
+  DT_float_vec *vec = new DT_float_vec(size);
+  for(int i=0; i<size; ++i)
+    vec->vec[i] = 0;
+   
 
-  std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 0.0f);
-  
-
-  // Aux to not lose pointers
-  std::string random_str = RandomString(15);
-  FloatVecAuxHash[random_str] = vec;
-  AuxRandomStrs[random_str] = "float_vec";
-    
-  return &FloatVecAuxHash[random_str];
+  return vec;
 }
 
-extern "C" std::vector<float> * ones_vec(Scope_Struct *scope_struct, float size) {
-  // TODO: turn into python like expression [0]*size
 
-  std::vector<float> vec = std::vector<float>(static_cast<size_t>(size), 1.0f);
-  
+extern "C" DT_float_vec *ones_vec(Scope_Struct *scope_struct, float size) {
+  DT_float_vec *vec = new DT_float_vec(size);
+  for(int i=0; i<size; ++i)
+    vec->vec[i] = 1;
+   
 
-  // Aux to not lose pointers
-  std::string random_str = RandomString(15);
-  FloatVecAuxHash[random_str] = vec;
-  AuxRandomStrs[random_str] = "float_vec";
-    
-  return &FloatVecAuxHash[random_str];
+  return vec;
 }
 
 
@@ -128,9 +102,9 @@ extern "C" float float_vec_Idx(Scope_Struct *scope_struct, char *vec_name, float
   int idx = (int) _idx;
   // std::cout << "float_vec_Idx on idx " << idx << " for the vector " << vec_name << ".\n";
 
-  std::vector<float> vec = ClassFloatVecs[vec_name];
+  DT_float_vec *vec = ClassFloatVecs[vec_name];
   // std::cout << "Loaded vec" << ".\n";
-  float ret = vec[idx];
+  float ret = vec->vec[idx];
   // std::cout << "got: " << ret << ".\n";
   delete[] vec_name;
   // std::cout << "returning" << ".\n"; 
@@ -146,11 +120,11 @@ extern "C" float float_vec_CalculateIdx(char *data_name, float first_idx, ...) {
 
 
 
-extern "C" float float_vec_first_nonzero(Scope_Struct *scope_struct, std::vector<float> vec)
-{ 
+extern "C" float float_vec_first_nonzero(Scope_Struct *scope_struct, DT_float_vec *vec) { 
+  // std::cout << "First non zero" << ".\n";
   float idx = -1;
-  for (int i=0; i<vec.size(); i++)
-    if (vec[i]!=0)
+  for (int i=0; i<vec->size; i++)
+    if (vec->vec[i]!=0)
     {
       idx = i;
       break;
@@ -161,13 +135,44 @@ extern "C" float float_vec_first_nonzero(Scope_Struct *scope_struct, std::vector
 
 
 
-extern "C" float float_vec_print(Scope_Struct *scope_struct, std::vector<float> vec) {
+extern "C" float float_vec_print(Scope_Struct *scope_struct, DT_float_vec *vec) {
   std::cout << "[";
-  for (int i=0; i<vec.size()-1; i++)
-    std::cout << vec[i] << ", ";
+  for (int i=0; i<vec->size-1; i++)
+    std::cout << vec->vec[i] << ", ";
 
-  std::cout << vec[vec.size()-1] << "]" << "\n";
+  std::cout << vec->vec[vec->size-1] << "]" << "\n";
   return 0;
 }
 
 
+
+
+
+extern "C" DT_float_vec *float_vec_Split_Parallel(Scope_Struct *scope_struct, DT_float_vec *vec)
+{
+    float threads_count = scope_struct->asyncs_count;
+    float thread_id = scope_struct->thread_id-1;
+    std::cout << "SPLITTING FLOAT VEC"  << ".\n";
+    std::cout << "Threads count: " << scope_struct->asyncs_count << ".\n";
+    std::cout << "Threads id: " << scope_struct->thread_id << ".\n\n";
+
+    int vec_size = vec->size;
+    int segment_size;
+
+    segment_size = ceilf(vec_size/threads_count);
+
+    std::cout << "SEGMENT SIZE IS " << segment_size << ".\n";
+
+    
+    DT_float_vec *out_vector = new DT_float_vec(segment_size);
+
+
+    int c=0;
+    for (int i = segment_size*thread_id; i<segment_size*(thread_id+1) && i<vec->size; ++i)
+    {
+      out_vector->vec[c] = vec->vec[i];
+      c++;
+    }
+
+    return out_vector;
+}
