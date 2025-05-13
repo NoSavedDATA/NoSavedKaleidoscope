@@ -456,6 +456,19 @@ class ForExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
 };
 
+/// ForExprAST - Expression class for for.
+class ForEachExprAST : public ExprAST {
+  std::string VarName;
+  std::unique_ptr<ExprAST> Vec;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  public:
+    ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
+              std::vector<std::unique_ptr<ExprAST>> Body);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
 /// WhileExprAST - Expression class for while.
 class WhileExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
@@ -530,6 +543,13 @@ class SplitParallelExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Inner_Vec;
   public:
     SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec);
+  Value* codegen(Value *scope_struct) override;
+};
+
+class SplitStridedParallelExprAST : public ExprAST {
+  std::unique_ptr<ExprAST> Inner_Vec;
+  public:
+    SplitStridedParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec);
   Value* codegen(Value *scope_struct) override;
 };
 

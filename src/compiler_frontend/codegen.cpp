@@ -454,6 +454,118 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
 
 
+
+
+
+
+Value *ForEachExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // // Create an alloca for the variable in the entry block.
+  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+  AllocaInst *idx_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+  function_allocas[current_codegen_function][VarName] = control_var_alloca;
+
+
+  Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
+
+  Value *vec = Vec->codegen(scope_struct);
+
+
+
+  Value *CurIdx = const_float(0);
+  Value *VecSize = callret("float_vec_size", {scope_struct, vec}); 
+  Builder->CreateStore(CurIdx, idx_alloca);
+
+
+
+  // VecSize = Builder->CreateFAdd(VecSize, const_float(1), "addtmp");
+  
+  
+
+
+
+  // // Make the new basic block for the loop header, inserting after current
+  // // block.
+  BasicBlock *CondBB = BasicBlock::Create(*TheContext, "cond", TheFunction);
+  BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "loop");
+  BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "after");
+
+
+
+  // // Insert an explicit fall through from the current block to the LoopBB.
+  Builder->CreateBr(CondBB);
+
+  
+  Builder->SetInsertPoint(CondBB);
+
+
+  // // Emit the body of the loop.  This, like any other expr, can change the
+  // // current BB.  Note that we ignore the value computed by the body, but don't
+  // // allow an error.
+ 
+  Value *StepVal = const_float(1);
+
+
+  // // Compute the end condition.
+  Value *EndCond=Builder->CreateLoad(Type::getFloatTy(*TheContext), idx_alloca, VarName.c_str());
+  // // Convert condition to a bool by comparing equal to 0.0.
+  EndCond = Builder->CreateFCmpONE(
+      EndCond, VecSize, "loopcond");
+
+
+
+
+  // // conditional goto branch
+  Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
+
+
+
+
+  // // codegen body and increment
+  TheFunction->insert(TheFunction->end(), LoopBB);
+  Builder->SetInsertPoint(LoopBB);
+
+  
+  CurIdx = Builder->CreateLoad(Type::getFloatTy(*TheContext), idx_alloca, VarName.c_str());
+  Builder->CreateStore(callret("float_vec_Idx_num", {scope_struct, vec, CurIdx}), control_var_alloca);
+  Value *NextIdx = Builder->CreateFAdd(CurIdx, StepVal, "nextvar"); // Increment  
+
+  int j=0;
+  for (auto &body : Body)
+    body->codegen(scope_struct);
+  call("scope_struct_Sweep", {scope_struct});
+
+
+  // // Reload, increment, and restore the alloca.  This handles the case where
+  // // the body of the loop mutates the variable.
+  // // Value *CurVal = callret("float_Load", {scope_struct, var_name});
+  Builder->CreateStore(NextIdx, idx_alloca);
+
+ 
+  
+  Builder->CreateBr(CondBB);
+
+
+
+
+  // // when the loop body is done, return the insertion point to outside the for loop
+  TheFunction->insert(TheFunction->end(), AfterBB);
+  Builder->SetInsertPoint(AfterBB);
+
+
+  // // for expr always returns 0.0.
+  // return Constant::getNullValue(Type::getFloatTy(*TheContext));
+  return const_float(0);
+}
+
+
+
+
+
+
 Value *WhileExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -561,8 +673,9 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   
   // p2t("Variable load");
   std::string load_fn = type + "_Load";
+  // std::cout << "Load: " << load_fn << "-------------------------------------------.\n";
   V = callret(load_fn, {scope_struct, var_name});
-  call("str_Delete", {var_name});
+  // call("str_Delete", {var_name});
 
   return V;
 }
@@ -1400,6 +1513,19 @@ Value *SplitParallelExprAST::codegen(Value *scope_struct) {
   // return callret("nullptr_get", {});
 
   std::string split_fn = Inner_Vec->GetType() + "_Split_Parallel";
+
+  return callret(split_fn, {scope_struct, inner_vec});
+}
+
+Value *SplitStridedParallelExprAST::codegen(Value *scope_struct) {
+  // call("scope_struct_Increment_Thread", {scope_struct});
+  
+  Value *inner_vec = Inner_Vec->codegen(scope_struct);
+  std::cout << "SPLIT STRIDED PARALLEL CODEGEN" << ".\n";
+  // return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // return callret("nullptr_get", {});
+
+  std::string split_fn = Inner_Vec->GetType() + "_Split_Strided_Parallel";
 
   return callret(split_fn, {scope_struct, inner_vec});
 }

@@ -43,6 +43,7 @@ enum Token {
     tok_return = -32,
     tok_ret = -41,
     tok_as = -33,
+    tok_in = -42,
 
     // operators
     tok_binary = -11,

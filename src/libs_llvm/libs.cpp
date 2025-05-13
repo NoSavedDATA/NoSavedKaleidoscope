@@ -1025,6 +1025,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_Idx", float_vec_IdxTy);
 
+	FunctionType *float_vec_Idx_numTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Idx_num", float_vec_Idx_numTy);
+
 	FunctionType *float_vec_CalculateIdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -1052,6 +1059,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_Split_Parallel", float_vec_Split_ParallelTy);
+
+	FunctionType *float_vec_Split_Strided_ParallelTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_Split_Strided_Parallel", float_vec_Split_Strided_ParallelTy);
+
+	FunctionType *float_vec_sizeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_size", float_vec_sizeTy);
 
 	FunctionType *print_randomsTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

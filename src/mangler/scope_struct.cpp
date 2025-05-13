@@ -14,7 +14,9 @@
 Scope_Struct::Scope_Struct() {
     first_arg = get_from_char_pool(1,"Scope mangler first_arg");
     scope = get_from_char_pool(1,"Scope mangler scope");
-    function_name = get_from_char_pool(1,"Scope mangler previous scope");
+    function_name = get_from_char_pool(1,"Scope mangler function name");
+
+
 
     first_arg[0] = '\0';
     scope[0] = '\0';
@@ -23,35 +25,28 @@ Scope_Struct::Scope_Struct() {
 std::map<std::string, Scope_Struct *> NamedScopeStructs;
 
 void Scope_Struct::Set_First_Arg(char *first_arg) {
-    move_to_char_pool(strlen(this->first_arg)+1, this->first_arg, "set first arg");
-    // delete[] this->first_arg;
+    delete[] this->first_arg;
     this->first_arg = first_arg;
 }
 void Scope_Struct::Set_Scope(char *scope) {
-    move_to_char_pool(strlen(this->scope)+1, this->scope, "set scope");
-    // delete[] this->scope;
+    delete[] this->scope;
     this->scope = scope;
 }
 void Scope_Struct::Set_Function_Name(char *function_name) {
-    move_to_char_pool(strlen(this->function_name)+1, this->function_name, "set function_name");
-    // delete[] this->function_name;
+    delete[] this->function_name;
     this->function_name = CopyString(function_name);
 }
 void Scope_Struct::Set_Thread_Id(int thread_id) {
     this->thread_id = thread_id;
 }
-
 void Scope_Struct::Set_Has_Grad(int has_grad) {
     this->has_grad = has_grad;
 }
 void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 {
-    // delete[] first_arg;
-    // delete[] scope;
-    // delete[] function_name;
-    move_to_char_pool(strlen(this->first_arg)+1, this->first_arg, "set first arg");
-    move_to_char_pool(strlen(this->scope)+1, this->scope, "set scope");
-    move_to_char_pool(strlen(this->function_name)+1, this->function_name, "set function_name");
+    delete[] first_arg;
+    delete[] scope;
+    delete[] function_name;
 
     first_arg = CopyString(scope_to_copy->first_arg);
     scope = CopyString(scope_to_copy->scope);
@@ -115,6 +110,7 @@ extern "C" void set_scope_at_return(Scope_Struct *scope_struct) {
 extern "C" void set_scope_not_at_return(Scope_Struct *scope_struct) {
     scope_struct->is_at_return = false;
 }
+
 extern "C" void set_scope_first_arg(Scope_Struct *scope_struct, char *first_arg) {
     // std::cout << "set_scope_first_arg: " << first_arg << ".\n";
     scope_struct->Set_First_Arg(first_arg);
@@ -237,12 +233,9 @@ extern "C" void scope_struct_Copy_MarkSweepMap(Scope_Struct *in_scope, Scope_Str
 
 inline void delete_scope(Scope_Struct *scope_struct) {
 
-    // delete[] scope_struct->first_arg;
-    // delete[] scope_struct->scope;
-    // delete[] scope_struct->function_name;
-    move_to_char_pool(strlen(scope_struct->first_arg)+1, scope_struct->first_arg, "set first arg");
-    move_to_char_pool(strlen(scope_struct->scope)+1, scope_struct->scope, "set scope");
-    move_to_char_pool(strlen(scope_struct->function_name)+1, scope_struct->function_name, "set function_name");
+    delete[] scope_struct->first_arg;
+    delete[] scope_struct->scope;
+    delete[] scope_struct->function_name;
 
     if (scope_struct->mark_sweep_map!=nullptr)
     {
