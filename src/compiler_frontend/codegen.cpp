@@ -1392,12 +1392,12 @@ extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
 
 extern "C" void pthread_join_aux(pthread_t thread)
 {
-  std::cout << "Joining " << thread <<  "\n";
+  // std::cout << "Joining " << thread <<  "\n";
   void **value_ptr;
   value_ptr = nullptr;
 
   pthread_join(thread, value_ptr);
-  std::cout << "Joined: " << thread << "\n";
+  // std::cout << "Joined: " << thread << "\n";
 }
 
 Value *AsyncExprAST::codegen(Value *scope_struct) {

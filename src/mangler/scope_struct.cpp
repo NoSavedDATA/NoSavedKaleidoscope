@@ -16,8 +16,6 @@ Scope_Struct::Scope_Struct() {
     scope = get_from_char_pool(1,"Scope mangler scope");
     function_name = get_from_char_pool(1,"Scope mangler function name");
 
-
-
     first_arg[0] = '\0';
     scope[0] = '\0';
     function_name[0] = '\0';
@@ -47,6 +45,7 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     delete[] first_arg;
     delete[] scope;
     delete[] function_name;
+
 
     first_arg = CopyString(scope_to_copy->first_arg);
     scope = CopyString(scope_to_copy->scope);
@@ -82,14 +81,21 @@ extern "C" Scope_Struct *scope_struct_Create() {
     return scope_struct;
 }
 
-extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy) {
+extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy, char *callee, char *override) {
+
     
-    // std::cout << "Copying scope struct" << ".\n";
+    std::cout << "Copying scope struct" << ".\n";
+
+
+    std::cout << "Callee: " << callee << ".\n";
+    std::cout << "Callee Override: " << override << ".\n";
 
     Scope_Struct *scope_struct = new Scope_Struct();
     scope_struct->Copy(scope_to_copy);
 
-    // std::cout << "Scope struct copied" << ".\n";
+    std::cout << "Scope struct copied" << ".\n";
+    std::cout << "\n";
+    
     return scope_struct;
 }
 extern "C" Scope_Struct *scope_struct_Overwrite(Scope_Struct *scope_struct, Scope_Struct *scope_to_copy) {
@@ -248,28 +254,17 @@ inline void delete_scope(Scope_Struct *scope_struct) {
 }
 
 
-extern "C" float tid(Scope_Struct *scope_struct) {
-    float thread_id = scope_struct->thread_id-1;
-    return thread_id;
-}
 
 
 extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
-    scope_struct->mark_sweep_map->clean_up();
+    // scope_struct->mark_sweep_map->clean_up();
 }  
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     if (strcmp(scope_struct->function_name,"")==0)
         return;
 
-    // if (scope_struct->thread_id==0)
-
-    // for (auto &pair : *scope_struct->mark_sweep_map->data_types)
-    // {
-    //     // std::cout << "Shall delete " << pair.first << "/" << pair.second << " on function " << scope_struct->first_arg << "_" << scope_struct->function_name << ".\n";
-    //     scope_struct->mark_sweep_map->delete_type(pair.first);
-    // }
-    scope_struct->mark_sweep_map->clean_up();
+    // scope_struct->mark_sweep_map->clean_up();
     delete_scope(scope_struct);
 }
 
