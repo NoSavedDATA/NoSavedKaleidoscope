@@ -142,7 +142,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     Value *initial_value = Init->codegen(scope_struct);
 
-    if(Type=="float"&&!(is_self||is_attr))
+    if((Type=="float"||Type=="str")&&!(is_self||is_attr))
     { 
       std::cout << "STORE OF " << current_codegen_function << "/" << VarName << ".\n";
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name);
@@ -613,6 +613,22 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 
+inline Value *load_alloca(std::string name, std::string type) {
+
+    llvm::Type *load_type;
+    if(type=="float")
+      load_type = Type::getFloatTy(*TheContext);
+    else if(type=="int")
+      load_type = Type::getInt32Ty(*TheContext);
+    else
+      load_type = int8PtrTy;
+
+    std::cout << "LOAD OF " << current_codegen_function << "/" << name << ".\n";
+    AllocaInst *alloca = function_allocas[current_codegen_function][name];
+
+    return Builder->CreateLoad(load_type, alloca, name.c_str());
+}
+
 
 bool seen_var_attr = false;
 Value *VariableExprAST::codegen(Value *scope_struct) {
@@ -635,11 +651,10 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   //Builder->CreateCall(TheModule->getFunction("print"),
   //    {Builder->CreateGlobalString(__print), ConstantFP::get(*TheContext, APFloat(0.0f))});
 
-  if (type=="float"&&!(is_self||is_attr))
+  if ((type=="float"||type=="str")&&!(is_self||is_attr))
   {
-    std::cout << "LOAD OF " << current_codegen_function << "/" << Name << ".\n";
-    AllocaInst *alloca = function_allocas[current_codegen_function][Name];
-    V = Builder->CreateLoad(Type::getFloatTy(*TheContext), alloca, Name.c_str());
+
+    V = load_alloca(Name, type);  
 
     return V;
   }
@@ -943,8 +958,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     std::string Lname = std::get<0>(name_solver->Names[0]);
     std::string LType = LHS->GetType();
 
+    bool is_alloca = ((LType=="float"||LType=="str")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
+
     Value *Lvar_name;
-    if (!(LType=="float"&&!LHS->GetSelf()&&!LHS->GetIsAttribute()))
+    if (!is_alloca)
       Lvar_name = LHSE->NameSolver->codegen(scope_struct);
 
 
@@ -953,7 +970,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     
     
-    // std::cout << "ATTRIBUTION: " << LType << " for " << LHSE->Name << ".\n";
+    std::cout << "ATTRIBUTION: " << LType << " .\n";
     
     std::string store_op = LType + "_Store";
 
@@ -994,12 +1011,14 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       call(store_op, {Lvar_name, idx, Val, scope_struct});
 
     } else
+    // std::cout << "NOT VEC" << ".\n";
     {
 
       // if (LType!="float")
       //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
-      if (LType=="float"&&!LHS->GetSelf()&&!LHS->GetIsAttribute())
+      if (is_alloca)
       {
+        std::cout << "Store as alloca" << ".\n";
         AllocaInst *alloca = function_allocas[current_codegen_function][Lname];
         Builder->CreateStore(Val, alloca);
         return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -2246,8 +2265,16 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   // --- Args --- //
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
-    std::string load_fn = Load_Type+"_Load";
-    Value *arg = callret(load_fn, {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});  
+    Value *arg;
+    if (!isSelf && (Load_Type=="float"||Load_Type=="str"))
+    {
+      std::cout << "CALLEXPR LOAD OF " << LoadOf << ".\n";
+      arg = load_alloca(LoadOf, Load_Type);
+
+    } else {
+      std::string load_fn = Load_Type+"_Load";
+      arg = callret(load_fn, {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});  
+    }
     ArgsV.push_back(arg);
   }
 

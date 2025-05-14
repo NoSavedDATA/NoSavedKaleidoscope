@@ -1,4 +1,4 @@
-1821-05-14 17:52:29
+1821-05-14 18:19:39
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -9,7 +9,7 @@
 
 	FunctionType *scope_struct_CopyTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);

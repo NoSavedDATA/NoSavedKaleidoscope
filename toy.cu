@@ -614,7 +614,7 @@ Function *FunctionAST::codegen() {
         // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
         // Coder args
-        if (type=="float") {
+        if (type=="float"||type=="str") {
             std::cout << "STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
             AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name);
             Builder->CreateStore(&Arg, arg_alloca);

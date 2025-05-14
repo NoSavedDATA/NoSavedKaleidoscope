@@ -81,21 +81,14 @@ extern "C" Scope_Struct *scope_struct_Create() {
     return scope_struct;
 }
 
-extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy, char *callee, char *override) {
-
+extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy) {
     
-    std::cout << "Copying scope struct" << ".\n";
-
-
-    std::cout << "Callee: " << callee << ".\n";
-    std::cout << "Callee Override: " << override << ".\n";
+    // std::cout << "Copying scope struct" << ".\n";
 
     Scope_Struct *scope_struct = new Scope_Struct();
     scope_struct->Copy(scope_to_copy);
 
-    std::cout << "Scope struct copied" << ".\n";
-    std::cout << "\n";
-    
+    // std::cout << "Scope struct copied" << ".\n";
     return scope_struct;
 }
 extern "C" Scope_Struct *scope_struct_Overwrite(Scope_Struct *scope_struct, Scope_Struct *scope_to_copy) {
