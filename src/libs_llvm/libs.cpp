@@ -355,7 +355,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *scope_struct_CopyTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);
@@ -506,13 +506,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Copy_MarkSweepMap", scope_struct_Copy_MarkSweepMapTy);
-
-	FunctionType *tidTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tid", tidTy);
 
 	FunctionType *scope_struct_SweepTy= FunctionType::get(
 		int8PtrTy,
@@ -1605,6 +1598,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("_tid", _tidTy);
+
+	FunctionType *tidTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tid", tidTy);
 
 	FunctionType *minTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

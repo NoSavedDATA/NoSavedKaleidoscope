@@ -404,7 +404,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(std::string class_name, bool can_be
     std::string scope_random_string = RandomString(14);
 
     aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, IdName, std::move(Args),
-                                                  "None", "None", "none", is_var_forward, callee_override, scope_random_string);
+                                                  "None", "None", "none", is_var_forward, callee_override, scope_random_string, "none");
 
   
 
@@ -1113,6 +1113,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
 
   std::string callee_override = "none";
   std::string load_type = "none";
+  std::string load_of = "none";
   bool name_solve_to_last = false;
   // x.view()
   if(typeVars.count(Prev_IdName)>0)
@@ -1121,6 +1122,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     callee_override = typeVars[Prev_IdName] + "_" + IdName;
     load_type = typeVars[Prev_IdName];
     std::cout << "Triggered from Prev_IdName, override as: " << callee_override << ".\n";
+    load_of = Prev_IdName;
   }
   // model.linear_1(x)
   if(typeVars.count(IdName)>0)
@@ -1128,6 +1130,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
     std::cout << "Triggered from IdName" << ".\n";
     name_solve_to_last = true;
     callee_override = typeVars[IdName];
+    load_of = IdName;
   }
   std::cout << "typeVars.count(Prev_IdName)>0: " << Prev_IdName << " is " <<  std::to_string(typeVars.count(Prev_IdName)>0) << ".\n";
   std::string callee = IdName;
@@ -1175,7 +1178,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::string class_name) {
   auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
   name_solver_expr->SetNameSolveToLast(name_solve_to_last);
   auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), callee, IdName, std::move(Args),
-                                        object_class, pre_dot, load_type, is_var_forward, callee_override, scope_random_string);
+                                        object_class, pre_dot, load_type, is_var_forward, callee_override, scope_random_string, load_of);
 
 
   if (functions_return_type.count(call_of)>0)
