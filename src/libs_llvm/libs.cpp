@@ -355,7 +355,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *scope_struct_CopyTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);
