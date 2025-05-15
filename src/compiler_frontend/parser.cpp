@@ -27,6 +27,8 @@ std::map<int, std::string> op_map;
 std::map<std::string, std::vector<std::string>> data_typeVars;
 std::map<std::string, std::string> typeVars;
 
+std::map<std::string, std::map<std::string, int>> ClassVariables;
+std::map<std::string, int> ClassSize;
 
 /// numberexpr ::= number
 std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct parser_struct) {
@@ -101,6 +103,8 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
   while (true) {
     std::string Name = IdentifierStr;
     objectVars.push_back(Name);
+    // typeVars[Name] = "object";
+
     if (!is_vec)
       Object_toClass[IdentifierStr] = _class;
     getNextToken(); // eat identifier.
@@ -2120,6 +2124,39 @@ std::unique_ptr<ExprAST> ParseClass() {
   if(CurTok==tok_space)
     getNextToken();
   
+
+  int last_offset=0;
+  while(CurTok==tok_data)
+  { 
+    std::string data_type = IdentifierStr;
+    getNextToken();
+    while(true)
+    {
+      if (CurTok!=tok_identifier)
+        LogError("Class " + Name + " variables definition requires simple non-attribute names.");
+
+      ClassVariables[Name][IdentifierStr] = last_offset;
+      
+      if (data_type=="float")
+        last_offset+=4;
+      else
+        last_offset+=8;
+
+      getNextToken();
+
+      if (CurTok!=',')
+        break;
+      getNextToken();
+    }
+    std::cout << "POST TOKEN IS " << ReverseToken(CurTok) << ".\n";
+    if (CurTok==tok_space)
+      getNextToken();
+  }
+  
+  ClassSize[Name] = last_offset;
+
+
+
 
   if (CurTok!=tok_def)
     return LogError("A class definition requires it's functions.");
