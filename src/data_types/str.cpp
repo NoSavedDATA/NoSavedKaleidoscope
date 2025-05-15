@@ -218,7 +218,7 @@ extern "C" std::vector<char *> *SplitString(Scope_Struct *scope_struct,char *sel
 
 extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pattern, float idx)
 {
-  std::cout << "SLIPPINT " << self << ".\n";
+  // std::cout << "SLIPPINT " << self << ".\n";
   
   std::vector<char *> splits;
   char *input = (char*)malloc(strlen(self) + 1);
@@ -245,7 +245,7 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
   if (idx < 0)
     idx = splits.size() + idx;
   
-  std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
+  // std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
  
   // Convert the retained token to a std::string
   char *result = CopyString(splits[idx]);
@@ -259,7 +259,7 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
 
 extern "C" float str_to_float(Scope_Struct *scope_struct, char *in_str)
 {
-  // std::cout << "Execution: StrToFloat" << ".\n";
+  // std::cout << "Execution: str_to_float" << ".\n";
   // std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
 
   char *copied = (char*)malloc(strlen(in_str) + 1);
@@ -269,7 +269,7 @@ extern "C" float str_to_float(Scope_Struct *scope_struct, char *in_str)
   float ret = std::strtof(copied, &end);
 
   free(copied);
-  // std::cout << "return from to float" << ".\n";
+  // std::cout << "return from to float: " << ret << ".\n";
 
   return ret;
 }

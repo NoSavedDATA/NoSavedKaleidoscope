@@ -1,7 +1,7 @@
 #pragma once
 
 #include "llvm/IR/Value.h"
-
+#include "parser_struct.h"
 
 using namespace llvm;
 
@@ -132,7 +132,8 @@ class VariableExprAST : public ExprAST {
   public:
     std::unique_ptr<ExprAST> NameSolver;
     std::string Name;
-    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name);
+    Parser_Struct parser_struct;
+    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name, Parser_Struct parser_struct);
 
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const; 
@@ -231,8 +232,10 @@ class VecIdxExprAST : public ExprAST {
   class DataExprAST : public VarExprAST {
     public:
       std::vector<std::unique_ptr<ExprAST>> Notes;
+      Parser_Struct parser_struct;
   
       DataExprAST(
+        Parser_Struct,
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
         std::string Type,
         std::vector<std::unique_ptr<ExprAST>> Notes);
@@ -343,10 +346,11 @@ class BinaryExprAST : public ExprAST {
   char Op;
   std::unique_ptr<ExprAST> LHS, RHS;
   std::string Elements, Operation;
+  Parser_Struct parser_struct;
 
 public:
   BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
-                std::unique_ptr<ExprAST> RHS);
+                std::unique_ptr<ExprAST> RHS, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -385,6 +389,7 @@ class CallExprAST : public ExprAST {
   bool IsVarForward;
   std::string CalleeOverride;
   std::unique_ptr<ExprAST> NameSolver;
+  Parser_Struct parser_struct;
 
   public:
     CallExprAST(std::unique_ptr<ExprAST> NameSolver,
@@ -396,7 +401,8 @@ class CallExprAST : public ExprAST {
                 bool IsVarForward,
                 const std::string &CalleeOverride,
                 const std::string &Scope_Random_Str,
-                const std::string &LoadOf
+                const std::string &LoadOf,
+                Parser_Struct parser_struct
               );
 
   Value *codegen(Value *scope_struct) override;
@@ -449,11 +455,12 @@ class ForExprAST : public ExprAST {
   std::string VarName;
   std::unique_ptr<ExprAST> Start, End, Step;
   std::vector<std::unique_ptr<ExprAST>> Body;
+  Parser_Struct parser_struct;
 
   public:
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
               std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-              std::vector<std::unique_ptr<ExprAST>> Body);
+              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -463,10 +470,11 @@ class ForEachExprAST : public ExprAST {
   std::string VarName;
   std::unique_ptr<ExprAST> Vec;
   std::vector<std::unique_ptr<ExprAST>> Body;
+  Parser_Struct parser_struct;
 
   public:
     ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-              std::vector<std::unique_ptr<ExprAST>> Body);
+              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
 };

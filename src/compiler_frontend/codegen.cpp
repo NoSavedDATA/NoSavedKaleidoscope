@@ -144,10 +144,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     if((Type=="float"||Type=="str")&&!(is_self||is_attr))
     { 
-      std::cout << "STORE OF " << current_codegen_function << "/" << VarName << ".\n";
+      std::cout << "STORE OF " << parser_struct.function_name << "/" << VarName << ".\n";
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name);
       Builder->CreateStore(initial_value, alloca);
-      function_allocas[current_codegen_function][VarName] = alloca;
+      function_allocas[parser_struct.function_name][VarName] = alloca;
       continue;
     }
 
@@ -329,7 +329,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   // Create an alloca for the variable in the entry block.
   AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
 
-  function_allocas[current_codegen_function][VarName] = control_var_alloca;
+  function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
 
   // Emit the start code first, without 'variable' in scope.
   Value *StartVal = Start->codegen(scope_struct);
@@ -338,7 +338,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
 
-  std::cout << "CURRENT FUNCTION ON CODEGEN " << current_codegen_function << ".\n";
+  std::cout << "CURRENT FUNCTION ON CODEGEN " << parser_struct.function_name << ".\n";
 
 
 
@@ -466,7 +466,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   // // Create an alloca for the variable in the entry block.
   AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
   AllocaInst *idx_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
-  function_allocas[current_codegen_function][VarName] = control_var_alloca;
+  function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
 
 
   Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
@@ -613,7 +613,7 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 
-inline Value *load_alloca(std::string name, std::string type) {
+Value *load_alloca(std::string name, std::string type, std::string from_function) {
 
     llvm::Type *load_type;
     if(type=="float")
@@ -623,8 +623,8 @@ inline Value *load_alloca(std::string name, std::string type) {
     else
       load_type = int8PtrTy;
 
-    std::cout << "LOAD OF " << current_codegen_function << "/" << name << ".\n";
-    AllocaInst *alloca = function_allocas[current_codegen_function][name];
+    std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << ".\n";
+    AllocaInst *alloca = function_allocas[from_function][name];
 
     return Builder->CreateLoad(load_type, alloca, name.c_str());
 }
@@ -651,10 +651,20 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   //Builder->CreateCall(TheModule->getFunction("print"),
   //    {Builder->CreateGlobalString(__print), ConstantFP::get(*TheContext, APFloat(0.0f))});
 
+  if (type=="str")
+  {
+    for (const auto &entry : NamedTensorsT)
+    {
+      std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
+      if (ends_with(entry.first, Name))
+        return ConstantFP::get(*TheContext, APFloat(0.0f));
+    } 
+  }
+
+
   if ((type=="float"||type=="str")&&!(is_self||is_attr))
   {
-
-    V = load_alloca(Name, type);  
+    V = load_alloca(Name, type, parser_struct.function_name);
 
     return V;
   }
@@ -670,15 +680,6 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
 
 
-  if (type=="str")
-  {
-    for (const auto &entry : NamedTensorsT)
-    {
-      std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
-      if (ends_with(entry.first, Name))
-        return ConstantFP::get(*TheContext, APFloat(0.0f));
-    } 
-  }
   if (type=="object")
     return var_name;
   if (type=="tensor" && !seen_var_attr)
@@ -1018,8 +1019,9 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
       if (is_alloca)
       {
-        std::cout << "Store as alloca" << ".\n";
-        AllocaInst *alloca = function_allocas[current_codegen_function][Lname];
+
+        std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << ".\n";
+        AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
         Builder->CreateStore(Val, alloca);
         return ConstantFP::get(*TheContext, APFloat(0.0f));
         // return nullptr;
@@ -1479,7 +1481,9 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
   // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct});   
 
+  // p2t("NOW STORE ASYNCS COUNT");
   call("scope_struct_Store_Asyncs_Count", {scope_struct, const_int(AsyncsCount)});
+  // p2t("STORED");
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
@@ -1620,18 +1624,25 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 
 Value *RetExprAST::codegen(Value *scope_struct) {
   seen_var_attr=true;
+
+  // p2t("set scope return");
   call("set_scope_at_return", {scope_struct});
 
 
   if(Vars.size()==1)
   {
+    // p2t("codegen return");
     Value *ret = Vars[0]->codegen(scope_struct);
     std::cout << "RETURN TYPE IS " << Vars[0]->GetType() << "-------------------.\n";
+    // p2t("unmark if not float"); 
     if(Vars[0]->GetType()!="float")
       call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
     seen_var_attr=false;
+    // p2t("set not at return");
     call("set_scope_not_at_return", {scope_struct});
+    // p2t("clean scope");
     call("scope_struct_Clean_Scope", {scope_struct}); 
+    // p2t("create return");
     Builder->CreateRet(ret);
     return ret;
   }
@@ -2266,10 +2277,10 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
     Value *arg;
-    if (!isSelf && (Load_Type=="float"||Load_Type=="str"))
+    if ((Load_Type=="float"||Load_Type=="str") && !isSelf)
     {
       std::cout << "CALLEXPR LOAD OF " << LoadOf << ".\n";
-      arg = load_alloca(LoadOf, Load_Type);
+      arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 
     } else {
       std::string load_fn = Load_Type+"_Load";
