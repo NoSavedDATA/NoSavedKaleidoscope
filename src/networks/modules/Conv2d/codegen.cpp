@@ -97,7 +97,7 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 extern "C" float Conv2d_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
 
-  std::cout << "\n\n\n----------------------EXECUTION: CREATING CONV2D: " << name << ".\n\n\n\n";
+  // std::cout << "\n\n\n----------------------EXECUTION: CREATING CONV2D: " << name << ".\n\n\n\n";
 
 
   std::string init = "xavu";
@@ -131,7 +131,7 @@ extern "C" float Conv2d_Create(Scope_Struct *scope_struct, char *name, char *sco
 
   NamedConv2d[name] = std::move(conv2d);
 
-  std::cout << "***Created Conv2d: " << name << ".\n";
+  // std::cout << "***Created Conv2d: " << name << ".\n";
 
   return 0;
 }

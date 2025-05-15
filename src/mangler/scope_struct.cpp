@@ -255,8 +255,12 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     if (strcmp(scope_struct->function_name,"")==0)
+    {
+        // std::cout << "\n\n\n\nCLEANING SCOPE OF " <<  scope_struct->function_name << "-----------------------------------------------------------*****************----------------.\n\n\n\n\n";
         return;
+    }
 
+    // std::cout << "\n\n\n\nCLEANING SCOPE OF " <<  scope_struct->function_name << "-----------------------------------------------------------*****************----------------.\n\n\n\n\n";
     // scope_struct->mark_sweep_map->clean_up();
     delete_scope(scope_struct);
 }

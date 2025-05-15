@@ -582,6 +582,7 @@ Function *FunctionAST::codegen() {
 
   p2t("FunctionAST start function args.");
 
+
   float val;
   int i = 0;
   for (auto &Arg : TheFunction->args()) {
@@ -2778,7 +2779,8 @@ static void HandleClass() { ParseClass(); }
 
 static void HandleDefinition() {
   
-  if (auto FnAST = ParseDefinition()) {
+  Parser_Struct parser_struct;
+  if (auto FnAST = ParseDefinition(parser_struct)) {
 
     FunctionProtos[FnAST->getProto().getName()] =
       std::make_unique<PrototypeAST>(FnAST->getProto());
@@ -2791,7 +2793,8 @@ static void HandleDefinition() {
 }
 
 static void HandleExtern() {
-  if (auto ProtoAST = ParseExtern()) {
+  Parser_Struct parser_struct;
+  if (auto ProtoAST = ParseExtern(parser_struct)) {
     if (auto *FnIR = ProtoAST->codegen()) {
       fprintf(stderr, "Read extern: ");
       FnIR->print(errs());
@@ -2848,7 +2851,9 @@ static void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   
-  if (std::unique_ptr<FunctionAST> FnAST = ParseTopLevelExpr()) {
+  Parser_Struct parser_struct;
+  parser_struct.function_name = "__anon_expr";
+  if (std::unique_ptr<FunctionAST> FnAST = ParseTopLevelExpr(parser_struct)) {
     CodegenTopLevelExpression(std::ref(FnAST));
 
   

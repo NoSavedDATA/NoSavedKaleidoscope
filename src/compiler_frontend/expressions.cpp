@@ -137,12 +137,14 @@ VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<ExprAST>> E
 
   
   /// VariableExprAST - Expression class for referencing a variable, like "a".
-VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name) : Name(Name) {
-
+VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name, Parser_Struct parser_struct)
+                                : Name(Name), parser_struct(parser_struct) {
   this->isVarLoad = true;
   this->NameSolver = std::move(NameSolver);
   this->SetType(Type);
   this->NameSolver->SetType(Type);
+
+  std::cout << "VARIABLE GOT FUNCTION NAME " << parser_struct.function_name << ".\n";
 }
   
 const std::string &VariableExprAST::getName() const { return Name; }
@@ -203,10 +205,11 @@ ObjectExprAST::ObjectExprAST(
  
   
 DataExprAST::DataExprAST(
+  Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
   std::vector<std::unique_ptr<ExprAST>> Notes)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
+  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)),
                 Notes(std::move(Notes)) {}
 
   
@@ -282,8 +285,8 @@ UnaryExprAST::UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
   
   /// BinaryExprAST - Expression class for a binary operator.
 BinaryExprAST::BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), Elements(Elements), Operation(Operation), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+              std::unique_ptr<ExprAST> RHS, Parser_Struct parser_struct)
+    : Op(Op), Elements(Elements), Operation(Operation), LHS(std::move(LHS)), RHS(std::move(RHS)), parser_struct(parser_struct) {}
   
   
   
@@ -315,11 +318,12 @@ CallExprAST::CallExprAST(std::unique_ptr<ExprAST> NameSolver,
             bool IsVarForward,
             const std::string &CalleeOverride,
             const std::string &Scope_Random_Str,
-            const std::string &LoadOf
+            const std::string &LoadOf,
+            Parser_Struct parser_struct
           )
     : NameSolver(std::move(NameSolver)), Callee(Callee), Name(Name), Args(std::move(Args)), Class(Class),
       PreDot(PreDot), Load_Type(Load_Type), IsVarForward(IsVarForward), CalleeOverride(CalleeOverride),
-      Scope_Random_Str(Scope_Random_Str), LoadOf(LoadOf) {
+      Scope_Random_Str(Scope_Random_Str), LoadOf(LoadOf), parser_struct(parser_struct) {
   SetType("float");
 }
 
@@ -351,15 +355,15 @@ IfExprAST::IfExprAST(std::unique_ptr<ExprAST> Cond,
 /// ForExprAST - Expression class for for.
 ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
           std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-          std::vector<std::unique_ptr<ExprAST>> Body)
+          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
     : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
-      Step(std::move(Step)), Body(std::move(Body)) {}
+      Step(std::move(Step)), Body(std::move(Body)), parser_struct(parser_struct) {}
   
 
 /// ForExprAST - Expression class for for.
 ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-          std::vector<std::unique_ptr<ExprAST>> Body)
-    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)) {}
+          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
+    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)), parser_struct(parser_struct) {}
 
   
   /// WhileExprAST - Expression class for while.
