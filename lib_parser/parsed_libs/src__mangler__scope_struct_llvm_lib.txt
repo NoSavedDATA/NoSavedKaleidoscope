@@ -1,4 +1,4 @@
-1821-05-14 22:10:40
+1821-05-17 09:45:01
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -111,6 +111,20 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Increment_Thread", scope_struct_Increment_ThreadTy);
+
+	FunctionType *set_scope_objectTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("set_scope_object", set_scope_objectTy);
+
+	FunctionType *get_scope_objectTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("get_scope_object", get_scope_objectTy);
 
 	FunctionType *scope_struct_Save_for_AsyncTy= FunctionType::get(
 		int8PtrTy,

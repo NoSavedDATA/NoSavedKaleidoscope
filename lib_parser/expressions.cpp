@@ -21,7 +21,7 @@ Lib_Info *PlaceholderExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) 
 CppFunctionExpr::CppFunctionExpr(const std::string & FunctionName) : FunctionName(FunctionName) {};
 
 Lib_Info *CppFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) {
-    // std::cout << "Deal with cpp function " << FunctionName << ".\n";
+    // Build std::maps<> for _backward and _Clean_Up functions
 
     std::string dict_key="";
 
@@ -53,6 +53,8 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
     std::string return_type="";
     if(in_return_type=="char*")
         return_type = "str";
+    else if (in_return_type=="int")
+        return_type = "int";
     else if (in_return_type=="std::vector<char*>*")
         return_type = "str_vec";
     else if (in_return_type=="std::vector<float>*")
@@ -71,8 +73,8 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
 
 
     if (in_return_type!="float"&&in_return_type!="void"&&in_return_type!="void*") 
-        lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, ";
-    lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", ";
+        lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, "; // {"tensor_tensor_add", "tensor"}
+    lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", "; // uuser_cpp_functions
 
     return lib_info;
 }

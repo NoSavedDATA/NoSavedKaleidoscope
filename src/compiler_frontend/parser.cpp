@@ -29,10 +29,17 @@ std::map<std::string, std::string> typeVars;
 
 std::map<std::string, std::map<std::string, int>> ClassVariables;
 std::map<std::string, int> ClassSize;
+std::map<std::string, llvm::Type *> ClassStructs;
 
 /// numberexpr ::= number
 std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct parser_struct) {
   auto Result = std::make_unique<NumberExprAST>(NumVal);
+  getNextToken(); // consume the number
+  return std::move(Result);
+}
+
+std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct parser_struct) {
+  auto Result = std::make_unique<IntExprAST>((int)NumVal);
   getNextToken(); // consume the number
   return std::move(Result);
 }
@@ -99,9 +106,10 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
   }
 
 
+  std::string Name;
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   while (true) {
-    std::string Name = IdentifierStr;
+    Name = IdentifierStr;
     objectVars.push_back(Name);
     // typeVars[Name] = "object";
 
@@ -122,7 +130,7 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
       return LogError("Expected object identifier names.");
   }
 
-  auto aux = std::make_unique<ObjectExprAST>(std::move(VarNames), "object", std::move(VecInitSize));
+  auto aux = std::make_unique<ObjectExprAST>(parser_struct, std::move(VarNames), "object", std::move(VecInitSize), ClassSize[Name]);
   aux->SetSelf(is_self);
   aux->SetIsAttribute(is_attr);
   aux->SetPreDot(pre_dot);
@@ -414,6 +422,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
 
     std::string fname = (callee_override!="none") ? callee_override : IdName;
 
+
     if (functions_return_type.count(fname)>0)
     {
       // std::cout << "----RETURN OF " << fname << " IS: " << functions_return_type[fname] << ".\n";
@@ -493,7 +502,7 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
   //std::cout << "\n\nIf else token: " << ReverseToken(CurTok) <<  "\n\n\n";
 
   if (CurTok != tok_else) {
-    Else.push_back(std::make_unique<NumberExprAST>(0));
+    Else.push_back(std::make_unique<IntExprAST>(0));
 
     return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
                                       std::move(Else));
@@ -598,7 +607,7 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
   
 
 
-  std::unique_ptr<ExprAST> Step = std::make_unique<NumberExprAST>(1.0);
+  std::unique_ptr<ExprAST> Step = std::make_unique<IntExprAST>(1.0);
   if (CurTok == ',') { // The step value is optional.
     getNextToken();
     auto aux = ParseExpression(parser_struct, class_name);
@@ -648,7 +657,7 @@ std::unique_ptr<ExprAST> ParseForExpr(Parser_Struct parser_struct, std::string c
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
-  typeVars[IdName] = "float";
+  typeVars[IdName] = "int";
 
   if (CurTok=='=')
     return ParseStandardForExpr(parser_struct, class_name, cur_level_tabs, IdName);
@@ -714,7 +723,7 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
   getNextToken(); // eat the async.
 
 
-  if (CurTok!=tok_number)
+  if (CurTok!=tok_int)
     LogError("asyncs expression expect the number of asynchrnonous functions.");
 
   int async_count = NumVal;
@@ -1507,12 +1516,12 @@ std::unique_ptr<ExprAST> ParseGlobalExpr(Parser_Struct parser_struct, std::strin
 std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string class_name) {
   getNextToken(); //eat return
 
-  std::vector<std::unique_ptr<ExprAST>> Vars, Destiny;
+  std::vector<std::unique_ptr<ExprAST>> Vars;
 
   std::unique_ptr<ExprAST> expr;
   
 
-  if (CurTok != tok_identifier && CurTok != tok_class_attr && CurTok != tok_self && CurTok != tok_number)
+  if (CurTok != tok_identifier && CurTok != tok_class_attr && CurTok != tok_self && CurTok != tok_number && CurTok != tok_int)
     return LogError("Expected identifier after return.");
 
   
@@ -1521,6 +1530,9 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
     if (CurTok==tok_number)
     {
       expr = std::make_unique<NumberExprAST>(NumVal);
+      getNextToken();
+    } else if (CurTok==tok_int) {
+      expr = std::make_unique<IntExprAST>(NumVal);
       getNextToken();
     }
     else
@@ -1546,7 +1558,6 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
 ///   ::= parenexpr
 ///   ::= ifexpr
 ///   ::= forexpr
-///   ::= varexpr
 std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string class_name, bool can_be_list) {
   // std::cout << "ParsePrimary: " << ReverseToken(CurTok) << "can be list: " << can_be_list << ".\n";
   switch (CurTok) {
@@ -1561,6 +1572,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseSelfExpr(parser_struct, class_name);
   case tok_number:
     return ParseNumberExpr(parser_struct);
+  case tok_int:
+    return ParseIntExpr(parser_struct);
   case tok_str:
     return ParseStringExpr(parser_struct);
   case '(':
@@ -1900,9 +1913,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
   std::string return_type;
 
-  if (CurTok==tok_data) {
+  if (CurTok==tok_data)
     return_type = IdentifierStr;
-  }
+  
 
   
   // std::cout << "Token " << ReverseToken(CurTok) << ".\n";
@@ -1979,7 +1992,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
       type=IdentifierStr;
 
     if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens)))
-      LogErrorP_to_comma("Prototype var type must be t, f or a data type. Got " + IdentifierStr);
+      LogErrorP_to_comma("Prototype var type must be s, t, i, f or a data type. Got " + IdentifierStr);
     else {
       Types.push_back(IdentifierStr);
       getNextToken(); // eat arg type
@@ -2126,6 +2139,7 @@ std::unique_ptr<ExprAST> ParseClass() {
   
 
   int last_offset=0;
+  std::vector<Type *> llvm_types;
   while(CurTok==tok_data)
   { 
     std::string data_type = IdentifierStr;
@@ -2135,12 +2149,20 @@ std::unique_ptr<ExprAST> ParseClass() {
       if (CurTok!=tok_identifier)
         LogError("Class " + Name + " variables definition requires simple non-attribute names.");
 
+
+      typeVars[IdentifierStr] = data_type;
       ClassVariables[Name][IdentifierStr] = last_offset;
       
       if (data_type=="float")
+      {
+        llvm_types.push_back(Type::getFloatTy(*TheContext));
         last_offset+=4;
+      }
       else
+      {
+        llvm_types.push_back(int8PtrTy);
         last_offset+=8;
+      }
 
       getNextToken();
 
@@ -2148,12 +2170,21 @@ std::unique_ptr<ExprAST> ParseClass() {
         break;
       getNextToken();
     }
-    std::cout << "POST TOKEN IS " << ReverseToken(CurTok) << ".\n";
     if (CurTok==tok_space)
       getNextToken();
   }
+
+  // for (auto &pair : ClassVariables[Name])
+  // {
+  //   std::cout << Name << ": " << pair.first << " - " << pair.second << ".\n";
+  // }
   
-  ClassSize[Name] = last_offset;
+  // ClassSize[Name] = last_offset;
+  // llvm::Type *class_struct = StructType::create(*TheContext);
+  // class_struct->setBody(llvm_types);
+  // ClassStructs[Name] = class_struct; // I fear this approach may lead to stack overflow, like what happend to the previous string allocas.
+
+
 
 
 

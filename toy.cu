@@ -216,7 +216,9 @@ std::map<std::string, Value *> NamedValues;
 std::map<std::string, char *> NamedStrs;
 std::map<std::string, std::vector<char *>> ClassStrVecs;
 std::map<std::string, DT_float_vec *> ClassFloatVecs;
+std::map<std::string, DT_int_vec *> NamedIntVecs;
 std::map<std::string, float> NamedClassValues;
+std::map<std::string, int> NamedInts;
 std::map<std::string, std::string> NamedObjects;
 std::map<std::string, std::vector<std::pair<std::string, std::string>>> ScopeVarsToClean;
 std::map<std::string, char *> ScopeNamesToClean;
@@ -615,9 +617,10 @@ Function *FunctionAST::codegen() {
         // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
         // Coder args
-        if (type=="float"||type=="str") {
-            std::cout << "STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
-            AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name);
+        if (type=="float"||type=="str"||type=="int") {
+            std::cout << "Arg STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
+            llvm::Type *alloca_type = get_type_from_str(type);
+            AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
             Builder->CreateStore(&Arg, arg_alloca);
             function_allocas[current_codegen_function][arg_name] = arg_alloca;
         }
@@ -655,14 +658,16 @@ Function *FunctionAST::codegen() {
 
 
 
-
+  bool expr_is_return = false;
   Value *RetVal;
   for (auto &body : Body)
   {
     std::string pre = "\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n" + std::string("FunctionAST Body codegen pre of: ") + typeid(*body).name();
     p2t(pre);
+
+    expr_is_return = ends_with(typeid(*body).name(), "RetExprAST");
+
     RetVal = body->codegen(scope_struct);
-    p2t("FunctionAST Body codegen post");
   }
 
 
@@ -673,22 +678,21 @@ Function *FunctionAST::codegen() {
   
   
 
-  p2t("FunctionAST return");
 
   if (RetVal) {
     // Finish off the function.
     
-    
-    p2t("FunctionAST CreateRet");
-    Builder->CreateRet(RetVal);
+    if(!expr_is_return)
+        Builder->CreateRet(RetVal);
     
 
-    p2t("FunctionAST verify");
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
 
 
     p2t("FunctionAST verified");
+
+    // TheModule->print(llvm::errs(), nullptr);
     // Validate the generated code, checking for consistency.
 
     return TheFunction;
@@ -748,6 +752,13 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("max", fmaxTy);
 
+
+  FunctionType *mallocType = FunctionType::get(
+        int8PtrTy, 
+        {Type::getInt64Ty(*TheContext)}, 
+        false
+  );
+  TheModule->getOrInsertFunction("malloc", mallocType);
 
   // 
   FunctionType *fminTy = FunctionType::get(
@@ -2819,6 +2830,9 @@ static void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
     fprintf(stderr, "\n\n");
     */
 
+
+    // TheModule->print(llvm::errs(), nullptr);
+
     // Create a ResourceTracker for memory managment
     // anonymous expression -- that way we can free it after executing.
     auto RT = TheJIT->getMainJITDylib().createResourceTracker();
@@ -3117,7 +3131,7 @@ int main() {
   reverse_ops = {{"float_tensor", "tensor_float"}};
 
   ops_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
-                     {"float_str", "str"},
+                     {"float_str", "str"}, {"int_int", "int"}, {"str_int", "str"}, {"int_str", "str"},
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"}};

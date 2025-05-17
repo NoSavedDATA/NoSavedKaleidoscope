@@ -9,6 +9,8 @@
 
 
 struct Scope_Struct { 
+    void *object_ptr = nullptr;
+
     char *first_arg = nullptr;
     char *scope = nullptr;
     char *function_name = nullptr;

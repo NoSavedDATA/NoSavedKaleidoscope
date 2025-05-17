@@ -47,6 +47,7 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     delete[] function_name;
 
 
+    object_ptr = scope_to_copy->object_ptr;
     first_arg = CopyString(scope_to_copy->first_arg);
     scope = CopyString(scope_to_copy->scope);
     function_name = CopyString(scope_to_copy->function_name);
@@ -107,6 +108,7 @@ extern "C" void set_scope_at_return(Scope_Struct *scope_struct) {
     scope_struct->is_at_return = true;
 }
 extern "C" void set_scope_not_at_return(Scope_Struct *scope_struct) {
+    // std::cout << "set_scope_not_at_return" << ".\n";
     scope_struct->is_at_return = false;
 }
 
@@ -182,6 +184,15 @@ extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
     return 0;
 }
 
+
+extern "C" void set_scope_object(Scope_Struct *scope_struct, void *object_ptr) {
+    std::cout << "Set scope object " << object_ptr << ".\n";
+    scope_struct->object_ptr = object_ptr;
+    std::cout << "done" << ".\n";
+}
+extern "C" void *get_scope_object(Scope_Struct *scope_struct) {
+    return scope_struct->object_ptr;
+}
 
 
 

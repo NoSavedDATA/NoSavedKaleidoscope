@@ -102,27 +102,27 @@ void KaleidoscopeASTMaterializationUnit::materialize(
     { L.emit(std::move(R), std::move(F)); }
 
 
-  void KaleidoscopeJIT::handleLazyCallThroughError() {
-    errs() << "LazyCallThrough error: Could not find function body";
-    exit(1);
-  }
+void KaleidoscopeJIT::handleLazyCallThroughError() {
+  errs() << "LazyCallThrough error: Could not find function body";
+  exit(1);
+}
 
-  KaleidoscopeJIT::KaleidoscopeJIT(std::unique_ptr<ExecutionSession> ES,
-                  std::unique_ptr<EPCIndirectionUtils> EPCIU,
-                  JITTargetMachineBuilder JTMB, DataLayout DL)
-      : ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)),
-        Mangle(*this->ES, this->DL),
-        ObjectLayer(*this->ES,
-                    []() { return std::make_unique<SectionMemoryManager>(); }),
-        CompileLayer(*this->ES, ObjectLayer,
-                     std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
-        OptimizeLayer(*this->ES, CompileLayer, optimizeModule),
-        ASTLayer(OptimizeLayer, this->DL),
-        MainJD(this->ES->createBareJITDylib("<main>")) {
-    MainJD.addGenerator(
-        cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(
-            DL.getGlobalPrefix())));
-  }
+KaleidoscopeJIT::KaleidoscopeJIT(std::unique_ptr<ExecutionSession> ES,
+                std::unique_ptr<EPCIndirectionUtils> EPCIU,
+                JITTargetMachineBuilder JTMB, DataLayout DL)
+    : ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)),
+      Mangle(*this->ES, this->DL),
+      ObjectLayer(*this->ES,
+                  []() { return std::make_unique<SectionMemoryManager>(); }),
+      CompileLayer(*this->ES, ObjectLayer,
+                    std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
+      OptimizeLayer(*this->ES, CompileLayer, optimizeModule),
+      ASTLayer(OptimizeLayer, this->DL),
+      MainJD(this->ES->createBareJITDylib("<main>")) {
+  MainJD.addGenerator(
+      cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(
+          DL.getGlobalPrefix())));
+}
 
 KaleidoscopeJIT::~KaleidoscopeJIT() {
   if (auto Err = ES->endSession())

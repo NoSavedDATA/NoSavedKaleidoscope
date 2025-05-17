@@ -116,6 +116,10 @@ NameSolverAST::NameSolverAST(std::vector<std::tuple<std::string, int, std::vecto
 NumberExprAST::NumberExprAST(float Val) : Val(Val) {
   this->SetType("float");
 } 
+
+IntExprAST::IntExprAST(int Val) : Val(Val) {
+  this->SetType("int");
+} 
   
   
   
@@ -144,7 +148,6 @@ VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::strin
   this->SetType(Type);
   this->NameSolver->SetType(Type);
 
-  std::cout << "VARIABLE GOT FUNCTION NAME " << parser_struct.function_name << ".\n";
 }
   
 const std::string &VariableExprAST::getName() const { return Name; }
@@ -194,10 +197,11 @@ NewVecExprAST::NewVecExprAST(
   
 
 ObjectExprAST::ObjectExprAST(
+    Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
   std::string Type,
-  std::unique_ptr<ExprAST> Init)
-  : VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)) {}
+  std::unique_ptr<ExprAST> Init, int Size)
+  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), Size(Size) {}
 
 
 
