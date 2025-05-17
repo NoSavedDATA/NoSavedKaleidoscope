@@ -92,7 +92,8 @@ extern "C" char * str_str_add(Scope_Struct *scope_struct, char *lc, char *rc)
 
 extern "C" char * str_int_add(Scope_Struct *scope_struct, char *lc, int rc)
 {
-  // std::cout << "Concat string and float fn" << ".\n";
+  // std::cout << "Concat string and int fn" << ".\n";
+  // std::cout << "Int is: " << rc << ".\n";
   // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
 
   size_t length_lc = strlen(lc);
@@ -112,6 +113,7 @@ extern "C" char * str_int_add(Scope_Struct *scope_struct, char *lc, int rc)
 
   return result_cstr;
 }
+
 
 
 extern "C" char * str_float_add(Scope_Struct *scope_struct, char *lc, float rc)
@@ -135,6 +137,28 @@ extern "C" char * str_float_add(Scope_Struct *scope_struct, char *lc, float rc)
 
   return result_cstr;
 }
+
+extern "C" char * int_str_add(Scope_Struct *scope_struct, int lc, char *rc)
+{   
+  std::stringstream ss;
+  ss << lc; // Adjust precision as needed
+  std::string lc_str = ss.str();
+  size_t length_lc = lc_str.length(); // +1 for null terminator
+
+  
+  size_t length_rc = strlen(rc) + 1; // +1 for null terminator
+  
+
+  char *result_cstr = get_from_char_pool(length_lc+length_rc, "float_str_add");
+
+  
+  memcpy(result_cstr, lc_str.c_str(), length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
+
+
+  return result_cstr;
+}
+
 
 extern "C" char * float_str_add(Scope_Struct *scope_struct, float lc, char *rc)
 {  

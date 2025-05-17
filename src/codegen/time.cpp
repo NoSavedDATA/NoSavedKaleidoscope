@@ -11,9 +11,9 @@
 
 
 
-extern "C" void __slee_p_(Scope_Struct *scope_struct, float id)
+extern "C" void __slee_p_(Scope_Struct *scope_struct, int duration)
 {
-  std::cout << "\n\nSleep " << id << " begin" << "\n";
+  // std::cout << "\n\nSleep " << duration << " begin" << "\n";
   std::random_device rd;
   std::mt19937 gen(rd());
 
@@ -21,9 +21,9 @@ extern "C" void __slee_p_(Scope_Struct *scope_struct, float id)
   int random_number = dis(gen);
 
   //std::this_thread::sleep_for(std::chrono::seconds(random_number));
-  std::this_thread::sleep_for(std::chrono::seconds((int)id));
+  std::this_thread::sleep_for(std::chrono::seconds(duration));
 
-  std::cout << "Sleep " << id << " finish" << "\n";
+  // std::cout << "Sleep " << duration << " finish" << "\n";
 
   //return id;
 }
@@ -45,7 +45,7 @@ extern "C" void random_sleep(Scope_Struct *scope_struct, float start, float fini
 }
 
 
-extern "C" float silent_sleep(Scope_Struct *scope_struct, float id)
+extern "C" float silent_sleep(Scope_Struct *scope_struct, int duration)
 {
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -54,7 +54,7 @@ extern "C" float silent_sleep(Scope_Struct *scope_struct, float id)
   int random_number = dis(gen);
 
   //std::this_thread::sleep_for(std::chrono::seconds(random_number));
-  std::this_thread::sleep_for(std::chrono::seconds((int)id));
+  std::this_thread::sleep_for(std::chrono::seconds(duration));
 
  
   return 0;
@@ -63,14 +63,14 @@ extern "C" float silent_sleep(Scope_Struct *scope_struct, float id)
 
 std::chrono::high_resolution_clock::time_point START_TIME;
 
-extern "C" float start_timer(Scope_Struct *scope_struct, float id)
+extern "C" float start_timer(Scope_Struct *scope_struct)
 {
   START_TIME = std::chrono::high_resolution_clock::now();
  
   return 0;
 }
 
-extern "C" float end_timer(Scope_Struct *scope_struct, float id)
+extern "C" float end_timer(Scope_Struct *scope_struct)
 {
   std::chrono::high_resolution_clock::time_point endTime = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsedTime = endTime - START_TIME;

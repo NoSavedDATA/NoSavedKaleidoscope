@@ -83,17 +83,23 @@ class ExprAST {
   };
   
   
-  /// NumberExprAST - Expression class for numeric literals like "1.0".
-  class NumberExprAST : public ExprAST {
-    float Val;
+/// NumberExprAST - Expression class for numeric literals like "1.0".
+class NumberExprAST : public ExprAST {
+  float Val;
+
+  public:
+    NumberExprAST(float Val); 
+
+  Value *codegen(Value *scope_struct) override;
+}; 
   
-    public:
-      NumberExprAST(float Val); 
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
+class IntExprAST : public ExprAST {
+  int Val;
+  public:
+    IntExprAST(int Val); 
+  Value *codegen(Value *scope_struct) override;
+}; 
+
   
 class StringExprAST : public ExprAST {
   std::string Val;
@@ -214,12 +220,15 @@ class VecIdxExprAST : public ExprAST {
   class ObjectExprAST : public VarExprAST {
   
   public:
+    Parser_Struct parser_struct;
     std::unique_ptr<ExprAST> Init;
+    int Size;
   
     ObjectExprAST(
+        Parser_Struct parser_struct,
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
         std::string Type,
-        std::unique_ptr<ExprAST> Init);
+        std::unique_ptr<ExprAST> Init, int Size);
   
     Value *codegen(Value *scope_struct) override;
   };

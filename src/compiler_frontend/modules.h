@@ -53,6 +53,9 @@ inline Value *global_str(std::string _string) {
 inline Value *const_int(int val) {
     return ConstantInt::get(Type::getInt32Ty(*TheContext), val);
 }
+inline Value *const_int64(int val) {
+    return ConstantInt::get(Type::getInt64Ty(*TheContext), val);
+}
 inline Value *const_float(float val) {
     return ConstantFP::get(*TheContext, APFloat(val));
 }

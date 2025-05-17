@@ -26,6 +26,7 @@ enum Token {
     // primary
     tok_identifier = -4,
     tok_number = -5,
+    tok_int = -13,
     tok_str = -40, // ""
 
     // control

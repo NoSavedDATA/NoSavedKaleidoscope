@@ -147,8 +147,8 @@ std::map<int, std::string> token_to_string = {
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
 std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class};
 
-std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "str", "str_vec", "float_vec", "list", "dict", "MHSA", "LSTM", "Linear", 
-                                        "Embedding", "Conv2d", "Pool2d", "BatchNorm2d", "float"};
+std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "str", "str_vec", "float_vec", "list", "dict", "MHSA", "LSTM", "Linear", 
+                                        "Embedding", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
 
 
 std::string IdentifierStr; // Filled in if tok_identifier
@@ -214,6 +214,8 @@ static int get_token() {
     
     return tok_str;
   }
+
+
 
   
   if (LastChar=='.')
@@ -327,7 +329,23 @@ static int get_token() {
     return tok_identifier;
   }
 
+
+  // if (LastChar=='@') {
+  //   LastChar = getchar();
+
+  //   std::string NumStr;
+  //   do {
+  //     NumStr += LastChar;
+  //     LastChar = getchar();
+  //   } while(isdigit(LastChar));
+
+  //   NumVal = strtod(NumStr.c_str(), nullptr);
+
+  //   return tok_int;
+  // }
+
   if (isdigit(LastChar)) { // Number: [-.]+[0-9.]+
+    bool is_float=false;
     
     std::string NumStr;
     if (LastChar == '-') { // Check for optional minus sign
@@ -335,12 +353,15 @@ static int get_token() {
       LastChar = getchar();
     }
     do {
+      if(LastChar=='.')
+        is_float==true;
       NumStr += LastChar;
       LastChar = getchar();
     } while (isdigit(LastChar) || LastChar == '.');
 
     NumVal = strtod(NumStr.c_str(), nullptr);
-    return tok_number;
+
+    return (is_float) ? tok_number : tok_int;
   }
 
   if (LastChar == '#') {

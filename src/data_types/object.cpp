@@ -185,3 +185,24 @@ extern "C" char *LoadObjectScopeName(char *self)
 
   return str_to_char(ret);
 }
+
+
+extern "C" void object_Attr_Float_on_Offset(Scope_Struct *scope_struct, float value, int offset) {
+  *(float *)((char*)scope_struct->object_ptr + offset) = value;
+}
+extern "C" void object_Attr_on_Offset(Scope_Struct *scope_struct, void *value, int offset) {
+  std::cout << "STORING VOID " << value << ".\n";
+  *(void**)((char*)scope_struct->object_ptr + offset) = value;
+}
+
+extern "C" float object_Load_Float_on_Offset(Scope_Struct *scope_struct, int offset) {
+  float value = *(float*)((char*)scope_struct->object_ptr + offset);
+  return value;
+}
+extern "C" void *object_Load_on_Offset(Scope_Struct *scope_struct, int offset) {
+  std::cout << "LOADING VOID" << ".\n";
+  void *value = *(void**)((char*)scope_struct->object_ptr + offset);
+  std::cout << "LOADING VOID GOT " << value << ".\n";
+  return value;
+}
+

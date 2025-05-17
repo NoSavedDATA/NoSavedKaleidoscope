@@ -38,7 +38,8 @@ Function *getFunction(std::string Name);
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
 /// the function.  This is used for mutable variables etc.
 AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
-                                          StringRef VarName);
+                                          StringRef VarName, llvm::Type *);
 
 
 
+Type *get_type_from_str(std::string type);

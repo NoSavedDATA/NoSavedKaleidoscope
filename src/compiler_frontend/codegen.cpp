@@ -68,22 +68,32 @@ Function *getFunction(std::string Name) {
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
 /// the function.  This is used for mutable variables etc.
 AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
-                                          StringRef VarName) {
+                                          StringRef VarName, Type *alloca_type) {
   IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
                    TheFunction->getEntryBlock().begin());
-  return TmpB.CreateAlloca(Type::getFloatTy(*TheContext), nullptr, VarName);
+  return TmpB.CreateAlloca(alloca_type, nullptr, VarName);
 }
 
 
 
 Value *NumberExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+    return const_float(0.0f);
 
   std::string msg = "NumberExpr Num has value: " + std::to_string(Val);
   p2t(msg);
 
-  return ConstantFP::get(*TheContext, APFloat(Val));
+  return const_float(Val);
+}
+
+Value *IntExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return const_int(0);
+
+  std::string msg = "NumberExpr Num has value: " + std::to_string(Val);
+  p2t(msg);
+
+  return const_int(Val);
 }
 
 Value *StringExprAST::codegen(Value *scope_struct) {
@@ -96,9 +106,7 @@ Value *StringExprAST::codegen(Value *scope_struct) {
 }
 
 Value *NullPtrExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  
+ 
   return callret("nullptr_get", {});
 }
 
@@ -114,10 +122,17 @@ Value *VarExprAST::codegen(Value *scope_struct) {
 
 
 
-
-
-
-
+llvm::Type *get_type_from_str(std::string type)
+{
+  llvm::Type *llvm_type;
+  if (type=="float")
+    llvm_type = Type::getFloatTy(*TheContext);
+  else if (type=="int")
+    llvm_type = Type::getInt32Ty(*TheContext);
+  else
+    llvm_type = int8PtrTy;
+  return llvm_type;
+}
 
 
 
@@ -142,10 +157,12 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     Value *initial_value = Init->codegen(scope_struct);
 
-    if((Type=="float"||Type=="str")&&!(is_self||is_attr))
+    if((Type=="float"||Type=="str"||Type=="int")&&!(is_self||is_attr))
     { 
-      std::cout << "STORE OF " << parser_struct.function_name << "/" << VarName << ".\n";
-      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name);
+      std::cout << "DataExpr STORE OF " << parser_struct.function_name << "/" << VarName << " type " << Type << ".\n";
+
+      llvm::Type *alloca_type = get_type_from_str(Type);
+      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
       Builder->CreateStore(initial_value, alloca);
       function_allocas[parser_struct.function_name][VarName] = alloca;
       continue;
@@ -209,7 +226,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     call("Dispose_NotesVector", {notes_vector, scopeless_name});
 
-    if(Type!="float")
+    if(Type!="float"&&Type!="int")
     {
       if(!(is_self||is_attr))
       {
@@ -241,9 +258,15 @@ Value *IfExprAST::codegen(Value *scope_struct) {
   if (!CondV)
     return nullptr;
 
+
   // Convert condition to a bool by comparing equal to 0.0.
-  CondV = Builder->CreateFCmpONE(
-      CondV, ConstantFP::get(*TheContext, APFloat(0.0)), "ifcond");
+  
+  if(Cond->GetType()=="int")
+    CondV = Builder->CreateICmpNE(
+        CondV, const_int(0), "ifcond");
+  if(Cond->GetType()=="float")
+    CondV = Builder->CreateFCmpONE(
+        CondV, const_float(0), "ifcond");
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
@@ -258,6 +281,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
   // Emit then value.
   Builder->SetInsertPoint(ThenBB);
 
+  
   
   Value *ThenV;
   for (auto &then_body : Then)
@@ -293,8 +317,13 @@ Value *IfExprAST::codegen(Value *scope_struct) {
   // Emit merge block.
   TheFunction->insert(TheFunction->end(), MergeBB);
   Builder->SetInsertPoint(MergeBB);
-  PHINode *PN = Builder->CreatePHI(Type::getFloatTy(*TheContext), 2, "iftmp");
 
+  // if (ThenV->getType() != Type::getFloatTy(*TheContext))
+    ThenV = Builder->CreateFPCast(ThenV, Type::getFloatTy(*TheContext));
+  // if (ElseV->getType() != Type::getFloatTy(*TheContext))
+    ElseV = Builder->CreateFPCast(ElseV, Type::getFloatTy(*TheContext));
+
+  PHINode *PN = Builder->CreatePHI(Type::getFloatTy(*TheContext), 2, "iftmp");
   PN->addIncoming(ThenV, ThenBB);
   PN->addIncoming(ElseV, ElseBB);
   
@@ -323,11 +352,11 @@ Value *IfExprAST::codegen(Value *scope_struct) {
 
 Value *ForExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+    return const_float(0);
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
   // Create an alloca for the variable in the entry block.
-  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName, Type::getInt32Ty(*TheContext));
 
   function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
 
@@ -336,7 +365,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   if (!StartVal)
     return nullptr;
 
-  Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
+  Value *_zero = const_int(0);
 
   std::cout << "CURRENT FUNCTION ON CODEGEN " << parser_struct.function_name << ".\n";
 
@@ -356,9 +385,9 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Make the new basic block for the loop header, inserting after current
   // block.
-  BasicBlock *CondBB = BasicBlock::Create(*TheContext, "cond", TheFunction);
-  BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "loop");
-  BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "after");
+  BasicBlock *CondBB = BasicBlock::Create(*TheContext, "for expr cond", TheFunction);
+  BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "for expr loop");
+  BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "for expr after");
 
 
 
@@ -398,8 +427,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     return nullptr;
 
   // Convert condition to a bool by comparing equal to 0.0.
-  EndCond = Builder->CreateFCmpONE(
-      EndCond, _zero, "loopcond");
+  EndCond = Builder->CreateICmpNE(
+      EndCond, _zero, "for expr loopcond");
 
 
 
@@ -423,8 +452,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
   // Value *CurVal = callret("float_Load", {scope_struct, var_name});
-  Value *CurVal = Builder->CreateLoad(Type::getFloatTy(*TheContext), control_var_alloca, VarName.c_str());
-  Value *NextVal = Builder->CreateFAdd(CurVal, StepVal, "nextvar"); // Increment  
+  Value *CurVal = Builder->CreateLoad(Type::getInt32Ty(*TheContext), control_var_alloca, VarName.c_str());
+  Value *NextVal = Builder->CreateAdd(CurVal, StepVal, "nextvar"); // Increment  
   Builder->CreateStore(NextVal, control_var_alloca);
   // call("float_Store", {var_name, NextVal, scope_struct});
   // call("float_Store", {var_name, NextVal, scope_struct});
@@ -449,7 +478,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   //  NamedValues.erase(VarName);
 
   // for expr always returns 0.0.
-  return Constant::getNullValue(Type::getFloatTy(*TheContext));
+  return Constant::getNullValue(Type::getInt32Ty(*TheContext));
 }
 
 
@@ -464,20 +493,24 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
   // // Create an alloca for the variable in the entry block.
-  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
-  AllocaInst *idx_alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+  
+
+  llvm::Type *alloca_type = get_type_from_str("int");  //TODO: this one could assume void* as well
+  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName, alloca_type);
+  AllocaInst *idx_alloca = CreateEntryBlockAlloca(TheFunction, VarName, Type::getInt32Ty(*TheContext));
   function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
 
 
-  Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
+  Value *_zero = const_int(0);
+  Value *CurIdx = const_int(0);
+
+  
 
   Value *vec = Vec->codegen(scope_struct);
 
-
-
-  Value *CurIdx = const_float(0);
-  Value *VecSize = callret("float_vec_size", {scope_struct, vec}); 
+  Value *VecSize = callret("int_vec_size", {scope_struct, vec}); 
   Builder->CreateStore(CurIdx, idx_alloca);
+
 
 
 
@@ -506,13 +539,13 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   // // current BB.  Note that we ignore the value computed by the body, but don't
   // // allow an error.
  
-  Value *StepVal = const_float(1);
+  Value *StepVal = const_int(1);
 
 
   // // Compute the end condition.
-  Value *EndCond=Builder->CreateLoad(Type::getFloatTy(*TheContext), idx_alloca, VarName.c_str());
+  Value *EndCond=Builder->CreateLoad(Type::getInt32Ty(*TheContext), idx_alloca, VarName.c_str());
   // // Convert condition to a bool by comparing equal to 0.0.
-  EndCond = Builder->CreateFCmpONE(
+  EndCond = Builder->CreateICmpNE(
       EndCond, VecSize, "loopcond");
 
 
@@ -529,9 +562,9 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   Builder->SetInsertPoint(LoopBB);
 
   
-  CurIdx = Builder->CreateLoad(Type::getFloatTy(*TheContext), idx_alloca, VarName.c_str());
-  Builder->CreateStore(callret("float_vec_Idx_num", {scope_struct, vec, CurIdx}), control_var_alloca);
-  Value *NextIdx = Builder->CreateFAdd(CurIdx, StepVal, "nextvar"); // Increment  
+  CurIdx = Builder->CreateLoad(Type::getInt32Ty(*TheContext), idx_alloca, VarName.c_str());
+  Builder->CreateStore(callret("int_vec_Idx_num", {scope_struct, vec, CurIdx}), control_var_alloca);
+  Value *NextIdx = Builder->CreateAdd(CurIdx, StepVal, "nextvar"); // Increment  
 
   int j=0;
   for (auto &body : Body)
@@ -623,7 +656,7 @@ Value *load_alloca(std::string name, std::string type, std::string from_function
     else
       load_type = int8PtrTy;
 
-    std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << ".\n";
+    std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << " type " << type << ".\n";
     AllocaInst *alloca = function_allocas[from_function][name];
 
     return Builder->CreateLoad(load_type, alloca, name.c_str());
@@ -662,11 +695,22 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   }
 
 
-  if ((type=="float"||type=="str")&&!(is_self||is_attr))
+  if ((type=="float"||type=="str"||type=="int")&&!(is_self||is_attr))
   {
     V = load_alloca(Name, type, parser_struct.function_name);
 
     return V;
+  }
+
+  if ((type=="float"||type=="str"||type=="tensor"||type=="int")&&is_self) {
+    int object_ptr_offset = ClassVariables[parser_struct.class_name][Name];
+    if (type=="float")
+      return callret("object_Load_Float_on_Offset", {scope_struct, const_int(object_ptr_offset)});
+    else
+    {
+      p2t("object_Load_on_Offset");
+      return callret("object_Load_on_Offset", {scope_struct, const_int(object_ptr_offset)});
+    }
   }
 
   Value *var_name;
@@ -959,7 +1003,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     std::string Lname = std::get<0>(name_solver->Names[0]);
     std::string LType = LHS->GetType();
 
-    bool is_alloca = ((LType=="float"||LType=="str")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
+    bool is_alloca = ((LType=="float"||LType=="str"||LType=="int")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
 
     Value *Lvar_name;
     if (!is_alloca)
@@ -1020,22 +1064,40 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       if (is_alloca)
       {
 
-        std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << ".\n";
+        std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
         AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
         Builder->CreateStore(Val, alloca);
-        return ConstantFP::get(*TheContext, APFloat(0.0f));
+        return const_float(0);
         // return nullptr;
       } else
       {
-        // std::cout << "HEAP STORE FOR " << Lname << ".\n";
+        std::cout << "HEAP STORE FOR " << Lname << ".\n";
         // call("print", {scope_struct, Lvar_name});
-        call(store_op, {Lvar_name, Val, scope_struct});
+
+        if(LHS->GetSelf())
+        {
+          std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
+          int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
+
+          if(LType=="float")
+            call("object_Attr_Float_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
+          else
+          {
+            std::cout << "SELF STORE OF " << attribute_name << ".\n";
+            call("object_Attr_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
+          }
+          // call();
+          // std::exit(0);
+          return ConstantFP::get(*TheContext, APFloat(0.0f));
+        } else
+          call(store_op, {Lvar_name, Val, scope_struct});
+
       }
     }
 
 
 
-    if (LType!="float")
+    if (LType!="float"&&LType!="int")
     {
       if(!LHS->GetSelf()&&!LHS->GetIsAttribute())
       {
@@ -1104,6 +1166,40 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       default:
         break;
       }
+
+  } else if (Elements=="int_int") {
+    switch (Op) {
+      case '+':
+        return Builder->CreateAdd(L, R, "addtmp");
+      case ':':
+        return L;
+      case tok_space:
+        return R;
+      case '-':
+        return Builder->CreateSub(L, R, "subtmp");
+      case '*':
+        return Builder->CreateMul(L, R, "multmp");
+      case '/':
+        return Builder->CreateSDiv(L, R, "divtmp");  // Signed division
+      case '%':
+        return Builder->CreateSRem(L, R, "remtmp");  // Signed remainder
+      case 77:
+        return LogErrorV("GOTCHA");
+      case '<':
+        L = Builder->CreateICmpSLT(L, R, "cmptmp");
+        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+      case '>':
+        L = Builder->CreateICmpSGT(L, R, "cmptmp");
+        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+      case tok_equal:
+        L = Builder->CreateICmpEQ(L, R, "cmptmp");
+        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+      case tok_diff:
+        L = Builder->CreateICmpNE(L, R, "cmptmp");
+        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+      default:
+        break;
+    }
   } else {
     // std::string msg = "Codegen for operation: " + Operation;
     // p2t(msg);
@@ -1116,7 +1212,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       std::string return_type = ops_type_return[Elements];
       // std::cout << "Operation of " << Elements << " has a return of " << return_type << ".\n";
 
-      if (return_type!="float")
+      if (return_type!="float"&&return_type!="int")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(return_type)});
     }
 
@@ -1625,33 +1721,27 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 Value *RetExprAST::codegen(Value *scope_struct) {
   seen_var_attr=true;
 
-  // p2t("set scope return");
   call("set_scope_at_return", {scope_struct});
 
 
   if(Vars.size()==1)
-  {
-    // p2t("codegen return");
+  { 
+    // p2t("Reached if");
     Value *ret = Vars[0]->codegen(scope_struct);
-    std::cout << "RETURN TYPE IS " << Vars[0]->GetType() << "-------------------.\n";
-    // p2t("unmark if not float"); 
-    if(Vars[0]->GetType()!="float")
+    if(Vars[0]->GetType()!="float"&&Vars[0]->GetType()!="int")
       call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
     seen_var_attr=false;
-    // p2t("set not at return");
     call("set_scope_not_at_return", {scope_struct});
-    // p2t("clean scope");
     call("scope_struct_Clean_Scope", {scope_struct}); 
-    // p2t("create return");
     Builder->CreateRet(ret);
-    return ret;
+    return const_float(0);
   }
   
   std::vector<Value *> values = {scope_struct};
   for (int i=0; i<Vars.size(); i++)
   {
     Value *value = Vars[i]->codegen(scope_struct);
-    if(Vars[i]->GetType()!="float")
+    if(Vars[i]->GetType()!="float"&&Vars[i]->GetType()!="int")
       call("MarkToSweep_Unmark_Scopeless", {scope_struct, value});
     std::string type = Vars[i]->GetType();
     values.push_back(global_str(type));
@@ -1705,7 +1795,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     if (!is_type)
     {
       // std::cout << "VALUE TYPE IS: " << type << ".\n";
-      if (type!="float")
+      if (type!="float"&&type!="int")
       {
         std::string copy_fn = type + "_" + "Copy";
         value = callret(copy_fn, {scope_struct, value});
@@ -1722,6 +1812,12 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
   return callret("list_New", values);
 }
 
+
+Value* callMalloc(Value *size) {
+    // Get or declare malloc: `i8* @malloc(i64)`
+    // Call malloc
+    return callret("malloc", {size});
+}
 
 Value *ObjectExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
@@ -1748,6 +1844,18 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
     
     if (!GetIsVec())
     {
+      if(!is_self&&!is_attr)
+      {   
+        AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, int8PtrTy);
+        Value *ptr = callret("malloc", {const_int64(Size)});
+        Builder->CreateStore(ptr, alloca);
+        function_allocas[parser_struct.function_name][VarName] = alloca;
+
+
+        std::cout << "CREATED STACK ALLOCA FOR " << VarName << ".\n";
+        continue;
+      }
+
       obj_name = global_str(VarName);
 
       if (is_attr)
@@ -2038,6 +2146,8 @@ Function *PrototypeAST::codegen() {
   FunctionType *FT;
   if (Return_Type=="float")
     FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
+  else if (Return_Type=="int")
+    FT = FunctionType::get(Type::getInt32Ty(*TheContext), types, false);
   else
     FT = FunctionType::get(int8PtrTy, types, false); 
   
@@ -2063,7 +2173,7 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     Value *arg; 
-    if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad())
+    if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf())
     {      
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(scope_struct);
@@ -2099,7 +2209,7 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
 
 Value *CallExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+    return const_float(0);
   // Look up the name in the global module table.
 
    
@@ -2205,10 +2315,21 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     first_arg = NameSolver->codegen(scope_struct_copy);
     call("set_scope_first_arg", {scope_struct_copy, first_arg});
 
+    if (isAttribute&&not_coding_language_method) {
+      NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
+      std::string object_name = std::get<0>(name_solver->Names[0]);
+
+      AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
+      Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
+      call("set_scope_object", {scope_struct_copy, obj});
+
+    }
+
     changed_first_arg = true;  
   }
   call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
 
+  std::cout << "TARGET FUNCTION IS " << tgt_function << ".\n";
 
   p2t("CallExpr Finish mangle, get scope info.\n---Function Name: " + tgt_function);
   
@@ -2219,7 +2340,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     has_scope = true;
     if(Callee!="print_scope" && !is_user_cpp_function)
     {
-      // scope_string = callret("RandomStrOnDemand", {});
       scope_string = global_str(Scope_Random_Str);
       scope_string = callret("str_int_add", {scope_struct, scope_string, callret("get_scope_thread_id", {scope_struct})});
       call("set_scope_scope", {scope_struct_copy, scope_string});
@@ -2277,7 +2397,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
     Value *arg;
-    if ((Load_Type=="float"||Load_Type=="str") && !isSelf)
+    if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int") && !isSelf)
     {
       std::cout << "CALLEXPR LOAD OF " << LoadOf << ".\n";
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
@@ -2312,7 +2432,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     //   call("print_float", {ret});
     // }
 
-    if (Type!="float"&&Type!="")
+    if (Type!="float"&&Type!="int"&&Type!="")
     {
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
     }
@@ -2344,7 +2464,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     
       
-    if (Type!="float"&&Type!="")
+    if (Type!="float"&&Type!=""&&Type!="int")
     {
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
     }
@@ -2375,7 +2495,7 @@ Value *ChainCallExprAST::codegen(Value *scope_struct) {
   std::string call_fn = Call_Of;
   Value *ret = callret(call_fn, ArgsV);
 
-  if (Type!="float"&&Type!="")
+  if (Type!="float"&&Type!="int"&&Type!="")
   {
 
     p2t("RETURN OF CHAIN CALL " + call_fn + " is " + Type);
