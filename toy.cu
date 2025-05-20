@@ -3044,6 +3044,7 @@ int main() {
   BinopPrecedence['%'] = 35;
   BinopPrecedence['*'] = 39;
   BinopPrecedence['/'] = 40;
+  BinopPrecedence[tok_int_div] = 40;
   BinopPrecedence['^'] = 50;
   BinopPrecedence['@'] = 60;
 
@@ -3118,14 +3119,14 @@ int main() {
   reverse_ops = {{"float_tensor", "tensor_float"}};
 
   ops_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
-                     {"float_str", "str"}, {"int_int", "int"}, {"str_int", "str"}, {"int_str", "str"},
+                     {"float_str", "str"}, {"int_int", "int"}, {"int_float", "float"}, {"float_int", "float"}, {"str_int", "str"}, {"int_str", "str"},
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"}};
                      
 
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
-            {tok_diff, "different"}, {'/', "divide"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
+            {tok_diff, "different"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
             {77, "error"}};
 
 

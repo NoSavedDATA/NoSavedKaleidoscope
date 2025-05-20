@@ -1,4 +1,4 @@
-1821-05-19 16:56:15
+1821-05-20 12:13:36
 
 	FunctionType *load_imgTy= FunctionType::get(
 		int8PtrTy,
@@ -9,21 +9,21 @@
 
 	FunctionType *gload_imgTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("gload_img", gload_imgTy);
 
 	FunctionType *wload_imgTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("wload_img", wload_imgTy);
 
 	FunctionType *wload_img_resizeTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("wload_img_resize", wload_img_resizeTy);

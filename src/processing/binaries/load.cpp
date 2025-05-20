@@ -73,7 +73,7 @@ extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, int first_idx, 
 
   for (int i=0; i<10; i++)
   {
-    float dim = va_arg(args, float);
+    int dim = va_arg(args, int);
     if (dim==TERMINATE_VARARG)
       break;
     idxs.push_back(dim);
@@ -87,7 +87,7 @@ extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, int first_idx, 
   dims = tensor->dims;
   std::vector<int> new_dims;
 
-  float offset=0;
+  int offset=0;
 
 
   if (dims.size()==1)
@@ -155,7 +155,7 @@ extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, int first_idx, 
 
 
 
-extern "C" float wload_bin(DT_tensor *tensor, char *bin_name, float worker_idx, float batch_idx)
+extern "C" float wload_bin(DT_tensor *tensor, char *bin_name, int worker_idx, int batch_idx)
 {
   //std::cout << "LOADING BINARY FOR: " << tensor->name <<  "\n";
   //std::cout << "Binary: " << bin_name <<  "\n";
@@ -195,7 +195,7 @@ extern "C" float wload_bin(DT_tensor *tensor, char *bin_name, float worker_idx, 
 
 
   float *image_data_float = tensor->cpu_tensor_ptr;
-  int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+  int idx_offset =  batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx;
 
 
   //todo: add out of bounds error here

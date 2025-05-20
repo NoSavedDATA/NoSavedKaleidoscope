@@ -143,25 +143,22 @@ extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)
 }
 
 
-extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, char *vec_name, float _idx)
+extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, std::vector<char*> vec, int idx)
 {
 
   // std::cout << "str_vec_Idx: " << vec_name << ".\n"; 
   // std::cout << "idx: " << _idx << ".\n";
 
-  int idx = (int) _idx;
 
-  std::vector<char*> vec = ClassStrVecs[vec_name];
 
   // std::cout << "Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
-  delete[] vec_name;
 
   return CopyString(vec[idx]);
 }
 
 
 
-extern "C" float str_vec_CalculateIdx(char *data_name, float first_idx, ...) {
+extern "C" int str_vec_CalculateIdx(std::vector<char *> vec, int first_idx, ...) {
   return first_idx;
 }
 

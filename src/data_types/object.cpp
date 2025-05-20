@@ -194,7 +194,7 @@ extern "C" void object_Attr_on_Offset_int(Scope_Struct *scope_struct, int value,
   *(int *)((char*)scope_struct->object_ptr + offset) = value;
 }
 extern "C" void object_Attr_on_Offset(Scope_Struct *scope_struct, void *value, int offset) {
-  std::cout << "STORING VOID " << value << " ON OFFSET " << offset << ".\n";
+  // std::cout << "STORING VOID " << value << " ON OFFSET " << offset << ".\n";
   *(void**)((char*)scope_struct->object_ptr + offset) = value;
 }
 
@@ -208,9 +208,9 @@ extern "C" int object_Load_on_Offset_int(Scope_Struct *scope_struct, int offset)
 }
 
 extern "C" void *object_Load_on_Offset(Scope_Struct *scope_struct, int offset) {
-  std::cout << "LOADING VOID" << ".\n";
+  // std::cout << "LOADING VOID" << ".\n";
   void *value = *(void**)((char*)scope_struct->object_ptr + offset);
-  std::cout << "LOADING VOID GOT " << value << ".\n";
+  // std::cout << "LOADING VOID GOT " << value << ".\n";
   return value;
 }
 

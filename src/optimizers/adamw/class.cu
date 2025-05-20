@@ -94,6 +94,8 @@ void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector
 extern "C" float AdamW(Scope_Struct *scope_struct, float lr, float beta1, float beta2, float weight_decay, float grad_clip)
 {
 
+  // std::cout << "AdamW: lr " << lr << " beta1 " << beta1 << " beta2 " << beta2 << " wd " << weight_decay << " grad clip " << grad_clip << ".\n";
+
   if (optimizer==nullptr)
     optimizer = std::make_unique<AdamW_optim>(lr, beta1, beta2, weight_decay, grad_clip);
 

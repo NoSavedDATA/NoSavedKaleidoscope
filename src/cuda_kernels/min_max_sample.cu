@@ -17,7 +17,7 @@
 
 
 
-extern "C" DT_tensor *tensor_onehot(Scope_Struct *scope_struct, DT_tensor *tensor, float num_classes)
+extern "C" DT_tensor *tensor_onehot(Scope_Struct *scope_struct, DT_tensor *tensor, int num_classes)
 {
   int thread_id = scope_struct->thread_id;
   // std::cout << "ONEHOT OF " << tensor->name << "\n";
@@ -29,7 +29,7 @@ extern "C" DT_tensor *tensor_onehot(Scope_Struct *scope_struct, DT_tensor *tenso
   new_dims.push_back(num_classes);
   
   int B = DimsProd(dims);
-  int C = (int)num_classes;
+  int C = num_classes;
 
   
   int grid_size, block_size, shared_mem_size; 
@@ -57,7 +57,7 @@ extern "C" DT_tensor *tensor_onehot(Scope_Struct *scope_struct, DT_tensor *tenso
 }
 
 
-extern "C" float priority_sample(int thread_id, DT_tensor *tensor, float max_idx, float seed)
+extern "C" float priority_sample(int thread_id, DT_tensor *tensor, int max_idx, int seed)
 {
   
   float *probs, *sampled, *probs_cpu;
@@ -97,7 +97,7 @@ extern "C" float priority_sample(int thread_id, DT_tensor *tensor, float max_idx
   return ret;
 }
 
-extern "C" float priority_sample_val(int thread_id, DT_tensor *tensor, float max_idx, float seed)
+extern "C" float priority_sample_val(int thread_id, DT_tensor *tensor, int max_idx, int seed)
 {  
   float *probs, *sampled, *probs_cpu;
   float ret;

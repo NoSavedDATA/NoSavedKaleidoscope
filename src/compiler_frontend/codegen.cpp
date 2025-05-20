@@ -196,19 +196,21 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     for (int j=0; j<Notes.size(); j++)
     {
       ExprAST *note = Notes[j].get();
+      
       if (NumberExprAST* numExpr = dynamic_cast<NumberExprAST*>(note)) {
         
-        notes_vector = callret("Add_Float_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
+        notes_vector = callret("Add_To_NotesVector_float", {notes_vector, note->codegen(scope_struct)});
       }
       else if (IntExprAST* numExpr = dynamic_cast<IntExprAST*>(note)) {
-        notes_vector = callret("Add_Int_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
+        notes_vector = callret("Add_To_NotesVector_int", {notes_vector, note->codegen(scope_struct)});
       }
       else if (StringExprAST* expr = dynamic_cast<StringExprAST*>(note)) {
         Value *str_val = callret("CopyString", {note->codegen(scope_struct)});
-        notes_vector = callret("Add_String_To_NotesVector", {notes_vector, str_val});
+        notes_vector = callret("Add_To_NotesVector_str", {notes_vector, str_val});
       }
       else if (VariableExprAST* expr = dynamic_cast<VariableExprAST*>(note)) {
-        notes_vector = callret("Add_Float_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
+        std::string type = expr->GetType();
+        notes_vector = callret("Add_To_NotesVector_"+type, {notes_vector, note->codegen(scope_struct)});
       }
       else {
         std::cout << "Could not find the data type of a note in DataExpr of " << VarName << " \n";
@@ -358,8 +360,13 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     return const_float(0);
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
+  std::string cond_type = End->GetType();
+
+  llvm::Type *llvm_type = get_type_from_str(cond_type);
+  
+
   // Create an alloca for the variable in the entry block.
-  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName, Type::getInt32Ty(*TheContext));
+  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName, llvm_type);
 
   function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
 
@@ -368,9 +375,18 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   if (!StartVal)
     return nullptr;
 
-  Value *_zero = const_int(0);
+  Value *_zero;
+  
+  if (cond_type=="int")
+    _zero = const_int(0);
+  if (cond_type=="float")
+    _zero = const_float(0.0f);
 
-  std::cout << "CURRENT FUNCTION ON CODEGEN " << parser_struct.function_name << ".\n";
+  if(Start->GetType()=="int"&&cond_type=="float")
+    StartVal = Builder->CreateSIToFP(StartVal, Type::getFloatTy(*TheContext), "lfp");
+
+  // std::cout << "CURRENT FUNCTION ON CODEGEN " << parser_struct.function_name << ".\n";
+  std::cout << "-------------------------- FOR EXPR COND TYPE: " << End->GetType() << ".\n";
 
 
 
@@ -423,6 +439,9 @@ Value *ForExprAST::codegen(Value *scope_struct) {
       return nullptr;
   } 
 
+  if(Step->GetType()=="int"&&cond_type=="float")
+    StepVal = Builder->CreateSIToFP(StepVal, Type::getFloatTy(*TheContext), "lfp");
+
 
   // Compute the end condition.
   Value *EndCond = End->codegen(scope_struct);
@@ -430,8 +449,18 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     return nullptr;
 
   // Convert condition to a bool by comparing equal to 0.0.
-  EndCond = Builder->CreateICmpNE(
-      EndCond, _zero, "for expr loopcond");
+
+  if(cond_type=="int")
+    EndCond = Builder->CreateICmpNE(
+        EndCond, _zero, "for expr loopcond"); 
+  else if(cond_type=="float")
+    EndCond = Builder->CreateFCmpONE(
+        EndCond, _zero, "for expr loopcond");
+  else
+      return LogErrorV("Unsupported type " + cond_type + " on the for expression");
+
+
+
 
 
 
@@ -455,11 +484,13 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
   // Value *CurVal = callret("float_Load", {scope_struct, var_name});
-  Value *CurVal = Builder->CreateLoad(Type::getInt32Ty(*TheContext), control_var_alloca, VarName.c_str());
-  Value *NextVal = Builder->CreateAdd(CurVal, StepVal, "nextvar"); // Increment  
+  Value *CurVal = Builder->CreateLoad(llvm_type, control_var_alloca, VarName.c_str());
+  Value *NextVal;
+  if (cond_type=="int")
+    NextVal = Builder->CreateAdd(CurVal, StepVal, "nextvar"); // Increment  
+  if (cond_type=="float")
+    NextVal = Builder->CreateFAdd(CurVal, StepVal, "nextvar"); // Increment 
   Builder->CreateStore(NextVal, control_var_alloca);
-  // call("float_Store", {var_name, NextVal, scope_struct});
-  // call("float_Store", {var_name, NextVal, scope_struct});
 
   // call("print", {callret("str_float_add", {scope_struct, global_str("i is: "), NextVal})});
   
@@ -677,6 +708,9 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   //std::string functionName = TheFunction->getName().str();
   
+
+  // p2t("Codegen for variableexprast");
+
   //std::cout << "Create value V" << "\n";
   Value *V;
 
@@ -685,9 +719,6 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
     
-  //std::string __print = "\n\nLOAD OF " + std::string(Name) + " ";
-  //Builder->CreateCall(TheModule->getFunction("print"),
-  //    {Builder->CreateGlobalString(__print), ConstantFP::get(*TheContext, APFloat(0.0f))});
 
   if (type=="str")
   {
@@ -699,21 +730,23 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
     } 
   }
 
+  // p2t("Variable " + Name + "  type is " + type);
+  // p2t("is self: " + (int)is_self);
+
 
   if ((type=="float"||type=="str"||type=="int")&&!(is_self||is_attr))
   {
-    V = load_alloca(Name, type, parser_struct.function_name);
 
-    return V;
+    return load_alloca(Name, type, parser_struct.function_name);
   }
 
   if ((type=="float"||type=="str"||type=="tensor"||type=="int"||type=="str_vec"||type=="int_vec")&&is_self) {
     int object_ptr_offset = ClassVariables[parser_struct.class_name][Name];
     if (type=="float"||type=="int")
-      return callret("object_Load_on_Offset_int", {scope_struct, const_int(object_ptr_offset)});
+      return callret("object_Load_on_Offset_"+type, {scope_struct, const_int(object_ptr_offset)});
     else
     {
-      p2t("object_Load_on_Offset");
+      // p2t("object_Load_on_Offset");
       return callret("object_Load_on_Offset", {scope_struct, const_int(object_ptr_offset)});
     }
   }
@@ -757,7 +790,6 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
 
 
-  p2t("CODEGEN FOR VECIDXEXPR");
 
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -772,11 +804,11 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
 
   Value *var_name, *object_name, *object_var_name;
-  var_name = NameSolver->codegen(scope_struct);
-  
-  NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-  std::string Name = std::get<0>(name_solver->Names[0]);
-  
+
+
+
+
+  Value *loaded_var = Loaded_Var->codegen(scope_struct);
 
 
 
@@ -789,43 +821,12 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   {
     std::string idx_fn = Type + "_Idx";
     std::cout << "Calling: " << idx_fn << ".\n";
-    // call("print", {scope_struct, var_name});
-    return callret(idx_fn, {scope_struct, var_name, idx});
+    return callret(idx_fn, {scope_struct, loaded_var, idx});
   }
 
-  // if (is_self||is_attr)
-  // {
-    
-  //   if (Type=="str_vec"){
-      
-  //     V = Builder->CreateCall(TheModule->getFunction("IndexClassStrVec"), {var_name, idx});
-      
-  //     return V;
-  //   }
-
-  //   if (Type=="float_vec"){
-  //     V = Builder->CreateCall(TheModule->getFunction("IndexClassFloatVec"), {var_name, idx});
-  //     return V;
-  //   }
-
-  //   if (Type=="object_vec")
-  //     return var_name;
-  // }
 
 
 
-  if (Type=="str_vec")
-  {
-    return nullptr;
-  }
-  if (Type=="float_vec")
-  {
-
-
-    V = Builder->CreateCall(TheModule->getFunction("IndexFloatVec"), {V, idx});
-
-    return V;
-  }
 
   if (Type=="tensor")
   {
@@ -833,16 +834,6 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
     if (Idx[0]->GetType()!="tensor")
     {
-      /*
-      std::vector<Value *> idx_calc_args;
-      idx_calc_args.push_back(var_name);
-      for (int i=0; i<Idx.size(); i++)
-        idx_calc_args.push_back(Idx[i]->codegen(scope_struct));
-      Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-                          idx_calc_args);
-
-      return Builder->CreateCall(TheModule->getFunction("IdxTensor"), {var_name, idx_at, scope_string, thread_id});
-      */
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(var_name);
       idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}));
@@ -936,11 +927,11 @@ Value *ObjectVecIdxExprAST::codegen(Value *scope_struct) {
 
 
 
-inline Value *Idx_Calc_Codegen(std::string type, Value *name, const std::vector<std::unique_ptr<ExprAST>> &idxs, Value *scope_struct)
+inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::vector<std::unique_ptr<ExprAST>> &idxs, Value *scope_struct)
 {
   std::vector<Value *> idxs_values;
 
-  idxs_values.push_back(name);
+  idxs_values.push_back(vec); // e.g, tensor uses its dims as a support to calculcate the index
 
   for (int i=0; i<idxs.size(); i++)
     idxs_values.push_back(idxs[i]->codegen(scope_struct));
@@ -1005,39 +996,16 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       return ConstantFP::get(*TheContext, APFloat(0.0f));
     }
 
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
 
-    std::string Lname = std::get<0>(name_solver->Names[0]);
     std::string LType = LHS->GetType();
-
-    bool is_alloca = ((LType=="float"||LType=="str"||LType=="int")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
-
-    Value *Lvar_name;
-    if (!is_alloca)
-      Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-
-
-
-
-
-    
-    
-    std::cout << "ATTRIBUTION: " << LType << " .\n";
-    
     std::string store_op = LType + "_Store";
 
     if(LHS->GetIsVec())
     {
 
-
       // VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
       // tensor_name = LHSE->NameSolver->codegen(scope_struct);
   
-  
-      
-  
-
   
       // Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
       //                       idx_calc_args);
@@ -1045,63 +1013,77 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       // Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
       //                       {tensor_name, Val, idx_at});
 
-
-
-
-
-
       VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
+      Value *vec = LHSV->Loaded_Var->codegen(scope_struct);
 
 
-
-      // p2t("Calculate idx");
-      Value *idx = Idx_Calc_Codegen(LHS->GetType(), Lvar_name, std::move(LHSV->Idx), scope_struct);
-      // call("print_float", {idx});
+      Value *idx = Idx_Calc_Codegen(LHS->GetType(), vec, std::move(LHSV->Idx), scope_struct);
 
       store_op = store_op + "_Idx";
       
-      // p2t("Store at " + store_op);
-      call(store_op, {Lvar_name, idx, Val, scope_struct});
+      call(store_op, {vec, idx, Val, scope_struct});
 
-    } else
+      return const_float(0);
+    }
+
+
+    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
+
+    std::string Lname = std::get<0>(name_solver->Names[0]);
+
+    bool is_alloca = ((LType=="float"||LType=="str"||LType=="int")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
+
+    Value *Lvar_name;
+    if (!is_alloca && !LHS->GetIsVec())
+      Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+    
+    
+    std::cout << "ATTRIBUTION: " << LType << " .\n";
+    
+    
+    std::cout << "NAME " << Lname << ".\n";
+    std::cout << "IS VEC: " << LHS->GetIsVec() << ".\n";
+
+     
     // std::cout << "NOT VEC" << ".\n";
+    
+
+    // if (LType!="float")
+    //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
+    if (is_alloca)
     {
 
-      // if (LType!="float")
-      //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
-      if (is_alloca)
-      {
+      std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
+      AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
+      Builder->CreateStore(Val, alloca);
+      return const_float(0);
+      // return nullptr;
+    } else
+    {
+      std::cout << "HEAP STORE FOR " << Lname << ".\n";
+      // call("print", {scope_struct, Lvar_name});
 
-        std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
-        AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
-        Builder->CreateStore(Val, alloca);
-        return const_float(0);
-        // return nullptr;
-      } else
+      if(LHS->GetSelf()&&LType!="pinned_tensor")
       {
-        std::cout << "HEAP STORE FOR " << Lname << ".\n";
-        // call("print", {scope_struct, Lvar_name});
+        std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
+        int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
 
-        if(LHS->GetSelf()&&LType!="pinned_tensor")
+        if(LType=="float"||LType=="int")
+          call("object_Attr_on_Offset_"+LType, {scope_struct, Val, const_int(obj_ptr_offset)});
+        else
         {
-          std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
-          int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
+          std::cout << "SELF STORE OF " << attribute_name << ".\n";
+          call("object_Attr_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
+        }
+        // call();
+        // std::exit(0);
+        return ConstantFP::get(*TheContext, APFloat(0.0f));
+      } else
+        call(store_op, {Lvar_name, Val, scope_struct});
 
-          if(LType=="float"||LType=="int")
-            call("object_Attr_on_Offset_"+LType, {scope_struct, Val, const_int(obj_ptr_offset)});
-          else
-          {
-            std::cout << "SELF STORE OF " << attribute_name << ".\n";
-            call("object_Attr_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
-          }
-          // call();
-          // std::exit(0);
-          return ConstantFP::get(*TheContext, APFloat(0.0f));
-        } else
-          call(store_op, {Lvar_name, Val, scope_struct});
-
-      }
     }
+    
 
 
 
@@ -1116,7 +1098,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val});
       }
     }
-    call("str_Delete", {Lvar_name});
+    // call("str_Delete", {Lvar_name});
     
 
     seen_var_attr=false;
@@ -1125,13 +1107,23 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
   
-
+  
   Value *L = LHS->codegen(scope_struct);
   Value *R = RHS->codegen(scope_struct);
   
   if (!L || !R)
-    return nullptr;
+  return nullptr;
 
+  if (Elements=="int_float") {
+    Elements = "float_float"; 
+    L = Builder->CreateSIToFP(L, Type::getFloatTy(*TheContext), "lfp");
+  }
+  if (Elements=="float_int") {
+    Elements = "float_float"; 
+    R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
+  }
+
+  
 
   
 
@@ -1153,7 +1145,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         return Builder->CreateFDiv(L, R, "divtmp");
       case '%':
         return Builder->CreateFRem(L, R, "remtmp");
-      case 77:
+      case tok_int_div:
         return LogErrorV("GOTCHA");
       case '<':
         L = Builder->CreateFCmpULT(L, R, "cmptmp");
@@ -1188,11 +1180,16 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       case '*':
         return Builder->CreateMul(L, R, "multmp");
       case '/':
-        return Builder->CreateSDiv(L, R, "divtmp");  // Signed division
+      {
+        llvm::Value* L_float = Builder->CreateSIToFP(L, Type::getFloatTy(*TheContext), "lfp");
+        llvm::Value* R_float = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "rfp");
+        return Builder->CreateFDiv(L_float, R_float, "divtmp");
+        // return Builder->CreateSDiv(L, R, "divtmp");  // Signed division
+      }
       case '%':
         return Builder->CreateSRem(L, R, "remtmp");  // Signed remainder
-      case 77:
-        return LogErrorV("GOTCHA");
+      case tok_int_div:
+        return Builder->CreateSDiv(L, R, "divtmp");  // Signed division
       case '<':
         L = Builder->CreateICmpSLT(L, R, "cmptmp");
         return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
@@ -1273,61 +1270,61 @@ Value *BinaryObjExprAST::codegen(Value *scope_struct) {
     seen_var_attr=true;
 
 
-    if (!LHS->GetIsVec())
-    {
-      std::cout << "\n\n3 3 attr\n";
-      VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(scope_struct);
+    // if (!LHS->GetIsVec())
+    // {
+    //   std::cout << "\n\n3 3 attr\n";
+    //   VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
+    //   if (!LHSE)
+    //     return LogErrorV("'=' object attribution destiny must be an object variable.");
+    //   LName = LHSE->NameSolver->codegen(scope_struct);
       
-      if (RHS->GetIsVec())
-      {
-        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
-        VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
+    //   if (RHS->GetIsVec())
+    //   {
+    //     std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
+    //     VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
+    //     RName = RHSE->NameSolver->codegen(scope_struct);
         
-        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
-                                                        {LName, RName});
-      } else {
-        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
+    //     Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
+    //                                                     {LName, RName});
+    //   } else {
+    //     VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
+    //     RName = RHSE->NameSolver->codegen(scope_struct);
         
-        Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
-                                                        {LName, RName});
+    //     Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
+    //                                                     {LName, RName});
 
-      }
+    //   }
     
-    } else {
-      std::cout << "\n\n3 3 other INDEXED attr\n";
-      VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      if (!LHSE)
-        return LogErrorV("'=' object attribution destiny must be an object variable.");
-      LName = LHSE->NameSolver->codegen(scope_struct);
+    // } else {
+    //   std::cout << "\n\n3 3 other INDEXED attr\n";
+    //   VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
+    //   if (!LHSE)
+    //     return LogErrorV("'=' object attribution destiny must be an object variable.");
+    //   LName = LHSE->NameSolver->codegen(scope_struct);
 
 
-      std::cout << "ok" << "\n";
+    //   std::cout << "ok" << "\n";
       
-      if (RHS->GetIsVec())
-      {
-        std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
-        VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
+    //   if (RHS->GetIsVec())
+    //   {
+    //     std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
+    //     VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
+    //     RName = RHSE->NameSolver->codegen(scope_struct);
         
-        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
-                                                        {LName, RName});
-      } else {
-        std::cout << "3 3 VEC FROM VAR" << "\n";
-        VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-        RName = RHSE->NameSolver->codegen(scope_struct);
+    //     Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
+    //                                                     {LName, RName});
+    //   } else {
+    //     std::cout << "3 3 VEC FROM VAR" << "\n";
+    //     VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
+    //     RName = RHSE->NameSolver->codegen(scope_struct);
         
-        Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
-                                                        {LName, RName});
+    //     Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
+    //                                                     {LName, RName});
 
-      }
+    //   }
 
 
-    }
+    // }
     seen_var_attr=false;
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   }

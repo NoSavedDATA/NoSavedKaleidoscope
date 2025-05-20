@@ -1,4 +1,4 @@
-1821-05-19 16:47:48
+1821-05-20 13:56:44
 
 	FunctionType *pinned_tensor_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -7,16 +7,23 @@
 	);
 	TheModule->getOrInsertFunction("pinned_tensor_Create", pinned_tensor_CreateTy);
 
+	FunctionType *pinned_tensor_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pinned_tensor_Load", pinned_tensor_LoadTy);
+
 	FunctionType *pinned_tensor_Store_IdxTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("pinned_tensor_Store_Idx", pinned_tensor_Store_IdxTy);
 
 	FunctionType *pinned_tensor_CalculateIdxTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("pinned_tensor_CalculateIdx", pinned_tensor_CalculateIdxTy);

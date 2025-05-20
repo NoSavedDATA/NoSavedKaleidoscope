@@ -259,7 +259,7 @@ extern "C" DT_tensor *tensor_float_higher_eq(Scope_Struct *scope_struct, DT_tens
 }
 
 
-void scalarmult_backward(float *inp, float dims_prod, float *out,
+void scalarmult_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {

@@ -51,6 +51,7 @@ enum Token {
     tok_unary = -12,
     tok_equal = -28,
     tok_diff = -34,
+    tok_int_div = -77,
     tok_higher_eq = -35,
     tok_minor_eq = -36,
     tok_mod = -29,

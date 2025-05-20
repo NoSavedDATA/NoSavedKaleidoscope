@@ -37,12 +37,12 @@
 #include "include.h"
 
 
-std::map<int, std::map<float, std::vector<float *>>> TensorPool;
-std::map<int, std::map<float, std::vector<half *>>> TensorHalfPool;
+std::map<int, std::map<int, std::vector<float *>>> TensorPool;
+std::map<int, std::map<int, std::vector<half *>>> TensorHalfPool;
 
 
 
-float *get_from_pool(int thread_id, float dims_prod, std::string from, bool is_new)
+float *get_from_pool(int thread_id, int dims_prod, std::string from, bool is_new)
 {
 
   if (dims_prod==0)
@@ -75,7 +75,7 @@ float *get_from_pool(int thread_id, float dims_prod, std::string from, bool is_n
 }
 
 
-void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string from)
+void move_to_pool(int thread_id, int dims_prod, float *tensor_ptr, std::string from)
 {
   //if (dims_prod==50*256)
   //  std::cout << "push B*OC of " << from << "\n";
@@ -108,7 +108,7 @@ void move_to_pool(int thread_id, float dims_prod, float *tensor_ptr, std::string
 
 
 
-void move_to_pool(int thread_id, float dims_prod, half *tensor_ptr, std::string from)
+void move_to_pool(int thread_id, int dims_prod, half *tensor_ptr, std::string from)
 {
   if (dims_prod==0)
     return;
@@ -122,7 +122,7 @@ void move_to_pool(int thread_id, float dims_prod, half *tensor_ptr, std::string 
 
 
 
-half *get_half_from_pool(int thread_id, float dims_prod, std::string from)
+half *get_half_from_pool(int thread_id, int dims_prod, std::string from)
 {
   
 
@@ -154,13 +154,13 @@ half *get_half_from_pool(int thread_id, float dims_prod, std::string from)
 
 
 
-void move_to_pool_pow2(int thread_id, float dims_prod, float *tensor_ptr, std::string from)
+void move_to_pool_pow2(int thread_id, int dims_prod, float *tensor_ptr, std::string from)
 {
   
   if (dims_prod==0)
     return;
 
-  float nearest_ceil_pow2 = 1;
+  int nearest_ceil_pow2 = 1;
   while(nearest_ceil_pow2<dims_prod)
     nearest_ceil_pow2*=2;
   dims_prod = nearest_ceil_pow2;
@@ -172,12 +172,12 @@ void move_to_pool_pow2(int thread_id, float dims_prod, float *tensor_ptr, std::s
   
 }
 
-float *get_from_pool_pow2(int thread_id, float dims_prod, std::string from)
+float *get_from_pool_pow2(int thread_id, int dims_prod, std::string from)
 {
   if (dims_prod==0)
     return nullptr;
 
-  float nearest_ceil_pow2 = 1;
+  int nearest_ceil_pow2 = 1;
   while(nearest_ceil_pow2<dims_prod)
     nearest_ceil_pow2*=2;
   dims_prod = nearest_ceil_pow2;

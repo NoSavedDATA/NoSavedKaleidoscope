@@ -50,12 +50,10 @@ void int_vec_Clean_Up(void *data_ptr) {
 }
 
 
-extern "C" int int_vec_Store_Idx(char *name, int idx, int value, Scope_Struct *scope_struct){
-  // std::cout << "int_vec_Store_Idx" << ".\n";
-  //std::cout << "STORING " << self << "." << object_var_name << " on demand as int vec type" << ".\n";
+extern "C" int int_vec_Store_Idx(DT_int_vec *vec, int idx, int value, Scope_Struct *scope_struct){
+  // std::cout << "int_vec_Store_Idx[" << idx << "]: " << value << ".\n";
 
-  DT_int_vec *vec = NamedIntVecs[name];
-  vec->vec[(int)idx] = value;
+  vec->vec[idx] = value;
 
   return 0;
 }
@@ -100,16 +98,13 @@ extern "C" DT_int_vec *ones_int(Scope_Struct *scope_struct, int size) {
 }
 
 
-extern "C" int int_vec_Idx(Scope_Struct *scope_struct, char *vec_name, int _idx)
+extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
 {
-  int idx = (int) _idx;
   // std::cout << "int_vec_Idx on idx " << idx << " for the vector " << vec_name << ".\n";
 
-  DT_int_vec *vec = NamedIntVecs[vec_name];
   // std::cout << "Loaded vec" << ".\n";
   int ret = vec->vec[idx];
   // std::cout << "got: " << ret << ".\n";
-  delete[] vec_name;
   // std::cout << "returning" << ".\n"; 
   return ret;
 }
@@ -126,7 +121,7 @@ extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int 
 
 
 
-extern "C" int int_vec_CalculateIdx(char *data_name, int first_idx, ...) {
+extern "C" int int_vec_CalculateIdx(DT_int_vec *vec, int first_idx, ...) {
   return first_idx;
 }
 

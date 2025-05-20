@@ -9,18 +9,18 @@
 #include "../../tensor/tensor_struct.h"
 
 
-void relu_backward(float *inp, float size, float *out,
+void relu_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node);
 
-void gelu_backward(float *inp, float size, float *out,
+void gelu_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node);
 
-void sigmoid_backward(float *inp, float size, float *out,
+void sigmoid_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node);
 
-void tanh_backward(float *inp, float size, float *out,
+void tanh_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node);

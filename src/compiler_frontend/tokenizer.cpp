@@ -110,6 +110,7 @@ std::map<int, std::string> token_to_string = {
 
   { tok_equal, "==" },
   { tok_diff, "!=" },
+  { tok_int_div, "//" },
   { tok_higher_eq, ">=" },
   { tok_minor_eq, "<=" },
   { tok_mod, "//" },
@@ -351,7 +352,10 @@ static int get_token() {
     }
     do {
       if(LastChar=='.')
-        is_float==true;
+      {
+        
+        is_float=true;
+      }
       NumStr += LastChar;
       LastChar = getchar();
     } while (isdigit(LastChar) || LastChar == '.');
@@ -440,7 +444,7 @@ static int get_token() {
 
   if((ThisChar=='/')&&(otherChar == '/')){
     LastChar = getchar();
-    return 77;
+    return tok_int_div;
   }
 
   //std::cout << "Post char: " << ReverseToken(ThisChar) << "\n";

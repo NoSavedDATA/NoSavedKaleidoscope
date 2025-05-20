@@ -85,7 +85,7 @@ extern "C" float CreateEmbeddingOnDemand(char *tensor_name, char *init,
     return 0;
 }
 
-void embedding_backward(float *inp, float size, float *out,
+void embedding_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {

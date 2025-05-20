@@ -11,7 +11,7 @@
 std::vector<DT_tensor *> todo_backward_tensors;
 std::map<std::string, float *> NamedParamGrads;
 
-std::map<std::string, std::function<void(float *, float, float *, float *, float *, std::string, DT_tensor *)>> backward_functions;
+std::map<std::string, std::function<void(float *, int, float *, float *, float *, std::string, DT_tensor *)>> backward_functions;
 
 
 
@@ -42,7 +42,7 @@ inline void HandleLeafGradient(DT_tensor *back_node, float *device_dy, std::stri
 
 
 
-inline void Acquire_Simple_Derivative(float *&d_ptr, float size, int op, bool from_custom, std::string parent) {
+inline void Acquire_Simple_Derivative(float *&d_ptr, int size, int op, bool from_custom, std::string parent) {
   if (op==add_op)
     return;
   // std::string from = "dx of "+ std::to_string(op);
@@ -58,7 +58,7 @@ inline void Acquire_Simple_Derivative(float *&d_ptr, float size, int op, bool fr
 }
 
 
-inline void Acquire_Weight_Gradient(float *&d_ptr, float size, std::string param_name, int op, bool from_custom) {
+inline void Acquire_Weight_Gradient(float *&d_ptr, int size, std::string param_name, int op, bool from_custom) {
   if (op==hadamard_op||op==add_op)
     return;
 
@@ -120,7 +120,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
   float *rhs, *d_lhs, *d_rhs;
   d_lhs=nullptr;
   d_rhs=nullptr;
-  float dims_prod = back_node->dims_prod;
+  int dims_prod = back_node->dims_prod;
 
   
 
@@ -153,7 +153,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
 
 
 
-    float lhs_size, rhs_size;
+    int lhs_size, rhs_size;
     float *lhs, *out;
     d_rhs=nullptr;
     rhs=nullptr;
@@ -318,7 +318,7 @@ extern "C" float backprop(Scope_Struct *scope_struct)
   for(DT_tensor *tensor : backprop_Tensors_to_save) // e.g: sparse idx tensors
   { 
     backprop_Tensors_to_free.erase(std::remove(backprop_Tensors_to_free.begin(), backprop_Tensors_to_free.end(), tensor), backprop_Tensors_to_free.end()); 
-    for(std::tuple<float, float *, std::string> pair : backprop_tensors_to_pool)
+    for(std::tuple<int, float *, std::string> pair : backprop_tensors_to_pool)
     {
       float *tensor_ptr = std::get<1>(pair);
       if (tensor->tensor_ptr == tensor_ptr)
@@ -334,7 +334,7 @@ extern "C" float backprop(Scope_Struct *scope_struct)
   for(DT_tensor *tensor : backprop_Tensors_to_free)
     delete tensor;
 
-  for(std::tuple<float, float *, std::string> pair : backprop_tensors_to_pool)
+  for(std::tuple<int, float *, std::string> pair : backprop_tensors_to_pool)
   {
     move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
     //move_to_pool(0, pair.first, pair.second);

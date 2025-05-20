@@ -1,1 +1,1 @@
-"CreateNotesVector", "Dispose_NotesVector", "Add_Float_To_NotesVector", "Add_Int_To_NotesVector", "Add_String_To_NotesVector", 
+"CreateNotesVector", "Dispose_NotesVector", "Add_To_NotesVector_float", "Add_To_NotesVector_int", "Add_To_NotesVector_str", 
