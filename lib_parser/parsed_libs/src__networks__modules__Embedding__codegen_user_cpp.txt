@@ -1,1 +1,1 @@
-"EmbeddingForward", "CreateEmbeddingOnDemand", 
+"Embedding", "Embedding_Create", 

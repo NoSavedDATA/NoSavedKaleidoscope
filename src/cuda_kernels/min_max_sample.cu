@@ -325,7 +325,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
 
 
 
-extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tensor, float first_dim, ...) 
+extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tensor, int first_dim, ...) 
 {
   int thread_id = scope_struct->thread_id;
   //std::cout << "ARGMAX OF " << tensor->name << " at thread: " << thread_id << "\n";
@@ -360,7 +360,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
       return nullptr;
     }
 
-    float dim = va_arg(args, float);
+    int dim = va_arg(args, int);
     
     if (dim==TERMINATE_VARARG)
       break;
@@ -377,7 +377,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
   va_end(args);
   
   
-  float maxed_dim;
+  int maxed_dim;
   for (int i=0; i<dims.size(); i++)
     if (!in_int(i, sum_dims))
       new_dims.push_back(dims[i]);
@@ -436,7 +436,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
 }
 
 
-extern "C" DT_tensor *topk(int thread_id, DT_tensor tensor, float k) 
+extern "C" DT_tensor *topk(int thread_id, DT_tensor tensor, int k) 
 {
   std::cout << "TOPK OF " << tensor.name << "\n";
 
@@ -447,12 +447,12 @@ extern "C" DT_tensor *topk(int thread_id, DT_tensor tensor, float k)
 
   std::vector<int> new_dims = RemoveLastDim(dims);
   std::vector<int> topk_dims = RemoveLastDim(dims);
-  float new_dims_prod = DimsProd(new_dims);
+  int new_dims_prod = DimsProd(new_dims);
   int dims_prod = DimsProd(dims);
   topk_dims.push_back(k);
-  float topk_dims_prod = DimsProd(topk_dims);
+  int topk_dims_prod = DimsProd(topk_dims);
 
-  float maxed_dim = dims[dims.size()-1];
+  int maxed_dim = dims[dims.size()-1];
 
   cudaStream_t stream = ThreadsStream[thread_id];
   

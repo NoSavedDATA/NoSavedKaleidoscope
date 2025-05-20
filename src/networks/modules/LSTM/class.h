@@ -11,7 +11,7 @@
 #include "../../../tensor/tensor_struct.h"
 
 
-class LSTM
+class DT_LSTM
 {
   public:
     
@@ -20,7 +20,7 @@ class LSTM
     float *W, *U, *x_out, *fused_out, *b, *all_ht, *all_ct, *dW, *dU, *dB, *d_ht, *d_ct, *d_ifoc;
     bool changed_descriptors, first_backward;
 
-    LSTM(int C, int OC, std::string Init, std::string Name);
+    DT_LSTM(int C, int OC, std::string Init, std::string Name);
 
   
   void SetDescriptors(int, int, int);

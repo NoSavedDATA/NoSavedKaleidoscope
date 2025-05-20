@@ -8,14 +8,15 @@
 
 
 #include "../../compiler_frontend/logging.h"
+#include "../../mangler/scope_struct.h"
 #include "../../tensor/tensor_dim_functions.h"
 #include "../../tensor/tensor_struct.h"
 #include "../../threads/include.h"
 
 
 std::map<std::string, int> Vocab;
-float max_tokens;
-float last_tok_id = 2;
+int max_tokens;
+int last_tok_id = 2;
 
 int UNK_TOK = 1.0f;
 int PAD_TOK = 0.0f;
@@ -35,7 +36,7 @@ void ProcessString(std::string& str) {
 }
 
 
-extern "C" float build_vocab(char *filename, float _max_tokens)
+extern "C" float build_vocab(Scope_Struct *scope_struct, char *filename, int _max_tokens)
 {
   pthread_mutex_lock(&vocab_mutex); // Files are not thread safe
   std::ifstream file(filename);
@@ -70,7 +71,7 @@ extern "C" float build_vocab(char *filename, float _max_tokens)
 }
 
 
-extern "C" float tokenize(DT_tensor *tensor, char *filename)
+extern "C" float tokenize(Scope_Struct *scope_struct, DT_tensor *tensor, char *filename)
 {
   pthread_mutex_lock(&vocab_mutex); // Files are not thread safe
   std::ifstream file(filename);
@@ -107,7 +108,7 @@ extern "C" float tokenize(DT_tensor *tensor, char *filename)
 }
 
 
-extern "C" float wtokenize(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize(Scope_Struct *scope_struct, DT_tensor *tensor, char *filename, int trunc_to, int worker_idx, int batch_idx)
 {
   //tensor e [workers, seq_len, batch_size, vocab_size]
 
@@ -122,7 +123,7 @@ extern "C" float wtokenize(DT_tensor *tensor, char *filename, float trunc_to, fl
 
 
   std::vector<int> dims = tensor->dims;
-  float dims_prod = tensor->dims_prod;
+  int dims_prod = tensor->dims_prod;
 
 
   std::vector<int> workerless_dims = BatchLessDims(dims);
@@ -191,7 +192,7 @@ extern "C" float wtokenize(DT_tensor *tensor, char *filename, float trunc_to, fl
 }
 
 
-extern "C" float wtokenize_pad_left(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize_pad_left(Scope_Struct *scope_struct, DT_tensor *tensor, char *filename, int trunc_to, int worker_idx, int batch_idx)
 {
   // x e [W, T, B]
   
@@ -205,7 +206,7 @@ extern "C" float wtokenize_pad_left(DT_tensor *tensor, char *filename, float tru
 
 
   std::vector<int> dims = tensor->dims;
-  float dims_prod = tensor->dims_prod;
+  int dims_prod = tensor->dims_prod;
 
 
   std::vector<int> workerless_dims = BatchLessDims(dims);
@@ -297,7 +298,7 @@ extern "C" float wtokenize_pad_left(DT_tensor *tensor, char *filename, float tru
 
 
 
-extern "C" float wtokenize_pad_left_batch_first(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize_pad_left_batch_first(Scope_Struct *scope_struct, DT_tensor *tensor, char *filename, int trunc_to, int worker_idx, int batch_idx)
 {
   // x e [W, B, T, V]
   
@@ -312,7 +313,7 @@ extern "C" float wtokenize_pad_left_batch_first(DT_tensor *tensor, char *filenam
 
 
   std::vector<int> dims = tensor->dims;
-  float dims_prod = tensor->dims_prod;
+  int dims_prod = tensor->dims_prod;
 
 
   std::vector<int> workerless_dims = BatchLessDims(dims);
@@ -403,14 +404,15 @@ extern "C" float wtokenize_pad_left_batch_first(DT_tensor *tensor, char *filenam
 }
 
 
-extern "C" float wtokenize_pad_left_idx(DT_tensor *tensor, char *filename, float trunc_to, float worker_idx, float batch_idx)
+extern "C" float wtokenize_pad_left_idx(Scope_Struct *scope_struct, DT_tensor *tensor, char *filename, int trunc_to, int worker_idx, int batch_idx)
 {
   // x e [W, B, T]
   
 
   std::ifstream file(filename);
 
-  //std::cout << "Loading" <<  filename << "\n";
+  // std::cout << "Loading" <<  filename << "\n";
+  // std::cout << "trunc to " << trunc_to << " worker " << worker_idx << " batch_idx " << batch_idx << ".\n";
   if (!file) {
     std::cerr << "Error opening file!" << std::endl;
     return 1;
@@ -418,7 +420,7 @@ extern "C" float wtokenize_pad_left_idx(DT_tensor *tensor, char *filename, float
 
 
   std::vector<int> dims = tensor->dims;
-  float dims_prod = tensor->dims_prod;
+  int dims_prod = tensor->dims_prod;
 
 
   std::vector<int> workerless_dims = BatchLessDims(dims);
@@ -430,9 +432,7 @@ extern "C" float wtokenize_pad_left_idx(DT_tensor *tensor, char *filename, float
   
 
 
-
-  int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
-
+  int idx_offset = batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx;
 
 
   int *indices  = new int[trunc_to];
@@ -447,6 +447,8 @@ extern "C" float wtokenize_pad_left_idx(DT_tensor *tensor, char *filename, float
 
   std::string line;
   int words_count = 0;
+  char *token 
+  // while()
   while (std::getline(file, line)) 
   {       
     std::istringstream lineStream(line); // Create a string stream from the line
@@ -488,18 +490,14 @@ extern "C" float wtokenize_pad_left_idx(DT_tensor *tensor, char *filename, float
 
 
 
-  //std::cout << "[";
-  // one-hot and save it into the tensor
   int idx = idx_offset;
   for(int i=0; i<trunc_to; i++)
   {
     tensor->cpu_tensor_ptr[idx] = padded_indices[i];
 
-    //std::cout << padded_indices[i] << ",";
 
     idx += 1; //moves to the next sequence element
   }
-  //std::cout << "]\n";
   
   
   delete[] indices;

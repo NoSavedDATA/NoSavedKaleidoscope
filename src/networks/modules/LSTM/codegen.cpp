@@ -13,7 +13,7 @@
 
 
 
-#include "../../../compiler_frontend/logging.h"
+#include "../../../compiler_frontend/include.h"
 #include "../../../tensor/include.h"
 #include "../globals.h"
 #include "class.h"
@@ -24,7 +24,7 @@ void lstm_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {
-  std::unique_ptr<LSTM> lstm = std::move(NamedLSTM[module_name]);
+  std::unique_ptr<DT_LSTM> lstm = std::move(NamedLSTM[module_name]);
 
   lstm->Backward(inp, dinp, dout);
 
@@ -34,24 +34,22 @@ void lstm_backward(float *inp, int size, float *out,
 
 
 
-extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_ht, DT_tensor *tensor_ct, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" DT_tensor *LSTM(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tensor *tensor_ht, DT_tensor *tensor_ct)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
+  std::string conv_name = scope_struct->first_arg;
+  int thread_id = scope_struct->thread_id;
   
-  std::string _self = self;
-  std::string conv_name = conv_namec;
-  if (is_obj_attr_or_self)
-    conv_name = _self + conv_name;
 
-  //std::cout << "LSTM forward of " << conv_name << " with input " << tensor_x->name << ", ht: " << tensor_ht->name << "\n";
+  //std::cout << "LSTM forward of " << conv_name << " with input " << tensor->name << ", ht: " << tensor_ht->name << "\n";
 
 
   
 
   float *tensor_ptr, *output, *d_filter;
   
-  std::vector<int> dims = tensor_x->dims;
+  std::vector<int> dims = tensor->dims;
   int input_dims_prod = DimsProd(dims);
 
   int B = dims[0];
@@ -60,7 +58,7 @@ extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_
 
 
 
-  std::unique_ptr<LSTM> lstm = std::move(NamedLSTM[conv_name]);
+  std::unique_ptr<DT_LSTM> lstm = std::move(NamedLSTM[conv_name]);
 
   if ((int)C!=(int)lstm->C)
   {
@@ -73,11 +71,11 @@ extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_
 
 
 
-  tensor_x->Sync();
+  tensor->Sync();
   tensor_ht->Sync();
   tensor_ct->Sync();
 
-  output = lstm->Forward(tensor_x, tensor_ht, tensor_ct, (int) B, (int)T, thread_id);
+  output = lstm->Forward(tensor, tensor_ht, tensor_ct, (int) B, (int)T, thread_id);
 
 
   
@@ -102,20 +100,41 @@ extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_
 
 
  
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "lstm_backward", conv_name, tensor_x);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "lstm_backward", conv_name, tensor);
 }
 
 
 
 
-extern "C" float CreateLSTMOnDemand(char *tensor_name, char *init,
-                                      int C, int OC)
+extern "C" float LSTM_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
+  
+  std::string init = "xavu";
+
+  int C = notes_vector->get<int>(0);
+  int OC = notes_vector->get<int>(1);
+
+  std::vector<std::string> notes; 
+
+  for (int i=2; i<notes_vector->data->size(); i++)
+  {
+    if(notes_vector->data_types->at(i)=="str")
+    {
+      char *note = notes_vector->get<char *>(i);
+      std::string note_str = note;
+      if (in_str(note, tensor_inits))
+        init = note;
+      else
+        notes.push_back(note);
+    }
+  }
+
+
   std::cout << "\nCreate lstm on demand:\n   C: " << C << " OC " << OC << "\n";
 
-  auto lstm = std::make_unique<LSTM>(C, OC, init, tensor_name);
+  auto lstm = std::make_unique<DT_LSTM>(C, OC, init, name);
 
-  std::cout << "Adding " << tensor_name << " to NamedLSTM dict\n";
-  NamedLSTM[tensor_name] = std::move(lstm);
+  std::cout << "Adding " << name << " to NamedLSTM dict\n";
+  NamedLSTM[name] = std::move(lstm);
   return 0;
 }

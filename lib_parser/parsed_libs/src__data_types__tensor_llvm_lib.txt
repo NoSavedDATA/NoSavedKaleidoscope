@@ -1,4 +1,4 @@
-1821-05-20 14:10:15
+1821-05-20 16:57:29
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -65,7 +65,7 @@
 
 	FunctionType *write_zeroswTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("write_zerosw", write_zeroswTy);

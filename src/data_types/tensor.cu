@@ -547,14 +547,14 @@ void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaS
 }
 
 
-extern "C" float write_zerosw(DT_tensor *tensor, float worker_idx)
+extern "C" float write_zerosw(Scope_Struct *scope_struct, DT_tensor *tensor, int worker_idx)
 {
   std::vector<int> dims = tensor->dims;
 
   std::vector<int> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
 
-  int idx_offset = (int) (workerless_dims_prod*worker_idx);
+  int idx_offset =  workerless_dims_prod*worker_idx;
 
   for(int i=0; i<workerless_dims_prod; i++)
     tensor->cpu_tensor_ptr[i+idx_offset] = 0.0f;
@@ -703,7 +703,7 @@ extern "C" int tensor_CalculateIdx(char *tensor_name, int first_idx, ...) {
       return 0;
     }
 
-    float idx = va_arg(args, float);
+    int idx = va_arg(args, int);
     if (idx==TERMINATE_VARARG)
       break;
 
@@ -713,7 +713,7 @@ extern "C" int tensor_CalculateIdx(char *tensor_name, int first_idx, ...) {
     
     current_dims_prod = DimsProd(dims);
 
-    idx_at += (int)(current_dims_prod*idx);
+    idx_at += current_dims_prod*idx;
 
     //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
     
@@ -740,7 +740,7 @@ extern "C" DT_tensor *zeros_like(Scope_Struct *scope_struct, DT_tensor *tensor) 
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<int> dims = tensor->dims;
-  float dims_prod = tensor->dims_prod;
+  int dims_prod = tensor->dims_prod;
 
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);

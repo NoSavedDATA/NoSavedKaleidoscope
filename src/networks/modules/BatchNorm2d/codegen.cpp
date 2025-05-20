@@ -21,7 +21,7 @@
 
 
 
-extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
+extern "C" DT_tensor *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   std::string bn_name = scope_struct->first_arg;
   int thread_id = scope_struct->thread_id;
@@ -32,7 +32,7 @@ extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   float *tensor_ptr, *output;
   tensor_ptr = tensor->tensor_ptr;
   std::vector<int> dims = tensor->dims;
-  float input_dims_prod = DimsProd(dims);
+  int input_dims_prod = DimsProd(dims);
 
   int B = dims[0];
   int C = dims[dims.size()-3];
@@ -45,7 +45,7 @@ extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   if ((int)C!=(int)conv->C)
   {
-    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the BatchNorm2d are: " + std::to_string(conv->C);
+    std::string error = "Input tensor channels are: " + std::to_string(C) + ", while the expected input channels of the BatchNorm2d are: " + std::to_string(conv->C);
     LogError(error);
     
     NamedBatchNorm2d[bn_name] = std::move(conv);
@@ -86,12 +86,13 @@ void batchnorm2d_backward(float *inp, int size, float *out,
 // extern "C" float CreateBatchNorm2dOnDemand(char *tensor_name, float C)
 extern "C" float BatchNorm2d_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
+
   if (notes_vector->data->size()<1)
     LogErrorS("BatchNorm2d requires input channels information.");
 
-  float C = notes_vector->get<float>(0);
+  int C = notes_vector->get<int>(0);
   // std::cout << "\nCreate BatchNorm2d " << name << " on demand:\n   C: " << C  << "\n";
-  auto conv = std::make_unique<BatchNorm2dCPP>((int)C, name);
+  auto conv = std::make_unique<BatchNorm2dCPP>(C, name);
 
 
   NamedBatchNorm2d[name] = std::move(conv);

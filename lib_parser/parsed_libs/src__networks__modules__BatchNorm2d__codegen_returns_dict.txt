@@ -1,0 +1,1 @@
+{"BatchNorm2d", "tensor"}, 

@@ -14,9 +14,9 @@
 
 std::map<std::string, std::unique_ptr<BatchNorm2dCPP>> NamedBatchNorm2d;
 std::map<std::string, std::unique_ptr<Conv2dCPP>> NamedConv2d;
-std::map<std::string, std::unique_ptr<Embedding>> NamedEmbedding;
+std::map<std::string, std::unique_ptr<DT_Embedding>> NamedEmbedding;
 std::map<std::string, std::unique_ptr<LinearCPP>> NamedLinear;
-std::map<std::string, std::unique_ptr<LSTM>> NamedLSTM;
+std::map<std::string, std::unique_ptr<DT_LSTM>> NamedLSTM;
 std::map<std::string, std::unique_ptr<MaxPool2dCPP>> NamedMaxPool2d;
 std::map<std::string, std::unique_ptr<MHSA>> NamedMHSA;
 

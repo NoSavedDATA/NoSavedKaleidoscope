@@ -20,8 +20,7 @@
 #include "kernels.h"
 
 
-
-Embedding::Embedding(int C, int OC, std::string Init, std::string Name)
+DT_Embedding::DT_Embedding(int C, int OC, std::string Init, std::string Name)
     : C(C), OC(OC), Init(Init), Name(Name) {
     // C == num_codebooks
     B = 0;
@@ -55,14 +54,14 @@ Embedding::Embedding(int C, int OC, std::string Init, std::string Name)
 }
 
 
-void Embedding::SetDescriptors(int B)
+void DT_Embedding::SetDescriptors(int B)
 {
   this->B=B;
   changed_descriptors=true;
 }
 
 
-float *Embedding::Forward(DT_tensor *tensor, int B, int thread_id)
+float *DT_Embedding::Forward(DT_tensor *tensor, int B, int thread_id)
 {
   float *out = get_from_pool(thread_id, B*OC, "embedding out");
 
@@ -92,16 +91,16 @@ float *Embedding::Forward(DT_tensor *tensor, int B, int thread_id)
 
 
 
-void Embedding::SetBackwardDescriptors()
+void DT_Embedding::SetBackwardDescriptors()
 {
 
   dW = get_from_pool(0, B*OC, "embedding dW");
-  set_to_zero_kernel<<<std::ceil((B*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, B*OC);
+  set_to_zero_kernel<<<std::ceil((float)(B*OC)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, B*OC);
 
   changed_descriptors=false;
 }
 
-void Embedding::Backward(float *x, float *dy)
+void DT_Embedding::Backward(float *x, float *dy)
 {
   /*
   if(changed_descriptors)
@@ -112,9 +111,8 @@ void Embedding::Backward(float *x, float *dy)
 
   
 
-  
-
+ 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
+  dim3 grid_size(std::ceil((float)OC/(float)TILE_SIZE), std::ceil((float)B/(float)TILE_SIZE));
   embedding_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
 }

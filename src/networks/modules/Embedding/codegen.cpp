@@ -13,7 +13,8 @@
 
 
 
-#include "../../../compiler_frontend/logging.h"
+#include "../../../compiler_frontend/include.h"
+#include "../../../notators/notators.h"
 #include "../../../tensor/include.h"
 #include "../globals.h"
 #include "class.h"
@@ -21,38 +22,33 @@
 
 
 
-extern "C" void *EmbeddingForward(char *self, DT_tensor *tensor_x, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
-  
-  std::string _self = self;
-  std::string conv_name = conv_namec;
-  if (is_obj_attr_or_self)
-    conv_name = _self + conv_name;
-
-  //std::cout << "Embedding forward of " << conv_name << " with input " << tensor_x->name <<  "\n";
+  int thread_id = scope_struct->thread_id;
+  std::string conv_name = scope_struct->first_arg;
 
 
 
   float *tensor_ptr, *output;
   
-  std::vector<int> dims = tensor_x->dims;
+  std::vector<int> dims = tensor->dims;
   int input_dims_prod = DimsProd(dims);
 
 
-  std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[conv_name]);
+  std::unique_ptr<DT_Embedding> embedding = std::move(NamedEmbedding[conv_name]);
 
-  tensor_x->Sync();
+  tensor->Sync();
 
   
-  output = embedding->Forward(tensor_x, tensor_x->dims_prod, thread_id);
+  output = embedding->Forward(tensor, tensor->dims_prod, thread_id);
   
 
   int is_forward_func = 1;
   
 
-  std::vector<int> new_dims = tensor_x->dims;
+  std::vector<int> new_dims = tensor->dims;
   new_dims.push_back(embedding->OC); 
 
   
@@ -62,7 +58,7 @@ extern "C" void *EmbeddingForward(char *self, DT_tensor *tensor_x, int thread_id
   
   
 
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "embedding_backward", conv_name, tensor_x);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "embedding_backward", conv_name, tensor);
 }
 
 
@@ -73,23 +69,42 @@ extern "C" void *EmbeddingForward(char *self, DT_tensor *tensor_x, int thread_id
 
 
 
-extern "C" float CreateEmbeddingOnDemand(char *tensor_name, char *init,
-  float C, float OC)
+extern "C" float Embedding_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
-    std::cout << "\nCreate embedding on demand:\n   C: " << C << " OC " << OC << "\n";
+  std::string init = "xavu";
 
-    auto embedding = std::make_unique<Embedding>((int)C, (int)OC, init, tensor_name);
+  int C = notes_vector->get<int>(0);
+  int OC = notes_vector->get<int>(1);
 
-    std::cout << "Adding " << tensor_name << " to NamedEmbedding dict\n";
-    NamedEmbedding[tensor_name] = std::move(embedding);
-    return 0;
+  std::vector<std::string> notes;
+  
+  for (int i=2; i<notes_vector->data->size(); i++)
+  {
+    if(notes_vector->data_types->at(i)=="str")
+    {
+      char *note = notes_vector->get<char *>(i);
+      std::string note_str = note;
+      if (in_str(note, tensor_inits))
+        init = note;
+      else
+        notes.push_back(note);
+    }
+  }
+
+  std::cout << "\nCreate embedding on demand:\n   C: " << C << " OC " << OC << "\n";
+
+  auto embedding = std::make_unique<DT_Embedding>(C, OC, init, name);
+
+  std::cout << "Adding " << name << " to NamedEmbedding dict\n";
+  NamedEmbedding[name] = std::move(embedding);
+  return 0;
 }
 
 void embedding_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {
-  std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[module_name]);
+  std::unique_ptr<DT_Embedding> embedding = std::move(NamedEmbedding[module_name]);
 
   embedding->Backward(inp, dout);
 
