@@ -1,1 +1,1 @@
-"_tid", "tid", 
+"dive_void", "emerge_void", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", 

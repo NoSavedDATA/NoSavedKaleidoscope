@@ -13,7 +13,6 @@ using namespace llvm;
 class ExprAST {
   public:
     virtual ~ExprAST() = default;
-    std::vector<float> Dims = {-1.0f};
     std::string Type = "None";
     std::string ReturnType = "None";
     std::string Name = "Unnamed";
@@ -26,7 +25,6 @@ class ExprAST {
     bool SolverIncludeScope = true;
     bool NameSolveToLast = true;
   
-    Value *TensorPtr;
   
   
     virtual Value *codegen(Value *scope_struct) = 0;
@@ -63,10 +61,6 @@ class ExprAST {
     virtual void SetIsList(bool); 
     virtual bool GetIsList(); 
 
-    // Tensor related
-    virtual std::vector<float> GetDims(); 
-    virtual void SetDims(std::vector<float> Dims); 
-    virtual Value *GetTensorPtr(); 
     
   };
   

@@ -62,7 +62,6 @@ enum Token {
     // var definition
     tok_attr_var = -18,
     tok_attr_tensor = -19,
-    tok_vec = -37,
     tok_post_class_attr_attr = -38,
     tok_post_class_attr_identifier = -39,
 

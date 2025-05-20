@@ -24,7 +24,7 @@ extern "C" float AttrTensorNoFree(char *tensor_name, DT_tensor *tensor, int thre
 {
   //std::cout << "\nAttrTensorNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
   
-  std::vector<float> new_dims = tensor->dims;
+  std::vector<int> new_dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
   
@@ -38,9 +38,7 @@ extern "C" float AttrTensorNoFree(char *tensor_name, DT_tensor *tensor, int thre
   float *new_tensor = get_from_pool(thread_id, dims_prod, "pinned");
 
   int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
 
   tensor->Sync();
   copy_tensor_kernel<<<grid_size, block_size>>>(new_tensor, tensor->tensor_ptr, dims_prod);
@@ -61,7 +59,7 @@ extern "C" float AttrTensorOnIdx(char *tensor_name, DT_tensor *tensor, float idx
 { 
   //std::cout << "AttrTensorOnIdx of" << tensor_name << " at idx " << idx_at << "\n";
 
-  std::vector<float> dims, Rdims;
+  std::vector<int> dims, Rdims;
   DT_tensor *tgt_tensor = NamedTensorsT[tensor_name];
   dims = tgt_tensor->dims;
   int dims_prod = tgt_tensor->dims_prod;
@@ -121,7 +119,7 @@ extern "C" float AttrTensorOnIdxTensor(char *tensor_name, char *idx_tensor_name,
 
   float *tensor_ptr, *idx_tensor_ptr, *r_tensor_ptr;
   float dims_prod, new_dims_prod;
-  std::vector<float> dims, idx_dims, new_dims;
+  std::vector<int> dims, idx_dims, new_dims;
 
   tensor_ptr = tensor->tensor_ptr;
   idx_tensor_ptr = idx_tensor->tensor_ptr;
@@ -216,7 +214,7 @@ extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, DT_tensor *Rtensor
   
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
 
-  std::vector<float> idxs;
+  std::vector<int> idxs;
 
   va_list args;
   va_start(args, first_idx);
@@ -235,7 +233,7 @@ extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, DT_tensor *Rtensor
   PrintDims(idxs);
 
   float offset = 0;
-  std::vector<float> dims, aux_dims, Rdims;
+  std::vector<int> dims, aux_dims, Rdims;
   
   
   DT_tensor *tensor = NamedTensorsT[tensor_name];
@@ -245,7 +243,7 @@ extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, DT_tensor *Rtensor
   float *new_tensor;
 
   dims = tensor->dims;
-  std::vector<float> new_dims;
+  std::vector<int> new_dims;
 
   if(idxs.size()>dims.size())
   {
@@ -254,7 +252,7 @@ extern "C" float AttrPinnedFromTensorOnIdx(char *tensor_name, DT_tensor *Rtensor
   }
 
   if (dims.size()==1)
-    new_dims = {1.0f};
+    new_dims = {1};
   else
   {
     aux_dims = dims;
@@ -318,7 +316,7 @@ extern "C" void *IdxTensor(char *tensor_name, char *scope, int thread_id, float 
   
   //std::cout << "\n\n\nIDX " << tensor_name << "\n\n\n\n";  
 
-  std::vector<float> idxs;
+  std::vector<int> idxs;
 
   va_list args;
   va_start(args, first_idx);
@@ -344,9 +342,9 @@ extern "C" void *IdxTensor(char *tensor_name, char *scope, int thread_id, float 
 
   float *new_tensor;
 
-  std::vector<float> dims, aux_dims;
+  std::vector<int> dims, aux_dims;
   dims = tensor->dims;
-  std::vector<float> new_dims;
+  std::vector<int> new_dims;
 
   if(idxs.size()>dims.size())
   {
@@ -355,7 +353,7 @@ extern "C" void *IdxTensor(char *tensor_name, char *scope, int thread_id, float 
   }
 
   if (dims.size()==1)
-    new_dims = {1.0f};
+    new_dims = {1};
   else
   {
     aux_dims = dims;
@@ -430,7 +428,7 @@ extern "C" void *IdxTensorWithTensor(char *tensor_name, char *idx_tensor_name, i
 
   float *tensor_ptr, *idx_tensor_ptr, *new_tensor;
   float new_dims_prod;
-  std::vector<float> dims, idx_dims, new_dims;
+  std::vector<int> dims, idx_dims, new_dims;
 
   tensor_ptr = tensor->tensor_ptr;
   idx_tensor_ptr = idx_tensor->tensor_ptr;

@@ -24,7 +24,7 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
 
   float *y_hat = L_tensor->tensor_ptr;
   float *y = R_tensor->tensor_ptr;
-  std::vector<float> BC = format_LinearLayer_Dims(L_tensor->dims);
+  std::vector<int> BC = format_LinearLayer_Dims(L_tensor->dims);
   float B  = BC[0];
   float C  = BC[1];
   
@@ -36,13 +36,10 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   
 
   int grid_size, block_size, shared_mem_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
-  grid_size  = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
-
+  CalculateGridAndBlockSizes(B*C, grid_size, block_size);
   set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(probs, B*C);
-
-
+  
+  
   /*
   grid_block_mem_sizes = CalculateGridAndBlockSizes(B*32*C);
   grid_size  = B*32;
@@ -53,8 +50,9 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
   
   
   
-
   
+  
+  std::vector<int> grid_block_mem_sizes;
   grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
   grid_size  = B;
   block_size = grid_block_mem_sizes[1];
@@ -66,9 +64,7 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
 
 
   
-  grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(B*C, grid_size, block_size);
 
   
   crossentropy_softmax_backward_kernel1<<<grid_size, block_size, 0, main_stream>>>(dloss, probs, y, B, C, scale);
@@ -102,7 +98,7 @@ void CrossEntropyIdxBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
 {
   float *y_hat = L_tensor->tensor_ptr;
   float *y = R_tensor->tensor_ptr; 
-  std::vector<float> BC = format_LinearLayer_Dims(L_tensor->dims);
+  std::vector<int> BC = format_LinearLayer_Dims(L_tensor->dims);
   float B  = BC[0];
   float C  = BC[1];
   

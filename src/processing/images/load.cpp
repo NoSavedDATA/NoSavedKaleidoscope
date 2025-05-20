@@ -57,12 +57,12 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char 
 
   if (image_data) {
     
-    std::vector<float> dims = tensor.dims;
+    std::vector<int> dims = tensor.dims;
 
     //std::cout << "GLOAD IMG, dims of " << tensor.name << "\n";
     //PrintDims(dims);
 
-    std::vector<float> batchless_dims = BatchLessDims(dims);
+    std::vector<int> batchless_dims = BatchLessDims(dims);
     int batchless_dims_prod = DimsProd(batchless_dims);
     
 
@@ -136,14 +136,14 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
 
   if (image_data) {
     
-    std::vector<float> dims = tensor->dims;
+    std::vector<int> dims = tensor->dims;
 
     
     
-    std::vector<float> workerless_dims = BatchLessDims(dims);
+    std::vector<int> workerless_dims = BatchLessDims(dims);
     int workerless_dims_prod = DimsProd(workerless_dims);
 
-    std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+    std::vector<int> batchless_dims = BatchLessDims(workerless_dims);
     int batchless_dims_prod = DimsProd(batchless_dims);
     
 
@@ -227,14 +227,14 @@ extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tenso
 
   if (image_data) {
     
-    std::vector<float> dims = tensor->dims;
+    std::vector<int> dims = tensor->dims;
 
     
     
-    std::vector<float> workerless_dims = BatchLessDims(dims);
+    std::vector<int> workerless_dims = BatchLessDims(dims);
     int workerless_dims_prod = DimsProd(workerless_dims);
 
-    std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+    std::vector<int> batchless_dims = BatchLessDims(workerless_dims);
     int batchless_dims_prod = DimsProd(batchless_dims);
     
 
@@ -297,7 +297,7 @@ extern "C" float load_preprocess_img(Scope_Struct *scope_struct,DT_tensor tensor
   float *img;
   img = load_img(scope_struct, img_name); 
   
-  std::vector<float> dims = tensor.dims;
+  std::vector<int> dims = tensor.dims;
 
   
   // Last three dims.

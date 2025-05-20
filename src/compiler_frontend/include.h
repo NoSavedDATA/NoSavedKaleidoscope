@@ -41,7 +41,7 @@ extern std::map<std::string, std::string> Object_toClass;
 extern std::map<std::string, std::string> Object_toClassVec;
 
 
-extern float TERMINATE_VARARG;
+extern int TERMINATE_VARARG;
 
 
 extern std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;

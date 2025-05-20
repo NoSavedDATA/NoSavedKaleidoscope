@@ -37,8 +37,8 @@ extern "C" void *EmbeddingForward(char *self, DT_tensor *tensor_x, int thread_id
 
   float *tensor_ptr, *output;
   
-  std::vector<float> dims = tensor_x->dims;
-  float input_dims_prod = DimsProd(dims);
+  std::vector<int> dims = tensor_x->dims;
+  int input_dims_prod = DimsProd(dims);
 
 
   std::unique_ptr<Embedding> embedding = std::move(NamedEmbedding[conv_name]);
@@ -52,8 +52,8 @@ extern "C" void *EmbeddingForward(char *self, DT_tensor *tensor_x, int thread_id
   int is_forward_func = 1;
   
 
-  std::vector<float> new_dims = tensor_x->dims;
-  new_dims.push_back((float)embedding->OC); 
+  std::vector<int> new_dims = tensor_x->dims;
+  new_dims.push_back(embedding->OC); 
 
   
 

@@ -48,9 +48,9 @@ LSTM::LSTM(int C, int OC, std::string Init, std::string Name)
     cudaMemcpy(U, u_cpu, 4*OC* C*sizeof(float), cudaMemcpyHostToDevice); // x weight
     cudaMemcpy(b, b_cpu, 4*OC*   sizeof(float), cudaMemcpyHostToDevice); // bias
 
-    DT_tensor *tensor_W = createTensor(W, {4*(float)OC, (float)OC}, 4*OC*OC, true, Name+"W");
-    DT_tensor *tensor_U = createTensor(U, {4*(float)OC, (float)C},  4*OC* C, true, Name+"U");
-    DT_tensor *tensor_B = createTensor(b, {4*(float)OC},            4*OC   , true, Name+"b");
+    DT_tensor *tensor_W = createTensor(W, {4*OC, OC}, 4*OC*OC, true, Name+"W");
+    DT_tensor *tensor_U = createTensor(U, {4*OC, C},  4*OC* C, true, Name+"U");
+    DT_tensor *tensor_B = createTensor(b, {4*OC},            4*OC   , true, Name+"b");
     tensor_W->SetIsWeight();
     tensor_U->SetIsWeight();
 
@@ -87,9 +87,7 @@ void LSTM::SetDescriptors(int B, int T, int thread_id)
 
 
   int grid_size, block_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(T*B*OC);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(T*B*OC, grid_size, block_size);
 
 
   //set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(all_ht, B*T*OC);

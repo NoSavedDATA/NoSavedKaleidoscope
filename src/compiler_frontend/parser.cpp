@@ -82,21 +82,21 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
   std::unique_ptr<ExprAST> VecInitSize = nullptr;
       
   //std::cout << "\n\n\n\nCUR TOK IS: " << ReverseToken(CurTok) << "\n\n\n\n\n\n";
-  if (CurTok==tok_vec)
-  {
-    getNextToken();
-    is_vec=true;
+  // if (CurTok==tok_vec)
+  // {
+  //   getNextToken();
+  //   is_vec=true;
         
-    if(CurTok=='[')
-    {
-      getNextToken();
-      VecInitSize = ParsePrimary(parser_struct, class_name);
-      if (CurTok!=']')
-        LogError("Expected ] at object vec");
-      getNextToken();
-    }
-    Object_toClassVec[IdentifierStr] = _class; //todo: this doesn't deal with self. expr
-  }
+  //   if(CurTok=='[')
+  //   {
+  //     getNextToken();
+  //     VecInitSize = ParsePrimary(parser_struct, class_name);
+  //     if (CurTok!=']')
+  //       LogError("Expected ] at object vec");
+  //     getNextToken();
+  //   }
+  //   Object_toClassVec[IdentifierStr] = _class; //todo: this doesn't deal with self. expr
+  // }
 
 
   if (CurTok==tok_self)
@@ -151,7 +151,7 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdx(Parser_Struct parser_struct, std:
     getNextToken(); // eat ,
     Idx.push_back(ParseExpression(parser_struct, class_name, false));
   }
-  Idx.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+  Idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
 
   return Idx;
 }
@@ -372,7 +372,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
 
     // varargs
     if (in_str(IdName, vararg_methods))
-      Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+      Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
     
     
 
@@ -734,6 +734,8 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
   
   //std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
 
+
+  parser_struct.function_name = "asyncs";
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
@@ -1180,7 +1182,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string 
   
   // varargs
   if (in_str(call_of, vararg_methods))
-    Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+    Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
 
   // std::cout << "\nCalling method: " << IdName << "/" << callee << " for pre-dot: " << pre_dot << "\n\n";
   // std::cout << "LOAD TYPE IS: " << load_type << ".\n";
@@ -1229,7 +1231,7 @@ std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::un
   
   // varargs
   if (in_str(call_of, vararg_methods))
-    Args.push_back(std::make_unique<NumberExprAST>(TERMINATE_VARARG));
+    Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
   
   
   
@@ -1271,16 +1273,17 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
     //std::make_unique<NumberExprAST>(NumVal)
     
     while (true) {
-      if (CurTok != tok_number && CurTok != tok_identifier && CurTok != tok_self)
+      if (CurTok != tok_number && CurTok != tok_int && CurTok != tok_identifier && CurTok != tok_self)
         return LogError("Expected a number or var on the tensor dimension.");
       
       if (CurTok==tok_number)
-      {
-        if (std::fmod(NumVal, 1.0) != 0)
-          LogWarning("A tensor's dimension should be int, not float.");
-      
-        notes.push_back(std::make_unique<NumberExprAST>( (float)((int)round(NumVal)) ));
+      { 
+        notes.push_back(std::make_unique<NumberExprAST>(NumVal));
         getNextToken();
+      } else if (CurTok==tok_number) {
+        notes.push_back(std::make_unique<IntExprAST>(NumVal));
+        getNextToken();
+        
       } else if (CurTok==tok_identifier)
         notes.push_back(std::move(ParseIdentifierExpr(parser_struct, class_name, true, false)));
       else {
@@ -1345,6 +1348,8 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
     {
       if (data_type=="float")
         Init = std::make_unique<NumberExprAST>(0.0f);
+      else if (data_type=="int")
+        Init = std::make_unique<IntExprAST>(0);
       else if (data_type=="str")
         Init = std::make_unique<StringExprAST>("");
       else
@@ -2156,6 +2161,11 @@ std::unique_ptr<ExprAST> ParseClass() {
       if (data_type=="float")
       {
         llvm_types.push_back(Type::getFloatTy(*TheContext));
+        last_offset+=4;
+      }
+      else if (data_type=="int")
+      {
+        llvm_types.push_back(Type::getInt32Ty(*TheContext));
         last_offset+=4;
       }
       else

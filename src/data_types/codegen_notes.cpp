@@ -14,7 +14,6 @@ std::map<std::string, DT_list *> NamedVectors;
 
 
 
-// template float DT_list::get<float>(size_t);
 template char *DT_list::get<char *>(size_t);
 template DT_tensor *DT_list::get<DT_tensor *>(size_t);
 
@@ -37,6 +36,16 @@ float DT_list::get<float>(size_t index) {
     }
     // std::cout << "Get float at idx " << index << " from DT_list" << ".\n";
     return std::any_cast<float>((*data)[index]);
+}
+
+template <>
+int DT_list::get<int>(size_t index) {
+    if (index >= data->size()) {
+        // throw std::out_of_range("Index out of range");
+        std::cout << "Index out of range.";
+    }
+    // std::cout << "Get float at idx " << index << " from DT_list" << ".\n";
+    return std::any_cast<int>((*data)[index]);
 }
 
 DT_list::DT_list() {
@@ -68,6 +77,8 @@ void DT_list::print() {
             std::cout << "Notes["<<i<<"]: " << get<char *>(i) << ".\n";
         if (data_types->at(i)=="float")
             std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
+        if (data_types->at(i)=="int")
+            std::cout << "Notes["<<i<<"]: " << get<int>(i) << ".\n";
         if (data_types->at(i)=="tensor")
         {
             DT_tensor *t = get<DT_tensor *>(i);
@@ -111,6 +122,14 @@ extern "C" float Dispose_NotesVector(DT_list *notes_vector, char *scopeless_name
 extern "C" DT_list *Add_Float_To_NotesVector(DT_list *notes_vector, float value) {
 
     notes_vector->append(value, "float");
+
+    return notes_vector;
+}
+
+
+extern "C" DT_list *Add_Int_To_NotesVector(DT_list *notes_vector, int value) {
+
+    notes_vector->append(value, "int");
 
     return notes_vector;
 }

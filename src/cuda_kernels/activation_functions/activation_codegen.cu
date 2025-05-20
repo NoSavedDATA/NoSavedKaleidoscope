@@ -19,7 +19,7 @@ extern "C" DT_tensor *relu(Scope_Struct *scope_struct, DT_tensor *tensor)
   //std::cout << "RELU THREAD IS: " << thread_id << "\n";
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
   int grid_size, block_size; 
@@ -59,7 +59,7 @@ extern "C" DT_tensor *gelu(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
 
   // std::cout << "GELU AT THREAD " << thread_id << "\n";
   
@@ -98,7 +98,7 @@ extern "C" DT_tensor *sigmoid(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   
 
   float dims_prod = DimsProd(dims);
@@ -140,7 +140,7 @@ extern "C" DT_tensor *_tanh(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   
 
   float dims_prod = DimsProd(dims);
@@ -169,7 +169,7 @@ extern "C" DT_tensor *softmax(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   
   dims =  format_LinearLayer_Dims(dims);
 

@@ -68,9 +68,9 @@ extern "C" DT_tensor *mse_with_priorities(int thread_id, DT_tensor *y_hat, DT_te
   todo_backward_tensors.push_back(loss_tensor);
 
 
-  std::vector<float> dims = format_BatchFirst_Dims(y_hat->dims);
-  float B = dims[0];
-  float C = dims[1];
+  std::vector<int> dims = format_BatchFirst_Dims(y_hat->dims);
+  int B = dims[0];
+  int C = dims[1];
 
 
   float *msed = get_from_pool(0, B, "mse with priorities");

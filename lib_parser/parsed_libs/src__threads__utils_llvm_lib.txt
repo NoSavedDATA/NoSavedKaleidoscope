@@ -1,4 +1,18 @@
-1821-05-17 10:28:29
+1821-05-19 21:34:05
+
+	FunctionType *dive_voidTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dive_void", dive_voidTy);
+
+	FunctionType *emerge_voidTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("emerge_void", emerge_voidTy);
 
 	FunctionType *_tidTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -13,3 +27,17 @@
 		false
 	);
 	TheModule->getOrInsertFunction("tid", tidTy);
+
+	FunctionType *pthread_create_auxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pthread_create_aux", pthread_create_auxTy);
+
+	FunctionType *pthread_join_auxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pthread_join_aux", pthread_join_auxTy);

@@ -12,7 +12,7 @@ extern "C" DT_tensor *logE(int thread_id, DT_tensor tensor) {
   //std::cout << "logE of: " << tensor.name << "\n";
 
   float * device_x = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  std::vector<int> dims = tensor.dims;
   int kDataLen = tensor.dims_prod;
 
 
@@ -20,9 +20,7 @@ extern "C" DT_tensor *logE(int thread_id, DT_tensor tensor) {
 
 
   int grid_size, block_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(kDataLen, grid_size, block_size);
 
   tensor.Sync();
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -36,7 +34,7 @@ extern "C" DT_tensor *logE2(int thread_id, DT_tensor tensor) {
   std::cout << "logE2 of: " << tensor.name << "\n";
 
   float * device_x = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  std::vector<int> dims = tensor.dims;
   int kDataLen = tensor.dims_prod;
 
 
@@ -44,9 +42,7 @@ extern "C" DT_tensor *logE2(int thread_id, DT_tensor tensor) {
 
 
   int grid_size, block_size;
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(kDataLen);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(kDataLen, grid_size, block_size);
 
   tensor.Sync();
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -60,7 +56,7 @@ extern "C" DT_tensor *logE2(int thread_id, DT_tensor tensor) {
 extern "C" DT_tensor *clip(int thread_id, DT_tensor tensor, float _min, float _max)
 {
   float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  std::vector<int> dims = tensor.dims;
   
   int B = DimsProd(dims);
 

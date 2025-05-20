@@ -32,13 +32,13 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
     DT_tensor *tensor;
 
 
-    std::vector<float> dims;
+    std::vector<int> dims;
     char *init = "xavu";
     bool is_weight = false;
     for (int i=0; i<notes_vector->data->size(); i++)
     {
-      if(notes_vector->data_types->at(i)=="float")
-        dims.push_back(notes_vector->get<float>(i));
+      if(notes_vector->data_types->at(i)=="int")
+        dims.push_back(notes_vector->get<int>(i));
       if(notes_vector->data_types->at(i)=="str")
       {
         std::cout << "get char" << ".\n";
@@ -167,7 +167,7 @@ extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor)
   std::string arg_tensor_name = "list_" + tensor_name;
   
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   int dims_prod = tensor->dims_prod;
 
   float *arg_tensor, *tensor_ptr;
@@ -350,7 +350,7 @@ extern "C" DT_tensor *gpu(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tens
 
   
   tensor_cpu = pinned_tensor->cpu_tensor_ptr;
-  std::vector<float> dims = pinned_tensor->dims;
+  std::vector<int> dims = pinned_tensor->dims;
   float dims_prod = pinned_tensor->dims_prod;
   
 
@@ -404,7 +404,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
 
   
   
-  std::vector<float> dims, batchless_dims;
+  std::vector<int> dims, batchless_dims;
   dims = pinned_tensor->dims;
   
 
@@ -549,9 +549,9 @@ void copyChunk(float* d_data, const float* h_data, int offset, float size, cudaS
 
 extern "C" float write_zerosw(DT_tensor *tensor, float worker_idx)
 {
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
 
-  std::vector<float> workerless_dims = BatchLessDims(dims);
+  std::vector<int> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
 
   int idx_offset = (int) (workerless_dims_prod*worker_idx);
@@ -563,18 +563,21 @@ extern "C" float write_zerosw(DT_tensor *tensor, float worker_idx)
 }
 
 
-extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor, float first_dim, ...)
+
+
+extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor, int first_dim, ...)
 {
 
-  //std::cout << "Executing: " << tensor.name << "." << "view" << "\n";
+  std::cout << "Executing: " << tensor->name << "." << "view" << "\n";
    
-  std::vector<float> new_dims, new_dims_no_minus, current_dims;
+  std::vector<int> new_dims, new_dims_no_minus, current_dims;
   bool has_minus = false;
   current_dims = tensor->dims;
 
   
   va_list args;
   va_start(args, first_dim);
+
 
   if (first_dim!=-1)
     new_dims_no_minus.push_back(first_dim);
@@ -592,7 +595,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
       return 0;
     }
 
-    float dim = va_arg(args, float);
+    int dim = va_arg(args, int);
     if (dim==TERMINATE_VARARG)
       break;
     new_dims.push_back(dim);
@@ -652,49 +655,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
 
 
 
-extern "C" DT_tensor *NewVecToTensor(Scope_Struct *scope_struct, float first_dim, ...)
-{
-  std::vector<float> values;
 
-  int thread_id = scope_struct->thread_id;
-  
-  va_list args;
-  va_start(args, first_dim);
-
-
-  values.push_back(first_dim);
-
-  for (int i=0; i<10; i++)
-  {
-    if (i==9)
-    {
-      LogErrorS("Tried to create a tensor from brackets with more than 10 positions. This is not yet supported");
-      return nullptr;
-    }
-
-    float dim = va_arg(args, float);
-    if (dim==TERMINATE_VARARG)
-      break;
-    values.push_back(dim);
-
-
-  }
-  va_end(args);
-
-
-  float dims_prod = values.size();
-
-  float *tensor_ptr, *tensor_cpu;
-  tensor_cpu = values.data();
-
-  tensor_ptr = get_from_pool(thread_id, dims_prod, "tensor from brackets");
-  cudaMemcpy(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice);
-  
-
-  DT_tensor *new_tensor = createTensor(tensor_ptr, {dims_prod}, dims_prod, true, "");
-  new_tensor->op=create_tensor_from_brackets_op;
-  return new_tensor;
-}
 
 
 
@@ -705,7 +666,7 @@ extern "C" float tensor_CalculateIdx(char *tensor_name, float first_idx, ...) {
 
   DT_tensor *tensor = NamedTensorsT[tensor_name];
 
-  std::vector<float> idxs, new_dims_no_minus, dims;
+  std::vector<int> idxs, new_dims_no_minus, dims;
   int current_dims_prod;
   bool has_minus = false;
   dims = tensor->dims;
@@ -778,7 +739,7 @@ extern "C" DT_tensor *zeros_like(Scope_Struct *scope_struct, DT_tensor *tensor) 
 
   int thread_id = scope_struct->thread_id;
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
   int grid_size, block_size; 

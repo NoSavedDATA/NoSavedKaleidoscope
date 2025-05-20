@@ -1,4 +1,4 @@
-1821-05-10 22:56:56
+1821-05-19 17:34:08
 
 	FunctionType *PrintDimsTy= FunctionType::get(
 		int8PtrTy,
@@ -6,13 +6,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("PrintDims", PrintDimsTy);
-
-	FunctionType *NewDimsOnIdxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("NewDimsOnIdx", NewDimsOnIdxTy);
 
 	FunctionType *StoreDimsOnDemandTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -23,7 +16,7 @@
 
 	FunctionType *CalculateIdxOffsetTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("CalculateIdxOffset", CalculateIdxOffsetTy);

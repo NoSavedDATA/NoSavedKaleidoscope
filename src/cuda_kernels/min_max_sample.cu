@@ -23,7 +23,7 @@ extern "C" DT_tensor *tensor_onehot(Scope_Struct *scope_struct, DT_tensor *tenso
   // std::cout << "ONEHOT OF " << tensor->name << "\n";
 
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims, new_dims;
+  std::vector<int> dims, new_dims;
   dims = tensor->dims;
   new_dims = tensor->dims;
   new_dims.push_back(num_classes);
@@ -225,7 +225,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
   
 
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float *summed;
 
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -255,7 +255,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
   }
 
 
-  std::vector<float> sum_dims, new_dims;
+  std::vector<int> sum_dims, new_dims;
   if (first_dim<0)
     first_dim = dims.size()+first_dim;
   sum_dims.push_back(first_dim);
@@ -272,7 +272,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
     
     if (dim==TERMINATE_VARARG)
       break;
-    if (in_float_vec(dim, sum_dims))  
+    if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
       LogErrorS(_error);
@@ -287,7 +287,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
   
   float summed_dim;
   for (int i=0; i<dims.size(); i++)
-    if (!in_float_vec(i, sum_dims))
+    if (!in_int(i, sum_dims))
       new_dims.push_back(dims[i]);
     else
       summed_dim=dims[i];
@@ -332,7 +332,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
   cudaCheck(cudaGetLastError());
 
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float *maxed, *argmaxed;
 
 
@@ -347,7 +347,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
   }
 
 
-  std::vector<float> sum_dims, new_dims;
+  std::vector<int> sum_dims, new_dims;
   if (first_dim<0)
     first_dim = dims.size()+first_dim;
   sum_dims.push_back(first_dim);
@@ -364,7 +364,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
     
     if (dim==TERMINATE_VARARG)
       break;
-    if (in_float_vec(dim, sum_dims))  
+    if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.argmax() operation.";
       LogErrorS(_error);
@@ -379,7 +379,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
   
   float maxed_dim;
   for (int i=0; i<dims.size(); i++)
-    if (!in_float_vec(i, sum_dims))
+    if (!in_int(i, sum_dims))
       new_dims.push_back(dims[i]);
     else
       maxed_dim=dims[i];
@@ -441,12 +441,12 @@ extern "C" DT_tensor *topk(int thread_id, DT_tensor tensor, float k)
   std::cout << "TOPK OF " << tensor.name << "\n";
 
   float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  std::vector<int> dims = tensor.dims;
   float *maxed, *argmaxed, *topk, *tensor_copy;
 
 
-  std::vector<float> new_dims = RemoveLastDim(dims);
-  std::vector<float> topk_dims = RemoveLastDim(dims);
+  std::vector<int> new_dims = RemoveLastDim(dims);
+  std::vector<int> topk_dims = RemoveLastDim(dims);
   float new_dims_prod = DimsProd(new_dims);
   int dims_prod = DimsProd(dims);
   topk_dims.push_back(k);

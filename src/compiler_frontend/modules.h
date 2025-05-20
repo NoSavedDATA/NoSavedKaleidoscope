@@ -45,6 +45,29 @@ inline Value *callret(std::string fn, std::vector<Value *> args) {
 }
 
 
+
+inline Value *robust_str(std::string _string) {
+    Constant *fnStrConstant = ConstantDataArray::getString(*TheContext, _string, true);
+    GlobalVariable *fnStrGV = new GlobalVariable(
+        *TheModule,
+        fnStrConstant->getType(),
+        true, // isConstant
+        GlobalValue::PrivateLinkage,
+        fnStrConstant,
+        ".str");
+
+    fnStrGV->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
+    fnStrGV->setAlignment(Align(1));
+
+    // get a pointer to the first element (i8*)
+    Value *v = Builder->CreateInBoundsGEP(
+        fnStrConstant->getType(),
+        fnStrGV,
+        {Builder->getInt32(0), Builder->getInt32(0)},
+        "fn_name_gep");
+    return v;
+}
+
 inline Value *global_str(std::string _string) {
     return Builder->CreateGlobalString(_string);
 }

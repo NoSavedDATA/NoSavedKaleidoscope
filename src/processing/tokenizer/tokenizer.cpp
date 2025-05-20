@@ -121,17 +121,17 @@ extern "C" float wtokenize(DT_tensor *tensor, char *filename, float trunc_to, fl
   }
 
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
 
-  std::vector<float> workerless_dims = BatchLessDims(dims);
+  std::vector<int> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
 
-  std::vector<float> seqless_dims = BatchLessDims(workerless_dims);
+  std::vector<int> seqless_dims = BatchLessDims(workerless_dims);
   int seqless_dims_prod = DimsProd(seqless_dims);
 
-  std::vector<float> batchless_dims = BatchLessDims(seqless_dims);
+  std::vector<int> batchless_dims = BatchLessDims(seqless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
   int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
@@ -204,17 +204,17 @@ extern "C" float wtokenize_pad_left(DT_tensor *tensor, char *filename, float tru
   }
 
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
 
-  std::vector<float> workerless_dims = BatchLessDims(dims);
+  std::vector<int> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
 
-  std::vector<float> seqless_dims = BatchLessDims(workerless_dims);
+  std::vector<int> seqless_dims = BatchLessDims(workerless_dims);
   int seqless_dims_prod = DimsProd(seqless_dims);
 
-  std::vector<float> batchless_dims = BatchLessDims(seqless_dims);
+  std::vector<int> batchless_dims = BatchLessDims(seqless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
   int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
@@ -311,17 +311,17 @@ extern "C" float wtokenize_pad_left_batch_first(DT_tensor *tensor, char *filenam
   }
 
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
 
-  std::vector<float> workerless_dims = BatchLessDims(dims);
+  std::vector<int> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
 
-  std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+  std::vector<int> batchless_dims = BatchLessDims(workerless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
-  std::vector<float> seqless_dims = BatchLessDims(batchless_dims);
+  std::vector<int> seqless_dims = BatchLessDims(batchless_dims);
   int seqless_dims_prod = DimsProd(seqless_dims);
 
 
@@ -417,14 +417,14 @@ extern "C" float wtokenize_pad_left_idx(DT_tensor *tensor, char *filename, float
   }
 
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
 
-  std::vector<float> workerless_dims = BatchLessDims(dims);
+  std::vector<int> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
 
-  std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+  std::vector<int> batchless_dims = BatchLessDims(workerless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
   

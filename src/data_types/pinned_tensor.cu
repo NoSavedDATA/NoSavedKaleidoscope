@@ -24,7 +24,7 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
 
   DT_tensor *tensor;
 
-  std::vector<float> dims;
+  std::vector<int> dims;
   bool is_weight = false;
   for (int i=0; i<notes_vector->data->size(); i++)
   {
@@ -55,7 +55,7 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
 
   
   // pinned tensors are 1 pool tensor behind.
-  std::vector<float> pool_dims = dims;
+  std::vector<int> pool_dims = dims;
   pool_dims.erase(pool_dims.begin());
   float pool_product = DimsProd(pool_dims);
   pool_tensor = get_from_pool(0, pool_product, "create pinned");
@@ -77,7 +77,7 @@ extern "C" void pinned_tensor_Store_Idx(char *tensor_name, float idx_at, float v
   DT_tensor *tensor = NamedTensorsT[tensor_name];
   // PrintDims(tensor->dims);
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   int dims_prod = DimsProd(dims);
   if (idx_at>(dims_prod-1))
   {
@@ -111,7 +111,7 @@ extern "C" float pinned_tensor_CalculateIdx(char *tensor_name, float first_idx, 
 
   DT_tensor *tensor = NamedTensorsT[tensor_name];
 
-  std::vector<float> idxs, new_dims_no_minus, dims;
+  std::vector<int> idxs, new_dims_no_minus, dims;
   int current_dims_prod;
   bool has_minus = false;
   dims = tensor->dims;

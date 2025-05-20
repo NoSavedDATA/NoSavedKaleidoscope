@@ -60,7 +60,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   float *output;
   
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   
   int C = dims[dims.size()-1];
 
@@ -77,7 +77,7 @@ extern "C" void *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
     return nullptr;
   }
     
-  std::vector<float> new_dims = RemoveLastDim(dims);
+  std::vector<int> new_dims = RemoveLastDim(dims);
   new_dims.push_back(linear->OC);
   
 
@@ -104,8 +104,8 @@ extern "C" float Linear_Create(Scope_Struct *scope_struct, char *name, char *sco
 
   std::string init = "xavu";
 
-  float C = notes_vector->get<float>(0);
-  float OC = notes_vector->get<float>(1);
+  int C = notes_vector->get<int>(0);
+  int OC = notes_vector->get<int>(1);
 
 
   std::vector<std::string> notes;
@@ -125,7 +125,7 @@ extern "C" float Linear_Create(Scope_Struct *scope_struct, char *name, char *sco
   }
 
 
-  std::unique_ptr<LinearCPP> linear = std::make_unique<LinearCPP>((int) C, (int) OC, init, notes, name);
+  std::unique_ptr<LinearCPP> linear = std::make_unique<LinearCPP>(C, OC, init, notes, name);
 
 
   NamedLinear[name] = std::move(linear);

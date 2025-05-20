@@ -65,7 +65,7 @@ extern "C" float float_vec_Store_Idx(char *name, float idx, float value, Scope_S
 
 
 
-extern "C" DT_float_vec *arange_float(Scope_Struct *scope_struct, float begin, float end) {
+extern "C" DT_float_vec *arange_float(Scope_Struct *scope_struct, int begin, int end) {
   // TODO: turn into python like expression [0]*size
 
   DT_float_vec *vec = new DT_float_vec(end-begin);
@@ -79,7 +79,7 @@ extern "C" DT_float_vec *arange_float(Scope_Struct *scope_struct, float begin, f
 }
 
 
-extern "C" DT_float_vec *zeros_vec(Scope_Struct *scope_struct, float size) {
+extern "C" DT_float_vec *zeros_vec(Scope_Struct *scope_struct, int size) {
   DT_float_vec *vec = new DT_float_vec(size);
   for(int i=0; i<size; ++i)
     vec->vec[i] = 0;
@@ -89,7 +89,7 @@ extern "C" DT_float_vec *zeros_vec(Scope_Struct *scope_struct, float size) {
 }
 
 
-extern "C" DT_float_vec *ones_vec(Scope_Struct *scope_struct, float size) {
+extern "C" DT_float_vec *ones_vec(Scope_Struct *scope_struct, int size) {
   DT_float_vec *vec = new DT_float_vec(size);
   for(int i=0; i<size; ++i)
     vec->vec[i] = 1;

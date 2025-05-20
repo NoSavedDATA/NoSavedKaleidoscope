@@ -13,8 +13,8 @@ class SGD_optim : public Optimizer {
         SGD_optim(float lr, float momentum, float weight_decay, float grad_clip);
         
     void init_states(std::string param_name, float params_count) override;
-    void step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
-    void sparse_step(float *, float *, float *, std::vector<float>, std::vector<float> dims, std::string param_name, cudaStream_t stream) override;
+    void step(float *param, float *grad, std::vector<int> dims, std::string param_name, cudaStream_t stream) override;
+    void sparse_step(float *, float *, float *, std::vector<int>, std::vector<int> dims, std::string param_name, cudaStream_t stream) override;
 };
 
 

@@ -58,8 +58,8 @@ MHSA::MHSA(int nh, int C, int maxT, std::string Init, int_vec *Notators, std::st
     cudaMemcpy(W, W_cpu, 3*C*C * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(W_proj, W_proj_cpu, C*C * sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_W = createTensor(W, {3*(float)C*(float)C}, 3*C*C, true, Name+"W");
-    DT_tensor *tensor_W_proj = createTensor(W_proj, {(float)C*(float)C}, C*C, true, Name+"W_proj");
+    DT_tensor *tensor_W = createTensor(W, {3*C*C}, 3*C*C, true, Name+"W");
+    DT_tensor *tensor_W_proj = createTensor(W_proj, {C*C}, C*C, true, Name+"W_proj");
     tensor_W->SetIsWeight();
     tensor_W_proj->SetIsWeight();
 

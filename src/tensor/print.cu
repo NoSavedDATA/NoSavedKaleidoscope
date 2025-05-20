@@ -25,7 +25,7 @@ extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
   float *tensor_cpu = new float[arr_size];
 
   
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   
   
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -38,7 +38,7 @@ extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
   std::cout << "\nTensor \033[95m" << tensorName << "\033[0m:\n\n";
   PrintDims(dims);
   std::cout << "\n";
-  std::vector<float> ends;
+  std::vector<int> ends;
 
 
   for (int i = 0; i < dims.size(); i++) {
@@ -86,7 +86,7 @@ extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
 
 
     for (int e = 0; e < ends.size(); e++)
-      if (fmod((i+1),(int)ends[e]) == 0.0f)
+      if (fmod((i+1), ends[e]) == 0.0f)
         std::cout << "],";
     
 
@@ -132,7 +132,7 @@ extern "C" float print_tensor(DT_tensor tensor){
 
 extern "C" float PrintTensorF(const float *cuda_tensor, int d1, int d2){
 
-  std::vector<float> dims;
+  std::vector<int> dims;
   dims.push_back(d1);
   dims.push_back(d2);
 

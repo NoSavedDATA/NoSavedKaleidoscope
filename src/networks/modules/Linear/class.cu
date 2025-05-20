@@ -68,7 +68,7 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
     cudaMalloc(&W,       product * sizeof(float));
     cudaMemcpy(W, W_cpu, product * sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_W = createTensor(W, {(float)OC*(float)C}, product, true, Name+"W");
+    DT_tensor *tensor_W = createTensor(W, {OC*C}, product, true, Name+"W");
     tensor_W->SetIsWeight();
 
     NamedTensorsT[Name+"W"] = tensor_W;
@@ -92,7 +92,7 @@ void LinearCPP::SetDescriptors(int B, int thread_id)
 float *LinearCPP::Forward(DT_tensor *x, int thread_id)
 {
 
-  std::vector<float> dims = format_LinearLayer_Dims(x->dims);
+  std::vector<int> dims = format_LinearLayer_Dims(x->dims);
   int B = dims[0];
 
   if (this->B!=B)
