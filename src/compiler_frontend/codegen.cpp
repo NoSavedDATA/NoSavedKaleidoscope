@@ -692,7 +692,7 @@ Value *load_alloca(std::string name, std::string type, std::string from_function
     else
       load_type = int8PtrTy;
 
-    std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << " type " << type << ".\n";
+    // std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << " type " << type << ".\n";
     AllocaInst *alloca = function_allocas[from_function][name];
 
     return Builder->CreateLoad(load_type, alloca, name.c_str());
@@ -816,7 +816,7 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
 
-  std::cout << "INDEX " << Name << ", type: " << Type << ".\n";
+  // std::cout << "INDEX " << Name << ", type: " << Type << ".\n";
   if (Type!="tensor")
   {
     std::string idx_fn = Type + "_Idx";
@@ -867,8 +867,8 @@ Value *ObjectVecIdxExprAST::codegen(Value *scope_struct) {
   std::cout << "ObjectVecIdxExprAST codegen" << "\n";
   
   VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(Vec.get());
-  std::cout << "vec name " << vec->GetName() << "\n";
-  std::cout << "ObjectVecIdxExprAST is vec: " << GetIsVec() << "\n";
+  // std::cout << "vec name " << vec->GetName() << "\n";
+  // std::cout << "ObjectVecIdxExprAST is vec: " << GetIsVec() << "\n";
 
   Value *idx = vec->Idx[0]->codegen(scope_struct);
 
@@ -1120,6 +1120,11 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   }
   if (Elements=="float_int") {
     Elements = "float_float"; 
+    R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
+  }
+  if (Operation=="tensor_int_div")
+  {
+    Operation = "tensor_float_div";
     R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
   }
 
@@ -1739,8 +1744,9 @@ Value *FinishExprAST::codegen(Value *scope_struct) {
                         {pthread});
     
   }
-  
   thread_pointers.clear();
+
+  call("scope_struct_Reset_Threads", {scope_struct});
   
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
@@ -2461,7 +2467,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     Value *arg;
     if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int") && !isSelf)
     {
-      std::cout << "CALLEXPR LOAD OF " << LoadOf << ".\n";
+      // std::cout << "CALLEXPR LOAD OF " << LoadOf << ".\n";
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 
     } else if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="tensor"||Load_Type=="int"||Load_Type=="str_vec"||Load_Type=="int_vec")&&isSelf) {

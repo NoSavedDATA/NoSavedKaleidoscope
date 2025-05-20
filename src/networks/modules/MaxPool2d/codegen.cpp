@@ -22,7 +22,7 @@
 
 
 // extern "C" void *MaxPoolForward2d(char *self, DT_tensor *tensor, int thread_id, char *pool_namec, int is_obj_attr_or_self)
-extern "C" void *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
+extern "C" DT_tensor *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   //std::cout << "MaxPoolForward2d of " << pool_namec << " and tensor " << tensor.name << "\n";
   
@@ -36,7 +36,7 @@ extern "C" void *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   float *tensor_ptr, *output, *d_filter;
   tensor_ptr = tensor->tensor_ptr;
   std::vector<int> dims = tensor->dims;
-  float input_dims_prod = DimsProd(dims);
+  int input_dims_prod = DimsProd(dims);
 
   int B = dims[0];
   int C = dims[dims.size()-3];
@@ -53,7 +53,7 @@ extern "C" void *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   
   
-  float resultingDimsProd = B * OC * conv->out_W * conv->out_W;
+  int resultingDimsProd = B * OC * conv->out_W * conv->out_W;
 
 
 

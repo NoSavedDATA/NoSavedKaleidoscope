@@ -1,4 +1,4 @@
-1821-05-20 14:27:10
+1821-05-20 18:37:06
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -104,6 +104,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
+
+	FunctionType *scope_struct_Reset_ThreadsTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Reset_Threads", scope_struct_Reset_ThreadsTy);
 
 	FunctionType *scope_struct_Increment_ThreadTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

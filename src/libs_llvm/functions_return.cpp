@@ -24,9 +24,12 @@ void set_functions_return_type() {
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, 
 						{"tid", "int"}, 
 						{"str_Create", "str"}, {"str_Load", "str"}, {"str_Copy", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"cat_str_float", "str"}, {"SplitString", "str_vec"}, {"str_split_idx", "str"}, 
+						{"Embedding", "tensor"}, 
 						{"ConcatScopeStr", "str"}, 
 						{"tensor_tensor_mma", "tensor"}, {"tensor_tensor_add", "tensor"}, {"tensor_tensor_sub", "tensor"}, {"tensor_tensor_equal", "tensor"}, {"tensor_tensor_mult", "tensor"}, {"tensor_tensor_div", "tensor"}, 
+						{"Conv2d", "tensor"}, 
 						{"load_img", ""}, {"gload_img", ""}, {"wload_img", ""}, {"wload_img_resize", ""}, 
+						{"BatchNorm2d", "tensor"}, 
 						{"rl_discounted_return", "tensor"}, 
 						{"RandomStrOnDemand", "str"}, {"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatStrFreeRight", "str"}, {"ConcatStrFree", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
 						{"btc_mult", "tensor"}, {"btc_multT", "tensor"}, 
@@ -42,6 +45,7 @@ void set_functions_return_type() {
 						{"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"}, {"Jitter", "tensor"}, 
 						{"FirstArgOnDemand", "str"}, 
 						{"LenStrVec", "int"}, {"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"str_vec_CalculateIdx", "int"}, 
+						{"Linear", "tensor"}, 
 						{"int_Create", "int"}, {"int_Load", "int"}, 
 						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_on_Offset_int", "int"}, 
 						{"logE", "tensor"}, {"logE2", "tensor"}, {"clip", "tensor"}, 
@@ -49,6 +53,8 @@ void set_functions_return_type() {
 						{"list_New", "list"}, {"list_Load", "list"}, {"list_Create", "list"}, 
 						{"mse_with_priorities", "tensor"}, 
 						{"dictionary_Create", "dict"}, 
+						{"Pool2d", "tensor"}, 
+						{"LSTM", "tensor"}, 
 
 	};
 }

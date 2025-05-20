@@ -11,7 +11,7 @@
 #include "../../../tensor/tensor_struct.h"
 
 
-class Embedding
+class DT_Embedding
 {
   public:
     
@@ -20,7 +20,7 @@ class Embedding
     float *W, *dW;
     bool changed_descriptors;
 
-    Embedding(int C, int OC, std::string Init, std::string Name); 
+    DT_Embedding(int C, int OC, std::string Init, std::string Name); 
   
   void SetDescriptors(int);
   void SetBackwardDescriptors();

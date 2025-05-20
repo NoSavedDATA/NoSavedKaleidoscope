@@ -57,10 +57,10 @@ extern "C" DT_tensor *repeat_interleave(int thread_id, DT_tensor tensor, float r
 }
 
 
-extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor, float first_dim, ...)
+extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor, int first_dim, ...)
 {
   int thread_id = scope_struct->thread_id;
-  //std::cout << "MEAN OF " << tensor->name << "\n";
+  // std::cout << "MEAN OF " << tensor->name << "\n";
 
 
   float *tensor_ptr = tensor->tensor_ptr;
@@ -122,7 +122,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
       return nullptr;
     }
 
-    float dim = va_arg(args, float);
+    int dim = va_arg(args, int);
     
     if (dim==TERMINATE_VARARG)
       break;
@@ -195,10 +195,10 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
 
 
 //TODO: mean over axis
-extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor, float first_dim, ...)
+extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor, int first_dim, ...)
 {
   int thread_id = scope_struct->thread_id;
-  //std::cout << "MEAN OF " << tensor->name << "\n";
+  // std::cout << "tensor_mean MEAN OF " << tensor->name << "\n";
 
 
   float *tensor_ptr = tensor->tensor_ptr;
@@ -260,7 +260,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
       return nullptr;
     }
 
-    float dim = va_arg(args, float);
+    int dim = va_arg(args, int);
     
     if (dim==TERMINATE_VARARG)
       break;
@@ -336,14 +336,14 @@ void mean_over_semilast_dim_backward(float *inp, int size, float *out,
                      std::string module_name, DT_tensor *node)
 {
   std::vector<int> dims = node->L_Node->dims;
-  float x_dims_prod = node->L_Node->dims_prod;
-  float y_dims_prod = node->dims_prod;
+  int x_dims_prod = node->L_Node->dims_prod;
+  int y_dims_prod = node->dims_prod;
 
 
-  mean_over_semilast_dim_backward_kernel<<<std::ceil(x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dinp, dout,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
+  mean_over_semilast_dim_backward_kernel<<<std::ceil((float)x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dinp, dout,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
 }
 
-extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
+extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, int first_dim, ...)
 {
   //std::cout << "SUM OF " << tensor.name << "\n";
 
@@ -401,7 +401,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
       return nullptr;
     }
 
-    float dim = va_arg(args, float);
+    int dim = va_arg(args, int);
     
     if (dim==TERMINATE_VARARG)
       break;
@@ -459,7 +459,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
 
 
 
-extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, float first_dim, ...)
+extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, int first_dim, ...)
 {
   //std::cout << "PROD OF " << tensor.name << "\n";
 
@@ -507,7 +507,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, float first_dim, ...
       return nullptr;
     }
 
-    float dim = va_arg(args, float);
+    int dim = va_arg(args, int);
     
     if (dim==TERMINATE_VARARG)
       break;

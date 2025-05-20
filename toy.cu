@@ -618,7 +618,7 @@ Function *FunctionAST::codegen() {
 
         // Coder args
         if (type=="float"||type=="str"||type=="int") {
-            std::cout << "Arg STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
+            // std::cout << "Arg STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
             llvm::Type *alloca_type = get_type_from_str(type);
             AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
             Builder->CreateStore(&Arg, arg_alloca);
@@ -3122,7 +3122,8 @@ int main() {
                      {"float_str", "str"}, {"int_int", "int"}, {"int_float", "float"}, {"float_int", "float"}, {"str_int", "str"}, {"int_str", "str"},
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
-                     {"object_object", "object"}, {"str_object", "object"}};
+                     {"object_object", "object"}, {"str_object", "object"},
+                     {"tensor_int", "tensor"}, {"int_tensor", "tensor"}};
                      
 
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},

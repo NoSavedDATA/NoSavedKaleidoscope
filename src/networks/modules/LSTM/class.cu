@@ -22,7 +22,7 @@
 #include "kernels.h"
 
 
-LSTM::LSTM(int C, int OC, std::string Init, std::string Name)
+DT_LSTM::DT_LSTM(int C, int OC, std::string Init, std::string Name)
     : C(C), OC(OC), Init(Init), Name(Name) {
     B = 0;
     T = 0;
@@ -68,7 +68,7 @@ LSTM::LSTM(int C, int OC, std::string Init, std::string Name)
 
 
 
-void LSTM::SetDescriptors(int B, int T, int thread_id)
+void DT_LSTM::SetDescriptors(int B, int T, int thread_id)
 {
 
   if (x_out!=nullptr)
@@ -99,7 +99,7 @@ void LSTM::SetDescriptors(int B, int T, int thread_id)
 }
 
 
-float *LSTM::Forward(DT_tensor *tensor_x, DT_tensor *tensor_ht, DT_tensor *tensor_ct, int B, int T, int thread_id)
+float *DT_LSTM::Forward(DT_tensor *tensor_x, DT_tensor *tensor_ht, DT_tensor *tensor_ct, int B, int T, int thread_id)
 {
 
   dim3 block_size(TILE_SIZE, TILE_SIZE);
@@ -187,7 +187,7 @@ float *LSTM::Forward(DT_tensor *tensor_x, DT_tensor *tensor_ht, DT_tensor *tenso
   return tensor_ht->tensor_ptr;
 }
 
-void LSTM::SetBackwardDescriptors()
+void DT_LSTM::SetBackwardDescriptors()
 {
   std::cout << "Changed LSTM descriptors." << "\n";
 
@@ -199,7 +199,7 @@ void LSTM::SetBackwardDescriptors()
   changed_descriptors=false;
 }
 
-void LSTM::FirstBackward()
+void DT_LSTM::FirstBackward()
 {
   std::cout << "First LSTM backward." << "\n";
 
@@ -219,7 +219,7 @@ void LSTM::FirstBackward()
 }
 
 
-void LSTM::Backward(float *x, float *dx, float *dy)
+void DT_LSTM::Backward(float *x, float *dx, float *dy)
 {
   dim3 block_size(TILE_SIZE, TILE_SIZE);
   int shared_mem_size = 2*TILE_SIZE_SQ*sizeof(float);

@@ -1,15 +1,15 @@
-1821-05-20 11:05:57
+1821-05-20 16:55:22
 
-	FunctionType *EmbeddingForwardTy= FunctionType::get(
+	FunctionType *EmbeddingTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("EmbeddingForward", EmbeddingForwardTy);
+	TheModule->getOrInsertFunction("Embedding", EmbeddingTy);
 
-	FunctionType *CreateEmbeddingOnDemandTy= FunctionType::get(
+	FunctionType *Embedding_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("CreateEmbeddingOnDemand", CreateEmbeddingOnDemandTy);
+	TheModule->getOrInsertFunction("Embedding_Create", Embedding_CreateTy);

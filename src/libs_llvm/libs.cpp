@@ -507,6 +507,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
 
+	FunctionType *scope_struct_Reset_ThreadsTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Reset_Threads", scope_struct_Reset_ThreadsTy);
+
 	FunctionType *scope_struct_Increment_ThreadTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy},
@@ -605,19 +612,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("network_ema", network_emaTy);
 
-	FunctionType *LSTMForwardTy= FunctionType::get(
+	FunctionType *LSTMTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("LSTMForward", LSTMForwardTy);
+	TheModule->getOrInsertFunction("LSTM", LSTMTy);
 
-	FunctionType *CreateLSTMOnDemandTy= FunctionType::get(
+	FunctionType *LSTM_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("CreateLSTMOnDemand", CreateLSTMOnDemandTy);
+	TheModule->getOrInsertFunction("LSTM_Create", LSTM_CreateTy);
 
 	FunctionType *backpropTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -1209,7 +1216,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *write_zeroswTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("write_zerosw", write_zeroswTy);
@@ -1300,21 +1307,21 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *mean_tensorTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("mean_tensor", mean_tensorTy);
 
 	FunctionType *sumTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("sum", sumTy);
 
 	FunctionType *prodTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("prod", prodTy);
@@ -1370,14 +1377,14 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *tensor_argmaxTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("tensor_argmax", tensor_argmaxTy);
 
 	FunctionType *topkTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext)},
+		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("topk", topkTy);
@@ -1853,42 +1860,42 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *build_vocabTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("build_vocab", build_vocabTy);
 
 	FunctionType *tokenizeTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("tokenize", tokenizeTy);
 
 	FunctionType *wtokenizeTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("wtokenize", wtokenizeTy);
 
 	FunctionType *wtokenize_pad_leftTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("wtokenize_pad_left", wtokenize_pad_leftTy);
 
 	FunctionType *wtokenize_pad_left_batch_firstTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("wtokenize_pad_left_batch_first", wtokenize_pad_left_batch_firstTy);
 
 	FunctionType *wtokenize_pad_left_idxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("wtokenize_pad_left_idx", wtokenize_pad_left_idxTy);
@@ -1928,19 +1935,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("end_timer", end_timerTy);
 
-	FunctionType *EmbeddingForwardTy= FunctionType::get(
+	FunctionType *EmbeddingTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("EmbeddingForward", EmbeddingForwardTy);
+	TheModule->getOrInsertFunction("Embedding", EmbeddingTy);
 
-	FunctionType *CreateEmbeddingOnDemandTy= FunctionType::get(
+	FunctionType *Embedding_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("CreateEmbeddingOnDemand", CreateEmbeddingOnDemandTy);
+	TheModule->getOrInsertFunction("Embedding_Create", Embedding_CreateTy);
 
 	FunctionType *SGDTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

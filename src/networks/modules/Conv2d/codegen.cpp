@@ -39,7 +39,7 @@ void conv2d_backward(float *inp, int size, float *out,
 
 
 
-extern "C" void *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
+extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
   std::string conv_name = scope_struct->first_arg;
   int thread_id = scope_struct->thread_id;

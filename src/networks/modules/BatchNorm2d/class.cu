@@ -131,10 +131,8 @@ float *BatchNorm2dCPP::Forward(DT_tensor *tensor, int H, int W, int B, int C, in
 
 
   // Forward
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B*C);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(B*C, grid_size, block_size);
   
   
 

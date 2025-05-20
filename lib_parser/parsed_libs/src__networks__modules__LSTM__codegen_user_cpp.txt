@@ -1,1 +1,1 @@
-"LSTMForward", "CreateLSTMOnDemand", 
+"LSTM", "LSTM_Create", 

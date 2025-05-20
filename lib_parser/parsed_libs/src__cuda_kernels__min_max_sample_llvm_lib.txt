@@ -1,4 +1,4 @@
-1821-05-20 14:04:50
+1821-05-20 17:36:40
 
 	FunctionType *tensor_onehotTy= FunctionType::get(
 		int8PtrTy,
@@ -44,14 +44,14 @@
 
 	FunctionType *tensor_argmaxTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("tensor_argmax", tensor_argmaxTy);
 
 	FunctionType *topkTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext)},
+		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("topk", topkTy);

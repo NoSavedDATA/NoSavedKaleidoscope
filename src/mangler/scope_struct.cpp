@@ -157,6 +157,13 @@ extern "C" int get_scope_has_grad(Scope_Struct *scope_struct) {
 std::set<int> assigned_ids;
 std::mutex id_mutex;
 
+
+extern "C" float scope_struct_Reset_Threads(Scope_Struct *scope_struct) {
+
+    assigned_ids.clear();    
+    return 0;
+}
+
 extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
     // std::cout << "get_scope_has_grad" << ".\n";
     // pthread_mutex_lock(&create_thread_mutex);

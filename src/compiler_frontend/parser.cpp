@@ -1140,18 +1140,18 @@ std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string 
     name_solve_to_last = false;
     callee_override = typeVars[Prev_IdName] + "_" + IdName;
     load_type = typeVars[Prev_IdName];
-    std::cout << "Triggered from Prev_IdName, override as: " << callee_override << ".\n";
+    // std::cout << "Triggered from Prev_IdName, override as: " << callee_override << ".\n";
     load_of = Prev_IdName;
   }
   // model.linear_1(x)
   if(typeVars.count(IdName)>0)
   {
-    std::cout << "Triggered from IdName" << ".\n";
+    // std::cout << "Triggered from IdName" << ".\n";
     name_solve_to_last = true;
     callee_override = typeVars[IdName];
     load_of = IdName;
   }
-  std::cout << "typeVars.count(Prev_IdName)>0: " << Prev_IdName << " is " <<  std::to_string(typeVars.count(Prev_IdName)>0) << ".\n";
+  // std::cout << "typeVars.count(Prev_IdName)>0: " << Prev_IdName << " is " <<  std::to_string(typeVars.count(Prev_IdName)>0) << ".\n";
   std::string callee = IdName;
   bool is_var_forward = false;
   bool return_tensor = false;
@@ -1874,11 +1874,9 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
         // std::cout << "Elements type: " << op_elements << ".\n";
         std::string operation = op_map[BinOp];
         std::string op_type = op_elements + "_" + operation;
-        std::cout << "Operation: " << op_type << ".\n";
         // std::cout << "op: " << BinOp << ".\n"; 
         
         
-        std::cout << "Op is: " << op_type << ".\n";
         LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(LHS), std::move(RHS), parser_struct);
         if (op_type=="int_int_div")
           return_type = "float";
