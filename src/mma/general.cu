@@ -289,7 +289,7 @@ void matmul_backward2(
   float *inp = L_tensor->tensor_ptr;
   float *weight = R_tensor->tensor_ptr;
 
-  std::vector<float> BC = format_LinearLayer_Dims(L_tensor->dims);
+  std::vector<int> BC = format_LinearLayer_Dims(L_tensor->dims);
   float B  = BC[0];
   float C  = BC[1];
   float OC = R_tensor->dims[0]; 

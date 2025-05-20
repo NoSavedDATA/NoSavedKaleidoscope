@@ -22,7 +22,7 @@ extern "C" float CopyArgTensor(Scope_Struct *scope_struct, DT_tensor *tensor, ch
   arg_tensor_name = arg_tensor_name + new_tensor_name;
   
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   int dims_prod = tensor->dims_prod;
 
   float *tensor_ptr = tensor->tensor_ptr;
@@ -55,7 +55,7 @@ extern "C" float CopyArgTensor(Scope_Struct *scope_struct, DT_tensor *tensor, ch
 //   arg_tensor_name = arg_tensor_name + new_tensor_name;
   
 
-//   std::vector<float> dims = tensor->dims;
+//   std::vector<int> dims = tensor->dims;
 //   int dims_prod = tensor->dims_prod;
 
 //   float *arg_tensor, *tensor_ptr;

@@ -97,15 +97,6 @@ bool ExprAST::GetIsList() {
 
 
 // Tensor related
-std::vector<float> ExprAST::GetDims() {
-  return Dims;
-}
-void ExprAST::SetDims(std::vector<float> Dims) {
-  this->Dims=Dims;
-}
-Value *ExprAST::GetTensorPtr() {
-  return TensorPtr;
-}
     
   
 NameSolverAST::NameSolverAST(std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names)

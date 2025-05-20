@@ -56,7 +56,7 @@ void Loader::Load(float *tensor_ptr, const float *tensor_cpu, int all_dims_prod)
   // float remainder = all_dims_prod % ASYNC_LOADER_THREADS;
 
 
-  // std::vector<float> dims_prods;
+  // std::vector<int> dims_prods;
 
   // for(int i=0; i<ASYNC_LOADER_THREADS-1; i++)
   //   dims_prods.push_back(quotient);

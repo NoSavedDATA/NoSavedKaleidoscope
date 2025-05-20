@@ -1,18 +1,18 @@
-#pragma once
+// #pragma once
 
-#include <cublas_v2.h>
-#include <cuda_fp16.h>
-#include <mma.h>
+// #include <cublas_v2.h>
+// #include <cuda_fp16.h>
+// #include <mma.h>
 
-#include "../tensor/tensor_struct.h"
-#include "utils.h"
+// #include "../tensor/tensor_struct.h"
+// #include "utils.h"
 
-using namespace nvcuda;
+// using namespace nvcuda;
 
-__global__ void btc_mult_kernel(float *out, const float *x, const float *w, const int B, const int Tx, const int Tw, const int C, const int tile_size, const int tile_offset);
-__global__ void btc_mult_kernelT(float *out, const float *x, const float *w, const int B, const int Tx, const int Tw, const int C, const int tile_size, const int tile_offset);
+// __global__ void btc_mult_kernel(float *out, const float *x, const float *w, const int B, const int Tx, const int Tw, const int C, const int tile_size, const int tile_offset);
+// __global__ void btc_mult_kernelT(float *out, const float *x, const float *w, const int B, const int Tx, const int Tw, const int C, const int tile_size, const int tile_offset);
 
 
 
-extern "C" DT_tensor *btc_mult(int thread_id, DT_tensor *x, DT_tensor*w);
-extern "C" DT_tensor *btc_multT(int thread_id, DT_tensor *x, DT_tensor*w);
+// extern "C" DT_tensor *btc_mult(int thread_id, DT_tensor *x, DT_tensor*w);
+// extern "C" DT_tensor *btc_multT(int thread_id, DT_tensor *x, DT_tensor*w);

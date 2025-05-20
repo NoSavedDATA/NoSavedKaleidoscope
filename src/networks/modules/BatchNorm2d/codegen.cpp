@@ -31,13 +31,13 @@ extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   float *tensor_ptr, *output;
   tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float input_dims_prod = DimsProd(dims);
 
-  float B = dims[0];
-  float C = dims[dims.size()-3];
-  float H = dims[dims.size()-2];
-  float W = dims[dims.size()-1];
+  int B = dims[0];
+  int C = dims[dims.size()-3];
+  int H = dims[dims.size()-2];
+  int W = dims[dims.size()-1];
 
 
 
@@ -60,7 +60,7 @@ extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   NamedBatchNorm2d[bn_name] = std::move(conv);
 
-  std::vector<float> new_dims = {(float)B, (float)C, (float)H, (float)W};
+  std::vector<int> new_dims = {B, C, H, W};
 
   return customOpTensor(output, new_dims, DimsProd(new_dims), "batchnorm2d_backward", bn_name, tensor);
 }

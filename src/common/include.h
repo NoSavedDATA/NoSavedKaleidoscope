@@ -6,4 +6,4 @@
 #include"extension_functions.h"
 
 
-extern float TERMINATE_VARARG;
+extern int TERMINATE_VARARG;

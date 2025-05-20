@@ -1,1 +1,1 @@
-{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, 
+{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_on_Offset_int", "int"}, 

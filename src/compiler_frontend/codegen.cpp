@@ -200,6 +200,9 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         
         notes_vector = callret("Add_Float_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
       }
+      else if (IntExprAST* numExpr = dynamic_cast<IntExprAST*>(note)) {
+        notes_vector = callret("Add_Int_To_NotesVector", {notes_vector, note->codegen(scope_struct)});
+      }
       else if (StringExprAST* expr = dynamic_cast<StringExprAST*>(note)) {
         Value *str_val = callret("CopyString", {note->codegen(scope_struct)});
         notes_vector = callret("Add_String_To_NotesVector", {notes_vector, str_val});
@@ -620,9 +623,11 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
   Value* condVal = Cond->codegen(scope_struct);
   if (!condVal)
     return nullptr;
+  // Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
+  // condVal = Builder->CreateFCmpONE(condVal, _zero, "loopcond");
+  Value *_zero = const_int(0);
+  condVal = Builder->CreateICmpNE(condVal, _zero, "whilecond");
 
-  Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
-  condVal = Builder->CreateFCmpONE(condVal, _zero, "loopcond");
 
   // Create the conditional branch
   Builder->CreateCondBr(condVal, LoopBB, AfterBB);
@@ -702,10 +707,10 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
     return V;
   }
 
-  if ((type=="float"||type=="str"||type=="tensor"||type=="int")&&is_self) {
+  if ((type=="float"||type=="str"||type=="tensor"||type=="int"||type=="str_vec"||type=="int_vec")&&is_self) {
     int object_ptr_offset = ClassVariables[parser_struct.class_name][Name];
-    if (type=="float")
-      return callret("object_Load_Float_on_Offset", {scope_struct, const_int(object_ptr_offset)});
+    if (type=="float"||type=="int")
+      return callret("object_Load_on_Offset_int", {scope_struct, const_int(object_ptr_offset)});
     else
     {
       p2t("object_Load_on_Offset");
@@ -751,6 +756,8 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   p2t(msg);
 
 
+
+  p2t("CODEGEN FOR VECIDXEXPR");
 
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -804,6 +811,7 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   //   if (Type=="object_vec")
   //     return var_name;
   // }
+
 
 
   if (Type=="str_vec")
@@ -1074,13 +1082,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         std::cout << "HEAP STORE FOR " << Lname << ".\n";
         // call("print", {scope_struct, Lvar_name});
 
-        if(LHS->GetSelf())
+        if(LHS->GetSelf()&&LType!="pinned_tensor")
         {
           std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
           int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
 
-          if(LType=="float")
-            call("object_Attr_Float_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
+          if(LType=="float"||LType=="int")
+            call("object_Attr_on_Offset_"+LType, {scope_struct, Val, const_int(obj_ptr_offset)});
           else
           {
             std::cout << "SELF STORE OF " << attribute_name << ".\n";
@@ -1380,7 +1388,12 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
       return callret("CudaScalarMult", {tensorPtr, R, callret("get_scope_thread_id", {scope_struct})});
     }
-    return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
+    
+    if (Operand->GetType()=="int")
+      return Builder->CreateMul(ConstantInt::get(Type::getInt32Ty(*TheContext), -1), OperandV, "multmp");
+    
+    if (Operand->GetType()=="tensor")
+      return Builder->CreateFMul(ConstantFP::get(Type::getFloatTy(*TheContext), -1),
                               OperandV, "multmp");
   }
 
@@ -1402,6 +1415,31 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
   return Builder->CreateCall(F, OperandV, "unop");
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1433,6 +1471,39 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
                              functionName,
                              TheModule.get());
 
+  // function_allocas[parser_struct.function_name][VarName] = alloca;
+
+  // std::vector<Value *> previous_scope_values;
+  std::vector<std::string> previous_scope_value_types;
+  std::vector<std::string> previous_scope_value_names;
+  std::cout << "-----------------------" << ".\n";
+  for (auto &pair : function_allocas["__anon_expr"]) {
+    std::cout << "Found alloca " << pair.first << ".\n";
+
+    std::string type;
+    if (Object_toClass.count(pair.first)>0)
+    {
+      type = "void";
+      std::cout << "Type is void ptr" << ".\n";
+    }
+    else
+    {
+      
+      type = typeVars[pair.first];
+      // std::cout << "Type is " << typeVars[pair.first] << ".\n";
+      continue;
+    }
+
+    Value *local = load_alloca(pair.first, type, "__anon_expr");
+    std::cout << "call dive_" <<type  << ".\n";
+    call("dive_"+type, {global_str(functionName), local, global_str(pair.first)});
+
+    previous_scope_value_types.push_back(type);
+    previous_scope_value_names.push_back(pair.first);
+
+    std::cout << "\n";
+  }
+  std::cout << "-----------------------" << ".\n";
   
   //Dive scope_struct
   Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName)}); 
@@ -1447,6 +1518,9 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 
   std::cout << "setted insert point" << ".\n";
 
+
+  
+
   // Recover scope_struct Value * on the new function
   Value *scope_struct_copy = Builder->CreateCall(TheModule->getFunction("scope_struct_Load_for_Async"), {Builder->CreateGlobalString(functionName)}); 
 
@@ -1454,7 +1528,17 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   // define body of function
   Value *V;
 
+  for(int i=0; i<previous_scope_value_names.size(); ++i) {
+    std::string type = previous_scope_value_types[i];
+    std::string var_name = previous_scope_value_names[i];
 
+    Value *v = callret("emerge_"+type, {global_str(functionName), global_str(var_name)});
+
+    llvm::Type *llvm_type = get_type_from_str(type);
+    AllocaInst * alloca = CreateEntryBlockAlloca(asyncFun, var_name, llvm_type);
+    Builder->CreateStore(v, alloca);
+    function_allocas["asyncs"][var_name] = alloca;
+  }
 
   
   for (auto &body : asyncBody)
@@ -1495,27 +1579,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 }
 
 
-//int pthread_create(pthread_t *thread, pthread_attr_t *attr,
-//                   void *(*start_routine) (void *arg), void *arg);
 
-extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
-                   void *(*function_ptr) (void *arg), void *arg)
-{
-  // std::cout << "Creating thread" << "\n";
-  pthread_create(thread, attr, function_ptr, arg);
-  // std::cout << "Created" << "\n";
-}
-
-
-extern "C" void pthread_join_aux(pthread_t thread)
-{
-  // std::cout << "Joining " << thread <<  "\n";
-  void **value_ptr;
-  value_ptr = nullptr;
-
-  pthread_join(thread, value_ptr);
-  // std::cout << "Joined: " << thread << "\n";
-}
 
 Value *AsyncExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
@@ -2173,7 +2237,7 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     Value *arg; 
-    if ((Args[i]->GetType()=="tensor" || Args[i]->GetType()=="pinned_tensor") && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf())
+    if ((Args[i]->GetType()=="tensor" && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf()) || (Args[i]->GetType()=="pinned_tensor"&&Args[i]->GetIsVarLoad()))
     {      
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(scope_struct);
@@ -2319,6 +2383,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
       std::string object_name = std::get<0>(name_solver->Names[0]);
 
+      std::cout << "SET SCOPE OF FUNCTION ALLOCA " << parser_struct.function_name << ".\n";
       AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
       Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
       call("set_scope_object", {scope_struct_copy, obj});
@@ -2402,6 +2467,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       std::cout << "CALLEXPR LOAD OF " << LoadOf << ".\n";
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 
+    } else if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="tensor"||Load_Type=="int"||Load_Type=="str_vec"||Load_Type=="int_vec")&&isSelf) {
+      int object_ptr_offset = ClassVariables[parser_struct.class_name][LoadOf];
+      arg = callret("object_Load_on_Offset", {scope_struct_copy, const_int(object_ptr_offset)});
     } else {
       std::string load_fn = Load_Type+"_Load";
       arg = callret(load_fn, {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});  

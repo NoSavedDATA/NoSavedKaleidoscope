@@ -51,12 +51,12 @@ extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_
 
   float *tensor_ptr, *output, *d_filter;
   
-  std::vector<float> dims = tensor_x->dims;
-  float input_dims_prod = DimsProd(dims);
+  std::vector<int> dims = tensor_x->dims;
+  int input_dims_prod = DimsProd(dims);
 
-  float B = dims[0];
-  float T = dims[dims.size()-2];
-  float C = dims[dims.size()-1];
+  int B = dims[0];
+  int T = dims[dims.size()-2];
+  int C = dims[dims.size()-1];
 
 
 
@@ -86,7 +86,7 @@ extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_
   
 
 
-  std::vector<float> new_dims = {(float)B, (float)lstm->OC}; 
+  std::vector<int> new_dims = {B, lstm->OC}; 
 
 
 
@@ -109,11 +109,11 @@ extern "C" void *LSTMForward(char *self, DT_tensor *tensor_x, DT_tensor *tensor_
 
 
 extern "C" float CreateLSTMOnDemand(char *tensor_name, char *init,
-                                      float C, float OC)
+                                      int C, int OC)
 {
   std::cout << "\nCreate lstm on demand:\n   C: " << C << " OC " << OC << "\n";
 
-  auto lstm = std::make_unique<LSTM>((int)C, (int)OC, init, tensor_name);
+  auto lstm = std::make_unique<LSTM>(C, OC, init, tensor_name);
 
   std::cout << "Adding " << tensor_name << " to NamedLSTM dict\n";
   NamedLSTM[tensor_name] = std::move(lstm);

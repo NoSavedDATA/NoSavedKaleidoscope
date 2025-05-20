@@ -14,7 +14,7 @@ extern "C" DT_tensor *RandomCrop(int thread_id, DT_tensor *tensor, float padding
 {
   float *tensor_ptr, *cropped;
   tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
   unsigned long long seed = get_int_seed();
@@ -63,7 +63,7 @@ extern "C" DT_tensor *RandomHorizontalFlip(int thread_id, DT_tensor *tensor)
 {
   float *tensor_ptr, *flipped;
   tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
   unsigned long long seed = get_int_seed();
@@ -109,7 +109,7 @@ extern "C" DT_tensor *NormalizeImg(int thread_id, DT_tensor *tensor, DT_tensor *
 {
   float *tensor_ptr, *normalized;
   tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float dims_prod = tensor->dims_prod;
 
 

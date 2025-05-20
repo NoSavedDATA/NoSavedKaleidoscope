@@ -24,7 +24,7 @@ extern "C" DT_tensor *repeat_interleave(int thread_id, DT_tensor tensor, float r
   //std::cout << "REPEAT_interleave OF " << tensor.name << " with " << repeats << " repeats.\n";
 
   float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims, new_dims;
+  std::vector<int> dims, new_dims;
   dims = tensor.dims;
   if (dim<0)
     dim = dims.size()+dim;
@@ -64,7 +64,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
 
 
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float *summed;
 
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -95,7 +95,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
     cudaCheck(cudaMemcpyAsync(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice, stream));
     delete[] aux;
   
-    std::vector<float> new_dims;
+    std::vector<int> new_dims;
     new_dims.push_back(1.0f);
   
     DT_tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
@@ -105,7 +105,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
   }
 
 
-  std::vector<float> sum_dims, new_dims;
+  std::vector<int> sum_dims, new_dims;
   if (first_dim<0)
     first_dim = dims.size()+first_dim;
   sum_dims.push_back(first_dim);
@@ -126,7 +126,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
     
     if (dim==TERMINATE_VARARG)
       break;
-    if (in_float_vec(dim, sum_dims))  
+    if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.mean() operation.";
       LogErrorS(_error);
@@ -141,7 +141,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
   
   float summed_dim;
   for (int i=0; i<dims.size(); i++)
-    if (!in_float_vec(i, sum_dims))
+    if (!in_int(i, sum_dims))
       new_dims.push_back(dims[i]);
     else
       summed_dim=dims[i];
@@ -161,7 +161,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
 
   if (sum_dims[0]==(dims.size()-2))
   {
-    std::vector<float> _dims = RemoveLastDim(RemoveLastDim(dims));
+    std::vector<int> _dims = RemoveLastDim(RemoveLastDim(dims));
     dims_prod = DimsProd(_dims);
 
     int warps_per_block = THREADS_PER_BLOCK/WARP_SIZE;
@@ -202,7 +202,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
 
 
   float *tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float *summed;
 
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -233,7 +233,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
     cudaCheck(cudaMemcpyAsync(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice, stream));
     delete[] aux;
   
-    std::vector<float> new_dims;
+    std::vector<int> new_dims;
     new_dims.push_back(1.0f);
   
     DT_tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
@@ -243,7 +243,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
   }
 
 
-  std::vector<float> sum_dims, new_dims;
+  std::vector<int> sum_dims, new_dims;
   if (first_dim<0)
     first_dim = dims.size()+first_dim;
   sum_dims.push_back(first_dim);
@@ -264,7 +264,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
     
     if (dim==TERMINATE_VARARG)
       break;
-    if (in_float_vec(dim, sum_dims))  
+    if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.mean() operation.";
       LogErrorS(_error);
@@ -279,7 +279,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
   
   float summed_dim;
   for (int i=0; i<dims.size(); i++)
-    if (!in_float_vec(i, sum_dims))
+    if (!in_int(i, sum_dims))
       new_dims.push_back(dims[i]);
     else
       summed_dim=dims[i];
@@ -299,7 +299,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
 
   if (sum_dims[0]==(dims.size()-2))
   {
-    std::vector<float> _dims = RemoveLastDim(RemoveLastDim(dims));
+    std::vector<int> _dims = RemoveLastDim(RemoveLastDim(dims));
     dims_prod = DimsProd(_dims);
 
     int warps_per_block = THREADS_PER_BLOCK/WARP_SIZE;
@@ -335,7 +335,7 @@ void mean_over_semilast_dim_backward(float *inp, float size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {
-  std::vector<float> dims = node->L_Node->dims;
+  std::vector<int> dims = node->L_Node->dims;
   float x_dims_prod = node->L_Node->dims_prod;
   float y_dims_prod = node->dims_prod;
 
@@ -349,7 +349,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
 
 
   float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  std::vector<int> dims = tensor.dims;
   float *summed;
 
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -379,7 +379,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
     cudaCheck(cudaMemcpy(ret, aux, 1*sizeof(float), cudaMemcpyHostToDevice));  
     delete[] aux;
   
-    std::vector<float> new_dims;
+    std::vector<int> new_dims;
     new_dims.push_back(1.0f);
   
     DT_tensor *new_tensor = createTensor(ret, new_dims, 1.0f, false, "");
@@ -388,7 +388,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
   }
 
 
-  std::vector<float> sum_dims, new_dims;
+  std::vector<int> sum_dims, new_dims;
   if (first_dim<0)
     first_dim = dims.size()+first_dim;
   sum_dims.push_back(first_dim);
@@ -405,7 +405,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
     
     if (dim==TERMINATE_VARARG)
       break;
-    if (in_float_vec(dim, sum_dims))  
+    if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
       LogErrorS(_error);
@@ -420,7 +420,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
   
   float summed_dim;
   for (int i=0; i<dims.size(); i++)
-    if (!in_float_vec(i, sum_dims))
+    if (!in_int(i, sum_dims))
       new_dims.push_back(dims[i]);
     else
       summed_dim=dims[i];
@@ -444,7 +444,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, float first_dim, ...)
   if (dims.size()==1)
   {
     sum_single_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod);
-    new_dims = {1.0f};
+    new_dims = {1};
   }
   else if (sum_dims[0]==(dims.size()-1))
     sum_over_last_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod, summed_dim);
@@ -465,7 +465,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, float first_dim, ...
 
 
   float *tensor_ptr = tensor.tensor_ptr;
-  std::vector<float> dims = tensor.dims;
+  std::vector<int> dims = tensor.dims;
   float *summed;
 
   cudaStream_t stream = ThreadsStream[thread_id];
@@ -494,7 +494,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, float first_dim, ...
   }
 
 
-  std::vector<float> sum_dims, new_dims;
+  std::vector<int> sum_dims, new_dims;
   if (first_dim<0)
     first_dim = dims.size()+first_dim;
   sum_dims.push_back(first_dim);
@@ -511,7 +511,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, float first_dim, ...
     
     if (dim==TERMINATE_VARARG)
       break;
-    if (in_float_vec(dim, sum_dims))  
+    if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
       LogErrorS(_error);
@@ -526,7 +526,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, float first_dim, ...
   
   float summed_dim;
   for (int i=0; i<dims.size(); i++)
-    if (!in_float_vec(i, sum_dims))
+    if (!in_int(i, sum_dims))
       new_dims.push_back(dims[i]);
     else
       summed_dim=dims[i];
@@ -556,7 +556,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, float first_dim, ...
   if (dims.size()==1)
   {
     prod_single_dim_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(tensor_ptr, summed, dims_prod);
-    new_dims = {1.0f};
+    new_dims = {1};
   }
   else if (sum_dims[0]==(dims.size()-1))
   {
@@ -586,7 +586,7 @@ extern "C" DT_tensor *gather(int thread_id, DT_tensor *tensor, DT_tensor *idx_te
     //std::cout << "Gather over last dim"  << "\n";
 
     float *tensor_ptr = tensor->tensor_ptr;
-    std::vector<float> dims, new_dims;
+    std::vector<int> dims, new_dims;
     dims = tensor->dims;
     new_dims = RemoveLastDim(dims);
     float leading_dim = dims[dim];
@@ -636,7 +636,7 @@ void gather_last_dim_backward(float *inp, float size, float *out,
 
   float *idx = node->R_Node->tensor_ptr;
 
-  std::vector<float> dims = node->L_Node->dims;
+  std::vector<int> dims = node->L_Node->dims;
   int leading_dim = dims[dims.size()-1];
 
   float dims_prod = node->dims_prod;

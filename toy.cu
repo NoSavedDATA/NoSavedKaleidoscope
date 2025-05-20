@@ -69,7 +69,7 @@
 
 
 
-float TERMINATE_VARARG = -40370000000.0f;
+int TERMINATE_VARARG = 2147483646;
 
 
 
@@ -1569,13 +1569,6 @@ static void InitializeModule() {
 
 
   //
-  FunctionType *viewTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy,int8PtrTy,Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
-      true // vararg
-  );
-  TheModule->getOrInsertFunction("tensor_view", viewTy);
-
   FunctionType *print_floatTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy},
@@ -1622,12 +1615,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("str_vec_CalculateIdx", str_vec_CalculateIdxTy);
 
   //
-  FunctionType *NewVecToTensorTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext),Type::getFloatTy(*TheContext)},
-      true // vararg
-  );
-  TheModule->getOrInsertFunction("NewVecToTensor", NewVecToTensorTy);
   
 
   //===----------------------------------------------------------------------===//

@@ -107,8 +107,8 @@ float* make_min_float(size_t N) {
     return arr;
 }
 
-float* make_xavier_uniform_float(size_t N, float fan_in, float fan_out) {
-    float xavier_scale = sqrt(6/(fan_in+fan_out));
+float* make_xavier_uniform_float(size_t N, int fan_in, int fan_out) {
+    float xavier_scale = sqrt(6/(float)(fan_in+fan_out));
 
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
@@ -120,7 +120,7 @@ float* make_xavier_uniform_float(size_t N, float fan_in, float fan_out) {
 }
 
 
-float* make_normal(float N) {
+float* make_normal(int N) {
     std::normal_distribution<float> dist(0.0, 1.0);
 
     float* arr = (float*)malloc(N * sizeof(float));
@@ -131,7 +131,7 @@ float* make_normal(float N) {
     return arr;
 }
 
-float* make_embedding_uniform(float N, float scale) {
+float* make_embedding_uniform(int N, float scale) {
     std::uniform_real_distribution<float> dist(-scale, scale);
 
     float* arr = (float*)malloc(N * sizeof(float));
@@ -227,8 +227,8 @@ float *make_N_orthogonals(int N, size_t rows, size_t cols)
 }
 
 
-float* make_xavier_uniform_float_relu(size_t N, float fan_in, float fan_out) {
-    float xavier_scale = 1.4142*sqrt(6/(fan_in+fan_out));
+float* make_xavier_uniform_float_relu(size_t N, int fan_in, int fan_out) {
+    float xavier_scale = 1.4142*sqrt(6/(float)(fan_in+fan_out));
 
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
 
@@ -240,8 +240,8 @@ float* make_xavier_uniform_float_relu(size_t N, float fan_in, float fan_out) {
     return arr;
 }
 
-float* make_xavier_uniform_float_tanh(size_t N, float fan_in, float fan_out) {
-    float xavier_scale = 1.6667*sqrt(6/(fan_in+fan_out));
+float* make_xavier_uniform_float_tanh(size_t N, int fan_in, int fan_out) {
+    float xavier_scale = 1.6667*sqrt(6/(float)(fan_in+fan_out));
 
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
 
@@ -255,8 +255,8 @@ float* make_xavier_uniform_float_tanh(size_t N, float fan_in, float fan_out) {
 
 
 
-float* make_he_normal_float_relu(float N, float fan_in) {
-    float std = sqrt(2/fan_in);
+float* make_he_normal_float_relu(int N, int fan_in) {
+    float std = sqrt(2/(float)fan_in);
 
     std::normal_distribution<> dist(0.0, std);
 
@@ -267,7 +267,7 @@ float* make_he_normal_float_relu(float N, float fan_in) {
     return arr;
 }
 
-float* make_gpt_init(float N) {
+float* make_gpt_init(int N) {
     
     std::normal_distribution<double> dist(0.0, 0.02);
 
@@ -278,7 +278,7 @@ float* make_gpt_init(float N) {
     return arr;
 }
 
-float* make_lstm_init_xavier(float OC, float C) {
+float* make_lstm_init_xavier(int OC, int C) {
 
     float xavier_scale = sqrt(6/(OC+C));
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
@@ -306,13 +306,13 @@ float* make_lstm_init_xavier(float OC, float C) {
     return arr;
 }
 
-float* make_lstm_bias(float OC) {
+float* make_lstm_bias(int OC) {
 
 
     float* arr = (float*)malloc(4*OC * sizeof(float));
 
-    int f_offset = 1*(int)OC;
-    int o_offset = 2*(int)OC;
+    int f_offset = 1*OC;
+    int o_offset = 2*OC;
     
 
     for (int i = 0; i < f_offset; i++)
@@ -330,9 +330,9 @@ float* make_lstm_bias(float OC) {
 }
 
 
-float* make_lstm_torch(float OC, float C) {
+float* make_lstm_torch(int OC, int C) {
 
-    float scale = sqrt(1/(4*OC));
+    float scale = sqrt(1/(float)(4*OC));
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // range -1..1
 
     float* arr = (float*)malloc(4*OC*C * sizeof(float));

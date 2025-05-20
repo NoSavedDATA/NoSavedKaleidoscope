@@ -50,24 +50,24 @@ extern "C" void *MHSAForward(char *self, DT_tensor *tensor, int thread_id, char 
 
   float *output;
   
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   
 
-  float B = dims[0];
-  float T = dims[dims.size()-2];
-  float C = dims[dims.size()-1];
+  int B = dims[0];
+  int T = dims[dims.size()-2];
+  int C = dims[dims.size()-1];
 
-  //std::vector<float> new_dims = dims;
-  std::vector<float> new_dims = {B, T, C};
+  //std::vector<int> new_dims = dims;
+  std::vector<int> new_dims = {B, T, C};
 
 
 
 
   std::unique_ptr<MHSA> mhsa = std::move(NamedMHSA[conv_name]);
 
-  if ((int)C!=(int)mhsa->C)
+  if (C!=mhsa->C)
   {
-    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the MHSA are: " + std::to_string(mhsa->C);
+    std::string error = "Input tensor channels are: " + std::to_string(C) + ", while the expected input channels of the MHSA are: " + std::to_string(mhsa->C);
     LogError(error);
     
     NamedMHSA[conv_name] = std::move(mhsa);
@@ -101,7 +101,7 @@ extern "C" float CreateMHSAOnDemand(char *tensor_name, char *init,
   std::cout << "\nCreate mhsa on demand:\n   nh: " << nh << " C " << C << " T " << T << "\n";
   std::cout << "" << tensor_name << " " << init << "\n";
 
-  std::unique_ptr<MHSA> mhsa = std::make_unique<MHSA>((int)nh, (int)T, (int) C, init, notators, tensor_name);
+  std::unique_ptr<MHSA> mhsa = std::make_unique<MHSA>(nh, T, C, init, notators, tensor_name);
 
   std::cout << "Adding " << tensor_name << " to NamedMHSA dict\n";
   NamedMHSA[tensor_name] = std::move(mhsa);

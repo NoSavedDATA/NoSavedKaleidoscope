@@ -110,10 +110,10 @@ void BatchNorm2dCPP::InitMovingAverages()
 
   DT_tensor *scale_tensor, *bias_tensor;
   scale_tensor = new DT_tensor();
-  scale_tensor->NewTensor(scale, {(float)C}, C, true, Name);
+  scale_tensor->NewTensor(scale, {C}, C, true, Name);
 
   bias_tensor = new DT_tensor();
-  bias_tensor->NewTensor(bias, {(float)C}, C, true, Name);
+  bias_tensor->NewTensor(bias, {C}, C, true, Name);
 
   NamedTensorsT[Name+"W"] = scale_tensor;
   NamedTensorsT[Name+"B"] = bias_tensor;

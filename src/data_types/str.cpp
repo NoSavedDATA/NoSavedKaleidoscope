@@ -240,7 +240,7 @@ extern "C" std::vector<char *> *SplitString(Scope_Struct *scope_struct,char *sel
 
 // INDEX METHODS
 
-extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pattern, float idx)
+extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pattern, int idx)
 {
   // std::cout << "SLIPPINT " << self << ".\n";
   

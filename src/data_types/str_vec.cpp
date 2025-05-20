@@ -58,9 +58,9 @@ extern "C" float PrintStrVec(std::vector<char*> vec)
 }
 
 
-extern "C" float LenStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
+extern "C" int LenStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
 {
-  return (float) vec.size();
+  return vec.size();
 }
 
 

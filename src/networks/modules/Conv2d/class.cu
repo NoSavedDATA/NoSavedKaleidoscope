@@ -216,6 +216,8 @@ void Conv2dCPP::InitFilters()
   float *filter;
   for (std::size_t idx = 0; idx < C * OC; ++idx) {
 
+
+
     if (Init=="xavu_relu")
       filter = make_xavier_uniform_float_relu(ks*ks, ks*ks*C, ks*ks*OC);
     if (Init == "xavu_tanh")
@@ -250,7 +252,8 @@ void Conv2dCPP::InitFilters()
   this->d_filter = d_filter;
   
 
-  std::vector<float> kernel_dims = {(float)OC, (float)C, (float)ks, (float)ks}; 
+
+  std::vector<int> kernel_dims = {OC, C, ks, ks}; 
 
   DT_tensor *tensor_W = createTensor(d_filter, kernel_dims, DimsProd(kernel_dims), true, Name+"W");
   tensor_W->SetIsWeight();

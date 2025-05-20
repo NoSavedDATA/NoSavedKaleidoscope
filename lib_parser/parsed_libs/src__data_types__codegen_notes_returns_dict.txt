@@ -1,1 +1,1 @@
-{"CreateNotesVector", "list"}, {"Add_Float_To_NotesVector", "list"}, {"Add_String_To_NotesVector", "list"}, 
+{"CreateNotesVector", "list"}, {"Add_Float_To_NotesVector", "list"}, {"Add_Int_To_NotesVector", "list"}, {"Add_String_To_NotesVector", "list"}, 

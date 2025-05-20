@@ -29,7 +29,7 @@ extern "C" void __slee_p_(Scope_Struct *scope_struct, int duration)
 }
 
 
-extern "C" void random_sleep(Scope_Struct *scope_struct, float start, float finish)
+extern "C" void random_sleep(Scope_Struct *scope_struct, int start, int finish)
 {
   std::random_device rd;
   std::mt19937 gen(rd());

@@ -15,14 +15,14 @@ extern "C" DT_tensor *tensor_tensor_mma(Scope_Struct *scope_struct, DT_tensor *t
 
   int thread_id = scope_struct->thread_id;
 
-  std::vector<float> Ldims, Rdims;
+  std::vector<int> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
   float *device_x = tensor_x->tensor_ptr;
   float *device_w = tensor_w->tensor_ptr;
 
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
+  std::vector<int> linear_layer_dims = format_LinearLayer_Dims(Ldims);
   int input_dims_prod = DimsProd(linear_layer_dims);
   
   int resultingDimsProd = resultingDimsProdOnMult(linear_layer_dims, Rdims);
@@ -45,7 +45,7 @@ extern "C" DT_tensor *tensor_tensor_mma(Scope_Struct *scope_struct, DT_tensor *t
 
   
   
-  std::vector<float> new_dims = NewDimsOnMult(Ldims, Rdims);
+  std::vector<int> new_dims = NewDimsOnMult(Ldims, Rdims);
 
   DT_tensor *new_tensor = createTensor(device_y, new_dims, resultingDimsProd, false, "");
   new_tensor->AttrNodes(tensor_x, tensor_w, mult_op);
@@ -59,7 +59,7 @@ extern "C" DT_tensor *tensor_tensor_add(Scope_Struct *scope_struct, DT_tensor *t
     
   int thread_id = scope_struct->thread_id;
 
-  std::vector<float> Ldims, Rdims;
+  std::vector<int> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
   float *device_x = tensor_x->tensor_ptr;
@@ -68,7 +68,7 @@ extern "C" DT_tensor *tensor_tensor_add(Scope_Struct *scope_struct, DT_tensor *t
 
 
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
+  std::vector<int> linear_layer_dims = format_LinearLayer_Dims(Ldims);
   float dims_prod = tensor_x->dims_prod;
 
 
@@ -85,9 +85,7 @@ extern "C" DT_tensor *tensor_tensor_add(Scope_Struct *scope_struct, DT_tensor *t
   {
 
     int grid_size, block_size;
-    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-    grid_size = grid_block_mem_sizes[0];
-    block_size = grid_block_mem_sizes[1];
+    CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
     
     add_forward<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod);
     
@@ -103,9 +101,7 @@ extern "C" DT_tensor *tensor_tensor_add(Scope_Struct *scope_struct, DT_tensor *t
   if(RemoveLastDim(Ldims)==Rdims||(RemoveLastDim(Ldims)==RemoveLastDim(Rdims)&&Rdims[Rdims.size()-1]==1))
   {
     int grid_size, block_size;
-    std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);
-    grid_size = grid_block_mem_sizes[0];
-    block_size = grid_block_mem_sizes[1];
+    CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
     
     broadcast_lastdim_add<<<grid_size, block_size, 0, stream>>>(device_y, device_x, device_w, dims_prod, tensor_x->dims[tensor_x->dims.size()-1]);
     
@@ -135,14 +131,14 @@ extern "C" DT_tensor *tensor_tensor_sub(Scope_Struct *scope_struct, DT_tensor *t
 
   //std::cout << "Cuda add of\n      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
-  std::vector<float> Ldims, Rdims;
+  std::vector<int> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
   float *device_x = tensor_x->tensor_ptr;
   float *device_w = tensor_w->tensor_ptr;
 
 
-  std::vector<float> linear_layer_dims = format_LinearLayer_Dims(Ldims);
+  std::vector<int> linear_layer_dims = format_LinearLayer_Dims(Ldims);
   float dims_prod = tensor_x->dims_prod;
 
 
@@ -172,7 +168,7 @@ extern "C" DT_tensor *tensor_tensor_equal(Scope_Struct *scope_struct, DT_tensor 
   int thread_id = scope_struct->thread_id;
                             
     
-  std::vector<float> Ldims, Rdims;
+  std::vector<int> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
   float *device_x = tensor_x->tensor_ptr;
@@ -206,7 +202,7 @@ extern "C" DT_tensor *tensor_tensor_mult(Scope_Struct *scope_struct, DT_tensor *
 
   //std::cout << "      L " << tensor_x.name << "  &  R " << tensor_w.name << "\n";
     
-  std::vector<float> Ldims, Rdims;
+  std::vector<int> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
   float *device_x = tensor_x->tensor_ptr;
@@ -298,7 +294,7 @@ extern "C" DT_tensor *tensor_tensor_div(Scope_Struct *scope_struct, DT_tensor *t
   
   //std::cout << "TENSOR TENSOR DIV" << "\n";
   
-  std::vector<float> Ldims, Rdims;
+  std::vector<int> Ldims, Rdims;
   Ldims = tensor_x->dims;
   Rdims = tensor_w->dims;
   float *device_x = tensor_x->tensor_ptr;

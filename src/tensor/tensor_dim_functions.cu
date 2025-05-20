@@ -18,12 +18,13 @@
 
 
 
-extern "C" void PrintDims(std::vector<float> dims)
+
+extern "C" void PrintDims(std::vector<int> dims)
 {
   std::cout << "dims: [";
   for (int i=0; i<dims.size();i++)
   {
-    std::cout << (int)dims[i];
+    std::cout << dims[i];
     if (i==dims.size()-1)
       std::cout << "]";
     else
@@ -31,6 +32,7 @@ extern "C" void PrintDims(std::vector<float> dims)
   }
   std::cout  << "\n";
 }
+
 int DimsProd(std::vector<float> dims)
 {
   if (dims.size()==1)
@@ -40,6 +42,17 @@ int DimsProd(std::vector<float> dims)
   for (int i = 0; i < dims.size(); i++)
     aux = aux*dims[i];
   return (int)aux;
+}
+
+int DimsProd(std::vector<int> dims)
+{
+  if (dims.size()==1)
+    return dims[0];
+
+  int aux=1;
+  for (int i = 0; i < dims.size(); i++)
+    aux = aux*dims[i];
+  return aux;
 }
 
 std::vector<float> BatchLessDims(std::vector<float> dims)
@@ -55,6 +68,21 @@ std::vector<float> BatchLessDims(std::vector<float> dims)
 
   return new_dims;
 }
+
+std::vector<int> BatchLessDims(std::vector<int> dims)
+{
+  // Removes first dim (batch dim).
+  if (dims.size()<=1)
+    LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+
+  std::vector<int> new_dims;
+
+  for (int i=0; i<dims.size()-1;i++)
+    new_dims.push_back(dims[i+1]);
+
+  return new_dims;
+}
+
 
 std::vector<float> RemoveLastDim(std::vector<float> dims)
 {
@@ -88,9 +116,52 @@ std::vector<float> RemoveFirstDim(std::vector<float> dims)
 }
 
 
+std::vector<int> RemoveLastDim(std::vector<int> dims)
+{
+  // Removes first dim (batch dim).
+  if (dims.size()<=1)
+  {
+    return {1};
+    //LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+  }
+
+  std::vector<int> new_dims;
+
+  for (int i=0; i<dims.size()-1;i++)
+    new_dims.push_back(dims[i]);
+
+  return new_dims;
+}
+
+std::vector<int> RemoveFirstDim(std::vector<int> dims)
+{
+  // Removes first dim (batch dim).
+  if (dims.size()<=1)
+    return {1};
+
+  std::vector<int> new_dims;
+
+  for (int i=0; i<dims.size()-1;i++)
+    new_dims.push_back(dims[i+1]);
+
+  return new_dims;
+}
+
+
 std::vector<float> format_BatchFirst_Dims(std::vector<float> dims)
 {
   std::vector<float> new_dims;
+  new_dims.push_back(dims[0]);
+  int aux=1;
+  for (int i = 0; i < dims.size()-1; i++)
+    aux *= dims[i+1];
+  new_dims.push_back(aux);
+  return new_dims;
+}
+
+std::vector<int> format_BatchFirst_Dims(std::vector<int> dims)
+{
+  std::vector<int> new_dims;
   new_dims.push_back(dims[0]);
   int aux=1;
   for (int i = 0; i < dims.size()-1; i++)
@@ -112,6 +183,18 @@ std::vector<float> format_LinearLayer_Dims(std::vector<float> dims)
 }
 
 
+std::vector<int> format_LinearLayer_Dims(std::vector<int> dims)
+{
+  std::vector<int> new_dims;
+  int aux=1;
+  for (int i = 0; i < dims.size()-1; i++)
+    aux *= dims[i];
+  new_dims.push_back(aux);
+  new_dims.push_back(dims[dims.size()-1]);
+  return new_dims;
+}
+
+
 
 int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 {
@@ -122,12 +205,41 @@ int resultingDimsProdOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
   return (int)aux;
 }
 
+int resultingDimsProdOnMult(std::vector<int> Ldims, std::vector<int> Rdims)
+{
+  float aux=1;
+  for (int i = 0; i < Ldims.size()-1; i++)
+    aux = aux * Ldims[i];
+  aux = aux * Rdims[0];
+  return aux;
+}
+
+
 
 std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rdims)
 {
   
 
   std::vector<float> new_dims;
+  if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
+  {
+    LogError("The last dimension of multiplied tensors must be the same.");
+    return {}; 
+  }
+  for (int i = 0; i < Ldims.size()-1; i++)
+    new_dims.push_back(Ldims[i]);
+  new_dims.push_back(Rdims[0]);
+
+
+  return new_dims;
+}
+
+
+std::vector<int> NewDimsOnMult(std::vector<int> Ldims, std::vector<int> Rdims)
+{
+  
+
+  std::vector<int> new_dims;
   if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
   {
     LogError("The last dimension of multiplied tensors must be the same.");
@@ -147,25 +259,7 @@ std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
 
 
 
-extern "C" void *NewDimsOnIdx(std::vector<float> dims)
-{
-  std::vector<float> new_dims;
 
-  for (int i = 0; i < dims.size()-1; i++)
-    new_dims.push_back(dims[i+1]);
-
-
-  // Aux to not lose pointers
-  std::string random_str = RandomString(15);
-  NamedDims[random_str] = new_dims; // Deal with new_dims being deleted after scope finished.
-  AuxRandomStrs[random_str] = "dim";
-
-
-  std::cout << "NewDimsOnIdx" << "\n";
-  PrintDims(NamedDims[random_str]);
-
-  return &NamedDims[random_str];
-}
 
 
 extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
@@ -183,7 +277,7 @@ extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
 
 
 
-extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
+extern "C" float CalculateIdxOffset(char *tensor_name, int first_idx, ...) {
   
   std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
 
@@ -192,7 +286,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, float first_idx, ...) {
 
   // PrintDims(tensor->dims);
 
-  std::vector<float> idxs, new_dims_no_minus, dims;
+  std::vector<int> idxs, new_dims_no_minus, dims;
   int current_dims_prod;
   bool has_minus = false;
   dims = tensor->dims;

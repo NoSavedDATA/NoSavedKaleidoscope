@@ -107,8 +107,8 @@ struct DT_tensor {
   float *tensor_ptr;
   half  *half_ptr;
   float *cpu_tensor_ptr;
-  std::vector<float> dims;
-  float dims_prod;
+  std::vector<int> dims;
+  int dims_prod;
   float *b=nullptr;
   float *dy=nullptr;
   float scalar;
@@ -138,17 +138,17 @@ struct DT_tensor {
 
   void NewNullTensor();
 
-  void NewTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
+  void NewTensor(float *new_tensor_ptr, std::vector<int> new_dims, int new_dims_prod,
                  bool new_is_leaf, std::string new_name, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
                  
-  void NewTensor(half *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod,
+  void NewTensor(half *new_tensor_ptr, std::vector<int> new_dims, int new_dims_prod,
                  bool new_is_leaf, std::string new_name, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
 
   void NewPinned(float *new_tensor_ptr, float *new_cpu_tensor_ptr,
-                 std::vector<float> new_dims, float new_dims_prod,
+                 std::vector<int> new_dims, int new_dims_prod,
                  bool new_is_leaf, std::string new_name);
 
-  void AttrTensor(float *new_tensor_ptr, std::vector<float> new_dims, float new_dims_prod, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
+  void AttrTensor(float *new_tensor_ptr, std::vector<int> new_dims, int new_dims_prod, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
 
   
   void AttrNodes(DT_tensor *new_L_Tensor, DT_tensor *new_R_Tensor, int op_type);
@@ -164,16 +164,16 @@ struct DT_tensor {
   void Sync();
 };
 
-DT_tensor *createTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createTensor(float* tensor_ptr, const std::vector<int>& dims, int kDataLen,
                      bool is_leaf, std::string name, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
                      
-DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<int>& dims, int kDataLen,
                      bool is_leaf, std::string name, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
 
-DT_tensor *customOpTensor(float* tensor_ptr, const std::vector<float>& dims, float kDataLen,
+DT_tensor *customOpTensor(float* tensor_ptr, const std::vector<int>& dims, int kDataLen,
                      std::string operation, std::string module_name, DT_tensor *LTensor, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
 
-DT_tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<float>& dims, float kDataLen,
+DT_tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<int>& dims, int kDataLen,
                      std::string name)
                      ;
 DT_tensor *createBackward(std::string name, DT_tensor *tensor);

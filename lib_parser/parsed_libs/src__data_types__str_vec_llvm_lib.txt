@@ -1,4 +1,4 @@
-1821-05-14 15:51:46
+1821-05-19 21:46:09
 
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -29,7 +29,7 @@
 	TheModule->getOrInsertFunction("PrintStrVec", PrintStrVecTy);
 
 	FunctionType *LenStrVecTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy},
 		false
 	);

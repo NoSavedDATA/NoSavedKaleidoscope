@@ -1,4 +1,4 @@
-1821-05-15 20:29:55
+1821-05-19 20:33:38
 
 	FunctionType *InstantiateObjectTy= FunctionType::get(
 		int8PtrTy,
@@ -77,12 +77,19 @@
 	);
 	TheModule->getOrInsertFunction("LoadObjectScopeName", LoadObjectScopeNameTy);
 
-	FunctionType *object_Attr_Float_on_OffsetTy= FunctionType::get(
+	FunctionType *object_Attr_on_Offset_floatTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("object_Attr_Float_on_Offset", object_Attr_Float_on_OffsetTy);
+	TheModule->getOrInsertFunction("object_Attr_on_Offset_float", object_Attr_on_Offset_floatTy);
+
+	FunctionType *object_Attr_on_Offset_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("object_Attr_on_Offset_int", object_Attr_on_Offset_intTy);
 
 	FunctionType *object_Attr_on_OffsetTy= FunctionType::get(
 		int8PtrTy,
@@ -91,12 +98,19 @@
 	);
 	TheModule->getOrInsertFunction("object_Attr_on_Offset", object_Attr_on_OffsetTy);
 
-	FunctionType *object_Load_Float_on_OffsetTy= FunctionType::get(
+	FunctionType *object_Load_on_Offset_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("object_Load_Float_on_Offset", object_Load_Float_on_OffsetTy);
+	TheModule->getOrInsertFunction("object_Load_on_Offset_float", object_Load_on_Offset_floatTy);
+
+	FunctionType *object_Load_on_Offset_intTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("object_Load_on_Offset_int", object_Load_on_Offset_intTy);
 
 	FunctionType *object_Load_on_OffsetTy= FunctionType::get(
 		int8PtrTy,

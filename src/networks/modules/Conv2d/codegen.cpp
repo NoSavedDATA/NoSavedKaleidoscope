@@ -50,12 +50,12 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   
 
   float *output;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
 
-  float B = dims[0];
-  float C = dims[dims.size()-3];
-  float H = dims[dims.size()-2];
-  float W = dims[dims.size()-1];
+  int B = dims[0];
+  int C = dims[dims.size()-3];
+  int H = dims[dims.size()-2];
+  int W = dims[dims.size()-1];
 
 
   std::unique_ptr<Conv2dCPP> conv = std::move(NamedConv2d[conv_name]);
@@ -78,7 +78,7 @@ extern "C" void *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
  
   
 
-  std::vector<float> new_dims = {(float)conv->B, (float)conv->OC, (float)conv->out_H, (float)conv->out_W};
+  std::vector<int> new_dims = {conv->B, conv->OC, conv->out_H, conv->out_W};
   
   
   NamedConv2d[conv_name] = std::move(conv);
@@ -102,11 +102,12 @@ extern "C" float Conv2d_Create(Scope_Struct *scope_struct, char *name, char *sco
 
   std::string init = "xavu";
 
-  float C = notes_vector->get<float>(0);
-  float OC = notes_vector->get<float>(1);
-  float ks = notes_vector->get<float>(2);
-  float stride = notes_vector->get<float>(3);
-  float padding = notes_vector->get<float>(4);
+  int C = notes_vector->get<int>(0);
+  int OC = notes_vector->get<int>(1);
+  int ks = notes_vector->get<int>(2);
+  int stride = notes_vector->get<int>(3);
+  int padding = notes_vector->get<int>(4);
+
 
 
   std::vector<std::string> notes;
@@ -126,7 +127,7 @@ extern "C" float Conv2d_Create(Scope_Struct *scope_struct, char *name, char *sco
   }
 
 
-  std::unique_ptr<Conv2dCPP> conv2d = std::make_unique<Conv2dCPP>((int) C, (int) OC, (int) ks, (int) stride, (int) padding, init, notes, name);
+  std::unique_ptr<Conv2dCPP> conv2d = std::make_unique<Conv2dCPP>(C, OC, ks, stride, padding, init, notes, name);
 
 
   NamedConv2d[name] = std::move(conv2d);

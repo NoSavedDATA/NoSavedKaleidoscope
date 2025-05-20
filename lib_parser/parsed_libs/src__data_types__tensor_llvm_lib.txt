@@ -1,4 +1,4 @@
-1821-05-14 15:04:45
+1821-05-19 18:48:14
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -72,17 +72,10 @@
 
 	FunctionType *tensor_viewTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("tensor_view", tensor_viewTy);
-
-	FunctionType *NewVecToTensorTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("NewVecToTensor", NewVecToTensorTy);
 
 	FunctionType *tensor_CalculateIdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

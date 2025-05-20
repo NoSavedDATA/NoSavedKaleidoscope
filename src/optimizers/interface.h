@@ -16,7 +16,7 @@ public:
   float eps = 1e-8;
     
   virtual void init_states(std::string, float);
-  virtual void step(float *, float *, std::vector<float>, std::string, cudaStream_t);
-  virtual void sparse_step(float *, float *, float *, std::vector<float>, std::vector<float>, std::string, cudaStream_t);
+  virtual void step(float *, float *, std::vector<int>, std::string, cudaStream_t);
+  virtual void sparse_step(float *, float *, float *, std::vector<int>, std::vector<int>, std::string, cudaStream_t);
   virtual void count_step(); 
 };

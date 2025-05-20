@@ -20,7 +20,7 @@ extern "C" DT_tensor *rl_discounted_return(int thread_id, DT_tensor *reward, DT_
 {
   //std::cout << "rl_discounted_return THREAD IS: " << thread_id << "\n";
 
-  std::vector<float> dims = reward->dims;
+  std::vector<int> dims = reward->dims;
 
   if (reward->dims.size()!=2||terminated->dims.size()!=2)
     LogErrorS("rl_discounted_return requires dims [B, T]");
@@ -29,10 +29,8 @@ extern "C" DT_tensor *rl_discounted_return(int thread_id, DT_tensor *reward, DT_
   int T = dims[1];
   
 
-  int grid_size, block_size, shared_mem_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(B);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  int grid_size, block_size; 
+  CalculateGridAndBlockSizes(B, grid_size, block_size);
   
 
   float *G = get_from_pool(thread_id, B, "rl_discounted_return");
@@ -45,7 +43,7 @@ extern "C" DT_tensor *rl_discounted_return(int thread_id, DT_tensor *reward, DT_
 
 
 
-  DT_tensor *new_tensor = createTensor(G, {(float)B}, B, false, "");
+  DT_tensor *new_tensor = createTensor(G, {B}, B, false, "");
   new_tensor->AttrNodes(reward, terminated, detach_op);
   return new_tensor;
 }

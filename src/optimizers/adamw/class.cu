@@ -44,7 +44,7 @@ void AdamW_optim::init_states(std::string param_name, float params_count)
   }
 }
 
-void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::string param_name, cudaStream_t stream)
+void AdamW_optim::step(float *param, float *grad, std::vector<int> dims, std::string param_name, cudaStream_t stream)
 {
   float *v = NamedV[param_name];
   float *m = NamedM[param_name];
@@ -56,9 +56,7 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
   int params_count = DimsProd(dims);
   
   int grid_size, block_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(params_count, grid_size, block_size);
 
   adamw_kernel<<<grid_size, block_size, 0, stream>>>(param, grad, m, v, params_count,
                                            lr, beta1, beta2, beta1_correction, beta2_correction,
@@ -66,7 +64,7 @@ void AdamW_optim::step(float *param, float *grad, std::vector<float> dims, std::
 }
 
 
-void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector<float> idx_dims, std::vector<float> dims, std::string param_name, cudaStream_t stream)
+void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector<int> idx_dims, std::vector<int> dims, std::string param_name, cudaStream_t stream)
 {
   float *v = NamedV[param_name];
   float *m = NamedM[param_name];
@@ -81,9 +79,7 @@ void AdamW_optim::sparse_step(float *param, float *grad, float *idx, std::vector
 
   
   int grid_size, block_size; 
-  std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(params_count);
-  grid_size = grid_block_mem_sizes[0];
-  block_size = grid_block_mem_sizes[1];
+  CalculateGridAndBlockSizes(params_count, grid_size, block_size);
 
   //std::cout << "Sparse step " << "\n";
   //PrintDims(idx_dims);

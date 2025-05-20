@@ -35,14 +35,14 @@ extern "C" void *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   float *tensor_ptr, *output, *d_filter;
   tensor_ptr = tensor->tensor_ptr;
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
   float input_dims_prod = DimsProd(dims);
 
-  float B = dims[0];
-  float C = dims[dims.size()-3];
-  float H = dims[dims.size()-2];
-  float W = dims[dims.size()-1];
-  float OC = C;
+  int B = dims[0];
+  int C = dims[dims.size()-3];
+  int H = dims[dims.size()-2];
+  int W = dims[dims.size()-1];
+  int OC = C;
 
 
   std::unique_ptr<MaxPool2dCPP> conv = std::move(NamedMaxPool2d[pool_name]);
@@ -53,11 +53,11 @@ extern "C" void *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   
   
-  float resultingDimsProd = B * (float)OC * (float)conv->out_W * (float)conv->out_W;
+  float resultingDimsProd = B * OC * conv->out_W * conv->out_W;
 
 
 
-  std::vector<float> new_dims = {(float)B, (float)OC, (float)conv->out_H, (float)conv->out_W};
+  std::vector<int> new_dims = {B, OC, conv->out_H, conv->out_W};
   
 
   NamedMaxPool2d[pool_name] = std::move(conv);
@@ -89,9 +89,9 @@ extern "C" float Pool2d_Create(Scope_Struct *scope_struct, char *name, char *sco
 {
   std::cout << "Pool2d_Create execution" << ".\n";
   
-  float ks = notes_vector->get<float>(0);
-  float stride = notes_vector->get<float>(1);
-  float padding = notes_vector->get<float>(2);
+  int ks = notes_vector->get<int>(0);
+  int stride = notes_vector->get<int>(1);
+  int padding = notes_vector->get<int>(2);
   
   std::cout << "\nCreate maxpool2d on demand:\n" << "   ks " << ks << " stride " << stride << " padding " << padding << "\n";
   char *type = "max";
@@ -99,7 +99,7 @@ extern "C" float Pool2d_Create(Scope_Struct *scope_struct, char *name, char *sco
   type = notes_vector->get<char *>(3);
 
 
-  auto maxpool = std::make_unique<MaxPool2dCPP>((int)ks, (int)stride, (int)padding, type);
+  auto maxpool = std::make_unique<MaxPool2dCPP>(ks, stride, padding, type);
 
   NamedMaxPool2d[name] = std::move(maxpool);
   return 0;

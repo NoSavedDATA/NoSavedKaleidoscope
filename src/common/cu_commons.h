@@ -63,12 +63,12 @@ float* make_ones_float(size_t N);
 
 float* make_min_float(size_t N); 
 
-float* make_xavier_uniform_float(size_t N, float fan_in, float fan_out); 
+float* make_xavier_uniform_float(size_t N, int fan_in, int fan_out); 
 
 
-float* make_normal(float N); 
+float* make_normal(int N); 
 
-float* make_embedding_uniform(float N, float scale=0.05); 
+float* make_embedding_uniform(int N, float scale=0.05); 
 
 
 float *make_orthogonal(size_t rows, size_t cols); 
@@ -80,20 +80,20 @@ float *make_N_orthogonals(int N, size_t rows, size_t cols);
 
 
 
-float* make_xavier_uniform_float_relu(size_t N, float fan_in, float fan_out); 
+float* make_xavier_uniform_float_relu(size_t N, int fan_in, int fan_out); 
 
-float* make_xavier_uniform_float_tanh(size_t N, float fan_in, float fan_out); 
-
-
-
-float* make_he_normal_float_relu(float N, float fan_in); 
-
-float* make_gpt_init(float N); 
-
-float* make_lstm_init_xavier(float OC, float C); 
-
-float* make_lstm_bias(float OC); 
+float* make_xavier_uniform_float_tanh(size_t N, int fan_in, int fan_out); 
 
 
-float* make_lstm_torch(float OC, float C); 
+
+float* make_he_normal_float_relu(int N, int fan_in); 
+
+float* make_gpt_init(int N); 
+
+float* make_lstm_init_xavier(int OC, int C); 
+
+float* make_lstm_bias(int OC); 
+
+
+float* make_lstm_torch(int OC, int C); 
 

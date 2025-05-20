@@ -197,6 +197,7 @@ extern "C" void *get_scope_object(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn_name) {
+    std::cout << "save for async: " << fn_name << ".\n";
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
     

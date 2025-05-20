@@ -62,9 +62,9 @@ extern "C" float load_bin(DT_tensor *tensor, char *bin_name)
 
 
 
-extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, float first_idx, ...)
+extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, int first_idx, ...)
 {
-  std::vector<float> idxs;
+  std::vector<int> idxs;
 
   va_list args;
   va_start(args, first_idx);
@@ -83,15 +83,15 @@ extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, float first_idx
 
 
 
-  std::vector<float> dims, aux_dims;
+  std::vector<int> dims, aux_dims;
   dims = tensor->dims;
-  std::vector<float> new_dims;
+  std::vector<int> new_dims;
 
   float offset=0;
 
 
   if (dims.size()==1)
-    new_dims = {1.0f};
+    new_dims = {1};
   else
   {
     aux_dims = dims;
@@ -185,12 +185,12 @@ extern "C" float wload_bin(DT_tensor *tensor, char *bin_name, float worker_idx, 
 
 
 
-  std::vector<float> dims = tensor->dims;
+  std::vector<int> dims = tensor->dims;
 
-  std::vector<float> workerless_dims = BatchLessDims(dims);
+  std::vector<int> workerless_dims = BatchLessDims(dims);
   int workerless_dims_prod = DimsProd(workerless_dims);
 
-  std::vector<float> batchless_dims = BatchLessDims(workerless_dims);
+  std::vector<int> batchless_dims = BatchLessDims(workerless_dims);
   int batchless_dims_prod = DimsProd(batchless_dims);
 
 

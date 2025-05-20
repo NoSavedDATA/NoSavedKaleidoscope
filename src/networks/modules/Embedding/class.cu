@@ -37,7 +37,7 @@ Embedding::Embedding(int C, int OC, std::string Init, std::string Name)
     W = get_from_pool(0, OC*C, "Embedding W");
     cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_W = createTensor(W, {(float)C,(float)OC}, OC*C, true, Name);
+    DT_tensor *tensor_W = createTensor(W, {C, OC}, OC*C, true, Name);
     
     
     

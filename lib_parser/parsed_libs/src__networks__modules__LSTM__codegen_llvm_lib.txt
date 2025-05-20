@@ -1,4 +1,4 @@
-1821-05-10 22:56:56
+1821-05-19 17:44:40
 
 	FunctionType *LSTMForwardTy= FunctionType::get(
 		int8PtrTy,
@@ -9,7 +9,7 @@
 
 	FunctionType *CreateLSTMOnDemandTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("CreateLSTMOnDemand", CreateLSTMOnDemandTy);

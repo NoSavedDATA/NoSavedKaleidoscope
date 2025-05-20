@@ -54,7 +54,6 @@ std::map<int, std::string> token_to_string = {
   { tok_tab, "tok tab" },
   { tok_return, "tok return"},
   { tok_as, "tok as"},
-  { tok_vec, "tok vec"},
   { tok_in, "tok in"},
 
 
@@ -324,8 +323,6 @@ static int get_token() {
       return tok_return;
     if (IdentifierStr == "as")
       return tok_as;
-    if (IdentifierStr == "vec")
-      return tok_vec;
     return tok_identifier;
   }
 
