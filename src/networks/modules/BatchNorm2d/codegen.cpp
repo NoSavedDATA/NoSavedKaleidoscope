@@ -69,7 +69,7 @@ extern "C" void *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 // void batchnormd2d_backward(float *inp, 
 //   float *dinp, float *dw, float *db,
   // float *dout, std::string bn_name)
-void batchnorm2d_backward(float *inp, float size, float *out,
+void batchnorm2d_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {

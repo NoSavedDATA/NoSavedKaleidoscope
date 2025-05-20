@@ -1,4 +1,4 @@
-1821-05-19 16:30:52
+1821-05-20 12:09:43
 
 	FunctionType *CreateNotesVectorTy= FunctionType::get(
 		int8PtrTy,
@@ -14,23 +14,23 @@
 	);
 	TheModule->getOrInsertFunction("Dispose_NotesVector", Dispose_NotesVectorTy);
 
-	FunctionType *Add_Float_To_NotesVectorTy= FunctionType::get(
+	FunctionType *Add_To_NotesVector_floatTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("Add_Float_To_NotesVector", Add_Float_To_NotesVectorTy);
+	TheModule->getOrInsertFunction("Add_To_NotesVector_float", Add_To_NotesVector_floatTy);
 
-	FunctionType *Add_Int_To_NotesVectorTy= FunctionType::get(
+	FunctionType *Add_To_NotesVector_intTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("Add_Int_To_NotesVector", Add_Int_To_NotesVectorTy);
+	TheModule->getOrInsertFunction("Add_To_NotesVector_int", Add_To_NotesVector_intTy);
 
-	FunctionType *Add_String_To_NotesVectorTy= FunctionType::get(
+	FunctionType *Add_To_NotesVector_strTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("Add_String_To_NotesVector", Add_String_To_NotesVectorTy);
+	TheModule->getOrInsertFunction("Add_To_NotesVector_str", Add_To_NotesVector_strTy);

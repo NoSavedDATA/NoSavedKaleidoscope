@@ -46,7 +46,7 @@ extern "C" float *load_img(Scope_Struct *scope_struct, char *img_name)
 }
 
 
-extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char *img_name, float batch_idx)
+extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char *img_name, int batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor.name <<  "\nImage: " << img_name << "\n";
   
@@ -90,7 +90,7 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char 
 
     //float *image_data_float = new float[width * height * channels];
     float *image_data_float = tensor.cpu_tensor_ptr;
-    int batch_offset = (int) batchless_dims_prod*batch_idx;
+    int batch_offset =  batchless_dims_prod*batch_idx;
     //std::cout << "batch idx: " << batch_idx << ", batch offset: " << batch_offset << "\n";
   
     // Loop through each pixel and convert to float between 0.0 and 1.0
@@ -122,7 +122,7 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char 
 
 
 
-extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, float worker_idx, float batch_idx)
+extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, int worker_idx, int batch_idx)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
@@ -171,7 +171,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
 
 
     float *image_data_float = tensor->cpu_tensor_ptr;
-    int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+    int idx_offset =  (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
 
     //std::cout << "worker idx: " << worker_idx << ", batch idx: " << batch_idx << ", batch offset: " << idx_offset << "\n";
   
@@ -202,7 +202,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
 
 
 
-extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, float worker_idx, float batch_idx, float c, float h, float w)
+extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, int worker_idx, int batch_idx, int c, int h, int w)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
   //std::cout << "Image: " << img_name <<  "\n";
@@ -262,7 +262,7 @@ extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tenso
 
 
     float *image_data_float = tensor->cpu_tensor_ptr;
-    int idx_offset = (int) (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
+    int idx_offset = batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx;
 
     //std::cout << "worker idx: " << worker_idx << ", batch idx: " << batch_idx << ", batch offset: " << idx_offset << "\n";
   

@@ -186,9 +186,9 @@ extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
 
 
 extern "C" void set_scope_object(Scope_Struct *scope_struct, void *object_ptr) {
-    std::cout << "Set scope object " << object_ptr << ".\n";
+    // std::cout << "Set scope object " << object_ptr << ".\n";
     scope_struct->object_ptr = object_ptr;
-    std::cout << "done" << ".\n";
+    // std::cout << "done" << ".\n";
 }
 extern "C" void *get_scope_object(Scope_Struct *scope_struct) {
     return scope_struct->object_ptr;
@@ -197,7 +197,7 @@ extern "C" void *get_scope_object(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn_name) {
-    std::cout << "save for async: " << fn_name << ".\n";
+    // std::cout << "save for async: " << fn_name << ".\n";
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
     

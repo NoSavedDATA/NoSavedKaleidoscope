@@ -321,7 +321,9 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     
 
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-    aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
+
+    aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
+    aux = std::make_unique<VecIdxExprAST>(std::move(aux), std::move(Idx), type);
     aux->SetIsVec(true);
     
     getNextToken(); // eat ]
@@ -598,13 +600,16 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
     return LogError("Expected ',' after for's control variable initial value.");
   getNextToken();
 
+  if(Start->GetType()=="float")
+    typeVars[IdName] = "float";
 
 
   auto End = ParseExpression(parser_struct, class_name);
   if (!End)
     return nullptr;
 
-  
+  // if(End->GetType()=="float")
+  //   typeVars[IdName] = "float";
 
 
   std::unique_ptr<ExprAST> Step = std::make_unique<IntExprAST>(1.0);
@@ -1057,14 +1062,14 @@ std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string 
       Idx = std::move(std::get<2>(Names[Names.size()-1]));
 
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-    aux = std::make_unique<VecIdxExprAST>(std::move(name_solver_expr), std::move(Idx), type);
-    aux->SetIsVec(true);
 
-
+    aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
     aux->SetSelf(is_self);
     aux->SetIsAttribute(is_class_attr);
     aux->SetPreDot(pre_dot);
 
+    aux = std::make_unique<VecIdxExprAST>(std::move(aux), std::move(Idx), type);
+    aux->SetIsVec(true);
 
     return std::move(aux);
   }
@@ -1828,11 +1833,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
     {
       if (BinOp=='-') // inversion of 1 - tensor
       {
-
         // std::cout << "---REVERSING" << ".\n";
-
-
-                                                    
 
         std::string op_type = op_elements + "_mult";
 
@@ -1873,10 +1874,14 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
         // std::cout << "Elements type: " << op_elements << ".\n";
         std::string operation = op_map[BinOp];
         std::string op_type = op_elements + "_" + operation;
-        // std::cout << "Operation: " << op_type << ".\n";
-        // std::cout << "op: " << BinOp << ".\n";
-
+        std::cout << "Operation: " << op_type << ".\n";
+        // std::cout << "op: " << BinOp << ".\n"; 
+        
+        
+        std::cout << "Op is: " << op_type << ".\n";
         LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(LHS), std::move(RHS), parser_struct);
+        if (op_type=="int_int_div")
+          return_type = "float";
         LHS->SetType(return_type);
       }
     }

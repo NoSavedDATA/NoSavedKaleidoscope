@@ -99,16 +99,13 @@ extern "C" DT_float_vec *ones_vec(Scope_Struct *scope_struct, int size) {
 }
 
 
-extern "C" float float_vec_Idx(Scope_Struct *scope_struct, char *vec_name, float _idx)
+extern "C" float float_vec_Idx(Scope_Struct *scope_struct, DT_float_vec *vec, int idx)
 {
-  int idx = (int) _idx;
   // std::cout << "float_vec_Idx on idx " << idx << " for the vector " << vec_name << ".\n";
 
-  DT_float_vec *vec = ClassFloatVecs[vec_name];
   // std::cout << "Loaded vec" << ".\n";
   float ret = vec->vec[idx];
   // std::cout << "got: " << ret << ".\n";
-  delete[] vec_name;
   // std::cout << "returning" << ".\n"; 
   return ret;
 }
@@ -125,7 +122,7 @@ extern "C" float float_vec_Idx_num(Scope_Struct *scope_struct, DT_float_vec *vec
 
 
 
-extern "C" float float_vec_CalculateIdx(char *data_name, float first_idx, ...) {
+extern "C" int float_vec_CalculateIdx(DT_float_vec *vec, int first_idx, ...) {
   return first_idx;
 }
 

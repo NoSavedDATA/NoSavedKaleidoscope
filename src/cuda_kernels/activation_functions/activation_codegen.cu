@@ -37,7 +37,7 @@ extern "C" DT_tensor *relu(Scope_Struct *scope_struct, DT_tensor *tensor)
 }
 
 
-void relu_backward(float *inp, float dims_prod, float *out,
+void relu_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node) {
   int grid_size, block_size;
@@ -47,7 +47,7 @@ void relu_backward(float *inp, float dims_prod, float *out,
 
 
 // void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* dout) {
-void gelu_backward(float *inp, float dims_prod, float *out,
+void gelu_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node) {  
   int grid_size, block_size; 
@@ -83,7 +83,7 @@ extern "C" DT_tensor *gelu(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-void sigmoid_backward(float *inp, float dims_prod, float *out,
+void sigmoid_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node) {  
   
@@ -122,7 +122,7 @@ extern "C" DT_tensor *sigmoid(Scope_Struct *scope_struct, DT_tensor *tensor)
 }
 
 
-void tanh_backward(float *inp, float dims_prod, float *out,
+void tanh_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node) {  
   

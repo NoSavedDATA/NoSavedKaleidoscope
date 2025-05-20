@@ -1,22 +1,22 @@
-1821-05-19 17:36:30
+1821-05-20 14:04:50
 
 	FunctionType *tensor_onehotTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_onehot", tensor_onehotTy);
 
 	FunctionType *priority_sampleTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("priority_sample", priority_sampleTy);
 
 	FunctionType *priority_sample_valTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("priority_sample_val", priority_sample_valTy);

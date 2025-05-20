@@ -21,7 +21,7 @@
 
 
 
-void mhsa_backward(float *inp, float size, float *out,
+void mhsa_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {

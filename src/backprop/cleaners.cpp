@@ -8,17 +8,17 @@
 
 // Cleaners
 std::map<std::string, float *> var_to_grad;
-std::vector<std::tuple<float, float *, std::string>> backprop_tensors_to_pool;
+std::vector<std::tuple<int, float *, std::string>> backprop_tensors_to_pool;
 std::vector<float *> tensors_sent_to_pool;
 std::vector<DT_tensor *> backprop_Tensors_to_free;
 std::vector<DT_tensor *> backprop_Tensors_to_save;
 
-std::map<std::string, std::vector<std::tuple<float, float*,std::string>>> forward_tensors_to_pool;
+std::map<std::string, std::vector<std::tuple<int, float*,std::string>>> forward_tensors_to_pool;
 std::map<std::string, std::vector<float*>> forward_tensors_sent_to_pool;
 std::map<std::string, std::vector<DT_tensor*>> forward_Tensors_to_free;
 std::map<std::string, std::map<std::string, float*>> scope_tensors; // records last version of a tensor //todo: is this one actually used?
 
-std::map<int, std::map<std::string, std::vector<std::tuple<float, float*,std::string>>>> threaded_tensors_to_pool;
+std::map<int, std::map<std::string, std::vector<std::tuple<int, float*,std::string>>>> threaded_tensors_to_pool;
 std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_sent_to_pool;
 std::map<int, std::map<std::string, std::vector<DT_tensor*>>> threaded_Tensors_to_free;
 std::map<int, std::map<std::string, std::vector<float*>>> threaded_tensors_to_save;
@@ -29,7 +29,7 @@ void to_free_tensor(DT_tensor *tensor_ptr)
   if(!in_tensor_ptr_vec(tensor_ptr, backprop_Tensors_to_free))
     backprop_Tensors_to_free.push_back(tensor_ptr);
 }
-void to_pool(float dims_prod, float *tensor_ptr, std::string from)
+void to_pool(int dims_prod, float *tensor_ptr, std::string from)
 {
   if (!in_float_ptr_vec(tensor_ptr, tensors_sent_to_pool))
   {
@@ -50,7 +50,7 @@ void to_free_tensor_forward(DT_tensor *tensor_ptr, std::string scope)
   if(!in_tensor_ptr_vec(tensor_ptr, forward_Tensors_to_free[scope]))
     forward_Tensors_to_free[scope].push_back(tensor_ptr);
 }
-void to_pool_forward(float dims_prod, float *tensor_ptr, std::string scope, std::string from)
+void to_pool_forward(int dims_prod, float *tensor_ptr, std::string scope, std::string from)
 {
   if (!in_float_ptr_vec(tensor_ptr, forward_tensors_sent_to_pool[scope]))
   {
@@ -65,7 +65,7 @@ void to_free_tensor_threaded(DT_tensor *tensor_ptr, std::string scope, int threa
   if(!in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_free[thread_id][scope]) && !in_tensor_ptr_vec(tensor_ptr, threaded_Tensors_to_save[thread_id][scope]))
     threaded_Tensors_to_free[thread_id][scope].push_back(tensor_ptr);
 }
-void to_pool_threaded(float dims_prod, float *tensor_ptr, std::string scope, int thread_id, std::string from)
+void to_pool_threaded(int dims_prod, float *tensor_ptr, std::string scope, int thread_id, std::string from)
 {
   if (!in_float_ptr_vec(tensor_ptr, threaded_tensors_sent_to_pool[thread_id][scope]) && !in_float_ptr_vec(tensor_ptr, threaded_tensors_to_save[thread_id][scope]))
   {
@@ -103,7 +103,7 @@ void CleanThreadTensors(std::string scope, int thread_id)
   std::vector<float*> scope_tensors_ptrs;
   
 
-  for(std::tuple<float, float *, std::string> pair : threaded_tensors_to_pool[thread_id][scope])
+  for(std::tuple<int, float *, std::string> pair : threaded_tensors_to_pool[thread_id][scope])
     move_to_pool(thread_id, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
 
 
@@ -162,7 +162,7 @@ void CleanScopeTensors(std::string scope)
   //for(auto &pair : scope_tensors[scope])
   //  scope_tensors_ptrs.push_back(pair.second);
 
-  for(std::tuple<float, float *, std::string> pair : forward_tensors_to_pool[scope])
+  for(std::tuple<int, float *, std::string> pair : forward_tensors_to_pool[scope])
   {
     //if(!in_float_ptr_vec(std::get<1>(pair), scope_tensors_ptrs))
       move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));

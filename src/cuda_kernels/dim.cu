@@ -331,7 +331,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
 }
 
 
-void mean_over_semilast_dim_backward(float *inp, float size, float *out,
+void mean_over_semilast_dim_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {
@@ -627,7 +627,7 @@ extern "C" DT_tensor *gather(int thread_id, DT_tensor *tensor, DT_tensor *idx_te
 
 
 
-void gather_last_dim_backward(float *inp, float size, float *out,
+void gather_last_dim_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
                      std::string module_name, DT_tensor *node)
 {

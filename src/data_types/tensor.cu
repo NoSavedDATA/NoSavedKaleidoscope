@@ -568,7 +568,7 @@ extern "C" float write_zerosw(DT_tensor *tensor, float worker_idx)
 extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor, int first_dim, ...)
 {
 
-  std::cout << "Executing: " << tensor->name << "." << "view" << "\n";
+  // std::cout << "Executing: " << tensor->name << "." << "view" << "\n";
    
   std::vector<int> new_dims, new_dims_no_minus, current_dims;
   bool has_minus = false;
@@ -660,7 +660,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
 
 
 
-extern "C" float tensor_CalculateIdx(char *tensor_name, float first_idx, ...) {
+extern "C" int tensor_CalculateIdx(char *tensor_name, int first_idx, ...) {
   
   // std::cout << "pinned_tensor_CalculateIdx of " << tensor_name << "\n";
 

@@ -144,10 +144,10 @@ class VariableExprAST : public ExprAST {
 class VecIdxExprAST : public ExprAST {
   
   public:
-    std::unique_ptr<ExprAST> NameSolver;
+    std::unique_ptr<ExprAST> Loaded_Var;
     std::vector<std::unique_ptr<ExprAST>> Idx;
 
-    VecIdxExprAST(std::unique_ptr<ExprAST> NameSolver, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type);
+    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type);
 
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const;

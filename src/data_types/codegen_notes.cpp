@@ -119,7 +119,7 @@ extern "C" float Dispose_NotesVector(DT_list *notes_vector, char *scopeless_name
 }
 
 
-extern "C" DT_list *Add_Float_To_NotesVector(DT_list *notes_vector, float value) {
+extern "C" DT_list *Add_To_NotesVector_float(DT_list *notes_vector, float value) {
 
     notes_vector->append(value, "float");
 
@@ -127,7 +127,7 @@ extern "C" DT_list *Add_Float_To_NotesVector(DT_list *notes_vector, float value)
 }
 
 
-extern "C" DT_list *Add_Int_To_NotesVector(DT_list *notes_vector, int value) {
+extern "C" DT_list *Add_To_NotesVector_int(DT_list *notes_vector, int value) {
 
     notes_vector->append(value, "int");
 
@@ -136,7 +136,7 @@ extern "C" DT_list *Add_Int_To_NotesVector(DT_list *notes_vector, int value) {
 
 
 
-extern "C" DT_list *Add_String_To_NotesVector(DT_list *notes_vector, char *value) {
+extern "C" DT_list *Add_To_NotesVector_str(DT_list *notes_vector, char *value) {
 
     // std::cout << "Add_String " << value << " to notes_vector" << ".\n";
     notes_vector->append((void *)value, "str");

@@ -147,12 +147,10 @@ std::string VariableExprAST::GetName()  {
 }
   
   
-VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> NameSolver, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type)
-              : Idx(std::move(Idx)) {
-  this->isVarLoad = true;
-  this->NameSolver = std::move(NameSolver);
+VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type)
+              : Loaded_Var(std::move(Loaded_Var)), Idx(std::move(Idx)) {
+  this->isVarLoad = true; //todo: remove this?
   this->SetType(Type);
-  this->NameSolver->SetType(Type);
 }
   
 const std::string &VecIdxExprAST::getName() const { return Name; }

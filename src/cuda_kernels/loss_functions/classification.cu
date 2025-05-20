@@ -77,6 +77,8 @@ void CrossEntropyBackward(DT_tensor *L_tensor, DT_tensor *R_tensor,
 
 extern "C" float cross_entropy(Scope_Struct *scope_struct, DT_tensor *y_hat, DT_tensor *y, float scale)
 {
+  // std::cout << "Cross entropy with scale " << scale << ".\n";
+
   DT_tensor *loss_tensor = new DT_tensor();
   // std::cout << "Cross entropy got last version? " << y_hat->is_last_version << "/" << y->is_last_version << ".\n";
 
