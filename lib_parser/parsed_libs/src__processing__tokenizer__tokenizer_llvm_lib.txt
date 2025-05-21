@@ -1,4 +1,4 @@
-1821-05-20 18:29:16
+1821-05-20 22:19:20
 
 	FunctionType *build_vocabTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -6,34 +6,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("build_vocab", build_vocabTy);
-
-	FunctionType *tokenizeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tokenize", tokenizeTy);
-
-	FunctionType *wtokenizeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("wtokenize", wtokenizeTy);
-
-	FunctionType *wtokenize_pad_leftTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("wtokenize_pad_left", wtokenize_pad_leftTy);
-
-	FunctionType *wtokenize_pad_left_batch_firstTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("wtokenize_pad_left_batch_first", wtokenize_pad_left_batch_firstTy);
 
 	FunctionType *wtokenize_pad_left_idxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

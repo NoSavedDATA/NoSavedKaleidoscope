@@ -4,10 +4,11 @@
 
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
-#include <thread>
-#include <string>
-#include <vector>
 #include <map>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 #include "../cuda_threads/include.h"
 
@@ -184,7 +185,6 @@ DT_tensor *wrapTensorWithDetached(DT_tensor* tensor);
 bool in_tensor_ptr_vec(DT_tensor *value, const std::vector<DT_tensor *>& list);
 
 
-extern std::map<std::string, DT_tensor *> NamedTensorsT;
-extern std::map<std::string, float *> NamedPinnedTensors;
+extern std::unordered_map<std::string, DT_tensor *> NamedTensorsT;
 extern std::map<std::string, std::vector<float>> NamedDims;
 extern std::vector<DT_tensor> TensorsToDelete;

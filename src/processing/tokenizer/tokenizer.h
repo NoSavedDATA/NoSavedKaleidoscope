@@ -5,7 +5,9 @@
 #include "../../tensor/tensor_struct.h"
 
 
-extern std::map<std::string, int> Vocab;
+extern std::unordered_map<std::string_view, int> Vocab;
+extern std::vector<std::string> VocabStorage;
+
 extern int max_tokens;
 extern int last_tok_id;
 
