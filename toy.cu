@@ -132,7 +132,7 @@ bool ShallCodegen = true;
 
 
 // Tensors
-std::map<std::string, DT_tensor *> NamedTensorsT;
+std::unordered_map<std::string, DT_tensor *> NamedTensorsT;
 std::map<std::string, float *> NamedPinnedTensors;
 std::map<std::string, std::vector<float>> NamedDims;
 std::vector<DT_tensor> TensorsToDelete;
