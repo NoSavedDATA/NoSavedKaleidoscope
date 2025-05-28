@@ -84,7 +84,7 @@ void Grid2::NewGrid(int gx, int gy, int bx, int by)
   this->b.y = by;
   this->b.z = 1;
 
-  smem = (bx+by)*64*sizeof(float);
+  smem = (bx+by)*64*sizeof(float); //times twice wk
 }
 
 void Grid2::SetWarpSize(int warps, int wx, int wy)
@@ -99,8 +99,7 @@ void Grid2::SetWarpSize(int warps, int wx, int wy)
   this->wy = wy;
 
 
-  bx_per_wx = this->b.x/wx;
-  by_per_wy = this->b.y/wy;
+  bx_per_wx = this->b.x/wx; // each bx work is splitted accross wx
 
   wx_per_wmma_m = wx / 16;
   wy_per_wmma_n = wy / 16;
@@ -121,7 +120,7 @@ Grid2 CalculateBlockingSize2(int M, int N)
   // while(by>N && by>64)
   //   by = by/2;
 
-  int gx = std::floor((M+bx-1)/(float)bx);
+  int gx = std::floor((M+bx-1)/(float)bx); // Each gx handles 128 rows of x (bx)
   int gy = std::floor((N+by-1)/(float)by);
 
   Grid2 grid;
@@ -134,7 +133,7 @@ Grid2 CalculateBlockingSize2(int M, int N)
   // int wy = fminf(fmaxf(N/16,1),4);
 
   int warps = 8;
-  int wx = 32;
+  int wx = 32; // each wx handles 32 rows
   int wy = 32;
 
   grid.SetWarpSize(warps, wx, wy);
