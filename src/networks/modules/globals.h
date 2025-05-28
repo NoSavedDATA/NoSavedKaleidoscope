@@ -9,6 +9,7 @@
 #include "BatchNorm2d/class.h"
 #include "Conv2d/class.h"
 #include "Embedding/class.h"
+#include "EmbeddingLn/class.h"
 #include "Linear/class.h"
 #include "LSTM/class.h"
 #include "MaxPool2d/class.h"
@@ -17,6 +18,7 @@
 extern std::map<std::string, std::unique_ptr<BatchNorm2dCPP>> NamedBatchNorm2d;
 extern std::map<std::string, std::unique_ptr<Conv2dCPP>> NamedConv2d;
 extern std::map<std::string, std::unique_ptr<DT_Embedding>> NamedEmbedding;
+extern std::map<std::string, std::unique_ptr<DT_EmbeddingLn>> NamedEmbeddingLn;
 extern std::map<std::string, std::unique_ptr<LinearCPP>> NamedLinear;
 extern std::map<std::string, std::unique_ptr<DT_LSTM>> NamedLSTM;
 extern std::map<std::string, std::unique_ptr<MaxPool2dCPP>> NamedMaxPool2d;

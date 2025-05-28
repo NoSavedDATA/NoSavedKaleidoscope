@@ -10,14 +10,13 @@
 #include <string>
 #include <vector>
 
+#include "../../../mma/include.h"
 
 #include "../../../backprop/include.h"
 #include "../../../common/include.h"
 #include "../../../compiler_frontend/logging.h"
 #include "../../../cuda_kernels/handles.h"
 #include "../../../cuda_kernels/elementwise_kernels_inline.cu"
-#include "../../../mma/general.h"
-#include "../../../mma/wmma_blocking.cu"
 #include "../../../notators/notators.h"
 #include "../../../tensor/include.h"
 #include "class.h"

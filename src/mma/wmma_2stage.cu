@@ -18,7 +18,7 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
                       const int wx, const int wy,
                       const int bx_per_w,     const int by_per_w,
                       const int bx_per_wx,    const int by_per_wy,
-                      const int wx_per_mma_m, const int wy_per_mma_n) {
+                      const int wx_per_wmma_m, const int wy_per_wmma_n) {
 
 
 
@@ -45,8 +45,8 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
   int smem_load_off = smem_cache_off;
 
 
-  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag[4]; // wy_per_mma_n
-  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag[8]; // wx_per_mma_m
+  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag[4]; // wy_per_wmma_n
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> w_frag[8]; // wx_per_wmma_m
   
 
 
@@ -191,21 +191,21 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
     {
 
 
-      for (int wy_tile=0; wy_tile<wy_per_mma_n; ++wy_tile)
+      for (int wy_tile=0; wy_tile<wy_per_wmma_n; ++wy_tile)
       {
 
         // if ((block_x+block_y+laneId+warp_x)==0)
-        //   printf("wy tile %d, wy_per_mma_n: %d, warp y: %d, row: %d\n", wy_tile, wy_per_mma_n, warp_y, (warp_y*wy + wy_tile*WMMA_N));
+        //   printf("wy tile %d, wy_per_wmma_n: %d, warp y: %d, row: %d\n", wy_tile, wy_per_wmma_n, warp_y, (warp_y*wy + wy_tile*WMMA_N));
         // __syncthreads();
         smem_xor_to_reg_A(x_frag[wy_tile], x_smem + smem_load_off + (warp_y*wy + wy_tile*WMMA_N)*wk, wk, k_stride);
       }
 
 
-      for (int wx_tile=0; wx_tile<wx_per_mma_m; ++wx_tile)
+      for (int wx_tile=0; wx_tile<wx_per_wmma_m; ++wx_tile)
       {
 
         // if ((block_x+block_y+laneId+warp_x+warp_y)==0)
-        //   printf("wx tile %d, wx_per_mma_n: %d\n", wx_tile, wx_per_mma_m);
+        //   printf("wx tile %d, wx_per_mma_n: %d\n", wx_tile, wx_per_wmma_m);
         // __syncthreads();
         smem_xor_to_reg_B(w_frag[wx_tile], w_smem + smem_load_off + (warp_x*wx + wx_tile*WMMA_M)*wk, wk, k_stride);
       }
@@ -220,25 +220,25 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
       int wy_tile=0;
       int jump=1;
       int gate=1;
-      for (int wx_tile=0; wx_tile<wx_per_mma_m; ++wx_tile)
+      for (int wx_tile=0; wx_tile<wx_per_wmma_m; ++wx_tile)
       {
         
-        for (wy_tile=0; wy_tile<wy_per_mma_n; wy_tile+=1)
+        for (wy_tile=0; wy_tile<wy_per_wmma_n; wy_tile+=1)
         {
           if ((block_y*by + wy_tile*WMMA_N)<B && (block_x*bx + wx_tile*WMMA_M)<OC)
-            wmma16x16x16(acc_frag+(wx_tile*wy_per_mma_n + wy_tile)*8, x_frag[wy_tile], w_frag[wx_tile]); // 8 is the frag ld
+            wmma16x16x16(acc_frag+(wx_tile*wy_per_wmma_n + wy_tile)*8, x_frag[wy_tile], w_frag[wx_tile]); // 8 is the frag ld
 
            
         }
 
-        // for (; wy_tile*jump<(wy_per_mma_n*gate); wy_tile+=jump)
+        // for (; wy_tile*jump<(wy_per_wmma_n*gate); wy_tile+=jump)
         // {
 
 
         //   if ((block_y*by + wy_tile*WMMA_N)<B && (block_x*bx + wx_tile*WMMA_M)<OC)
         //   {
 
-        //     wmma16x16x16(acc_frag+(wx_tile*wy_per_mma_n + wy_tile)*8, x_frag[wy_tile], w_frag[wx_tile]);
+        //     wmma16x16x16(acc_frag+(wx_tile*wy_per_wmma_n + wy_tile)*8, x_frag[wy_tile], w_frag[wx_tile]);
             
         //   }
         // }
@@ -266,10 +266,10 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
   
 
 
-  for (int wx_tile=0; wx_tile<wx_per_mma_m; ++wx_tile)
+  for (int wx_tile=0; wx_tile<wx_per_wmma_m; ++wx_tile)
   {
 
-    for (int wy_tile=0; wy_tile<wy_per_mma_n; ++wy_tile)
+    for (int wy_tile=0; wy_tile<wy_per_wmma_n; ++wy_tile)
     {
       __syncthreads();
 
@@ -281,7 +281,7 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
       {
         
         
-        frag_to_mem(acc_frag+(wx_tile*wy_per_mma_n + wy_tile)*8, _out, bx_per_wx*WMMA_T);
+        frag_to_mem(acc_frag+(wx_tile*wy_per_wmma_n + wy_tile)*8, _out, bx_per_wx*WMMA_T);
         
         
         
@@ -329,5 +329,5 @@ inline void blocking_mma_2stage(const float *x, const float *w, float *o, int B,
                           (x, w, o, B, C, OC, grid.b.x, grid.b.y, grid.wx, grid.wy,
                           grid.bx_per_w, grid.by_per_w,
                           grid.bx_per_wx, grid.by_per_wy,
-                          grid.wx_per_mma_m, grid.wy_per_mma_n);
+                          grid.wx_per_wmma_m, grid.wy_per_wmma_n);
 }

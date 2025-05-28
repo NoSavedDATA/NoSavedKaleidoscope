@@ -201,7 +201,6 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
 
 
 
-
 extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, int worker_idx, int batch_idx, int c, int h, int w)
 {
   //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";

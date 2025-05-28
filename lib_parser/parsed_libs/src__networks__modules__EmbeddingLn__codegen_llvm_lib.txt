@@ -1,0 +1,15 @@
+1821-05-26 17:24:26
+
+	FunctionType *EmbeddingLnTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("EmbeddingLn", EmbeddingLnTy);
+
+	FunctionType *EmbeddingLn_CreateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("EmbeddingLn_Create", EmbeddingLn_CreateTy);

@@ -148,7 +148,7 @@ std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '
 std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class};
 
 std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "str", "str_vec", "float_vec", "list", "dict", "MHSA", "LSTM", "Linear", 
-                                        "Embedding", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
+                                        "Embedding", "EmbeddingLn", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
 
 
 std::string IdentifierStr; // Filled in if tok_identifier

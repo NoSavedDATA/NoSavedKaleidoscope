@@ -47,12 +47,17 @@ CU_SRC = $(shell find $(SRC_DIR) -name "*.cu")
 CU_OBJ = $(CU_SRC:$(SRC_DIR)/%.cu=$(OBJ_DIR)/%.o)
 CU_DIR = $(sort $(dir $(CU_OBJ)))
 
+CUH_SRC = $(shell find $(SRC_DIR) -name "*.cuh")
+CUH_OBJ = $(CUH_SRC:$(SRC_DIR)/%.cuh=$(OBJ_DIR)/%.o)
+CUH_DIR = $(sort $(dir $(CUH_OBJ)))
+
+
 # C++ Source and Object Files
 CXX_SRC = $(shell find $(SRC_DIR) -name "*.cpp")
 CXX_OBJ = $(CXX_SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 CXX_DIR = $(sort $(dir $(CXX_OBJ)))
 
-OBJ_DIRS := $(sort $(CU_DIR) $(CXX_DIR))
+OBJ_DIRS := $(sort $(CU_DIR) $(CXX_DIR) $(CUH_OBJ))
 
 
 # Lib Parser Object Files
@@ -93,17 +98,19 @@ $(shell mkdir -p $(LIB_PARSER_OBJ_DIR);)
 
 
 
-all: prebuild $(OBJ) check_done
+all: prebuild $(CU_OBJ) $(CXX_OBJ) $(OBJ) check_done
+
+
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu | prebuild
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -I$(SRC_DIR) -MMD -MP -c -o $@ $<
 	
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | prebuild
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
 
 
 $(OBJ): $(SRC) $(CU_OBJ) $(CXX_OBJ)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -o $(OBJ) -lcudart
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(SRC) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -MMD -MP -o $(OBJ) -lcudart
 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
 	@touch $(BUILD_FLAG)
 

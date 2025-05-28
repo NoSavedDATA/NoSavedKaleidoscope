@@ -46,6 +46,7 @@ void set_user_functions() {
 		"load_img", "gload_img", "wload_img", "wload_img_resize", "load_preprocess_img", 
 		"LockMutex", "UnlockMutex", 
 		"FirstArgOnDemand", 
+		"EmbeddingLn", "EmbeddingLn_Create", 
 		"InstantiateObject", "objHash", "LoadObject", "InitObjectVecWithNull", "is_null", "objAttr_var_from_var", "objAttr_var_from_vec", "objAttr_vec_from_var", "objAttr_vec_from_vec", "append", "LoadObjectScopeName", "object_Attr_on_Offset_float", "object_Attr_on_Offset_int", "object_Attr_on_Offset", "object_Load_on_Offset_float", "object_Load_on_Offset_int", "object_Load_on_Offset", 
 		"mse", "mse_with_priorities", 
 		"min", "max", "logE2f", "roundE", "floorE", "logical_not", 
@@ -125,6 +126,8 @@ void set_user_functions() {
 	backward_functions["gather_last_dim_backward"] = gather_last_dim_backward;
 
 	backward_functions["conv2d_backward"] = conv2d_backward;
+
+	backward_functions["embeddingln_backward"] = embeddingln_backward;
 
 
 }
