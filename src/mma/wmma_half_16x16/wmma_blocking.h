@@ -23,295 +23,47 @@ using namespace nvcuda;
 
 
 
+// Each thread-block handles bx rows and by cols
+// Each bx work is splitted accross wx warp loads
+
 template<int WMMA_T, int wx_per_wmma_m, int wy_per_wmma_n, int wk>
 __global__ void wmma_blocking(const float *__restrict__ x, const float *__restrict__ w,
                         float *__restrict__ out, const int B, const int C, const int OC,
                         const int bx, const int by,
                         const int wx, const int wy,
                         const int bx_per_w,     const int by_per_w,
-                        const int bx_per_wx,    const int by_per_wy) {
+                        const int bx_per_wx)
+ {
 
-
-
-
-
-  int block_x = blockIdx.x;
-  int block_y = blockIdx.y;
-
-
-  int warpId = threadIdx.x / warpSize;
-  int laneId = (threadIdx.x) % warpSize;
-
-  // bx = 256, wx = 64
-  //bx_per_wx = 4
-  int warp_y = warpId / bx_per_wx;
-  int warp_x = warpId % bx_per_wx;
-
-  int mw = laneId / 4;
-  int ml = laneId % 4;
-
-
-  int smem_cache_off = (bx + by)*wk;
-  int smem_store_off = 0;
-  int smem_load_off = smem_cache_off;
-
-
-
-//   my_device_func();
- my_device_func();
-
-
-
+  // bx: 128, by: 64
+  // wx: 32,  wy: 32
 
   
-  fp16_mma_info<wx_per_wmma_m, wy_per_wmma_n> mma_struct;
-  
-
-
-  wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> x_frag[wx_per_wmma_m];
-  // wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> mma_struct.w_frag[wy_per_wmma_n];
-
-  // float mma_struct.acc_frag[wx_per_wmma_m*wy_per_wmma_n*8];
-  
-
-  
-
+  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n> frag_loader;
+    
   extern __shared__ float smem[];
-  float *out_smem = smem;
 
-  float *x_smem     = smem;
-  float *w_smem     = smem + by*wk;
+
+  wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, wk);
   
-  
-  // index auxiliars
-  int xor_addr = smem_xor_cp_async(laneId);
-
-  int by_warp_offset = by_per_w*warpId;
-  int bx_warp_offset = bx_per_w*warpId;
+  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n> smem_loader(smem, wmma_idx, (bx+by)*wk);
+  float *x_smem = smem_loader.smem_malloc(smem, by*wk);
+  float *w_smem = smem_loader.smem_malloc(smem);
 
 
 
+  blocking_tiled_wmma_fp16_16x16x16(frag_loader, wmma_idx, smem_loader,
+                                    x, w, x_smem, w_smem,
+                                    B, OC, C, WMMA_M, WMMA_N);
 
 
-  /////////////////////////////
-
-
-  for(int block_tile=0; block_tile<by_per_w/4; ++block_tile) // 4 from 4 jumped rows
-  {
-
-      int row = block_y*by + by_warp_offset + block_tile*4 + ml; // 4 from 4 loaded bits
-      float const *gmem_ptr = x + row*C + mw*4; // 4 from 4 loaded bits
-
-      gmem_to_smem_xor(gmem_ptr,  *(x_smem + (by_warp_offset + block_tile*4)*wk + xor_addr), // 4 from 4 loaded bits
-                        (row<B) ? std::min((( C-(mw*4)) /4)*4, 16) : 0);            
-  }
-
-
-
-
-  for(int block_tile=0; block_tile<bx_per_w/4; ++block_tile)
-  {
-
-      int row = block_x*bx + bx_warp_offset + block_tile*4 + ml;
-      float const *gmem_ptr = w + row*C + mw*4;
-
-      gmem_to_smem_xor(gmem_ptr,  *(w_smem + (bx_warp_offset + block_tile*4)*wk + xor_addr),
-                        (row<OC) ? std::min((( C-(mw*4)) /4)*4, 16) : 0);            
-  }
-
-
-
-
-  asm volatile("cp.async.commit_group;\n" ::);
-
-  // asm volatile("cp.async.wait_all;");
-  // __syncthreads();
-
-
-
-
-#pragma unroll
-  for (int tile=0; tile<C; tile+=wk)
-  {
-    // warp * mw_size * i_size + mw*i_size + i
-    
-
-
-    smem_store_off ^= smem_cache_off;
-    smem_load_off  ^= smem_cache_off;
-
-
-
-    // if ((block_x+block_y+laneId+warp_x)==0)
-    //   printf("load %d, \t\t store: %d\n", smem_load_off, smem_store_off);
-
-
-    // Each iter processes 4/ml rows and 8/mw*(4 floats) | 32 cols.
-    // So, we jump 4|ml rows per iter.
-
-
-    int next_tile = tile + wk;
-
-    if (next_tile<C)
-    {
-      
-      for(int block_tile=0; block_tile<by_per_w/4; ++block_tile)
-      {
-
-          int row = block_y*by + by_warp_offset + block_tile*4 + ml;
-          float const *gmem_ptr = x + row*C + next_tile+mw*4;
-
-          gmem_to_smem_xor(gmem_ptr,  *(x_smem + smem_store_off + (by_warp_offset + block_tile*4)*wk + xor_addr),
-                            (row<B) ? std::min((( C-(next_tile+mw*4)) /4)*4, 16) : 0);
-      }
-
-
-
-
-      for(int block_tile=0; block_tile<bx_per_w/4; ++block_tile)
-      {
-
-          int row = block_x*bx + bx_warp_offset + block_tile*4 + ml;
-          float const *gmem_ptr = w + row*C + next_tile+mw*4;
-
-          gmem_to_smem_xor(gmem_ptr,  *(w_smem + smem_store_off + (bx_warp_offset + block_tile*4)*wk + xor_addr),
-                            (row<OC) ? std::min((( C-(next_tile+mw*4)) /4)*4, 16) : 0);
-      }
 
   
-      asm volatile("cp.async.commit_group;\n" ::);
-      asm volatile("cp.async.wait_group %0;" ::"n"(1));
-    } else {
-      asm volatile("cp.async.wait_all;");
-    }
-    
-
-    __syncthreads();
-
-
-
-
-
-
 
 /////////////////////////////
 
+  smem_loader.blocking_tiled_store_C(out, frag_loader, B, OC, WMMA_M, WMMA_N, WMMA_T);
 
-    for (int k_stride=0; k_stride<2; ++k_stride)
-    {
-
-
-      for (int wy_tile=0; wy_tile<wy_per_wmma_n; ++wy_tile)
-      {
-
-        // if ((block_x+block_y+laneId+warp_x)==0)
-        //   printf("wy tile %d, wy_per_wmma_n: %d, warp y: %d, row: %d\n", wy_tile, wy_per_wmma_n, warp_y, (warp_y*wy + wy_tile*WMMA_N));
-        // __syncthreads();
-        smem_xor_to_reg_A(x_frag[wy_tile], x_smem + smem_load_off + (warp_y*wy + wy_tile*WMMA_N)*wk, wk, k_stride);
-      }
-
-
-      for (int wx_tile=0; wx_tile<wx_per_wmma_m; ++wx_tile)
-      {
-
-        // if ((block_x+block_y+laneId+warp_x+warp_y)==0)
-        //   printf("wx tile %d, wx_per_mma_n: %d\n", wx_tile, wx_per_wmma_m);
-        // __syncthreads();
-        smem_xor_to_reg_B(mma_struct.w_frag[wx_tile], w_smem + smem_load_off + (warp_x*wx + wx_tile*WMMA_M)*wk, wk, k_stride);
-      }
-      
-
-
-
-/////////////////////////////
-
-
-
-      int wy_tile=0;
-      int jump=1;
-      int gate=1;
-      for (int wx_tile=0; wx_tile<wx_per_wmma_m; ++wx_tile)
-      {
-        
-        for (wy_tile=0; wy_tile<wy_per_wmma_n; wy_tile+=1)
-        {
-          if ((block_y*by + wy_tile*WMMA_N)<B && (block_x*bx + wx_tile*WMMA_M)<OC)
-            wmma16x16x16(mma_struct.acc_frag+(wx_tile*wy_per_wmma_n + wy_tile)*8, x_frag[wy_tile], mma_struct.w_frag[wx_tile]); // 8 is the frag ld
-
-           
-        }
-
-        // for (; wy_tile*jump<(wy_per_wmma_n*gate); wy_tile+=jump)
-        // {
-
-
-        //   if ((block_y*by + wy_tile*WMMA_N)<B && (block_x*bx + wx_tile*WMMA_M)<OC)
-        //   {
-
-        //     wmma16x16x16(mma_struct.acc_frag+(wx_tile*wy_per_wmma_n + wy_tile)*8, x_frag[wy_tile], mma_struct.w_frag[wx_tile]);
-            
-        //   }
-        // }
-
-        // jump*=-1;
-        // gate = (jump+1)/2;
-      }
-      __syncthreads();
-    }
-
-    // asm volatile("cp.async.wait_all;");
-    // __syncthreads();
-
-  }
-  
-
-
-
-/////////////////////////////
-
-
-
-  // float *_out = out_smem + warp_y*WMMA_T*(X_WARPS*WMMA_T) + warp_x*WMMA_T;
-  float *_out = out_smem + warp_y*WMMA_N*(bx_per_wx*WMMA_T) + warp_x*WMMA_M; // todo: is this correct?
-  
-
-
-  for (int wx_tile=0; wx_tile<wx_per_wmma_m; ++wx_tile)
-  {
-
-    for (int wy_tile=0; wy_tile<wy_per_wmma_n; ++wy_tile)
-    {
-      __syncthreads();
-
-
-      int threaded_row = block_y*by + warp_y*wy + wy_tile*WMMA_N;
-      int threaded_col = block_x*bx + warp_x*wx + wx_tile*WMMA_M;
-
-      if (threaded_row<B && threaded_col<OC && (warp_y*wy)<B && (warp_x*wx)<OC)
-      {
-        
-        
-        frag_to_mem(mma_struct.acc_frag+(wx_tile*wy_per_wmma_n + wy_tile)*8, _out, bx_per_wx*WMMA_T);
-        
-        
-        
-
-    #pragma unroll
-        for (int tile=0; tile<std::ceil((WMMA_N*WMMA_M)/(float)(warpSize)); ++tile)
-        {
-          int tile_idx = tile*warpSize + laneId;
-
-          int row =  tile_idx / WMMA_M;
-          int col = (tile_idx % WMMA_M);
-
-
-          if((threaded_row+row)<B  &&  (threaded_col+col)<OC && row<WMMA_T)
-            out[(threaded_row+row)*OC + threaded_col+col] = _out[row*(bx_per_wx*WMMA_M)+col];
-
-        }
-      }
-    }
-  }
 }
 
 

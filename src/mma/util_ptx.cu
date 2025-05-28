@@ -18,18 +18,18 @@
 //             : "r"(RA0), "r"(RA1), "r"(RA2), "r"(RA3), "r"(RB0), "r"(RB1), "r"(RC0), "r"(RC1))
 
 
-using namespace nvcuda;
+// using namespace nvcuda;
 
-__device__ __inline__ void gmem_to_smem_xor(const float *gmem_ptr, float &smem, const int trunc)
-{
-  uint32_t smem_int_ptr = cast_smem_ptr_to_uint(&smem);
+// __device__ __inline__ void gmem_to_smem_xor(const float *gmem_ptr, float &smem, const int trunc)
+// {
+//   uint32_t smem_int_ptr = cast_smem_ptr_to_uint(&smem);
   
-  asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], %2, %3;"
-                :: "r"(smem_int_ptr),
-                   "l"(gmem_ptr),
-                   "n"(16),
-                   "r"(trunc)); // incorrect 0 padding yet
-}
+//   asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], %2, %3;"
+//                 :: "r"(smem_int_ptr),
+//                    "l"(gmem_ptr),
+//                    "n"(16),
+//                    "r"(trunc)); // incorrect 0 padding yet
+// }
 
 
 
