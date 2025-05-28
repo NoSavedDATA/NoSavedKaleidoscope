@@ -850,6 +850,20 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("pinned_tensor_CalculateIdx", pinned_tensor_CalculateIdxTy);
 
+	FunctionType *EmbeddingLnTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("EmbeddingLn", EmbeddingLnTy);
+
+	FunctionType *EmbeddingLn_CreateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("EmbeddingLn_Create", EmbeddingLn_CreateTy);
+
 	FunctionType *cross_entropyTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},

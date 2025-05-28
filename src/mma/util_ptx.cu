@@ -1,5 +1,6 @@
 
-#include "util.cu"
+#include "util.h"
+#include "../nsk_cuda/include.h"
 
 // Cuda
 #include <cuda_runtime.h>

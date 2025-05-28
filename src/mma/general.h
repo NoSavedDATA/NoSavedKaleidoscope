@@ -5,6 +5,7 @@
 #include <mma.h>
 
 #include "../tensor/tensor_struct.h"
+#include "../nsk_cuda/include.h"
 #include "utils.h"
 
 using namespace nvcuda;

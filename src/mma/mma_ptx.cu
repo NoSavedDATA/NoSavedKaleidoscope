@@ -17,7 +17,7 @@ __global__ void mma_ptx(const float *__restrict__ x, const float *__restrict__ w
                       const int wx, const int wy,
                       const int bx_per_w,     const int by_per_w,
                       const int bx_per_wx,    const int by_per_wy,
-                      const int wx_per_mma_m, const int wy_per_mma_n) {
+                      const int wx_per_wmma_m, const int wy_per_wmma_n) {
 
 
     int block_x = blockIdx.x;
@@ -137,7 +137,7 @@ __global__ void mma_ptx(const float *__restrict__ x, const float *__restrict__ w
 
 
 
-            for (int wy_tile=0; wy_tile<wy_per_mma_n; ++wy_tile)
+            for (int wy_tile=0; wy_tile<wy_per_wmma_n; ++wy_tile)
             {
                 
                 const float *smem_off = x_smem + (warp_y*wy + wy_tile*MMA_PTX_M);
@@ -159,12 +159,12 @@ __global__ void mma_ptx(const float *__restrict__ x, const float *__restrict__ w
 
 
 
-            for (int wx_tile=0; wx_tile<wx_per_mma_m; ++wx_tile)
+            for (int wx_tile=0; wx_tile<wx_per_wmma_m; ++wx_tile)
             {
 
 
 
-                for (int wy_tile=0; wy_tile<wy_per_mma_n; ++wy_tile)
+                for (int wy_tile=0; wy_tile<wy_per_wmma_n; ++wy_tile)
                 {
 
 
@@ -258,5 +258,5 @@ inline void blocking_mma_ptx(const float *x, const float *w, float *o, int B, in
                             (x, w, o, B, C, OC, grid.b.x, grid.b.y, grid.wx, grid.wy,
                             grid.bx_per_w, grid.by_per_w,
                             grid.bx_per_wx, grid.by_per_wy,
-                            grid.wx_per_mma_m, grid.wy_per_mma_n);
+                            grid.wx_per_wmma_m, grid.wy_per_wmma_n);
 }

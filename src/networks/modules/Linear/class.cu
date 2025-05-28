@@ -103,9 +103,9 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
 
   cudaStream_t stream = ThreadsStream[thread_id];  
 
-
   if (_fp32)
   {
+    std::cout << "Linear is fp32" << ".\n";
     dim3 block_size(TILE_SIZE, TILE_SIZE);
     dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
     int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
@@ -136,7 +136,7 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     // wmma_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_cf, stream>>>(x->tensor_ptr, W, out, B, C, OC);
 
 
-    
+
     blocking_mma<WMMA_T>(x->tensor_ptr, W, out, B, C, OC, stream);
     
 
