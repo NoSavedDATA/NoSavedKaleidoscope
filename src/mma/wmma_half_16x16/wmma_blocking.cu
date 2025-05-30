@@ -22,12 +22,12 @@ template __global__ void wmma_blocking<16,1,1,32>(const float *__restrict__ x, c
 
 
 
-// template __global__ void wmma_blocking<16,2,1,32>(const float *__restrict__ x, const float *__restrict__ w,
-//                         float *__restrict__ out, const int B, const int C, const int OC,
-//                         const int bx, const int by,
-//                         const int wx, const int wy,
-//                         const int bx_per_w,     const int by_per_w,
-//                         const int bx_per_wx);
+template __global__ void wmma_blocking<16,2,1,32>(const float *__restrict__ x, const float *__restrict__ w,
+                        float *__restrict__ out, const int B, const int C, const int OC,
+                        const int bx, const int by,
+                        const int wx, const int wy,
+                        const int bx_per_w,     const int by_per_w,
+                        const int bx_per_wx);
 
 
 template __global__ void wmma_blocking<16,3,1,32>(const float *__restrict__ x, const float *__restrict__ w,

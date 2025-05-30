@@ -8,29 +8,11 @@
 #include <cudnn.h>
 #include <mma.h>
 
+#include "../../../nsk_cuda/include.h"
+
+using namespace nvcuda;
 
 
-
-__global__ void embeddingln_forward_kernel(const float *x, const float *w,
-                      float *out, const int tile_size, const int B, const int batches_per_block, const int C, const int OC) {
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
-  int x_block = blockIdx.x;
-  int y_block = blockIdx.y;
-
-  
-  int col = x_block*tile_size + tx; // OC
-
-
-  // w e [V, OC]
-  for (int i=0; i<batches_per_block; ++i)
-  {
-    int row = (y_block*batches_per_block+i)*tile_size + ty; // B
-
-    if(row<B && col<OC)
-      out[row*OC + col] = w[((int)x[row])*OC + col];
-  }
-}
 
 
 

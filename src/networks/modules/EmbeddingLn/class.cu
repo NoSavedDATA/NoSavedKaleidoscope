@@ -16,6 +16,7 @@
 #include "../../../cuda_kernels/handles.h"
 #include "../../../cuda_kernels/elementwise_kernels_inline.cu"
 #include "../../../tensor/include.h"
+#include "../../../mma/util.h"
 #include "class.h"
 #include "kernels.h"
 
@@ -42,8 +43,8 @@ DT_EmbeddingLn::DT_EmbeddingLn(int V, int C, int OC, std::string Init, std::stri
     cudaMemcpy(Book, book_cpu, V*C*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_Book = createTensor(Book, {V, OC}, V*C, true, Name+"_Book");
-    DT_tensor *tensor_W = createTensor(W, {C, OC}, OC*C, true, Name+"_W");
+    DT_tensor *tensor_Book = createTensor(Book, {V, C}, V*C, true, Name+"_Book");
+    DT_tensor *tensor_W = createTensor(W, {OC, C}, OC*C, true, Name+"_W");
     
     
     
@@ -73,6 +74,14 @@ void DT_EmbeddingLn::SetDescriptors(int B)
 }
 
 
+
+
+template<int wx_per_wmma_m, int wy_per_wmma_n>
+void launch_embedding_ln(Wmma_Grid grid, const float *idxs, const float *embedding_book, const float *weight, float *out, const int M, const int N, const int K, cudaStream_t stream) {
+
+  embeddingln_forward_kernel<wx_per_wmma_m, wy_per_wmma_n><<<grid.g, grid.w, grid.smem, stream>>>(idxs, embedding_book, weight, out, M, N, K);  
+}
+
 float *DT_EmbeddingLn::Forward(DT_tensor *tensor, int B, int thread_id)
 {
   float *out = get_from_pool(thread_id, B*OC, "embedding out");
@@ -81,23 +90,40 @@ float *DT_EmbeddingLn::Forward(DT_tensor *tensor, int B, int thread_id)
   if (this->B!=B)
     SetDescriptors(B);
 
-  //if(thread_id==0 && nn_mode==training_mode)
-  //  NamedTensorsT[Name]->Sparse_Idx_Tensor = tensor;
+ 
+  Wmma_Grid grid = CalculateBlockingSize(OC, B,
+                                         8,
+                                         128, 64,
+                                         32, 32,
+                                         16, 16);
 
+  // int b = B;
+  // while (b>1 && std::ceil((b*OC)/TILE_SIZE_SQ)>128)
+  //   b-=1;
+  // int batches_per_block = std::ceil(B/(float)b);
 
-  int b = B;
-  while (b>1 && std::ceil((b*OC)/TILE_SIZE_SQ)>128)
-    b-=1;
-  int batches_per_block = std::ceil(B/(float)b);
+  // dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(b/(float)TILE_SIZE));
+  // dim3 block_size(TILE_SIZE, TILE_SIZE);
 
-
-
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(b/(float)TILE_SIZE));
-  //std::cout << "blocks: " << (grid_size.x*grid_size.y) << ", b " << b << ", B " << B << ", OC " << OC << ", TILE_SIZE " << TILE_SIZE << "\n";
+  // embeddingln_forward_kernel<<<grid_size, block_size, 0, stream>>>(tensor->tensor_ptr, W, out, TILE_SIZE, B, batches_per_block, C, OC);
+  
   cudaStream_t stream = ThreadsStream[thread_id];
-  embeddingln_forward_kernel<<<grid_size, block_size, 0, stream>>>(tensor->tensor_ptr, W, out, TILE_SIZE, B, batches_per_block, C, OC);
 
+  using LaunchFn = void(*)(Wmma_Grid, const float*, const float*, const float *, float*, int, int, int, cudaStream_t);
+  static constexpr LaunchFn dispatch_table[5][5] = {
+      {nullptr}, // 0 is unused
+      {nullptr, launch_embedding_ln<1,1>, launch_embedding_ln<1,2>, launch_embedding_ln<1,3>, launch_embedding_ln<1,4>},
+      {nullptr, launch_embedding_ln<2,1>, launch_embedding_ln<2,2>, launch_embedding_ln<2,3>, launch_embedding_ln<2,4>},
+      {nullptr, launch_embedding_ln<3,1>, launch_embedding_ln<3,2>, launch_embedding_ln<3,3>, launch_embedding_ln<3,4>},
+      {nullptr, launch_embedding_ln<4,1>, launch_embedding_ln<4,2>, launch_embedding_ln<4,3>, launch_embedding_ln<4,4>},
+  };
+
+  auto launcher = dispatch_table[grid.wx_per_wmma_m][grid.wy_per_wmma_n];
+  launcher(grid, tensor->tensor_ptr, Book, W, out, B, OC, C, stream);
+  // wmma_blocking<WX, WY><<<grid.g, grid.w, grid.smem, stream>>>(
+  //       x, w, o, B, C, OC, grid.b.x, grid.b.y, grid.wx, grid.wy,
+  //       grid.bx_per_w, grid.by_per_w,
+  //       grid.bx_per_wx);
   return out;
 }
 

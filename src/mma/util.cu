@@ -3,140 +3,50 @@
 
 
 
-
-void Grid::NewGrid(int gx, int gy, int bx, int by)
+Wmma_Grid::Wmma_Grid(int gx, int gy, int warps, int bx, int by, int wx, int wy, int wmma_m, int wmma_n)
+                  : bx(bx), by(by), wx(wx), wy(wy)
 {
   this->g.x = gx;
   this->g.y = gy;
-  this->g.z = 1;
-
-  this->b.x = bx;
-  this->b.y = by;
-  this->b.z = 1;
-
-  smem = (bx+by)*32*sizeof(float);
-}
-
-void Grid::SetWarpSize(int wx, int wy)
-{
-  wx_per_bx = b.x / (wx*16);
-  wy_per_by = b.y / (wy*16);
-
-  this->w.x = wx*32;
-  this->w.y = wy;
-  this->w.z = 1;
-}
-
-Grid CalculateBlockingSize(int M, int N)
-{
-
-  int bx = 256;
-  int by = 128;
-
-
-  while(bx>M && bx>64)
-    bx = bx/2;
-
-  while(by>N && by>64)
-    by = by/2;
-
-  int gx = std::floor((M+bx-1)/(float)bx);
-  int gy = std::floor((N+by-1)/(float)by);
-
-  Grid grid;
-
-  // std::cout << gx << ", " << gy << ", " << bx << ", " << by << "\n";
-  grid.NewGrid(gx, gy, bx, by);
-
-
-  int wx = fminf(fmaxf(M/16,1),4);
-  int wy = fminf(fmaxf(N/16,1),4);
-
-  wx = 4;
-  wy = 2;
-
-  grid.SetWarpSize(wx, wy);
-
-  return grid;
-}
-
-
-
-
-
-
-
-
-
-
-
-  
-
-
-
-void Grid2::NewGrid(int gx, int gy, int bx, int by)
-{
-  this->g.x = gx;
-  this->g.y = gy;
-  this->g.z = 1;
-
-  this->b.x = bx;
-  this->b.y = by;
-  this->b.z = 1;
 
   smem = (bx+by)*64*sizeof(float); //times twice wk
-}
 
-void Grid2::SetWarpSize(int warps, int wx, int wy)
-{
-  bx_per_w = b.x / warps;
-  by_per_w = b.y / warps;
+
+  bx_per_w = bx / warps; // each bx work is splitted accross warps
+  by_per_w = by / warps;
 
   this->w.x = warps*32;
 
+  bx_per_wx = bx/wx;
 
-  this->wx = wx;
-  this->wy = wy;
-
-
-  bx_per_wx = this->b.x/wx; // each bx work is splitted accross wx
-
-  wx_per_wmma_m = wx / 16;
-  wy_per_wmma_n = wy / 16;
-
+  wx_per_wmma_m = wx / wmma_m;
+  wy_per_wmma_n = wy / wmma_n;
 }
 
 
-Grid2 CalculateBlockingSize2(int M, int N)
-{
 
-  int bx = 128;
-  int by = 64;
+Wmma_Grid CalculateBlockingSize(int M, int N,
+                                int warps,
+                                int block_size_x, int block_size_y,
+                                int wx, int wy,
+                                int wmma_m, int wmma_n)
+{  
+  // while(bblock_size_x>M && block_size_x>64)
+  //   block_size_x = block_size_x/2;
+  // while(block_size_y>N && block_size_y>64)
+  //   block_size_y = block_size_y/2;
 
-
-  // while(bx>M && bx>64)
-  //   bx = bx/2;
-
-  // while(by>N && by>64)
-  //   by = by/2;
-
-  int gx = std::floor((M+bx-1)/(float)bx); // Each gx handles 128 rows of x (bx)
-  int gy = std::floor((N+by-1)/(float)by);
-
-  Grid2 grid;
-
-  // std::cout << gx << ", " << gy << ", " << bx << ", " << by << "\n";
-  grid.NewGrid(gx, gy, bx, by);
-
+  int gx = std::floor((M+block_size_x-1)/(float)block_size_x); // Each gx handles 128 rows of x (bx)
+  int gy = std::floor((N+block_size_y-1)/(float)block_size_y);
 
   // int wx = fminf(fmaxf(M/16,1),4);
   // int wy = fminf(fmaxf(N/16,1),4);
 
-  int warps = 8;
-  int wx = 32; // each wx handles 32 rows
-  int wy = 32;
-
-  grid.SetWarpSize(warps, wx, wy);
+  Wmma_Grid grid(gx, gy,
+                 warps,
+                 block_size_x, block_size_y,
+                 wx, wy,
+                 wmma_m, wmma_n);
 
   return grid;
 }

@@ -137,7 +137,8 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
 
 
 
-    blocking_mma<WMMA_T>(x->tensor_ptr, W, out, B, C, OC, stream);
+
+    blocking_mma<WMMA_T>(x->tensor_ptr, W, out, B, OC, C, stream);
     
 
 
@@ -196,6 +197,7 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
 
   if (_fp32)
   {
+
   // backwad to dx
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
                              W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
@@ -222,8 +224,13 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) +   (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
 
     // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream>>>(dx, W, dy, B, C, OC);
-    wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(dx, W, dy, B, C, OC);
+    // wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(dx, W, dy, B, C, OC);
     wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(dW, x, dy, B, C, OC);
+
+
+    
+
+    blocking_mma_dx<WMMA_T>(dy, W, dx, B, C, OC, main_stream);
 
 
 

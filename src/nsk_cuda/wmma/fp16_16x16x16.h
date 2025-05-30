@@ -35,8 +35,8 @@ __device__ void blocking_tiled_wmma_fp16_16x16x16(fp16_wmma_frags<warp_rows_per_
                                               const float *x, const float *w, float *x_smem, float *w_smem,
                                               const int M, const int N, const int K, const int WMMA_M, const int WMMA_N)
 {
-    smem_loader.load_A(x_smem, x, M, K);
-    smem_loader.load_B(w_smem, w, N, K);
+    smem_loader.load_A(x_smem, x, 0, M, K);
+    smem_loader.load_B(w_smem, w, 0, N, K);
 
     asm volatile("cp.async.commit_group;\n" ::);
     // asm volatile("cp.async.wait_all;");
@@ -56,8 +56,8 @@ __device__ void blocking_tiled_wmma_fp16_16x16x16(fp16_wmma_frags<warp_rows_per_
         if (next_tile<K)
         {
             
-            smem_loader.load_A(x_smem, x, M, K);
-            smem_loader.load_B(w_smem, w, N, K);
+            smem_loader.load_A(x_smem, x, next_tile, M, K);
+            smem_loader.load_B(w_smem, w, next_tile, N, K);
 
 
             asm volatile("cp.async.commit_group;\n" ::);
