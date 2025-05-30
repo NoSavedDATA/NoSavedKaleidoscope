@@ -58,9 +58,9 @@ extern "C" DT_tensor *EmbeddingLn(Scope_Struct *scope_struct, DT_tensor *tensor)
   NamedEmbeddingLn[conv_name] = std::move(embedding);
   
 
-  std::cout << "Out dims: " << ".\n";
-  PrintDims(new_dims);
-  std::exit(0);
+  // std::cout << "Out dims: " << ".\n";
+  // PrintDims(new_dims);
+  // std::exit(0);
   
 
   return customOpTensor(output, new_dims, DimsProd(new_dims), "embeddingln_backward", conv_name, tensor);

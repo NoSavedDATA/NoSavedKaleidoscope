@@ -247,15 +247,18 @@ __global__ void mma_ptx(const float *__restrict__ x, const float *__restrict__ w
 template<int WMMA_T>
 inline void blocking_mma_ptx(const float *x, const float *w, float *o, int B, int C, int OC, cudaStream_t stream)
 {
-    Grid2 grid = CalculateBlockingSize2(OC, B);
-
+  Wmma_Grid grid = CalculateBlockingSize(OC, B,
+                                         8,
+                                         128, 64,
+                                         32, 32,
+                                         16, 16);
     // std::cout << "OC: " << OC << ", B: " << B << \
     //   "\ngx: " << grid.g.x << ", gy: " << grid.g.y << ", bx: " << grid.b.x << ", by: " << grid.b.y << \
     //   "\nblocking warps per block x: " << grid.bx_per_w << ", y: " << grid.by_per_w << \
     //   "\nx warps: " << grid.w.x/32 << ", y warps: " << grid.w.y <<  "\n\n";
 
     mma_ptx<WMMA_T, 32><<<grid.g, grid.w, grid.smem, stream>>>
-                            (x, w, o, B, C, OC, grid.b.x, grid.b.y, grid.wx, grid.wy,
+                            (x, w, o, B, C, OC, grid.bx, grid.by, grid.wx, grid.wy,
                             grid.bx_per_w, grid.by_per_w,
                             grid.bx_per_wx, grid.by_per_wy,
                             grid.wx_per_wmma_m, grid.wy_per_wmma_n);

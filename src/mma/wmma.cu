@@ -229,13 +229,9 @@ __global__ void wmma_cp_async_blocking(const float *__restrict__ x, const float 
 template<int WMMA_T>
 inline void wmma(const float *x, const float *w, float *o, int B, int C, int OC, cudaStream_t stream)
 {
-  Grid grid = CalculateBlockingSize(OC, B);
-  // std::cout << "OC: " << OC << ", B: " << B << \
-  //   "\ngx: " << grid.g.x << ", gy: " << grid.g.y << ", bx: " << grid.b.x << ", by: " << grid.b.y << \
-  //   "\nblocking warps per block x: " << grid.wx_per_bx << ", y: " << grid.wy_per_by << \
-  //   "\nx warps: " << grid.w.x/32 << ", y warps: " << grid.w.y <<  "\n\n";
+  // Grid grid = CalculateBlockingSize(OC, B);
 
-  wmma_cp_async_blocking<WMMA_T, 32><<<grid.g, grid.w, grid.smem, stream>>>
-                          (x, w, o, B, C, OC, grid.b.x, grid.b.y, (grid.w.x/32)*WMMA_T, grid.w.y*WMMA_T,
-                          grid.wx_per_bx, grid.wy_per_by, grid.w.x/32, grid.w.y);
+  // wmma_cp_async_blocking<WMMA_T, 32><<<grid.g, grid.w, grid.smem, stream>>>
+  //                         (x, w, o, B, C, OC, grid.b.x, grid.b.y, (grid.w.x/32)*WMMA_T, grid.w.y*WMMA_T,
+  //                         grid.wx_per_bx, grid.wy_per_by, grid.w.x/32, grid.w.y);
 }

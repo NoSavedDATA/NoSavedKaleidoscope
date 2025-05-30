@@ -243,7 +243,7 @@ float *MHSA::Forward(DT_tensor *x, int B, int T, int thread_id)
     // wmma_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_wmma_proj, block_size_wmma, shared_mem_cf, stream>>>(x->tensor_ptr, W, qkv, B*T, C, 3*C);
 
 
-    blocking_mma<WMMA_T>(x->tensor_ptr, W, qkv, B*T, C, 3*C, stream);
+    blocking_mma<WMMA_T>(x->tensor_ptr, W, qkv, B*T, 3*C, C, stream);
 
 
 

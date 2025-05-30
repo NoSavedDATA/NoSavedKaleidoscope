@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../utils.h"
-#include "../../nsk_cuda/include.h"
+#include "../../utils.h"
+#include "../../../nsk_cuda/include.h"
 
 using namespace nvcuda;
 
@@ -17,8 +17,8 @@ using namespace nvcuda;
 // Each bx work is splitted accross wx warp loads
 
 template<int WMMA_T, int wx_per_wmma_m, int wy_per_wmma_n, int wk>
-__global__ void wmma_blocking(const float *__restrict__ x, const float *__restrict__ w,
-                        float *__restrict__ out, const int M, const int K, const int N,
+__global__ void wmma_blocking_dx(const float *__restrict__ x, const float *__restrict__ w,
+                        float *__restrict__ out, const int M, const int N, const int K,
                         const int bx, const int by,
                         const int wx, const int wy,
                         const int bx_per_w,     const int by_per_w,
@@ -27,8 +27,6 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
 
   // bx: 128, by: 64
   // wx: 32,  wy: 32
-  // wmma_t: 16
-  // wk: 32
 
   
   fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n> frag_loader;
@@ -44,7 +42,7 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
 
 
 
-  blocking_tiled_wmma_fp16_16x16x16(frag_loader, wmma_idx, smem_loader,
+  blocking_tiled_wmma_fp16_16x16x16_dx(frag_loader, wmma_idx, smem_loader,
                                     x, w, x_smem, w_smem,
                                     M, N, K, WMMA_M, WMMA_N);
 

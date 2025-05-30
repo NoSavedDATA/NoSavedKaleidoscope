@@ -19,12 +19,13 @@ struct wmma_indexes {
 
     warp_y = warpId / bx_per_wx;
     warp_x = warpId % bx_per_wx;
+    
+    by_warp_offset = by_per_w*warpId;
+    bx_warp_offset = bx_per_w*warpId;
 
     mw = laneId / 4;
     ml = laneId % 4;
 
-    by_warp_offset = by_per_w*warpId;
-    bx_warp_offset = bx_per_w*warpId;
   }
 
 };

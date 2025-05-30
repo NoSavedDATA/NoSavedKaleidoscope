@@ -41,24 +41,52 @@ struct smem_cpasync_wmma_loader {
 
 
 
-  __device__ void load_A(float *x_smem, const float *x, int M, int N) {
+  __device__ void load_A(float *x_smem, const float *x, int next_tile, int M, int N) {
     for(int block_tile=0; block_tile<wmma_idx.by_per_w/4; ++block_tile) // 4 from 4 jumped rows
     {
-        int row = wmma_idx.block_y*wmma_idx.blocking_size_y + wmma_idx.by_warp_offset + block_tile*4 + wmma_idx.ml; // 4 from 4 loaded bits
-        float const *gmem_ptr = x + row*N + wmma_idx.mw*4; // 4 from 4 loaded bits
+      int row = wmma_idx.block_y*wmma_idx.blocking_size_y + wmma_idx.by_warp_offset + block_tile*4 + wmma_idx.ml; // 4 from 4 ml loaded rows
+      float const *gmem_ptr = x + row*N + next_tile+wmma_idx.mw*4; // 4 from 4 loaded floats of cp.async
+                                                                    // mw goes up to 8, so it completes a tile of 32 floats.
 
-        gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.by_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr), // 4 from 4 loaded bits
-                          (row<M) ? std::min((( N-(wmma_idx.mw*4)) /4)*4, 16) : 0);            
+      // Each thread copies 1 row  per 4  columns of floats / 16 Bytes.
+      // Each warp   copies 4 rows per 32 columns of floats.
+      
+      gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.by_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr), // 4 from 4 ml loaded rows, wk=32
+                        (row<M) ? std::max(std::min(( (N-(next_tile+wmma_idx.mw*4)))*4, 16), 0) : 0); // last *4 tells that sizeof float is 4
+      // xor addr(laneId): up to 128, jump by 4 
     }
   }
-  __device__ void load_B(float *x_smem, const float *x, int M, int N) {
+  __device__ void load_B(float *x_smem, const float *x, int next_tile, int M, int N) {
     for(int block_tile=0; block_tile<wmma_idx.bx_per_w/4; ++block_tile)
     {
-        int row = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*4 + wmma_idx.ml;
-        float const *gmem_ptr = x + row*N + wmma_idx.mw*4;
+      int row = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*4 + wmma_idx.ml;
+      float const *gmem_ptr = x + row*N + next_tile+wmma_idx.mw*4;
 
-        gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr),
-                          (row<M) ? std::min((( N-(wmma_idx.mw*4)) /4)*4, 16) : 0);
+      gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr),
+                        (row<M) ? std::max(std::min(( (N-(next_tile+wmma_idx.mw*4)))*4, 16), 0) : 0);
+
+    }
+  }
+
+  __device__ void load_B_transposed(float *x_smem, const float *x, int next_tile, int M, int N) {
+    for(int block_tile=0; block_tile<wmma_idx.bx_per_w/4; ++block_tile)
+    {
+      int col = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*4 + wmma_idx.ml;
+      float *_out  = x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr;
+
+      #pragma unroll
+      for(int i=0; i<4; i++) // Simulate copy 4 floats of cp.async
+      { 
+        int row = next_tile+wmma_idx.mw*4 + i;
+        // printf("Col is %d - row is %d\n", col, row);
+
+
+        if (row<M && col<N)
+          _out[i] = x[row*N + col];
+        else
+          _out[i] = 0.0f;
+        // printf("from %f to %f\n",*gmem_ptr, *_out);
+      }
     }
   }
 
@@ -69,7 +97,7 @@ struct smem_cpasync_wmma_loader {
                               const int WMMA_N, int k_stride)
   {
     for (int w_tile=0; w_tile<warp_cols_per_n; ++w_tile)
-        smem_xor_to_reg_A(frag_loader.x_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_N)*wmma_idx.wk, wmma_idx.wk, k_stride);
+      smem_xor_to_reg_A(frag_loader.x_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_N)*wmma_idx.wk, wmma_idx.wk, k_stride);
   }
 
   __device__ void store_frag_B(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n> &frag_loader,
