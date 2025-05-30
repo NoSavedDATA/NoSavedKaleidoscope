@@ -3,7 +3,7 @@
 #include <mma.h>
 
 #include "../structs/fp16_wmma_frags.h"
-#include "fp16_16x16x16.h"
+#include "fp16_16x16x16_warp_tile.h"
 
 using namespace nvcuda;
 
@@ -19,8 +19,10 @@ __device__ void blocking_tiled_wmma_fp16_16x16x16_dx(fp16_wmma_frags<warp_rows_p
 {
     // B, C, OC
 
+
     smem_loader.load_A(x_smem, x, 0, M, K);
     smem_loader.load_B_transposed(w_smem, w, 0, K, N);
+    
 
     asm volatile("cp.async.commit_group;\n" ::);
     // asm volatile("cp.async.wait_all;");
@@ -54,8 +56,8 @@ __device__ void blocking_tiled_wmma_fp16_16x16x16_dx(fp16_wmma_frags<warp_rows_p
 
         for (int k_stride=0; k_stride<2; ++k_stride)
         {
-            smem_loader.store_frag_A(frag_loader, x_smem, WMMA_N, k_stride);
-            smem_loader.store_frag_B(frag_loader, w_smem, WMMA_M, k_stride);
+            smem_loader.store_frag_A(frag_loader, x_smem, WMMA_M, k_stride);
+            smem_loader.store_frag_B(frag_loader, w_smem, WMMA_N, k_stride);
 
             warp_tiled_wmma_fp16_16x16x16(frag_loader, wmma_idx, M, N, WMMA_M, WMMA_N);
         }

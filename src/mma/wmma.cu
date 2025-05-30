@@ -1,4 +1,6 @@
+#include "../nsk_cuda/include.h"
 #include "utils.h"
+
 
 using namespace nvcuda;
 

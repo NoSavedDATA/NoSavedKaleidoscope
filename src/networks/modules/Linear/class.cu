@@ -105,12 +105,15 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
 
   if (_fp32)
   {
-    std::cout << "Linear is fp32" << ".\n";
-    dim3 block_size(TILE_SIZE, TILE_SIZE);
-    dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
-    int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
+    // std::cout << "Linear is fp32" << ".\n";
+    // dim3 block_size(TILE_SIZE, TILE_SIZE);
+    // dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(B/(float)TILE_SIZE));
+    // int shared_mem_size = 2*TILE_SIZE*TILE_SIZE*sizeof(float);
 
-    mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    // mult_kernel<<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, TILE_SIZE, TILE_SIZE*TILE_SIZE, B, C, OC);
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
+    cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, x->tensor_ptr, C, &beta, out, OC));
   } else {
     
     constexpr int num_warps_x{4};
@@ -224,12 +227,14 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) +   (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
 
     // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream>>>(dx, W, dy, B, C, OC);
+    
+    // wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(dW, x, dy, B, C, OC);
     // wmma_backwarddx_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_size, main_stream>>>(dx, W, dy, B, C, OC);
-    wmma_backwarddw_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dw, block_size, shared_mem_size, main_stream>>>(dW, x, dy, B, C, OC);
 
 
     
 
+    blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
     blocking_mma_dx<WMMA_T>(dy, W, dx, B, C, OC, main_stream);
 
 
