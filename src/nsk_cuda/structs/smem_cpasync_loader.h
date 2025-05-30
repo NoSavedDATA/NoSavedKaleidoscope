@@ -41,54 +41,18 @@ struct smem_cpasync_wmma_loader {
 
 
 
-  __device__ void load_A(float *x_smem, const float *x, int next_tile, int M, int N) {
-    for(int block_tile=0; block_tile<wmma_idx.by_per_w/4; ++block_tile) // 4 from 4 jumped rows
-    {
-      int row = wmma_idx.block_y*wmma_idx.blocking_size_y + wmma_idx.by_warp_offset + block_tile*4 + wmma_idx.ml; // 4 from 4 ml loaded rows
-      float const *gmem_ptr = x + row*N + next_tile+wmma_idx.mw*4; // 4 from 4 loaded floats of cp.async
-                                                                    // mw goes up to 8, so it completes a tile of 32 floats.
+  __device__ void load_A(float *x_smem, const float *x, int next_tile, int M, int N); 
+  __device__ void load_B(float *x_smem, const float *x, int next_tile, int M, int N); 
 
-      // Each thread copies 1 row  per 4  columns of floats / 16 Bytes.
-      // Each warp   copies 4 rows per 32 columns of floats.
-      
-      gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.by_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr), // 4 from 4 ml loaded rows, wk=32
-                        (row<M) ? std::max(std::min(( (N-(next_tile+wmma_idx.mw*4)))*4, 16), 0) : 0); // last *4 tells that sizeof float is 4
-      // xor addr(laneId): up to 128, jump by 4 
-    }
-  }
-  __device__ void load_B(float *x_smem, const float *x, int next_tile, int M, int N) {
-    for(int block_tile=0; block_tile<wmma_idx.bx_per_w/4; ++block_tile)
-    {
-      int row = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*4 + wmma_idx.ml;
-      float const *gmem_ptr = x + row*N + next_tile+wmma_idx.mw*4;
+  __device__ void load_A_transposed(float *x_smem, const float *x, int next_tile, int M, int N); 
+  __device__ void load_B_transposed(float *x_smem, const float *x, int next_tile, int M, int N); 
+  
+  __device__ void load_A_indexed(float *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N);
+  __device__ void load_B_indexed(float *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N);
 
-      gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr),
-                        (row<M) ? std::max(std::min(( (N-(next_tile+wmma_idx.mw*4)))*4, 16), 0) : 0);
+  __device__ void load_A_transposed_indexed(float *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N);
+  __device__ void load_B_transposed_indexed(float *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N);
 
-    }
-  }
-
-  __device__ void load_B_transposed(float *x_smem, const float *x, int next_tile, int M, int N) {
-    for(int block_tile=0; block_tile<wmma_idx.bx_per_w/4; ++block_tile)
-    {
-      int col = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*4 + wmma_idx.ml;
-      float *_out  = x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr;
-
-      #pragma unroll
-      for(int i=0; i<4; i++) // Simulate copy 4 floats of cp.async
-      { 
-        int row = next_tile+wmma_idx.mw*4 + i;
-        // printf("Col is %d - row is %d\n", col, row);
-
-
-        if (row<M && col<N)
-          _out[i] = x[row*N + col];
-        else
-          _out[i] = 0.0f;
-        // printf("from %f to %f\n",*gmem_ptr, *_out);
-      }
-    }
-  }
 
 
 
@@ -107,6 +71,8 @@ struct smem_cpasync_wmma_loader {
     for (int w_tile=0; w_tile<warp_cols_per_n; ++w_tile)
         smem_xor_to_reg_B(frag_loader.w_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_x*wmma_idx.wx + w_tile*WMMA_M)*wmma_idx.wk, wmma_idx.wk, k_stride);
   }
+
+
 
 
   __device__ void store_C(float *out, float *out_smem, int threaded_row, int threaded_col,
@@ -151,6 +117,65 @@ struct smem_cpasync_wmma_loader {
                   
           
           store_C(out, out_smem, threaded_row, threaded_col, M, N, WMMA_M, WMMA_N, WMMA_K);
+
+        }
+      }
+    }
+
+  }
+
+
+
+
+
+  __device__ void store_C_indexed(float *out, const float *idxs, float *out_smem, int threaded_row, int threaded_col,
+                          int M, int N,
+                          int WMMA_M, int WMMA_N, int WMMA_K) {
+    // printf("store_C_indexed");
+  #pragma unroll
+    for (int tile=0; tile<std::ceil((WMMA_N*WMMA_M)/(float)(warpSize)); ++tile)
+    {
+      int tile_idx = tile*warpSize + wmma_idx.laneId;
+
+      int row =  tile_idx / WMMA_M;
+      int col = (tile_idx % WMMA_M);
+      
+      
+      if((threaded_row+row)<M  &&  (threaded_col+col)<N && row<WMMA_K)
+      {
+        int idx = (int)idxs[threaded_row+row];
+        float *_out = out + idx*N + threaded_col+col;
+        // out[(threaded_row+row)*N + threaded_col+col] = out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col];
+        atomicAdd(_out, out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col]);
+      }
+    }
+  }
+
+  __device__ void blocking_tiled_store_C_indexed(float *out,
+                                         fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n> &frag_loader,
+                                         const float *idxs,
+                                         int M, int N, const int WMMA_M, const int WMMA_N, const int WMMA_K)
+  {
+
+    float *out_smem = smem + wmma_idx.warp_y*WMMA_M*(wmma_idx.bx_per_wx*WMMA_K) + wmma_idx.warp_x*WMMA_N; // todo: is this correct?
+
+    for (int wx_tile=0; wx_tile<warp_rows_per_m; ++wx_tile)
+    {
+      for (int wy_tile=0; wy_tile<warp_cols_per_n; ++wy_tile)
+      {
+        __syncthreads();
+
+        int threaded_row = wmma_idx.block_y*wmma_idx.blocking_size_y + wmma_idx.warp_y*wmma_idx.wy + wy_tile*WMMA_M;
+        int threaded_col = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.warp_x*wmma_idx.wx + wx_tile*WMMA_N;
+
+        if (threaded_row<M && threaded_col<N && (wmma_idx.warp_y*wmma_idx.wy)<M && (wmma_idx.warp_x*wmma_idx.wx)<N)
+        {
+          
+          
+          frag_to_mem(frag_loader.acc_frag+(wx_tile*warp_cols_per_n + wy_tile)*8, out_smem, wmma_idx.bx_per_wx*WMMA_K);
+                  
+          
+          store_C_indexed(out, idxs, out_smem, threaded_row, threaded_col, M, N, WMMA_M, WMMA_N, WMMA_K);
 
         }
       }

@@ -28,15 +28,16 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
   for (auto& pair : NamedParamGrads)
   {
     std::string param_name = pair.first;
-    //std::cout << "Optimizing " << param_name << "\n";
+    // std::cout << "Optimizing " << param_name << "\n";
 
     if (param_name!="none")
     {
       float *grad = pair.second;
       DT_tensor *tensor = NamedTensorsT[param_name];
       
-      //std::cout << "param dims: "  << "\n";
-      //PrintDims(tensor->dims);
+      
+      // std::cout << "param dims: "  << "\n";
+      // PrintDims(tensor->dims);
       optimizer->init_states(param_name, tensor->dims_prod);
 
       if (tensor->Sparse_Idx_Tensor!=nullptr)

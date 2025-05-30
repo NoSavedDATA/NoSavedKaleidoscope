@@ -2,8 +2,8 @@
 
 #include <mma.h>
 
-#include "../structs/fp16_wmma_frags.h"
-#include "fp16_16x16x16_warp_tile.h"
+#include "../../structs/fp16_wmma_frags.h"
+#include "../fp16_16x16x16_warp_tile.h"
 
 using namespace nvcuda;
 
@@ -11,18 +11,15 @@ using namespace nvcuda;
 
 
 template<int warp_rows_per_m, int warp_cols_per_n>
-__device__ void blocking_tiled_wmma_fp16_16x16x16_dx(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n> &frag_loader,
+__device__ void blocking_tiled_wmma_fp16_16x16x16_dw_L_index(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n> &frag_loader,
                                               wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx,
                                               smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n>& smem_loader,
-                                              const float *x, const float *w, float *x_smem, float *w_smem,
+                                              const float *x, const float *book, const float *idxs, float *x_smem, float *w_smem,
                                               const int M, const int N, const int K, const int WMMA_M, const int WMMA_N)
 {
-    // B, C, OC
 
-
-    smem_loader.load_A(x_smem, x, 0, M, K);
-    smem_loader.load_B_transposed(w_smem, w, 0, K, N);
-    
+    smem_loader.load_A_transposed(x_smem, x, 0, K, M); // dy [B, OC]
+    smem_loader.load_B_transposed_indexed(w_smem, book, idxs, 0, K, N); // x  [B, C]
 
     asm volatile("cp.async.commit_group;\n" ::);
     // asm volatile("cp.async.wait_all;");
@@ -42,8 +39,8 @@ __device__ void blocking_tiled_wmma_fp16_16x16x16_dx(fp16_wmma_frags<warp_rows_p
         if (next_tile<K)
         {
             
-            smem_loader.load_A(x_smem, x, next_tile, M, K);             // dy [B, OC]
-            smem_loader.load_B_transposed(w_smem, w, next_tile, K, N);  // w  [OC, C]
+            smem_loader.load_A_transposed(x_smem, x, next_tile, K, M);
+            smem_loader.load_B_transposed_indexed(w_smem, book, idxs, next_tile, K, N);
 
 
             asm volatile("cp.async.commit_group;\n" ::);

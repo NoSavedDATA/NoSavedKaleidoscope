@@ -31,7 +31,7 @@ DT_EmbeddingLn::DT_EmbeddingLn(int V, int C, int OC, std::string Init, std::stri
     //w_cpu = make_xavier_uniform_float(OC*C, OC,  C);
     // w_cpu = make_normal(OC*C);
     book_cpu = make_embedding_uniform(V*C);
-    w_cpu = make_xavier_uniform_float(OC*C, OC, C);
+    w_cpu = make_xavier_uniform_float(OC*C, C, OC);
 
 
 
@@ -77,9 +77,14 @@ void DT_EmbeddingLn::SetDescriptors(int B)
 
 
 template<int wx_per_wmma_m, int wy_per_wmma_n>
-void launch_embedding_ln(Wmma_Grid grid, const float *idxs, const float *embedding_book, const float *weight, float *out, const int M, const int N, const int K, cudaStream_t stream) {
+void launch_embedding_ln(Wmma_Grid grid, const float *embedding_book, const float *idxs, const float *weight, float *out, const int M, const int N, const int K, cudaStream_t stream) {
 
-  embeddingln_forward_kernel<wx_per_wmma_m, wy_per_wmma_n><<<grid.g, grid.w, grid.smem, stream>>>(idxs, embedding_book, weight, out, M, N, K);  
+  embeddingln_forward_kernel<wx_per_wmma_m, wy_per_wmma_n>
+                            <<<grid.g, grid.w, grid.smem, stream>>>(embedding_book, idxs, weight, out,
+                                                                    grid.bx_per_w, grid.by_per_w, grid.bx_per_wx,
+                                                                    grid.bx, grid.by,
+                                                                    grid.wx, grid.wy, 32,
+                                                                    M, N, K);
 }
 
 float *DT_EmbeddingLn::Forward(DT_tensor *tensor, int B, int thread_id)
@@ -97,16 +102,8 @@ float *DT_EmbeddingLn::Forward(DT_tensor *tensor, int B, int thread_id)
                                          32, 32,
                                          16, 16);
 
-  // int b = B;
-  // while (b>1 && std::ceil((b*OC)/TILE_SIZE_SQ)>128)
-  //   b-=1;
-  // int batches_per_block = std::ceil(B/(float)b);
-
-  // dim3 grid_size(std::ceil(OC/(float)TILE_SIZE), std::ceil(b/(float)TILE_SIZE));
-  // dim3 block_size(TILE_SIZE, TILE_SIZE);
-
-  // embeddingln_forward_kernel<<<grid_size, block_size, 0, stream>>>(tensor->tensor_ptr, W, out, TILE_SIZE, B, batches_per_block, C, OC);
   
+
   cudaStream_t stream = ThreadsStream[thread_id];
 
   using LaunchFn = void(*)(Wmma_Grid, const float*, const float*, const float *, float*, int, int, int, cudaStream_t);
@@ -119,11 +116,8 @@ float *DT_EmbeddingLn::Forward(DT_tensor *tensor, int B, int thread_id)
   };
 
   auto launcher = dispatch_table[grid.wx_per_wmma_m][grid.wy_per_wmma_n];
-  launcher(grid, tensor->tensor_ptr, Book, W, out, B, OC, C, stream);
-  // wmma_blocking<WX, WY><<<grid.g, grid.w, grid.smem, stream>>>(
-  //       x, w, o, B, C, OC, grid.b.x, grid.b.y, grid.wx, grid.wy,
-  //       grid.bx_per_w, grid.by_per_w,
-  //       grid.bx_per_wx);
+  launcher(grid, Book, tensor->tensor_ptr, W, out, B, OC, C, stream);
+
   return out;
 }
 
@@ -133,7 +127,7 @@ void DT_EmbeddingLn::SetBackwardDescriptors()
 {
 }
 
-void DT_EmbeddingLn::Backward(float *x, float *dy)
+void DT_EmbeddingLn::Backward(float *idxs, float *dy)
 {
   /*
   if(changed_descriptors)
@@ -142,10 +136,37 @@ void DT_EmbeddingLn::Backward(float *x, float *dy)
   copy_tensor_kernel<<<std::ceil((B*OC)/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dW, dy, B*C);
   */
 
-  
 
+  
+  Wmma_Grid grid_dw = CalculateBlockingSize(C, OC,
+                                         8,
+                                         128, 64,
+                                         32, 32,
+                                         16, 16);
+
+  embeddingln_backward_dw<2, 2>
+        <<<grid_dw.g, grid_dw.w, grid_dw.smem, main_stream>>>(dy, idxs, Book, dW,
+                                                grid_dw.bx_per_w, grid_dw.by_per_w, grid_dw.bx_per_wx,
+                                                grid_dw.bx, grid_dw.by,
+                                                grid_dw.wx, grid_dw.wy, 32,
+                                                OC, C, B);
+
+
+  Wmma_Grid grid_dx = CalculateBlockingSize(C, B,
+                                         8,
+                                         128, 64,
+                                         32, 32,
+                                         16, 16);
+
+  embeddingln_backward_dx<2, 2>
+        <<<grid_dx.g, grid_dx.w, grid_dx.smem, main_stream>>>(dy, W, dBook, idxs,
+                                                grid_dx.bx_per_w, grid_dx.by_per_w, grid_dx.bx_per_wx,
+                                                grid_dx.bx, grid_dx.by,
+                                                grid_dx.wx, grid_dx.wy, 32,
+                                                B, C, OC);
  
-  dim3 block_size(TILE_SIZE, TILE_SIZE);
-  dim3 grid_size(std::ceil((float)OC/(float)TILE_SIZE), std::ceil((float)B/(float)TILE_SIZE));
-  embeddingln_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
+
+  // dim3 block_size(TILE_SIZE, TILE_SIZE);
+  // dim3 grid_size(std::ceil((float)OC/(float)TILE_SIZE), std::ceil((float)B/(float)TILE_SIZE));
+  // embeddingln_backward_kernel<<<grid_size, block_size, 0, main_stream>>>(x, dW, dy, TILE_SIZE, B, C, OC);
 }
