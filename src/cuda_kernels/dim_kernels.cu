@@ -141,7 +141,7 @@ __global__ void mean_over_semilast_dim_kernel(const float *x, float *y, const in
     if (c<C)
     {
       for (int lane_tile=laneId; lane_tile<T; lane_tile+=warpSize)
-        sumval += x[b*T*C + lane_tile*T + c];
+        sumval += x[b*T*C + lane_tile*C + c];
 
       float mask_sumval;
       for(int mask=warpSize/2; mask>0; mask>>=1)
@@ -173,7 +173,7 @@ __global__ void mean_over_semilast_dim_backward_kernel(float *dx, const float *d
   int c = idx % C;
 
 
-  dx[b*T*C + t*C + c] = dy[b*C + c];
+  dx[b*T*C + t*C + c] = dy[b*C + c]/T;
 }
 
 

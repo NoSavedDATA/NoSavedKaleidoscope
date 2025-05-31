@@ -33,9 +33,9 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n>::load
             for(int i=0; i<4; ++i)
             {
                 if (row<M && (col+i)<N)
-                smem_ptr[i] = gmem_ptr[i];
+                    smem_ptr[i] = gmem_ptr[i];
                 else
-                smem_ptr[i] = 0.0f;
+                    smem_ptr[i] = 0.0f;
             }
         }
     }

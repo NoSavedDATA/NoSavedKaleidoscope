@@ -17,7 +17,6 @@ __device__ void blocking_tiled_wmma_fp16_16x16x16_dw_L_index(fp16_wmma_frags<war
                                               const float *x, const float *book, const float *idxs, float *x_smem, float *w_smem,
                                               const int M, const int N, const int K, const int WMMA_M, const int WMMA_N)
 {
-
     smem_loader.load_A_transposed(x_smem, x, 0, K, M); // dy [B, OC]
     smem_loader.load_B_transposed_indexed(w_smem, book, idxs, 0, K, N); // x  [B, C]
 
