@@ -51,7 +51,7 @@ __global__ void embeddingln_forward_kernel(const float *embedding_book, const fl
 
 template<int wx_per_wmma_m, int wy_per_wmma_n>
 __global__ void embeddingln_backward_dw(const float *x,
-                                        const float *idxs, const float *embedding_book,
+                                        const float *embedding_book, const float *idxs,
                                         float *out,
                                         int bx_per_w, int by_per_w, int bx_per_wx, int bx, int by, int wx, int wy, int wk,
                                         const int M, const int N, const int K)
@@ -70,6 +70,7 @@ __global__ void embeddingln_backward_dw(const float *x,
   blocking_tiled_wmma_fp16_16x16x16_dw_L_index(frag_loader, wmma_idx, smem_loader,
                                     x, embedding_book, idxs, x_smem, w_smem,
                                     M, N, K, WMMA_M, WMMA_N);
+
 
 
   smem_loader.blocking_tiled_store_C(out, frag_loader, M, N, WMMA_M, WMMA_N, WMMA_K);

@@ -57,6 +57,7 @@ DT_EmbeddingLn::DT_EmbeddingLn(int V, int C, int OC, std::string Init, std::stri
 
     NamedTensorsT[Name+"_Book"] = tensor_Book;
     NamedParamGrads[Name+"_Book"] = dBook;
+    
     NamedTensorsT[Name+"_W"] = tensor_W;
     NamedParamGrads[Name+"_W"] = dW;
 
@@ -106,17 +107,25 @@ float *DT_EmbeddingLn::Forward(DT_tensor *tensor, int B, int thread_id)
 
   cudaStream_t stream = ThreadsStream[thread_id];
 
-  using LaunchFn = void(*)(Wmma_Grid, const float*, const float*, const float *, float*, int, int, int, cudaStream_t);
-  static constexpr LaunchFn dispatch_table[5][5] = {
-      {nullptr}, // 0 is unused
-      {nullptr, launch_embedding_ln<1,1>, launch_embedding_ln<1,2>, launch_embedding_ln<1,3>, launch_embedding_ln<1,4>},
-      {nullptr, launch_embedding_ln<2,1>, launch_embedding_ln<2,2>, launch_embedding_ln<2,3>, launch_embedding_ln<2,4>},
-      {nullptr, launch_embedding_ln<3,1>, launch_embedding_ln<3,2>, launch_embedding_ln<3,3>, launch_embedding_ln<3,4>},
-      {nullptr, launch_embedding_ln<4,1>, launch_embedding_ln<4,2>, launch_embedding_ln<4,3>, launch_embedding_ln<4,4>},
-  };
+  // using LaunchFn = void(*)(Wmma_Grid, const float*, const float*, const float *, float*, int, int, int, cudaStream_t);
+  // static constexpr LaunchFn dispatch_table[5][5] = {
+  //     {nullptr}, // 0 is unused
+  //     {nullptr, launch_embedding_ln<1,1>, launch_embedding_ln<1,2>, launch_embedding_ln<1,3>, launch_embedding_ln<1,4>},
+  //     {nullptr, launch_embedding_ln<2,1>, launch_embedding_ln<2,2>, launch_embedding_ln<2,3>, launch_embedding_ln<2,4>},
+  //     {nullptr, launch_embedding_ln<3,1>, launch_embedding_ln<3,2>, launch_embedding_ln<3,3>, launch_embedding_ln<3,4>},
+  //     {nullptr, launch_embedding_ln<4,1>, launch_embedding_ln<4,2>, launch_embedding_ln<4,3>, launch_embedding_ln<4,4>},
+  // };
 
-  auto launcher = dispatch_table[grid.wx_per_wmma_m][grid.wy_per_wmma_n];
-  launcher(grid, Book, tensor->tensor_ptr, W, out, B, OC, C, stream);
+  // auto launcher = dispatch_table[grid.wx_per_wmma_m][grid.wy_per_wmma_n];
+  // launcher(grid, Book, tensor->tensor_ptr, W, out, B, OC, C, stream);
+
+
+  embeddingln_forward_kernel<2, 2>
+                          <<<grid.g, grid.w, grid.smem, stream>>>(Book, tensor->tensor_ptr, W, out,
+                                                                  grid.bx_per_w, grid.by_per_w, grid.bx_per_wx,
+                                                                  grid.bx, grid.by,
+                                                                  grid.wx, grid.wy, 32,
+                                                                  B, OC, C);
 
   return out;
 }
@@ -137,6 +146,8 @@ void DT_EmbeddingLn::Backward(float *idxs, float *dy)
   */
 
 
+
+
   
   Wmma_Grid grid_dw = CalculateBlockingSize(C, OC,
                                          8,
@@ -145,11 +156,13 @@ void DT_EmbeddingLn::Backward(float *idxs, float *dy)
                                          16, 16);
 
   embeddingln_backward_dw<2, 2>
-        <<<grid_dw.g, grid_dw.w, grid_dw.smem, main_stream>>>(dy, idxs, Book, dW,
+        <<<grid_dw.g, grid_dw.w, grid_dw.smem, main_stream>>>(dy, Book, idxs, dW,
                                                 grid_dw.bx_per_w, grid_dw.by_per_w, grid_dw.bx_per_wx,
                                                 grid_dw.bx, grid_dw.by,
                                                 grid_dw.wx, grid_dw.wy, 32,
                                                 OC, C, B);
+
+
 
 
   Wmma_Grid grid_dx = CalculateBlockingSize(C, B,
@@ -165,6 +178,9 @@ void DT_EmbeddingLn::Backward(float *idxs, float *dy)
                                                 grid_dx.wx, grid_dx.wy, 32,
                                                 B, C, OC);
  
+
+
+                                                
 
   // dim3 block_size(TILE_SIZE, TILE_SIZE);
   // dim3 grid_size(std::ceil((float)OC/(float)TILE_SIZE), std::ceil((float)B/(float)TILE_SIZE));

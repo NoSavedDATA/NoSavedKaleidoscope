@@ -121,7 +121,6 @@ struct smem_cpasync_wmma_loader {
         }
       }
     }
-
   }
 
 
@@ -131,7 +130,6 @@ struct smem_cpasync_wmma_loader {
   __device__ void store_C_indexed(float *out, const float *idxs, float *out_smem, int threaded_row, int threaded_col,
                           int M, int N,
                           int WMMA_M, int WMMA_N, int WMMA_K) {
-    // printf("store_C_indexed");
   #pragma unroll
     for (int tile=0; tile<std::ceil((WMMA_N*WMMA_M)/(float)(warpSize)); ++tile)
     {
@@ -139,18 +137,19 @@ struct smem_cpasync_wmma_loader {
 
       int row =  tile_idx / WMMA_M;
       int col = (tile_idx % WMMA_M);
-      
-      
+
+
       if((threaded_row+row)<M  &&  (threaded_col+col)<N && row<WMMA_K)
       {
         int idx = (int)idxs[threaded_row+row];
         float *_out = out + idx*N + threaded_col+col;
         // out[(threaded_row+row)*N + threaded_col+col] = out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col];
+        // printf("row %d - idx %d\n", threaded_row+row, idx);
         atomicAdd(_out, out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col]);
       }
     }
   }
-
+  
   __device__ void blocking_tiled_store_C_indexed(float *out,
                                          fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n> &frag_loader,
                                          const float *idxs,
@@ -180,7 +179,6 @@ struct smem_cpasync_wmma_loader {
         }
       }
     }
-
   }
 
 };
