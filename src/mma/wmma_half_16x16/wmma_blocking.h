@@ -34,7 +34,6 @@ __global__ void wmma_blocking(const float *__restrict__ x, const float *__restri
   fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n, __half> frag_loader;
     
   extern __shared__ float smem[];
-  frag_loader.investigate_mapping(smem);
 
 
   wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, wk);
