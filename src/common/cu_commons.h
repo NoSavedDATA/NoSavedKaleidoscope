@@ -65,6 +65,8 @@ float* make_min_float(size_t N);
 
 float* make_xavier_uniform_float(size_t N, int fan_in, int fan_out); 
 
+float* make_xavier_uniform_float_fixed(size_t N, int fan_in, int fan_out, int seed);
+
 
 float* make_normal(int N); 
 

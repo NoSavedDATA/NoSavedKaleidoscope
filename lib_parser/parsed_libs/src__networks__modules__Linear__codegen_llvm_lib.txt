@@ -1,4 +1,4 @@
-1821-05-20 16:55:43
+1821-05-31 11:31:50
 
 	FunctionType *LinearTy= FunctionType::get(
 		int8PtrTy,
@@ -6,6 +6,20 @@
 		false
 	);
 	TheModule->getOrInsertFunction("Linear", LinearTy);
+
+	FunctionType *Linear_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Linear_Load", Linear_LoadTy);
+
+	FunctionType *Linear_weightTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Linear_weight", Linear_weightTy);
 
 	FunctionType *Linear_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

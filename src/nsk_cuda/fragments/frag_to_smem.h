@@ -42,3 +42,28 @@ __inline__ __device__ void frag_to_mem_ec(const float *frag, const float *delta_
   wmma_foreach_ij_acc(func_y);
   __syncwarp();
 }
+
+
+
+
+
+
+
+
+__inline__ __device__ void frag_to_mem(const int *frag, float *gmem, const int ld)
+{
+  const auto func_y = [&](const unsigned* frag_index_list,
+        const unsigned fragment_index_count,
+        const unsigned i,
+        const unsigned j) {
+                
+        
+    #pragma unroll
+        for (unsigned f = 0; f < fragment_index_count; f++)
+          gmem[i*ld + j] = ((float)frag[frag_index_list[f]]) / 10000;
+    };
+
+  __syncwarp();
+  wmma_foreach_ij_acc(func_y);
+  __syncwarp();
+}

@@ -1,1 +1,1 @@
-{"Linear", "tensor"}, 
+{"Linear", "tensor"}, {"Linear_Load", "str"}, 

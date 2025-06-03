@@ -1,4 +1,4 @@
-1821-05-19 17:40:16
+1821-06-01 10:47:51
 
 	FunctionType *PrintTensorTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -20,3 +20,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("PrintTensorF", PrintTensorFTy);
+
+	FunctionType *PrintTensorI8Ty= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintTensorI8", PrintTensorI8Ty);

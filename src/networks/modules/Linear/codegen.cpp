@@ -94,6 +94,28 @@ extern "C" DT_tensor *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
+extern "C" char *Linear_Load(Scope_Struct *scope_struct, char *name) {
+  return name;
+}
+
+
+extern "C" float Linear_weight(Scope_Struct *scope_struct, char *name) {
+  std::string conv_name = scope_struct->first_arg;
+  std::cout << "Linear name is " << name << ".\n";
+
+
+  std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[conv_name]);
+
+  std::string _a = linear->Name+"W";
+  char *a = _a.data();
+
+  PrintTensor(scope_struct, a);
+
+  NamedLinear[conv_name] = std::move(linear);
+  
+  return 0;
+}
+
 
 
 extern "C" float Linear_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)

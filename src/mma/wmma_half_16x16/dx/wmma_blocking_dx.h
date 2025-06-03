@@ -29,14 +29,14 @@ __global__ void wmma_blocking_dx(const float *__restrict__ x, const float *__res
   // wx: 32,  wy: 32
 
   
-  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n> frag_loader;
+  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n, __half> frag_loader;
     
   extern __shared__ float smem[];
 
 
   wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, wk);
   
-  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n> smem_loader(smem, wmma_idx, (bx+by)*wk);
+  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*wk);
   float *x_smem = smem_loader.smem_malloc(smem, by*wk);
   float *w_smem = smem_loader.smem_malloc(smem);
 

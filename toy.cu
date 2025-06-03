@@ -2937,6 +2937,8 @@ int main() {
   printf("Device %d: %s\n", deviceIdx, deviceProp.name);
   std::cout << "Device Max Compute Capability (SM): " << deviceProp.major << "." << deviceProp.minor << std::endl;
 
+  std::cout << "Shared-Memory per thread-block size: " << deviceProp.sharedMemPerBlock << ".\n";
+  
 
     
   cudaDeviceGetAttribute(&WARP_SIZE, cudaDevAttrWarpSize, 0); 
@@ -3132,7 +3134,7 @@ int main() {
 
 
 
-  tensor_inits = {"binary", "arange", "int", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal"};
+  tensor_inits = {"binary", "arange", "ints", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal", "fixed8i", "fixed42i"};
   notators_str = {"bias", "fp32", "fp16", "causal"};
 
 

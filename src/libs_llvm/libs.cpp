@@ -815,6 +815,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("PrintTensorF", PrintTensorFTy);
 
+	FunctionType *PrintTensorI8Ty= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("PrintTensorI8", PrintTensorI8Ty);
+
 	FunctionType *ConcatScopeStrTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -1493,6 +1500,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("Linear", LinearTy);
+
+	FunctionType *Linear_LoadTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Linear_Load", Linear_LoadTy);
+
+	FunctionType *Linear_weightTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Linear_weight", Linear_weightTy);
 
 	FunctionType *Linear_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

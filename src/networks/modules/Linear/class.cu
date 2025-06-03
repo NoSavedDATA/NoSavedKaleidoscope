@@ -17,6 +17,7 @@
 #include "../../../cuda_kernels/handles.h"
 #include "../../../mma/include.h"
 #include "../../../notators/notators.h"
+#include "../../../nsk_cuda/include.h"
 #include "../../../tensor/include.h"
 #include "class.h"
 
@@ -27,12 +28,17 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
     : C(C), OC(OC), Init(Init), Notes(Notes), Name(Name) {
     B = 0;
 
-    _fp32 = true;
+
+    
+
+    
     // if (in_int_ptr(fp16, Notators->vec, Notators->size))
     //   _fp32 = false;
 
     if (in_str("fp16", Notes))
-      _fp32 = false;
+      precision = 1;
+    if (in_str("i8", Notes))
+      precision = 2;
 
 
 
@@ -51,6 +57,10 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
       W_cpu = make_normal(product);
     if (Init=="xavu")
       W_cpu = make_xavier_uniform_float(product, C, OC);
+    if (Init=="fixed8i")
+      W_cpu = make_xavier_uniform_float_fixed(product, C, OC, 8);
+    if (Init=="fixed42i")
+      W_cpu = make_xavier_uniform_float_fixed(product, C, OC, 42);
     if (Init=="xavu_relu")
       W_cpu = make_xavier_uniform_float_relu(product, C, OC);
     if (Init=="xavu_tanh")
@@ -59,7 +69,7 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
       W_cpu = make_he_normal_float_relu(product, C);
     if (Init=="init_gpt")
       W_cpu = make_gpt_init(product);
-    if (Init=="int")
+    if (Init=="ints")
       W_cpu = make_random_int(product, 10);
     if (Init=="binary")
       W_cpu = make_random_int(product, 1);
@@ -99,11 +109,11 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     SetDescriptors(B, thread_id);
 
 
-  float *out = get_from_pool(thread_id, B*OC, "linear fwd");
 
   cudaStream_t stream = ThreadsStream[thread_id];  
 
-  if (_fp32)
+  float *out = get_from_pool(thread_id, B*OC, "linear fwd");
+  if (precision==0)
   {
     // std::cout << "Linear is fp32" << ".\n";
     // dim3 block_size(TILE_SIZE, TILE_SIZE);
@@ -114,7 +124,8 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     const float alpha = 1.0f;
     const float beta = 0.0f;
     cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, x->tensor_ptr, C, &beta, out, OC));
-  } else {
+  } else if (precision==1) { 
+
     
     constexpr int num_warps_x{4};
     constexpr int num_warps_y{4};
@@ -144,28 +155,41 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     blocking_mma<WMMA_T>(x->tensor_ptr, W, out, B, OC, C, stream);
     
 
+    cudaCheck(cudaGetLastError());
+  } else if (precision==2) {
 
-
-    // float *bank;
-    // cudaMalloc(&bank, 16*32*4);
     
-    // std::cout << "\n\n\n";
-    // std::cout << "B: " << B << ", C: " << C << ", OC: " << OC << "\nbx " << grid_size.x << ", by " << grid_size.y << "\n\n";
+    int8_t *x8 = get_i8pool(thread_id, B*C, "linear fwd");
+    int8_t *w8 = get_i8pool(thread_id, OC*C, "linear fwd");
 
-    // int shared_mem_size = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) +   (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
-    // wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
-    // wmma_pingpong<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size_pp, shared_mem_pp, stream>>>(x->tensor_ptr, W, out, B, C, OC);
+    quantize_f32_to_i8(x8, x->tensor_ptr, 0.99, B, C, stream);
+    quantize_f32_to_i8(w8, W, 0.99, OC, C, stream);
 
-    // PrintTensorF(bank, 32, 16);
-
-    // wmma_mult_kernel<WMMA_T,num_warps_x,num_warps_y><<<grid_size, block_size, shared_mem_size, stream>>>(x->tensor_ptr, W, out, B, C, OC);
+    PrintTensorI8(x8, B, C);
+    PrintTensorI8(w8, OC, C);
 
 
-    // PrintTensorF(out, 16, 16);
+    constexpr int WMMA_T{16};
+    blocking_mma_i8<WMMA_T>(x8, w8, out, B, OC, C, stream);
+
+
+
+    // std::cout << "PRINTING" << ".\n";
+    // PrintTensorF(out, B, OC);
+    // std::cout << "Printed.." << ".\n";
+
+
 
     cudaCheck(cudaGetLastError());
 
+
+    std::cout << "Precision is int8"  << ".\n";
+  } else {
+    std::cout << "Unknown precision type" << ".\n";
+    std::exit(0);
   }
+
+
   
   return out;
 }
@@ -198,7 +222,7 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     FirstBackward();
 
 
-  if (_fp32)
+  if (precision==0)
   {
 
   // backwad to dx
@@ -211,7 +235,7 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
   cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
                              x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-  } else {
+  } else if (precision==1) {
 
     constexpr int num_warps_x{4};
     constexpr int num_warps_y{4};
@@ -246,7 +270,14 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
                              x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
     */
+  } else {
+    std::cout << "backward precision int8" << ".\n";
+
+    constexpr int WMMA_T{16};
+    blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
+    blocking_mma_dx<WMMA_T>(dy, W, dx, B, C, OC, main_stream);
   }
+
 }
 
 

@@ -87,6 +87,12 @@ __device__ void smem_xor_to_reg_B_ec(wmma::fragment<wmma::matrix_b, 16, 16, 16, 
 
 
 
+
+
+
+
+
+
 __inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> &frag,
                                   const float *smem, const int ld, const int k_stride)
 {
@@ -101,6 +107,7 @@ __inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 
 
           int xj = j/4;
           int wj = j%4;
+
 
           int offset = smem_dexor_from_cp_async(xi, xj*2 + k_stride)+wj;
 
@@ -142,6 +149,114 @@ __inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 
   #pragma unroll
           for (unsigned f = 0; f < fragment_index_count; f++)
             frag.x[frag_index_list[f]] = tmp;
+    };
+
+  wmma_foreach_ij(
+      frag,
+      func
+    );
+  __syncwarp();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 16, 16, int8_t, wmma::row_major> &frag,
+                                  const float *smem, const int ld, const int k_stride)
+{
+  const auto func = [&](const unsigned* frag_index_list,
+        const unsigned fragment_index_count,
+        const unsigned i,
+        const unsigned j) {
+      
+
+          int wi = i/4;
+          int xi = i%4;
+
+          int xj = j/4;
+          int wj = j%4;
+
+          // int offset = smem_dexor_from_cp_async_i8(k_stride*4 + xi, xj);
+          int offset = k_stride*16 + xi*4 + xj;
+
+        
+          const float *out_smem = smem + (wi*4)*ld + offset;
+
+          int8_t tmp = * ( ((const int8_t *)out_smem) + wj);
+
+          if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
+          {
+            printf("i-%d  j-%d;   xi-%d  xj-%d;   strided: %d;   offset: %d\n", i, j, xi, xj, xj+k_stride, offset);
+            printf("  wi-%d  wj-%d\n", wi, wj);
+            printf("  tmp-%d\n", (int)tmp);       
+          }
+          // __syncwarp();
+          // if(threadIdx.x==3&&blockIdx.x==0&&blockIdx.y==0)
+          // {
+          //   printf("\t\ti-%d  j-%d;   xi-%d  xj-%d;   strided: %d;   offset: %d\n", i, j, xi, xj, xj+k_stride, offset);
+          //   printf("\t\t  wi-%d  wj-%d\n", wi, wj);
+          //   printf("\t\t  tmp-%d\n", (int)tmp);
+          // }
+          // __syncwarp();
+
+          frag.x[frag_index_list[0]] = tmp;
+
+    };
+
+  wmma_foreach_ij(
+      frag,
+      func
+    );
+  __syncwarp();
+}
+
+
+__inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_major> &frag,
+                                  const float *smem, const int ld, const int k_stride)
+{
+  const auto func = [&](const unsigned* frag_index_list,
+        const unsigned fragment_index_count,
+        const unsigned i,
+        const unsigned j) {
+      
+        
+          int wi = i/4;
+          int xi = i%4;
+
+          int xj = j/4;
+          int wj = j%4;
+
+
+          // int offset = smem_dexor_from_cp_async_i8(k_stride*4 + xi, xj);
+          int offset = k_stride*16 + xi*4 + xj;
+
+
+        
+          const float *out_smem = smem + (wi*4)*ld + offset;
+
+          int8_t tmp = * ( ((const int8_t *)out_smem) + wj);
+
+          frag.x[frag_index_list[0]] = tmp;
     };
 
   wmma_foreach_ij(

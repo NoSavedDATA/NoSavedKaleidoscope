@@ -3,6 +3,7 @@
 #include "fragments/include.h"
 #include "smem/include.h"
 #include "structs/include.h"
+#include "quantize/include.h"
 #include "wmma/include.h"
 
 

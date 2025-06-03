@@ -120,6 +120,20 @@ float* make_xavier_uniform_float(size_t N, int fan_in, int fan_out) {
 }
 
 
+float* make_xavier_uniform_float_fixed(size_t N, int fan_in, int fan_out, int seed) {
+    float xavier_scale = sqrt(6/(float)(fan_in+fan_out));
+
+    std::mt19937 fixed_weight_prng(seed);
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+
+    float* arr = (float*)malloc(N * sizeof(float));
+    for (size_t i = 0; i < N; i++)
+        arr[i] = xavier_scale*dist(fixed_weight_prng);
+    
+    return arr;
+}
+
+
 float* make_normal(int N) {
     std::normal_distribution<float> dist(0.0, 1.0);
 
