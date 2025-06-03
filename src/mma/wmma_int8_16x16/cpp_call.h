@@ -19,7 +19,7 @@ void blocking_mma_i8(const int8_t *x, const int8_t *w, float *o, int M, int N, i
 
   Wmma_Grid grid = CalculateBlockingSize(N, M,
                                          8,
-                                         64, 64,
+                                         128, 64,
                                          32, 32,
                                          16, 16);
                                          

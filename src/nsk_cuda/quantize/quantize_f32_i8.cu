@@ -31,14 +31,15 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, const float f
 
 
 
-
+  // if(threadIdx.x==0 && block_x==0)
+  //   printf("block_y is %d - %d\n", block_y, block_y*max_M);
   // printf("%d - %d\n", (tid/cpasync_jump)*N, (block_x*num_warps+(tid%cpasync_jump)*4)); 
   
 
   for(int tile=0; tile<max_M; tile+=32)
   {
-    const float *_x = x + tile*N + block_x*num_warps;
-    int8_t *_x8 = x8 + tile*N + block_x*num_warps;
+    const float *_x = x + (block_y*max_M+tile)*N + block_x*num_warps;
+    int8_t *_x8 = x8 + (block_y*max_M+tile)*N + block_x*num_warps;
      
     if((block_y*max_M + tile + tid/cpasync_jump)<M && (block_x*num_warps+(tid%cpasync_jump)*4) < N)
     {
@@ -46,7 +47,7 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, const float f
       for(int i=0; i<4; ++i)
       {
         if ((block_x*num_warps+(tid%cpasync_jump)*4)+i < N)
-          smem[tid*4+i] = _x[(block_y*max_M + tid/cpasync_jump)*N + (tid%cpasync_jump)*4 + i];
+          smem[tid*4+i] = _x[(tid/cpasync_jump)*N + (tid%cpasync_jump)*4 + i];
       }
     }
     

@@ -162,15 +162,21 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     int8_t *x8 = get_i8pool(thread_id, B*C, "linear fwd");
     int8_t *w8 = get_i8pool(thread_id, OC*C, "linear fwd");
 
+    cudaCheck(cudaGetLastError());
     quantize_f32_to_i8(x8, x->tensor_ptr, 0.99, B, C, stream);
+    cudaCheck(cudaGetLastError());
     quantize_f32_to_i8(w8, W, 0.99, OC, C, stream);
 
-    PrintTensorI8(x8, B, C);
-    PrintTensorI8(w8, OC, C);
+    // PrintTensorI8(x8+(31*B/32)*C, B/32, C);
+    // PrintTensorI8(w8, OC, C);
 
+    cudaCheck(cudaGetLastError());
 
     constexpr int WMMA_T{16};
     blocking_mma_i8<WMMA_T>(x8, w8, out, B, OC, C, stream);
+
+    move_to_i8pool(thread_id, B*C, x8, "Linear x8");
+    move_to_i8pool(thread_id, OC*C, w8, "Linear w8");
 
 
 
@@ -183,7 +189,7 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     cudaCheck(cudaGetLastError());
 
 
-    std::cout << "Precision is int8"  << ".\n";
+    // std::cout << "Precision is int8"  << ".\n";
   } else {
     std::cout << "Unknown precision type" << ".\n";
     std::exit(0);
@@ -248,7 +254,7 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     
     int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
 
-    int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) +   (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
+    int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
 
     // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream>>>(dx, W, dy, B, C, OC);
     
@@ -271,7 +277,7 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
     */
   } else {
-    std::cout << "backward precision int8" << ".\n";
+    // std::cout << "backward precision int8" << ".\n";
 
     constexpr int WMMA_T{16};
     blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
