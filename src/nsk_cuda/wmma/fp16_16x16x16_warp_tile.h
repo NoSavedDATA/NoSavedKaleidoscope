@@ -10,7 +10,7 @@ using namespace nvcuda;
 
 
 template<int warp_rows_per_m, int warp_cols_per_n>
-__device__ void warp_tiled_wmma_fp16_16x16x16(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n> &frag_loader,
+__device__ void warp_tiled_wmma_fp16_16x16x16(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n, __half> &frag_loader,
                                               wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx,
                                               const int M, const int N, const int WMMA_M, const int WMMA_N) {
   

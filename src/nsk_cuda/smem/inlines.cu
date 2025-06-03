@@ -32,3 +32,25 @@ __inline__ __device__ int smem_dexor_from_cp_async(int strided, int contiguous) 
     // *4 means we calculate the storage for 16B/128b words (4 floats), done for each thread
     return offset*4;
 }
+
+
+__inline__ __device__ int smem_dexor_from_cp_async_i8(int strided, int contiguous) {
+    int stride=8;
+    
+    int tc = contiguous / 8;
+    int ts = strided / 4;
+
+    int c = contiguous % 8;
+    int s = strided % 4;
+
+    int k_index = c / 2;
+
+    int bank = ((c & 1) * 4) | (s ^ k_index); // e [0, 7]
+    
+    int offset = tc * 32 + bank + (ts * 4 + k_index) * stride;
+
+
+    // *4 means we calculate the storage for 16B/128b words (4 floats), done for each thread
+    return offset*4;
+}
+

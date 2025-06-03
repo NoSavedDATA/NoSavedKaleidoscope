@@ -6,8 +6,8 @@
 #include "../wmma_indexes.h"
 #include "../fp16_wmma_frags.h"
 
-template<int warp_rows_per_m, int warp_cols_per_n>
-__device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n>::load_A_transposed_indexed(float *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N) {
+template<int warp_rows_per_m, int warp_cols_per_n, typename T>
+__device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::load_A_transposed_indexed(T *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N) {
     for(int block_tile=0; block_tile<wmma_idx.by_per_w/4; ++block_tile) 
     {
         int col = wmma_idx.block_y*wmma_idx.blocking_size_y + wmma_idx.by_warp_offset + block_tile*4 + wmma_idx.ml; 
@@ -29,8 +29,8 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n>::load
     }
 } 
 
-template<int warp_rows_per_m, int warp_cols_per_n>
-__device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n>::load_B_transposed_indexed(float *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N) {
+template<int warp_rows_per_m, int warp_cols_per_n, typename T>
+__device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::load_B_transposed_indexed(T *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N) {
     for(int block_tile=0; block_tile<wmma_idx.bx_per_w/4; ++block_tile)
     {
       int col = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*4 + wmma_idx.ml;

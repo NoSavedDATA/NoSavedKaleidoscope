@@ -26,7 +26,7 @@ class LinearCPP
     bool first_backward, changed_descriptors;
 
     std::vector<std::string> Notes;
-    bool _fp32;
+    int precision=0;
 
     LinearCPP(int C, int OC, std::string Init, std::vector<std::string> Notes, std::string Name);
   

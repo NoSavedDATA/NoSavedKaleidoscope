@@ -27,13 +27,13 @@ __global__ void embeddingln_forward_kernel(const float *embedding_book, const fl
                       const int M, const int N, const int K) {
   // B, OC, C
 
-  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n> frag_loader;
+  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n, __half> frag_loader;
   extern __shared__ float smem[];
 
 
   wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, wk);
 
-  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n> smem_loader(smem, wmma_idx, (bx+by)*wk);
+  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*wk);
   float *x_smem = smem_loader.smem_malloc(smem, by*wk);
   float *w_smem = smem_loader.smem_malloc(smem);
 
@@ -56,13 +56,13 @@ __global__ void embeddingln_backward_dw(const float *x,
                                         int bx_per_w, int by_per_w, int bx_per_wx, int bx, int by, int wx, int wy, int wk,
                                         const int M, const int N, const int K)
 {
-  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n> frag_loader;
+  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n, __half> frag_loader;
   extern __shared__ float smem[];
 
 
   wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, wk);
 
-  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n> smem_loader(smem, wmma_idx, (bx+by)*wk);
+  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*wk);
   float *x_smem = smem_loader.smem_malloc(smem, by*wk);
   float *w_smem = smem_loader.smem_malloc(smem);
                         
@@ -84,13 +84,13 @@ __global__ void embeddingln_backward_dx(const float *x, const float *w, float *o
                       int bx_per_w, int by_per_w, int bx_per_wx, int bx, int by, int wx, int wy, int wk,
                       const int M, const int N, const int K) {
 
-  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n> frag_loader;
+  fp16_wmma_frags<wx_per_wmma_m, wy_per_wmma_n, __half> frag_loader;
   extern __shared__ float smem[];
 
 
   wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, wk);
 
-  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n> smem_loader(smem, wmma_idx, (bx+by)*wk);
+  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*wk);
   float *x_smem = smem_loader.smem_malloc(smem, by*wk);
   float *w_smem = smem_loader.smem_malloc(smem);
 

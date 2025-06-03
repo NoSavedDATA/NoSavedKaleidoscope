@@ -26,6 +26,21 @@ wmma_foreach_ij(wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_maj
   }
 }
 
+// matrix_b col_major
+template <class Func>
+__device__ inline void
+wmma_foreach_ij(wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::col_major> &frag,
+           Func func) {
+  const unsigned lane_id = threadIdx.x & 0x1f;
+  const auto i_offset = (lane_id & 0b11) * 2;
+  const auto j_offset = lane_id / 4;
+  for (unsigned x = 0; x < frag.num_elements / 2; x++) {
+    const unsigned i = i_offset + (x & 0b1) + (x & 0b10) * 4;
+    const unsigned j = j_offset + (x & 0b100) * 2;
+    const unsigned frag_index_list[2] = {x, x + 8};
+    func(frag_index_list, 2, i, j);
+  }
+}
 
 
 // matrix_a row_major other warp info
@@ -50,22 +65,57 @@ wmma_foreach_ij(wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_maj
 
 
 
+
+
+
+
+
+
+
+
+
+// matrix_a row_major
+template <class Func>
+__device__ inline void
+wmma_foreach_ij(wmma::fragment<wmma::matrix_a, 16, 16, 16, int8_t, wmma::row_major> &frag,
+           Func func) {
+
+  const unsigned lane_id = threadIdx.x & 0x1f;
+  const auto i_offset = lane_id / 4;
+  const auto j_offset = (lane_id & 0b11) * 4;
+  
+  for (unsigned x = 0; x < frag.num_elements; x++) {
+    const unsigned i = i_offset + (x & 0b100) * 2;
+    const unsigned j = j_offset + (x & 0b11);
+    const unsigned frag_index_list[1] = {x};
+    func(frag_index_list, 1, i, j);
+  }
+
+}
+
 // matrix_b col_major
 template <class Func>
 __device__ inline void
-wmma_foreach_ij(wmma::fragment<wmma::matrix_b, 16, 16, 16, half,
-                                  wmma::col_major> &frag,
+wmma_foreach_ij(wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_major> &frag,
            Func func) {
   const unsigned lane_id = threadIdx.x & 0x1f;
-  const auto i_offset = (lane_id & 0b11) * 2;
-  const auto j_offset = lane_id / 4;
-  for (unsigned x = 0; x < frag.num_elements / 2; x++) {
-    const unsigned i = i_offset + (x & 0b1) + (x & 0b10) * 4;
-    const unsigned j = j_offset + (x & 0b100) * 2;
-    const unsigned frag_index_list[2] = {x, x + 8};
-    func(frag_index_list, 2, i, j);
+  const auto i_offset = lane_id / 4;
+  const auto j_offset = (lane_id & 0b11) * 4;
+  
+  for (unsigned x = 0; x < frag.num_elements; x++) {
+    const unsigned i = i_offset + (x & 0b100) * 2;
+    const unsigned j = j_offset + (x & 0b11);
+    const unsigned frag_index_list[1] = {x};
+    func(frag_index_list, 1, i, j);
   }
 }
+
+
+
+
+
+
+
 
 
 

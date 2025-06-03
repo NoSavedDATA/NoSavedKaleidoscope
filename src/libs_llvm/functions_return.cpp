@@ -46,7 +46,7 @@ void set_functions_return_type() {
 						{"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"}, {"Jitter", "tensor"}, 
 						{"FirstArgOnDemand", "str"}, 
 						{"LenStrVec", "int"}, {"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"str_vec_CalculateIdx", "int"}, 
-						{"Linear", "tensor"}, 
+						{"Linear", "tensor"}, {"Linear_Load", "str"}, 
 						{"int_Create", "int"}, {"int_Load", "int"}, 
 						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_on_Offset_int", "int"}, 
 						{"logE", "tensor"}, {"logE2", "tensor"}, {"clip", "tensor"}, 

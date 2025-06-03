@@ -1,1 +1,1 @@
-"PrintTensor", "print_tensor", "PrintTensorF", 
+"PrintTensor", "print_tensor", "PrintTensorF", "PrintTensorI8", 

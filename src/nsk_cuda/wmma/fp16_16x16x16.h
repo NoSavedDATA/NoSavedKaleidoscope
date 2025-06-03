@@ -10,10 +10,10 @@ using namespace nvcuda;
 
 
 
-template<int warp_rows_per_m, int warp_cols_per_n>
-__device__ void blocking_tiled_wmma_fp16_16x16x16(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n> &frag_loader,
+template<int warp_rows_per_m, int warp_cols_per_n, typename T>
+__device__ void blocking_tiled_wmma_fp16_16x16x16(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n, __half> &frag_loader,
                                               wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx,
-                                              smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n>& smem_loader,
+                                              smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>& smem_loader,
                                               const float *x, const float *w, float *x_smem, float *w_smem,
                                               const int M, const int N, const int K, const int WMMA_M, const int WMMA_N)
 {

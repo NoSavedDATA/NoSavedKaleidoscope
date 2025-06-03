@@ -72,6 +72,10 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
           tensor_cpu = make_normal(product);
         if (std::strcmp(init, "xavu") == 0)
           tensor_cpu = make_xavier_uniform_float(product, dims[dims.size()-1], dims[dims.size()-2]);
+        if (std::strcmp(init, "fixed8i") == 0)
+          tensor_cpu = make_xavier_uniform_float_fixed(product, dims[dims.size()-1], dims[dims.size()-2], 8);
+        if (std::strcmp(init, "fixed42i") == 0)
+          tensor_cpu = make_xavier_uniform_float_fixed(product, dims[dims.size()-1], dims[dims.size()-2], 42);
         if (std::strcmp(init, "xavu_relu") == 0)
           tensor_cpu = make_xavier_uniform_float_relu(product, dims[dims.size()-1], dims[dims.size()-2]);
         if (std::strcmp(init, "xavu_tanh") == 0)
@@ -80,7 +84,7 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
           tensor_cpu = make_he_normal_float_relu(product, dims[dims.size()-1]);
         if (std::strcmp(init, "init_gpt") == 0)
           tensor_cpu = make_gpt_init(product);
-        if (std::strcmp(init, "int") == 0)
+        if (std::strcmp(init, "ints") == 0)
           tensor_cpu = make_random_int(product, 10);
         if (std::strcmp(init, "arange") == 0)
           tensor_cpu = make_arange(product);

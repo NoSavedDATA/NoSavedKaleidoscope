@@ -2,6 +2,7 @@
 
 
 #include "wmma_half_16x16/include.h"
+#include "wmma_int8_16x16/include.h"
 
 #include "general.h"
 #include "wmma.cu"

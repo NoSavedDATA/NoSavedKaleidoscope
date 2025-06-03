@@ -1,5 +1,6 @@
 #pragma once
 
+#include "i8/include.h"
 #include "indexed/include.h"
 
 #include "fp16_16x16x16_dx.h"
