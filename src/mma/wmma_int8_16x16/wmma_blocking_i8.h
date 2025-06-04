@@ -18,7 +18,8 @@ using namespace nvcuda;
 
 template<int WMMA_T, int wx_per_wmma_m, int wy_per_wmma_n, int wk>
 __global__ void wmma_blocking_i8(const int8_t *__restrict__ x, const int8_t *__restrict__ w,
-                        float *__restrict__ out, const int M, const int N, const int K,
+                        float *__restrict__ out, const float *scale_M, const float *scale_N,
+                        const int M, const int N, const int K,
                         const int bx, const int by,
                         const int wx, const int wy,
                         const int bx_per_w,     const int by_per_w,
@@ -52,6 +53,5 @@ __global__ void wmma_blocking_i8(const int8_t *__restrict__ x, const int8_t *__r
 
 
 
-  smem_loader.blocking_tiled_store_C(out, nullptr, nullptr, frag_loader, M, N, WMMA_M, WMMA_N, WMMA_T);
-
+  smem_loader.blocking_tiled_store_C(out, scale_M, scale_N, frag_loader, M, N, WMMA_M, WMMA_N, WMMA_T);
 }

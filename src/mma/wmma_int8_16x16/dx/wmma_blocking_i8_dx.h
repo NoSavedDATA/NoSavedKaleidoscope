@@ -51,6 +51,6 @@ __global__ void wmma_blocking_i8_dx(const int8_t *__restrict__ x, const int8_t *
 
 
 
-  smem_loader.blocking_tiled_store_C(out, nullptr, nullptr, frag_loader, M, N, WMMA_M, WMMA_N, WMMA_T);
+  // smem_loader.blocking_tiled_store_C(out, nullptr, nullptr, frag_loader, M, N, WMMA_M, WMMA_N, WMMA_T);
 
 }
