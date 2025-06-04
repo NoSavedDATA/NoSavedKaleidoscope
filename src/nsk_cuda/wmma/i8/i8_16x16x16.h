@@ -5,7 +5,6 @@
 #include "../../structs/i8_wmma_frags.h"
 #include "i8_16x16x16_warp_tile.h"
 
-
 using namespace nvcuda;
 
 
@@ -21,7 +20,6 @@ __device__ void blocking_tiled_wmma_i8_16x16x16(i8_wmma_frags<warp_rows_per_m, w
 
     smem_loader.load_A(x_smem, x, 0, M, K);
     smem_loader.load_B(w_smem, w, 0, N, K);
-
 
 
 

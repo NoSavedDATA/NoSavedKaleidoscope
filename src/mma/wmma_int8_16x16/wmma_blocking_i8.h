@@ -18,7 +18,7 @@ using namespace nvcuda;
 
 template<int WMMA_T, int wx_per_wmma_m, int wy_per_wmma_n, int wk>
 __global__ void wmma_blocking_i8(const int8_t *__restrict__ x, const int8_t *__restrict__ w,
-                        float *__restrict__ out, const int M, const int K, const int N,
+                        float *__restrict__ out, const int M, const int N, const int K,
                         const int bx, const int by,
                         const int wx, const int wy,
                         const int bx_per_w,     const int by_per_w,

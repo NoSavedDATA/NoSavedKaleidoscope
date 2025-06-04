@@ -13,14 +13,14 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 {
   int num_streams = NamedParamGrads.size();
 
-  std::vector<cudaStream_t> streams(num_streams);
+  // std::vector<cudaStream_t> streams(num_streams);
 
-  for (int i = 0; i < num_streams; ++i)
-  {
+  // for (int i = 0; i < num_streams; ++i)
+  // {
 
-    cudaStreamCreate(&streams[i]);
-    //StreamAwaitStreamB(streams[i], main_stream);
-  }
+  //   cudaStreamCreate(&streams[i]);
+  //   //StreamAwaitStreamB(streams[i], main_stream);
+  // }
 
   cudaStreamSynchronize(main_stream);
 
@@ -46,32 +46,33 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
         DT_tensor *idx_tensor = tensor->Sparse_Idx_Tensor;
 
         optimizer->sparse_step(tensor->tensor_ptr, grad, idx_tensor->tensor_ptr,
-                               idx_tensor->dims, tensor->dims, param_name, streams[i]);
+                               idx_tensor->dims, tensor->dims, param_name, main_stream);
+                              //  idx_tensor->dims, tensor->dims, param_name, streams[i]);
 
         move_to_pool(0, idx_tensor->dims_prod, idx_tensor->tensor_ptr, "sparse grad idxs");
         delete idx_tensor;
       } else
-        optimizer->step(tensor->tensor_ptr, grad, tensor->dims, param_name, streams[i]);
+        optimizer->step(tensor->tensor_ptr, grad, tensor->dims, param_name, main_stream);
 
       int grid_size, block_size; 
       std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(tensor->dims_prod);
       grid_size = grid_block_mem_sizes[0];
       block_size = grid_block_mem_sizes[1];
 
-      set_to_zero_kernel<<<grid_size, block_size, 0, streams[i]>>>(grad, tensor->dims_prod);
+      set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(grad, tensor->dims_prod);
     }
     i+=1;
   }
   optimizer->count_step();
 
   
-  for (int i = 0; i < num_streams; ++i)
-  {
-    cudaStreamSynchronize(streams[i]);
-    //StreamAwaitStreamB(main_stream, streams[i]);
-  }
-  for (int i = 0; i < num_streams; ++i)
-    cudaStreamDestroy(streams[i]);
+  // for (int i = 0; i < num_streams; ++i)
+  // {
+  //   cudaStreamSynchronize(streams[i]);
+  //   //StreamAwaitStreamB(main_stream, streams[i]);
+  // }
+  // for (int i = 0; i < num_streams; ++i)
+  //   cudaStreamDestroy(streams[i]);
 
   cudaStreamSynchronize(main_stream);
 

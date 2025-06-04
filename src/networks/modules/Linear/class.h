@@ -11,9 +11,11 @@
 #include <vector>
 
 
+
 #include "../../../notators/notators.h"
 #include "../../../tensor/tensor_struct.h"
 
+#include "../../../nsk_cuda/minimal_tensor.h"
 
 
 class LinearCPP
@@ -23,6 +25,8 @@ class LinearCPP
     int B, C, OC;
     std::string Init, Name;
     float *W, *dW;
+    int8_t *x8=nullptr, *w8;
+    Minimal_Tensor *scale_M=nullptr, *scale_N=nullptr;
     bool first_backward, changed_descriptors;
 
     std::vector<std::string> Notes;

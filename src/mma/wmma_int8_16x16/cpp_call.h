@@ -40,7 +40,7 @@ void blocking_mma_i8(const int8_t *x, const int8_t *w, float *o, int M, int N, i
 
 
   auto launcher = dispatch_table[grid.wx_per_wmma_m][grid.wy_per_wmma_n];
-  launcher(grid, x, w, o, M, K, N, stream);
+  launcher(grid, x, w, o, M, N, K, stream);
 }
 
 

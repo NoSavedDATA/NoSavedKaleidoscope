@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#include "../include.h"
+#include "../util.h"
 
 #include "wmma_blocking.h"
 
