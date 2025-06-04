@@ -196,13 +196,13 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     // PrintTensorF(x->tensor_ptr, 8, 8);
 
     // PrintTensorI8(x8+(31*B/32)*C, B/32, C);
-    // PrintTensorI8(w8, OC, C);
+    // PrintTensorI8(w8, OC, 4);
 
 
     // cudaCheck(cudaGetLastError());
 
     constexpr int WMMA_T{16};
-    blocking_mma_i8<WMMA_T>(x8, w8, out, B, OC, C, stream);
+    blocking_mma_i8<WMMA_T>(x8, w8, out, (float*)scale_M->tensor, (float*)scale_N->tensor, B, OC, C, stream);
 
     // blocking_mma<WMMA_T>(x->tensor_ptr, W, out, B, OC, C, stream);
 

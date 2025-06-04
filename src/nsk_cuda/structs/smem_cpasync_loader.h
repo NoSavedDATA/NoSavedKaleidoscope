@@ -187,7 +187,7 @@ struct smem_cpasync_wmma_loader {
 
 
 
-  __device__ void store_C(float *out, float *out_smem, float *scale_M, float *scale_N, int threaded_row, int threaded_col,
+  __device__ void store_C(float *out, float *out_smem, const float *scale_M, const float *scale_N, int threaded_row, int threaded_col,
                           int M, int N,
                           int WMMA_M, int WMMA_N, int WMMA_K) {
   #pragma unroll
@@ -200,10 +200,18 @@ struct smem_cpasync_wmma_loader {
 
 
       if((threaded_row+row)<M  &&  (threaded_col+col)<N && row<WMMA_K)
-        out[(threaded_row+row)*N + threaded_col+col] = out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col];
+      {
+        // if (blockIdx.x==0&&threadIdx.x==0)
+        // {
+        //   printf("Storing %f - %f\n", out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col], out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col] / (scale_M[threaded_row+row] * scale_N[threaded_col+col]));
+        //   printf("Scale is: %f - %f\n", scale_M[threaded_row+row], scale_N[threaded_col+col]);
+        // }
+        
+        out[(threaded_row+row)*N + threaded_col+col] = out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col] / (scale_M[threaded_row+row] * scale_N[threaded_col+col]);
+      }
     }
   }
-  __device__ void blocking_tiled_store_C(float *out, float *scale_M, float *scale_N,
+  __device__ void blocking_tiled_store_C(float *out, const float *scale_M, const float *scale_N,
                                          i8_wmma_frags<warp_rows_per_m, warp_cols_per_n, int8_t> &frag_loader,
                                          int M, int N, const int WMMA_M, const int WMMA_N, const int WMMA_K)
   {
