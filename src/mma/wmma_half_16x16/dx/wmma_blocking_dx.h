@@ -21,7 +21,7 @@ __global__ void wmma_blocking_dx(const float *__restrict__ x, const float *__res
                         float *__restrict__ out, const int M, const int N, const int K,
                         const int bx, const int by,
                         const int wx, const int wy,
-                        const int bx_per_w,     const int by_per_w,
+                        const int bx_per_w, const int by_per_w,
                         const int bx_per_wx)
  {
 

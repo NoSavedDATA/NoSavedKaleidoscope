@@ -86,6 +86,10 @@ struct smem_cpasync_wmma_loader {
   __device__ void load_A_transposed(T *x_smem, const float *x, int next_tile, int M, int N); 
   __device__ void load_B_transposed(T *x_smem, const float *x, int next_tile, int M, int N); 
   
+
+  __device__ void load_A_transposed(T *x_smem, const int8_t *x, int next_tile, int M, int N);
+  __device__ void load_B_transposed(T *x_smem, const int8_t *x, int next_tile, int M, int N);
+
   __device__ void load_A_indexed(T *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N);
   __device__ void load_B_indexed(T *x_smem, const float *embedding_book, const float *idxs, int next_tile, int M, int N);
 

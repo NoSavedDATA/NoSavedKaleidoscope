@@ -17,9 +17,6 @@ __device__ void blocking_tiled_wmma_fp16_16x16x16_dx(fp16_wmma_frags<warp_rows_p
                                               const float *x, const float *w, float *x_smem, float *w_smem,
                                               const int M, const int N, const int K, const int WMMA_M, const int WMMA_N)
 {
-    // B, C, OC
-
-
     smem_loader.load_A(x_smem, x, 0, M, K);
     smem_loader.load_B_transposed(w_smem, w, 0, K, N);
     

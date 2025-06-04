@@ -38,7 +38,14 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
     if (in_str("fp16", Notes))
       precision = 1;
     if (in_str("i8", Notes))
+    {
       precision = 2;
+      w8 = get_i8pool(0, OC*C, "Linear w8");
+
+      scale_N = new Minimal_Tensor();
+      scale_M = new Minimal_Tensor();
+      scale_N->tensor = (void *)get_from_pool(0, OC, "Linear i8 scale_N");
+    }
 
 
 
@@ -93,6 +100,20 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
 
 void LinearCPP::SetDescriptors(int B, int thread_id)
 {
+  if(precision==2)
+  {
+    std::cout << "Thread id: " << thread_id << ".\n";
+    if(x8!=nullptr)
+      move_to_i8pool(thread_id, this->B*C, x8, "Linear x8 on set descriptors");
+    if(scale_M->tensor!=nullptr)
+      move_to_pool(thread_id, B, (float *)scale_M->tensor, "Linear i8 scale_M");
+
+    x8 = get_i8pool(thread_id, B*C, "Linear x8 on set descriptors");
+    scale_M->tensor = (void*)get_from_pool(thread_id, B, "Linear i8 scale_M");
+
+    // printf("MALLOCING %d - %d - %d\n", B, C, B*C);
+  }
+
   this->B=B;
   changed_descriptors=true;
 }
@@ -126,21 +147,21 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     cublasCheck(cublasSgemm(cublas_handle, CUBLAS_OP_T, CUBLAS_OP_N, OC, B, C, &alpha, W, C, x->tensor_ptr, C, &beta, out, OC));
   } else if (precision==1) { 
 
+    constexpr int WMMA_T{16};
     
-    constexpr int num_warps_x{4};
-    constexpr int num_warps_y{4};
+    // constexpr int num_warps_x{4};
+    // constexpr int num_warps_y{4};
     
 
-    constexpr int WMMA_T{16};
-    dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
-    dim3 block_size_pp(num_warps_x * WARP_SIZE*2, num_warps_y);
-    dim3 grid_size(std::floor((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::floor((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    // dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
+    // dim3 block_size_pp(num_warps_x * WARP_SIZE*2, num_warps_y);
+    // dim3 grid_size(std::floor((OC + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::floor((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
     // dim3 grid_size_pp(std::ceil((OC + ((num_warps_x/2)*WMMA_T - 1)) / (float)((num_warps_x/2)*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
 
     
     // int shared_mem_pp   = (num_warps_y*WMMA_T*WMMA_T*(num_warps_x/2))*sizeof(float) + 2*((num_warps_x/2)+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
-    int shared_mem_pp   = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) + 2*(num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+    // int shared_mem_pp   = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) + 2*(num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
 
 
 
@@ -158,26 +179,32 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     cudaCheck(cudaGetLastError());
   } else if (precision==2) {
 
-    
-    int8_t *x8 = get_i8pool(thread_id, B*C, "linear fwd");
-    int8_t *w8 = get_i8pool(thread_id, OC*C, "linear fwd");
+
+    // x8 = get_i8pool(0, B*C, "x8");
+    // w8 = get_i8pool(0, OC*C, "w8");
+
+
+
+    // std::cout << "Quantize x-------------------------"  << ".\n";
+    quantize_f32_to_i8(x8, x->tensor_ptr, scale_M, 0.99, B, C, stream);
+    // cudaCheck(cudaGetLastError());
+    // std::cout << "Quantize w-------------------------"  << ".\n";
+    quantize_f32_to_i8(w8, W, scale_N, 0.99, OC, C, stream);
 
     cudaCheck(cudaGetLastError());
-    quantize_f32_to_i8(x8, x->tensor_ptr, 0.99, B, C, stream);
-    cudaCheck(cudaGetLastError());
-    quantize_f32_to_i8(w8, W, 0.99, OC, C, stream);
+    // PrintTensorI8(x8, 8, 8);
+    // PrintTensorF(x->tensor_ptr, 8, 8);
 
     // PrintTensorI8(x8+(31*B/32)*C, B/32, C);
     // PrintTensorI8(w8, OC, C);
 
-    cudaCheck(cudaGetLastError());
+
+    // cudaCheck(cudaGetLastError());
 
     constexpr int WMMA_T{16};
     blocking_mma_i8<WMMA_T>(x8, w8, out, B, OC, C, stream);
 
-    move_to_i8pool(thread_id, B*C, x8, "Linear x8");
-    move_to_i8pool(thread_id, OC*C, w8, "Linear w8");
-
+    // blocking_mma<WMMA_T>(x->tensor_ptr, W, out, B, OC, C, stream);
 
 
     // std::cout << "PRINTING" << ".\n";
@@ -243,18 +270,18 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
   } else if (precision==1) {
 
-    constexpr int num_warps_x{4};
-    constexpr int num_warps_y{4};
+    // constexpr int num_warps_x{4};
+    // constexpr int num_warps_y{4};
     
 
     constexpr int WMMA_T{16};
-    dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
-    dim3 grid_size_dx(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
-    dim3 grid_size_dw(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((OC + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    // dim3 block_size(num_warps_x * WARP_SIZE, num_warps_y);
+    // dim3 grid_size_dx(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((B + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
+    // dim3 grid_size_dw(std::ceil((C + (num_warps_x*WMMA_T - 1)) / (float)(num_warps_x*WMMA_T)), std::ceil((OC + (num_warps_y*WMMA_T - 1)) / (float)(num_warps_y*WMMA_T)));
     
-    int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
+    // int shared_mem_size = num_warps_y*WMMA_T*WMMA_T*num_warps_x*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*sizeof(__half);
 
-    int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
+    // int shared_mem_cf = (num_warps_y*WMMA_T*WMMA_T*num_warps_x)*sizeof(float) + (num_warps_x+num_warps_y)*WMMA_T*WMMA_T*2*sizeof(float);
 
     // wmma_dx_cp_async<WMMA_T,num_warps_x,num_warps_y><<<grid_size_dx, block_size, shared_mem_cf, main_stream>>>(dx, W, dy, B, C, OC);
     
@@ -270,6 +297,10 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
 
 
 
+
+
+
+
     /*
     // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
     cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
@@ -279,9 +310,24 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
   } else {
     // std::cout << "backward precision int8" << ".\n";
 
+    
     constexpr int WMMA_T{16};
     blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
     blocking_mma_dx<WMMA_T>(dy, W, dx, B, C, OC, main_stream);
+    
+    
+    // int8_t *dy8 = get_i8pool(0, B*OC, "linear fwd");
+    // quantize_f32_to_i8(dy8, dy, 0.99, B, OC, main_stream);
+    
+    // printf("dy - %d, %d\n", B, OC);
+    // PrintTensorF(dy, 8, OC);
+    // printf("dy8\n");
+    // PrintTensorI8(dy8, 8, OC);
+
+    // blocking_mma_i8_dw<WMMA_T>(dy8, x8, dW, OC, C, B, main_stream);
+    // blocking_mma_i8_dx<WMMA_T>(dy8, w8, dx, B, C, OC, main_stream);
+
+    // move_to_i8pool(0, B*OC, dy8, "Linear w8");
   }
 
 }
