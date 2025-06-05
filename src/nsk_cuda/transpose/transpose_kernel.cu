@@ -34,6 +34,7 @@ __global__ void transpose_kernel(float *y, const float *x, const int M, const in
         gmem_to_smem_safe(x_i+col, *(smem_i+col), (N-col)*4);
     asm volatile("cp.async.commit_group;");
 
+    __syncthreads();
 
     for (int tile=0; tile<N; tile+=128)
     {
