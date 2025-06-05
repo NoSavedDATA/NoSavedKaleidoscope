@@ -325,8 +325,8 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
 
 
     // printf("\n\n%d - %d\n", OC, C);
-    // PrintTensorF(w_T, 8, 8);
-    PrintTensorF(dy, 8, 8);
+    PrintTensorF(w_T, 8, std::min(OC,8));
+    // PrintTensorF(dy, 8, 8);
 
     int8_t *w8_T = get_i8pool(0, C*OC, "Linear w8_T");
     int8_t *x8_T = get_i8pool(0, B*C, "linear fwd");
@@ -336,8 +336,8 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     quantize_f32_to_i8(dy8, dy, scale_M, 0.99, B, OC, main_stream);
     quantize_f32_to_i8(w8_T, w_T, scale_K, 0.99, C, OC, main_stream);
 
-    // PrintTensorI8(w8_T, 8, 8);
-    PrintTensorI8(dy8, 8, 8);
+    PrintTensorI8(w8_T, 8, std::min(OC,8));
+    // PrintTensorI8(dy8, 8, 8);
     
     blocking_mma_i8<WMMA_T>(dy8, w8_T, dx, (float*)scale_M->tensor, (float*)scale_K->tensor, B, C, OC, main_stream);
 
@@ -355,7 +355,7 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
 
     
     blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
-    // blocking_mma_dx<WMMA_T>(dy, W, dx, B, C, OC, main_stream);
+    // blocking_mma<WMMA_T>(dy, w_T, dx, B, C, OC, main_stream);
 
     move_to_pool(0, B*C, x_T, "Linear x_T");
     move_to_pool(0, OC*C, w_T, "Linear w_T");

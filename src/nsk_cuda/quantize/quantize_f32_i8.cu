@@ -7,6 +7,8 @@
 #include "../smem/gmem_to_smem.h"
 
 
+#include "quantize.cuh"
+
 
 
 
@@ -37,6 +39,14 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
   const float *x_i = x + B_idx*N;
   int8_t *x8_i = x8 + B_idx*N;
+
+
+
+
+  float top_k[6];
+  #pragma unroll
+  for (int i = 0; i < 6; ++i)
+      top_k[i] = -INFINITY;
 
 
 
@@ -78,16 +88,28 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
     
 
 
+      
     for(int i=0; i<4; ++i)
     {
-      // if (B_idx==0 && laneId==0)
-      // {
-      //   printf("   Max is %f, loading %f of %f\n", maxval, smem_ij[i], x_i[tile+laneId*4+i], x[0]);
-      // }
+      float _maxval;
+      if(col+i<N)
+      {
+        _maxval = smem_ij[i]; 
+        _maxval = abs(_maxval);
+      }
+      else 
+        _maxval = -INFINITY;
 
-      float _maxval = smem_ij[i];
-      if(_maxval<0)
-        _maxval *= -1;
+
+      if (_maxval>top_k[5])
+      {
+        top_k[5] = _maxval;
+        for (int j=5; j>0 && top_k[j]>top_k[j-1]; --j) {
+            float tmp = top_k[j];
+            top_k[j] = top_k[j - 1];
+            top_k[j - 1] = tmp;
+        }
+      }
 
       float mask__maxval;
       for (int mask=warpSize/2; mask>0; mask>>=1)
@@ -103,31 +125,57 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
      if (maxval<_maxval&&laneId==0)
         maxval=_maxval;
+      
+      
     }
     __syncthreads();
   }
 
 
 
-  maxval = min(maxval, 30.0f);
-  if (blockIdx.x==0&&threadIdx.x==0)
-    printf("\n");
+  for (int k = 0; k < 6; ++k) {
+    float v = top_k[k];
+    for (int mask = warpSize / 2; mask > 0; mask >>= 1) {
+        __syncwarp();
+        float shuffled = __shfl_down_sync(0xFFFFFFFF, v, mask);
+        if (shuffled > top_k[k]) {
+            top_k[k] = shuffled;
+        }
+    }
+  }
+
+
+  float quantile_clamp;
+  // if(N>512)
+  // {
+  //   quantile_clamp = (1-fraction)*top_k[5]+fraction*top_k[4];
+  //   maxval = quantile_clamp;
+  // } else
+    quantile_clamp = INFINITY;
+
+  // if(block_x==0&&threadIdx.x==0)
+  // {
+  //   for(int i=0; i<6; ++i)
+  //     printf("%f, ", top_k[i]);
+  //   printf("\n");
+
+  //   printf("max %f, 6 %f, 5 %f, fraction %f, clamp %f\n", top_k[0], top_k[5], top_k[4], fraction, quantile_clamp);
+  // }
+
+
+
+
+
+  // maxval = min(maxval, 30.0f);
   float scale = 127/maxval;
-  if (blockIdx.x==0&&laneId==0)
-    printf("%f, ", scale);
-  if (blockIdx.x==0&&threadIdx.x==0)
-    printf("\n\n");
+
 
   if (std::isinf(scale)||scale<=0)
     scale = 1;
-  if (blockIdx.x==0&&laneId==0)
-    printf("%f, ", scale);
-  if (blockIdx.x==0&&threadIdx.x==0)
-    printf("\n");
-  // if(scale<=0)
-  //   scale=1;
-  // if(scale>1000000)
-  //   scale = 1000000;
+
+  // scale = min(scale, 1000000.0f);
+
+
   if (B_idx<M && laneId==0)
     scale_tensor[B_idx] = scale;
   scale = __shfl_sync(0xFFFFFFFF, scale, 0);
@@ -145,7 +193,13 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
     for(int i=0; i<4; ++i)
     {
       if(B_idx<M && col+i<std::min(N, max_N))
-        x8_i[col+i] = (int8_t) min(max(smem_ij[i]*scale, -127.0f), 127.0f);
+      {
+        float val = min(max(smem_ij[i], -quantile_clamp), quantile_clamp) * scale;
+        // float val = smem_ij[i] * scale;
+        x8_i[col+i] = (int8_t) min(max(val, -127.0f), 127.0f);
+      }
+        // x8_i[col+i] = quantize_scaled_float(smem_ij[i], scale);
+
     }
   }
 
@@ -163,6 +217,8 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
   if(B_idx<M)
     gmem_to_smem_safe(x_i+col, *(smem_i+col), (N-col)*4);
   asm volatile("cp.async.commit_group;");
+
+  __syncthreads();
 
   for(; tile<N; tile+=128)
   {
@@ -194,7 +250,11 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
     for(int i=0; i<4; ++i)
     {
       if(B_idx<M && col+i<N)
-        x8_i[col+i] = (int8_t) min(max(smem_ij[i]*scale, -127.0f), 127.0f);
+      {
+        float val = min(max(smem_ij[i], -quantile_clamp), quantile_clamp) * scale;
+        x8_i[col+i] = (int8_t) min(max(val, -127.0f), 127.0f);
+        // x8_i[col+i] = (int8_t) min(max(smem_ij[i]*scale, -127.0f), 127.0f);
+      }
     }
     __syncthreads();
   }
