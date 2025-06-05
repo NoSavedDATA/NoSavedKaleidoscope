@@ -60,6 +60,7 @@ void set_user_functions() {
 		"float_vec_Create", "float_vec_Load", "float_vec_Store", "float_vec_Store_Idx", "arange_float", "zeros_vec", "ones_vec", "float_vec_Idx", "float_vec_Idx_num", "float_vec_CalculateIdx", "float_vec_first_nonzero", "float_vec_print", "float_vec_Split_Parallel", "float_vec_Split_Strided_Parallel", "float_vec_size", 
 		"CreateNotesVector", "Dispose_NotesVector", "Add_To_NotesVector_float", "Add_To_NotesVector_int", "Add_To_NotesVector_str", 
 		"RandomStrOnDemand", "GetEmptyChar", "FreeCharFromFunc", "FreeChar", "CopyString", "ConcatStr", "ConcatStrFreeLeft", "ConcatStrFreeRight", "ConcatStrFree", "ConcatFloatToStr", "ConcatNumToStrFree", 
+		"tensor_transpose", 
 		"save_img", 
 		"OneCycleLR", 
 		"MarkToSweep_Mark", "MarkToSweep_Unmark_Scopeful", "MarkToSweep_Unmark_Scopeless", 

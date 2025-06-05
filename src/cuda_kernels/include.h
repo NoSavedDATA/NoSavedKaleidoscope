@@ -24,6 +24,8 @@
 #include "tensor_scalar_kernels_inline.cu"
 #include "tensor_tensor_codegen.h"
 #include "tensor_tensor_kernels.h"
+#include "transpose.h"
+
 
 
 

@@ -26,7 +26,7 @@ void quantize_f32_to_i8(int8_t *x8, float *x, Minimal_Tensor *scale, float quant
     
     dim3 grid_size(std::floor((M + (num_warps - 1)) / (float)(num_warps)));
 
-    int smem_N = std::clamp(N, 128, max_N);
+    int smem_N = std::clamp(N, 256, max_N); // 128 * 2 for the xor swap
 
     int smem = smem_N*num_warps*sizeof(float);
     
