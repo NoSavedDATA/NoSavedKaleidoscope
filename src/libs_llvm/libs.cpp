@@ -829,6 +829,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("ConcatScopeStr", ConcatScopeStrTy);
 
+	FunctionType *tensor_transposeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_transpose", tensor_transposeTy);
+
 	FunctionType *pinned_tensor_CreateTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},

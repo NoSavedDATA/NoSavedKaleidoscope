@@ -2,9 +2,9 @@
 
 using namespace nvcuda;
 
-__inline__ __device__ uint32_t cast_smem_ptr_to_uint(void *smem_ptr) {
-    return static_cast<uint32_t>(__cvta_generic_to_shared(smem_ptr));
-}
+// __inline__ __device__ uint32_t cast_smem_ptr_to_uint(void *smem_ptr) {
+//     return static_cast<uint32_t>(__cvta_generic_to_shared(smem_ptr));
+// }
 
 
 __inline__ __device__ int smem_xor_cp_async(int lane_id) {

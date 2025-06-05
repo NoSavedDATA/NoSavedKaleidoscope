@@ -44,10 +44,10 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
   // --- Load First Smem Tile and Get Quantization Statistics --- //
   int col = laneId*4;
   if(B_idx<M)
-    gmem_to_smem_safe(x_i, *(smem_i+col), (N-col)*4);
+    gmem_to_smem_safe(x_i+col, *(smem_i+col), (N-col)*4);
   asm volatile("cp.async.commit_group;");
 
-
+  __syncthreads();
 
 
   float maxval = -INFINITY;
@@ -61,14 +61,14 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
     if (next_tile<max_N) {
 
-      col = next_tile + laneId*4; // jump by 4 copied floats of cp.async (16B)
-      const float *x_ij = x_i + col;
+      int next_col = next_tile + laneId*4; // jump by 4 copied floats of cp.async (16B)
+      const float *x_ij = x_i + next_col;
       
       
-      float *smem_ij_next_tile = smem_i + col;
+      float *smem_ij_next_tile = smem_i + next_col;
       
       if(B_idx<M)
-        gmem_to_smem_safe(x_ij, *smem_ij_next_tile, (N-col)*4);
+        gmem_to_smem_safe(x_ij, *smem_ij_next_tile, (N-next_col)*4);
       asm volatile("cp.async.commit_group;\n" ::);
       asm volatile("cp.async.wait_group %0;" ::"n"(1));
     } else
@@ -109,16 +109,29 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
 
 
-
+  maxval = min(maxval, 30.0f);
+  if (blockIdx.x==0&&threadIdx.x==0)
+    printf("\n");
   float scale = 127/maxval;
+  if (blockIdx.x==0&&laneId==0)
+    printf("%f, ", scale);
+  if (blockIdx.x==0&&threadIdx.x==0)
+    printf("\n\n");
+
+  if (std::isinf(scale)||scale<=0)
+    scale = 1;
+  if (blockIdx.x==0&&laneId==0)
+    printf("%f, ", scale);
+  if (blockIdx.x==0&&threadIdx.x==0)
+    printf("\n");
+  // if(scale<=0)
+  //   scale=1;
+  // if(scale>1000000)
+  //   scale = 1000000;
   if (B_idx<M && laneId==0)
     scale_tensor[B_idx] = scale;
   scale = __shfl_sync(0xFFFFFFFF, scale, 0);
 
-  // if (B_idx==0 && laneId==0)
-  // {
-  //   printf("Max is %f - %f\n", maxval, scale);
-  // }
 
 
 
@@ -131,29 +144,30 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
     for(int i=0; i<4; ++i)
     {
-      if(B_idx<M && col+i<N)
+      if(B_idx<M && col+i<std::min(N, max_N))
         x8_i[col+i] = (int8_t) min(max(smem_ij[i]*scale, -127.0f), 127.0f);
     }
   }
 
+ 
 
 
 
-
+  __syncthreads();
   // --- Load Remanescent Tiles --- //
-  if(N<max_N)
+  if(N<=max_N)
     return;
 
   
   col = xor_swap + laneId*4;
   if(B_idx<M)
-    gmem_to_smem_safe(x_i, *(smem_i+col), (N-col)*4);
+    gmem_to_smem_safe(x_i+col, *(smem_i+col), (N-col)*4);
   asm volatile("cp.async.commit_group;");
 
   for(; tile<N; tile+=128)
   {
     col = tile + laneId*4;
-    float *smem_ij = smem_i + xor_swap+laneId*4;
+    float *smem_ij = smem_i + xor_swap + laneId*4;
     
     xor_swap ^= xor_swap_val;
 
@@ -161,13 +175,13 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
     if (next_tile<N) {
 
-      col = next_tile + laneId*4; // jump by 4 copied floats of cp.async (16B)
-      const float *x_ij = x_i + col;
+      int next_col = next_tile + laneId*4; // jump by 4 copied floats of cp.async (16B)
+      const float *x_ij = x_i + next_col;
       
       float *smem_ij_next_tile = smem_i + xor_swap+laneId*4;
 
       if(B_idx<M)
-        gmem_to_smem_safe(x_ij, *smem_ij_next_tile, (N-col)*4);
+        gmem_to_smem_safe(x_ij, *smem_ij_next_tile, (N-next_col)*4);
       asm volatile("cp.async.commit_group;\n" ::);
       asm volatile("cp.async.wait_group %0;" ::"n"(1));
     } else

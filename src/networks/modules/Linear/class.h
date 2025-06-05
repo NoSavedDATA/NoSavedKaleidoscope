@@ -26,7 +26,7 @@ class LinearCPP
     std::string Init, Name;
     float *W, *dW;
     int8_t *x8=nullptr, *w8;
-    Minimal_Tensor *scale_M=nullptr, *scale_N=nullptr;
+    Minimal_Tensor *scale_M=nullptr, *scale_N=nullptr, *scale_K=nullptr;
     bool first_backward, changed_descriptors;
 
     std::vector<std::string> Notes;
