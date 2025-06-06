@@ -10,6 +10,10 @@
 extern std::map<int, std::map<int, std::vector<float *>>> TensorPool;
 extern std::map<int, std::map<int, std::vector<half *>>> TensorHalfPool;
 
+
+
+int round_to_nearest_pow2(int x); 
+
 float *get_from_pool(int thread_id, int dims_prod, std::string from, bool is_new=false);
 
 

@@ -28,11 +28,12 @@ void quantize_f32_to_i8(int8_t *x8, float *x, Minimal_Tensor *scale, float quant
 
     int smem_N = std::clamp(N, 256, max_N); // 128 * 2 for the xor swap
 
+    
     int smem = smem_N*num_warps*sizeof(float);
     
 
-    // std::cout << "fraction: " << fraction << " lower " << lower << " upper " << upper << ", M " << M << ", N " << N << ", max_N " << max_N << ", smem_N " << smem_N << ", warps " << num_warps <<".\n";
-    // std::cout << "g.x " << grid_size.x << "\n";
+    std::cout << "fraction: " << fraction << " lower " << lower << " upper " << upper << ", M " << M << ", N " << N << ", max_N " << max_N << ", smem_N " << smem_N << ", warps " << num_warps <<".\n";
+    std::cout << "g.x " << grid_size.x << "\n";
     
     quantize_f32_i8_kernel<<<grid_size, num_warps*32, smem, stream>>>(x8, x, (float *)scale->tensor, fraction, lower, upper, M, N, max_N, smem_N, num_warps, M*N);
 
