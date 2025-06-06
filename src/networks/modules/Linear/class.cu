@@ -317,35 +317,36 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
 
     float *w_T = get_from_pool(0, OC*C, "Linear w_T");
     float *x_T = get_from_pool(0, B*C, "Linear x_T");
-    float *dy_T = get_from_pool(0, B*OC, "Linear w_T");
+    float *dy_T = get_from_pool(0, B*OC, "Linear dy_T");
 
-    transpose_tensor(x_T, x, B, C, main_stream);
     transpose_tensor(w_T, W, OC, C, main_stream);
+    transpose_tensor(x_T, x, B, C, main_stream);
     transpose_tensor(dy_T, dy, B, OC, main_stream);
 
 
     // printf("\n\n%d - %d\n", OC, C);
-    PrintTensorF(w_T, 8, std::min(OC,8));
+    // PrintTensorF(w_T, 8, std::min(OC,8));
     // PrintTensorF(dy, 8, 8);
 
-    int8_t *w8_T = get_i8pool(0, C*OC, "Linear w8_T");
-    int8_t *x8_T = get_i8pool(0, B*C, "linear fwd");
-    int8_t *dy8 = get_i8pool(0, B*OC, "linear fwd");
-    int8_t *dy8_T = get_i8pool(0, B*OC, "linear fwd");
+    int8_t *w8_T  = get_i8pool(0, C*OC, "Linear w8_T");
+    int8_t *x8_T  = get_i8pool(0, B*C, "linear x8_T");
+    int8_t *dy8   = get_i8pool(0, B*OC, "linear dy8");
+    int8_t *dy8_T = get_i8pool(0, B*OC, "linear dy8_T");
 
     quantize_f32_to_i8(dy8, dy, scale_M, 0.99, B, OC, main_stream);
     quantize_f32_to_i8(w8_T, w_T, scale_K, 0.99, C, OC, main_stream);
 
-    PrintTensorI8(w8_T, 8, std::min(OC,8));
+    // PrintTensorI8(w8_T, 8, std::min(OC,8));
     // PrintTensorI8(dy8, 8, 8);
     
     blocking_mma_i8<WMMA_T>(dy8, w8_T, dx, (float*)scale_M->tensor, (float*)scale_K->tensor, B, C, OC, main_stream);
 
-    // quantize_f32_to_i8(dy8_T, dy_T, scale_N, 0.99, OC, B, main_stream);
-    // quantize_f32_to_i8(x8_T, x_T, scale_K, 0.99, C, B, main_stream);
 
-    // blocking_mma_i8<WMMA_T>(dy8_T, x8_T, dW, (float*)scale_N->tensor, (float*)scale_K->tensor, OC, C, B, main_stream);
 
+    // quantize_f32_to_i8(dy8_T, dy_T, scale_M, 0.99, OC, B, main_stream);
+    // quantize_f32_to_i8(x8, x_T, scale_K, 0.99, C, B, main_stream);
+
+    // blocking_mma_i8<WMMA_T>(dy8_T, x8, dW, (float*)scale_N->tensor, (float*)scale_K->tensor, OC, C, B, main_stream);
 
 
     // quantize_f32_to_i8(w8, W, scale_N, 0.99, OC, C, stream);
@@ -375,6 +376,8 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     move_to_i8pool(0, B*C, x8_T, "Linear w8");
     move_to_i8pool(0, B*OC, dy8, "Linear w8");
     move_to_i8pool(0, OC*B, dy8_T, "Linear w8");
+
+    cudaStreamSynchronize(main_stream);
   }
 
 }

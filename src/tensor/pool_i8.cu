@@ -48,56 +48,42 @@ int8_t *get_i8pool(int thread_id, int dims_prod, std::string from)
   if (dims_prod==0)
     return nullptr;
 
+  dims_prod = dims_prod/4;
 
 
-  int8_t *tensor_ptr;
+  float *tensor_ptr;
 
-  if(TensorPool_i8[thread_id].count(dims_prod)>0)
+  if(TensorPool[thread_id].count(dims_prod)>0)
   {
-    std::vector<int8_t *> tensors_in_pool = TensorPool_i8[thread_id][dims_prod];
+    std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
     if (tensors_in_pool.size()>0)
     {
       //std::cout << "GETTING FROM POOL: " << dims_prod << "\n";
       tensor_ptr = tensors_in_pool.back();
-      TensorPool_i8[thread_id][dims_prod].pop_back();
-      return tensor_ptr;
+      TensorPool[thread_id][dims_prod].pop_back();
+      return (int8_t*)tensor_ptr;
     }
   }
 
   
   std::cout << "Malloc new INT8 from " << from << " of size: " << dims_prod << ", at thread: " << thread_id << "\n";
-  cudaCheck(cudaMalloc(&tensor_ptr, dims_prod*sizeof(int8_t)));
-  return tensor_ptr;
+  cudaCheck(cudaMalloc(&tensor_ptr, dims_prod*sizeof(4)));
+  return (int8_t*)tensor_ptr;
 }
 
 
-void move_to_i8pool(int thread_id, int dims_prod, int8_t *tensor_ptr, std::string from)
+void move_to_i8pool(int thread_id, int dims_prod, int8_t *_tensor_ptr, std::string from)
 {
-  //if (dims_prod==50*256)
-  //  std::cout << "push B*OC of " << from << "\n";
-
-  // if (dims_prod==393216)
-  //   std::cout << "-------------Move " << from << ".\n";
 
   if (dims_prod==0)
     return;
-  //std::cout << "move_to_pool from: " << from << "\n";
+  float *tensor_ptr = (float*) _tensor_ptr;
+
+  dims_prod = dims_prod/4;
   
 
-  std::vector<int8_t *> tensors_in_pool = TensorPool_i8[thread_id][dims_prod];
-  if (!in_int8_ptr_vec(tensor_ptr, tensors_in_pool))
-  {
-    //if(!(tensors_in_pool.size()<30&&dims_prod==1))
-    /*
-    if(tensors_in_pool.size()<1000)
-      TensorPool_i8[dims_prod].push_back(tensor_ptr);
-    else
-    {
-      std::cout << "FREEING TENSOR WITH dims prod: " << dims_prod << " from: " << from <<  "\n";
-      cudaCheck(cudaFree(tensor_ptr));
-    }
-    */
-    TensorPool_i8[thread_id][dims_prod].push_back(tensor_ptr);
-  }  
+  std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];
+  if (!in_float_ptr_vec(tensor_ptr, tensors_in_pool))
+    TensorPool[thread_id][dims_prod].push_back(tensor_ptr);
 }
 
