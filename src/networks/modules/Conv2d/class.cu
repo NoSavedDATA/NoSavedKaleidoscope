@@ -246,7 +246,7 @@ void Conv2dCPP::InitFilters()
     
   float* d_filter = nullptr;
   const std::size_t filter_size = h_filter.size();
-  cudaCheck(cudaMalloc(&d_filter, filter_size * sizeof(float)));
+  cudaCheck(cudaMalloc(&d_filter, round_to_nearest_pow2(filter_size) * sizeof(float)));
 
   cudaCheck(cudaMemcpy(d_filter, h_filter.data(), filter_size * sizeof(float), cudaMemcpyDefault));
   this->d_filter = d_filter;

@@ -495,7 +495,7 @@ extern "C" float cpu(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-  cudaMallocHost(&tensor_cpu, dims_prod*sizeof(float));
+  cudaMallocHost(&tensor_cpu, round_to_nearest_pow2(dims_prod)*sizeof(float));
   cudaMemcpy(tensor_cpu, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
 
   tensor->cpu_tensor_ptr = tensor_cpu;
@@ -535,7 +535,7 @@ extern "C" DT_tensor *randu_like(Scope_Struct *scope_struct, DT_tensor tensor)
   tensor_cpu = make_random_float_uniform(dims_prod);
 
   cudaStream_t stream = ThreadsStream[thread_id];
-  cudaMalloc(&tensor_ptr, dims_prod*sizeof(float));
+  cudaMalloc(&tensor_ptr, round_to_nearest_pow2(dims_prod)*sizeof(float));
   cudaMemcpyAsync(tensor_ptr, tensor_cpu, dims_prod*sizeof(float), cudaMemcpyHostToDevice, stream);
   delete[] tensor_cpu;
 

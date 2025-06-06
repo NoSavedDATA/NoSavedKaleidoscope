@@ -84,7 +84,7 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
       W_cpu = make_random_int(product, 1);
 
 
-    cudaMalloc(&W,       product * sizeof(float));
+    cudaMalloc(&W,       round_to_nearest_pow2(product) * sizeof(float));
     cudaMemcpy(W, W_cpu, product * sizeof(float), cudaMemcpyHostToDevice);
 
     DT_tensor *tensor_W = createTensor(W, {OC*C}, product, true, Name+"W");
@@ -310,8 +310,6 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
     */
   } else {
-    // std::cout << "backward precision int8" << ".\n";
-
     
     constexpr int WMMA_T{16};
 
@@ -324,62 +322,38 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     transpose_tensor(dy_T, dy, B, OC, main_stream);
 
 
-    // printf("\n\n%d - %d\n", OC, C);
-    // PrintTensorF(w_T, 8, std::min(OC,8));
-    // PrintTensorF(dy, 8, 8);
 
-    int8_t *w8_T  = get_i8pool(0, C*OC, "Linear w8_T");
-    int8_t *x8_T  = get_i8pool(0, B*C, "linear x8_T");
     int8_t *dy8   = get_i8pool(0, B*OC, "linear dy8");
-    int8_t *dy8_T = get_i8pool(0, B*OC, "linear dy8_T");
 
     quantize_f32_to_i8(dy8, dy, scale_M, 0.99, B, OC, main_stream);
-    quantize_f32_to_i8(w8_T, w_T, scale_K, 0.99, C, OC, main_stream);
+    quantize_f32_to_i8(w8, w_T, scale_K, 0.99, C, OC, main_stream);
 
-    // PrintTensorI8(w8_T, 8, std::min(OC,8));
-    // PrintTensorI8(dy8, 8, 8);
     
-    blocking_mma_i8<WMMA_T>(dy8, w8_T, dx, (float*)scale_M->tensor, (float*)scale_K->tensor, B, C, OC, main_stream);
+    blocking_mma_i8<WMMA_T>(dy8, w8, dx, (float*)scale_M->tensor, (float*)scale_K->tensor, B, C, OC, main_stream);
 
 
 
-    // quantize_f32_to_i8(dy8_T, dy_T, scale_M, 0.99, OC, B, main_stream);
-    // quantize_f32_to_i8(x8, x_T, scale_K, 0.99, C, B, main_stream);
+    quantize_f32_to_i8(dy8, dy_T, scale_M, 0.99, OC, B, main_stream);
+    quantize_f32_to_i8(x8, x_T, scale_K, 0.99, C, B, main_stream);
 
-    // blocking_mma_i8<WMMA_T>(dy8_T, x8, dW, (float*)scale_N->tensor, (float*)scale_K->tensor, OC, C, B, main_stream);
-
-
-    // quantize_f32_to_i8(w8, W, scale_N, 0.99, OC, C, stream);
-
-
+    blocking_mma_i8<WMMA_T>(dy8, x8, dW, (float*)scale_N->tensor, (float*)scale_K->tensor, OC, C, B, main_stream);
 
 
     
-    blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
+    // blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
     // blocking_mma<WMMA_T>(dy, w_T, dx, B, C, OC, main_stream);
+
+
 
     move_to_pool(0, B*C, x_T, "Linear x_T");
     move_to_pool(0, OC*C, w_T, "Linear w_T");
     move_to_pool(0, B*OC, dy_T, "Linear dy_T");
         
-    // quantize_f32_to_i8(dy8, dy, 0.99, B, OC, main_stream);
     
-    // printf("dy - %d, %d\n", B, OC);
-    // PrintTensorF(dy, 8, OC);
-    // printf("dy8\n");
-    // PrintTensorI8(dy8, 8, OC);
-
-    // blocking_mma_i8_dw<WMMA_T>(dy8, x8, dW, OC, C, B, main_stream);
-    // blocking_mma_i8_dx<WMMA_T>(dy8, w8, dx, B, C, OC, main_stream);
-
-    move_to_i8pool(0, OC*C, w8_T, "Linear w8");
-    move_to_i8pool(0, B*C, x8_T, "Linear w8");
     move_to_i8pool(0, B*OC, dy8, "Linear w8");
-    move_to_i8pool(0, OC*B, dy8_T, "Linear w8");
 
     cudaStreamSynchronize(main_stream);
   }
-
 }
 
 

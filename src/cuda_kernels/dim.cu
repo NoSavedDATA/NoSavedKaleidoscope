@@ -81,7 +81,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
     summed = new float[dims_prod];
     cudaCheck(cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream));
 
-    cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
+    cudaCheck(cudaMalloc(&ret, round_to_nearest_pow2(1)*sizeof(float)));
   
     float tensor_sum=0;
     for(int i=0; i<dims_prod; i++)
@@ -219,7 +219,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
     summed = new float[dims_prod];
     cudaCheck(cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream));
 
-    cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
+    cudaCheck(cudaMalloc(&ret, round_to_nearest_pow2(1)*sizeof(float)));
   
     float tensor_sum=0;
     for(int i=0; i<dims_prod; i++)
@@ -366,7 +366,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, int first_dim, ...)
     summed = new float[dims_prod];
     cudaCheck(cudaMemcpyAsync(summed, tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToHost, stream));
 
-    cudaCheck(cudaMalloc(&ret, 1*sizeof(float)));
+    cudaCheck(cudaMalloc(&ret, round_to_nearest_pow2(1)*sizeof(float)));
   
     float tensor_sum=0;
     for(int i=0; i<dims_prod; i++)

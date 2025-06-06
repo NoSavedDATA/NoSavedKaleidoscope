@@ -76,34 +76,34 @@ void BatchNorm2dCPP::InitMovingAverages()
   float *aux;
 
   aux = make_ones_float(C);
-  cudaCheck(cudaMalloc(&scale, C*sizeof(float)));
+  cudaCheck(cudaMalloc(&scale, round_to_nearest_pow2(C)*sizeof(float)));
   cudaCheck(cudaMemcpy(scale, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
   
   aux = make_zeros_float(C);
-  cudaCheck(cudaMalloc(&bias, C*sizeof(float)));
+  cudaCheck(cudaMalloc(&bias, round_to_nearest_pow2(C)*sizeof(float)));
   cudaCheck(cudaMemcpy(bias, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
   
 
   aux = make_zeros_float(C);
-  cudaCheck(cudaMalloc(&running_mean, C*sizeof(float)));
+  cudaCheck(cudaMalloc(&running_mean, round_to_nearest_pow2(C)*sizeof(float)));
   cudaCheck(cudaMemcpy(running_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
 
   aux = make_zeros_float(C);
-  cudaCheck(cudaMalloc(&saved_mean, C*sizeof(float)));
+  cudaCheck(cudaMalloc(&saved_mean, round_to_nearest_pow2(C)*sizeof(float)));
   cudaCheck(cudaMemcpy(saved_mean, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
   
   
   aux = make_ones_float(C);
-  cudaCheck(cudaMalloc(&running_var, C*sizeof(float)));
+  cudaCheck(cudaMalloc(&running_var, round_to_nearest_pow2(C)*sizeof(float)));
   cudaCheck(cudaMemcpy(running_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
 
   aux = make_ones_float(C);
-  cudaCheck(cudaMalloc(&saved_var, C*sizeof(float)));
+  cudaCheck(cudaMalloc(&saved_var, round_to_nearest_pow2(C)*sizeof(float)));
   cudaCheck(cudaMemcpy(saved_var, aux, C*sizeof(float), cudaMemcpyHostToDevice));
   delete[] aux;
 

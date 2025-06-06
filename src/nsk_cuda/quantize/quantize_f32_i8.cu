@@ -50,12 +50,11 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
   // --- Load First Smem Tile and Get Quantization Statistics --- //
   int col = laneId*4;
 
-  // if(laneId==0)
+  // if(laneId==0&&block_x==0)
   //   printf("block_x %d - B_idx %d - M %d - col %d - N %d \n", block_x, B_idx, M, col, N);
 
   if(B_idx<M)
   {
-    // printf("Executing B_idx %d\n", B_idx);
     gmem_to_smem_safe(x_i+col, *(smem_i+col), (N-col)*4);
   }
   asm volatile("cp.async.commit_group;");

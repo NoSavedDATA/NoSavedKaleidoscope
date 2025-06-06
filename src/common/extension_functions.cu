@@ -34,6 +34,20 @@ void LogErrorCodegen(std::string Str, int line) {
 
 
 
+int round_nearest_pow2(int x) {
+    if (x == 0) return 1; // By convention, or you can return 0
+
+    int abs_x = std::abs(x);
+    int exp = std::round(std::log2(abs_x));
+    int result = 1 << exp;
+
+    // Clamp to avoid overflow
+    if (result < 0) result = std::numeric_limits<int>::max();
+
+    return (x > 0) ? result : -result;
+}
+
+
 
 
 

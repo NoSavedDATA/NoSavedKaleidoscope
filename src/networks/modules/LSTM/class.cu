@@ -41,9 +41,9 @@ DT_LSTM::DT_LSTM(int C, int OC, std::string Init, std::string Name)
     b_cpu = make_lstm_bias(OC);
 
 
-    cudaMalloc(&W, 4*OC*OC*sizeof(float));
-    cudaMalloc(&U, 4*OC* C*sizeof(float));
-    cudaMalloc(&b, 4*OC*   sizeof(float));
+    cudaMalloc(&W, round_to_nearest_pow2(4*OC*OC)*sizeof(float));
+    cudaMalloc(&U, round_to_nearest_pow2(4*OC* C)*sizeof(float));
+    cudaMalloc(&b, round_to_nearest_pow2(4*OC   )*sizeof(float));
     cudaMemcpy(W, w_cpu, 4*OC*OC*sizeof(float), cudaMemcpyHostToDevice); // ht weight
     cudaMemcpy(U, u_cpu, 4*OC* C*sizeof(float), cudaMemcpyHostToDevice); // x weight
     cudaMemcpy(b, b_cpu, 4*OC*   sizeof(float), cudaMemcpyHostToDevice); // bias
