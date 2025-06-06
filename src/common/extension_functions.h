@@ -61,3 +61,7 @@ std::vector<std::string> concat_str_vec(std::vector<std::string> l, std::vector<
 std::vector<int> concat_int_vec(std::vector<int> l, std::vector<int>r);
 
 extern bool ShallCodegen;
+
+
+
+int round_nearest_pow2(int x); 

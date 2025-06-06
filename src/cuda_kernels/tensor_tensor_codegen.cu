@@ -220,7 +220,7 @@ extern "C" DT_tensor *tensor_tensor_mult(Scope_Struct *scope_struct, DT_tensor *
       float tgt_dim_size = Ldims[Rdims.size()];
       float aux_size = DimsProd(Rdims);
       float *aux_tensor, *aux_free;
-      cudaMalloc(&aux_tensor, aux_size*tgt_dim_size*sizeof(float));
+      cudaMalloc(&aux_tensor, round_to_nearest_pow2(aux_size*tgt_dim_size)*sizeof(float));
       cudaMemset(aux_tensor, 0, aux_size*tgt_dim_size*sizeof(float));
       
       int grid_size = dims_prod;
@@ -243,7 +243,7 @@ extern "C" DT_tensor *tensor_tensor_mult(Scope_Struct *scope_struct, DT_tensor *
       float tgt_dim_size = Rdims[Ldims.size()];
       float aux_size = DimsProd(Ldims);
       float *aux_tensor, *aux_free;
-      cudaMalloc(&aux_tensor, aux_size*tgt_dim_size*sizeof(float));
+      cudaMalloc(&aux_tensor, round_to_nearest_pow2(aux_size*tgt_dim_size)*sizeof(float));
       cudaMemset(aux_tensor, 0, aux_size*tgt_dim_size*sizeof(float));
       
       int grid_size = dims_prod;
@@ -313,7 +313,7 @@ extern "C" DT_tensor *tensor_tensor_div(Scope_Struct *scope_struct, DT_tensor *t
       float tgt_dim_size = Ldims[Rdims.size()];
       float aux_size = DimsProd(Rdims);
       float *aux_tensor, *aux_free;
-      cudaMalloc(&aux_tensor, aux_size*tgt_dim_size*sizeof(float));
+      cudaMalloc(&aux_tensor, round_to_nearest_pow2(aux_size*tgt_dim_size)*sizeof(float));
       cudaMemset(aux_tensor, 0, aux_size*tgt_dim_size*sizeof(float));
       
       int grid_size = dims_prod;
@@ -336,7 +336,7 @@ extern "C" DT_tensor *tensor_tensor_div(Scope_Struct *scope_struct, DT_tensor *t
       float tgt_dim_size = Rdims[Ldims.size()];
       float aux_size = DimsProd(Ldims);
       float *aux_tensor, *aux_free;
-      cudaMalloc(&aux_tensor, aux_size*tgt_dim_size*sizeof(float));
+      cudaMalloc(&aux_tensor, round_to_nearest_pow2(aux_size*tgt_dim_size)*sizeof(float));
       cudaMemset(aux_tensor, 0, aux_size*tgt_dim_size*sizeof(float));
       
       int grid_size = dims_prod;

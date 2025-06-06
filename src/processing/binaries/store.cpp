@@ -7,6 +7,7 @@
 #include <cuda_runtime.h>
 
 #include "../../tensor/tensor_struct.h"
+#include "../../tensor/pool.h"
 
 
 extern "C" float save_as_bin(int thread_id, DT_tensor *tensor, char *bin_name)
@@ -20,7 +21,7 @@ extern "C" float save_as_bin(int thread_id, DT_tensor *tensor, char *bin_name)
 
 
   if (tensor->cpu_tensor_ptr==nullptr)
-    cudaMallocHost(&tensor->cpu_tensor_ptr, tensor->dims_prod*sizeof(float));
+    cudaMallocHost(&tensor->cpu_tensor_ptr, round_to_nearest_pow2(tensor->dims_prod)*sizeof(float));
   
   cudaMemcpy(tensor->cpu_tensor_ptr, tensor->tensor_ptr, tensor->dims_prod*sizeof(float), cudaMemcpyDeviceToHost);
 

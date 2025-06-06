@@ -45,7 +45,7 @@ int round_to_nearest_pow2(int x) {
     if (x == 0) return 1; // By convention, or you can return 0
 
     int abs_x = std::abs(x);
-    int exp = std::round(std::log2(abs_x));
+    int exp = std::ceil(std::log2(abs_x));
     int result = 1 << exp;
 
     // Clamp to avoid overflow
@@ -62,6 +62,7 @@ float *get_from_pool(int thread_id, int dims_prod, std::string from, bool is_new
   if (dims_prod==0)
     return nullptr;
 
+  dims_prod = round_to_nearest_pow2(dims_prod);
   // if (dims_prod==393216)
   //   std::cout << "*************Get " << from << ".\n";
 
@@ -100,6 +101,7 @@ void move_to_pool(int thread_id, int dims_prod, float *tensor_ptr, std::string f
   if (dims_prod==0)
     return;
   //std::cout << "move_to_pool from: " << from << "\n";
+  dims_prod = round_to_nearest_pow2(dims_prod);
   
 
   std::vector<float *> tensors_in_pool = TensorPool[thread_id][dims_prod];

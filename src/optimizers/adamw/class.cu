@@ -7,6 +7,7 @@
 #include "../../cuda_kernels/calculate_grids.h"
 #include "../../mangler/scope_struct.h"
 #include "../../tensor/tensor_dim_functions.h"
+#include "../../tensor/pool.h"
 
 #include "../common.h"
 #include "class.h"
@@ -31,8 +32,8 @@ void AdamW_optim::init_states(std::string param_name, float params_count)
     m = make_zeros_float(params_count);
 
 
-    cudaMalloc(&device_v, params_count*sizeof(float));
-    cudaMalloc(&device_m, params_count*sizeof(float));
+    cudaMalloc(&device_v, round_to_nearest_pow2(params_count)*sizeof(float));
+    cudaMalloc(&device_m, round_to_nearest_pow2(params_count)*sizeof(float));
     cudaMemcpy(device_v, v, params_count*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(device_m, m, params_count*sizeof(float), cudaMemcpyHostToDevice);
 

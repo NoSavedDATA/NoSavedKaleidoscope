@@ -52,8 +52,8 @@ MHSA::MHSA(int nh, int C, int maxT, std::string Init, int_vec *Notators, std::st
     W_cpu = make_xavier_uniform_float(3*C*C, C, 3*C);
     W_proj_cpu = make_xavier_uniform_float(C*C, C, C);
 
-    cudaMalloc(&W,       3*C*C*sizeof(float));
-    cudaMalloc(&W_proj,  C*C*sizeof(float));
+    cudaMalloc(&W,       round_to_nearest_pow2(3*C*C)*sizeof(float));
+    cudaMalloc(&W_proj,  round_to_nearest_pow2(C*C)  *sizeof(float));
     cudaMemcpy(W, W_cpu, 3*C*C * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(W_proj, W_proj_cpu, C*C * sizeof(float), cudaMemcpyHostToDevice);
 

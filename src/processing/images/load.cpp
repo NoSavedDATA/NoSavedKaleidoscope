@@ -4,6 +4,7 @@
 #include "../../compiler_frontend/logging.h"
 #include "../../mangler/scope_struct.h"
 #include "../../tensor/tensor_dim_functions.h"
+#include "../../tensor/pool.h"
 #include "stb_lib.h"
 #include "load.h"
 #include "interpolate.h"
@@ -304,7 +305,7 @@ extern "C" float load_preprocess_img(Scope_Struct *scope_struct,DT_tensor tensor
 
 
   current_data = new float[img_dims_prod];
-  cudaCheck(cudaMallocHost(&current_data, img_dims_prod*sizeof(float)));
+  cudaCheck(cudaMallocHost(&current_data, round_to_nearest_pow2(img_dims_prod)*sizeof(float)));
 
 
   for (int j = 0; j < img_dims_prod; ++j)

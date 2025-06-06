@@ -456,10 +456,10 @@ extern "C" DT_tensor *topk(int thread_id, DT_tensor tensor, int k)
 
   cudaStream_t stream = ThreadsStream[thread_id];
   
-  cudaMalloc(&maxed, new_dims_prod*sizeof(float));
-  cudaMalloc(&argmaxed, new_dims_prod*sizeof(float));
-  cudaMalloc(&topk, topk_dims_prod * sizeof(float));
-  cudaMalloc(&tensor_copy, dims_prod*sizeof(float));
+  cudaMalloc(&maxed, round_to_nearest_pow2(new_dims_prod)*sizeof(float));
+  cudaMalloc(&argmaxed, round_to_nearest_pow2(new_dims_prod)*sizeof(float));
+  cudaMalloc(&topk, round_to_nearest_pow2(topk_dims_prod) * sizeof(float));
+  cudaMalloc(&tensor_copy, round_to_nearest_pow2(dims_prod)*sizeof(float));
   cudaMemset(maxed, 0, new_dims_prod*sizeof(float));
   cudaMemset(argmaxed, 0, new_dims_prod*sizeof(float));
   cudaMemset(topk, 0, topk_dims_prod * sizeof(float));

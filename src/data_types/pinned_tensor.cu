@@ -42,7 +42,7 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
   float *tensor_cpu;
 
 
-  cudaMallocHost(&tensor_cpu, product*sizeof(float));
+  cudaMallocHost(&tensor_cpu, round_to_nearest_pow2(product)*sizeof(float));
   //tensor_cpu = new float[product];
 
   for (int i = 0; i < product; ++i) {
@@ -50,7 +50,7 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
   }
   
 
-  cudaMalloc(&tensor_ptr, product*sizeof(float));  
+  cudaMalloc(&tensor_ptr, round_to_nearest_pow2(product)*sizeof(float));  
   tensor = createPinned(tensor_ptr, tensor_cpu, dims, product, tensor_name);
   NamedTensorsT[tensor_name] = tensor;
   
