@@ -203,7 +203,7 @@ DT_tensor *createCudaTensor(int thread_id, std::string type, const std::vector<i
     std::vector<int> new_dims = RemoveLastDim(dims);
     new_dims.push_back(cuda_tensor->aN);
     int kDataLen = cuda_dims[0] * cuda_tensor->aN;
-    std::cout << "kDataLen: " << kDataLen << ".\n";
+    // std::cout << "kDataLen: " << kDataLen << ".\n";
     new_tensor->NewTensor((float*)cuda_tensor->tensor, new_dims, kDataLen, is_leaf, name, cuda_stream, _loader);
     new_tensor->cuda_tensor = cuda_tensor;
 

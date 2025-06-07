@@ -4,12 +4,13 @@
 
 
 Wmma_Grid::Wmma_Grid(int gx, int gy, int warps, int bx, int by, int wx, int wy, int wmma_m, int wmma_n)
-                  : bx(bx), by(by), wx(wx), wy(wy)
+                  : bx(bx), by(by), wx(wx), wy(wy), warps(warps)
 {
   this->g.x = gx;
   this->g.y = gy;
 
-  smem = (bx+by)*64*sizeof(float); //times twice wk
+  // smem = (bx+by)*64*sizeof(float); //times twice wk
+  smem = (128+64)*64*sizeof(float); //times twice wk
 
 
   bx_per_w = bx / warps; // each bx work is splitted accross warps

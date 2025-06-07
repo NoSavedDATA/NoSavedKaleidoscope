@@ -80,6 +80,7 @@ __device__ inline void
 wmma_foreach_ij(wmma::fragment<wmma::matrix_a, 16, 16, 16, int8_t, wmma::row_major> &frag,
            Func func) {
 
+
   const unsigned lane_id = threadIdx.x & 0x1f;
   const auto i_offset = lane_id / 4;
   const auto j_offset = (lane_id & 0b11) * 4;
@@ -98,6 +99,7 @@ template <class Func>
 __device__ inline void
 wmma_foreach_ij(wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_major> &frag,
            Func func) {
+
   const unsigned lane_id = threadIdx.x & 0x1f;
   const auto i_offset = lane_id / 4;
   const auto j_offset = (lane_id & 0b11) * 4;
@@ -108,6 +110,7 @@ wmma_foreach_ij(wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_maj
     const unsigned frag_index_list[1] = {x};
     func(frag_index_list, 1, i, j);
   }
+
 }
 
 
