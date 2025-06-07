@@ -12,6 +12,7 @@
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
+#include "../nsk_cuda/pool/include.h"
 #include "../tensor/include.h"
 #include "include.h"
 

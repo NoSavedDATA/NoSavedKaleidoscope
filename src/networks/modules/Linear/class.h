@@ -27,6 +27,7 @@ class LinearCPP
     float *W, *dW;
     int8_t *x8=nullptr, *w8;
     Minimal_Tensor *scale_M=nullptr, *scale_N=nullptr, *scale_K=nullptr;
+    CudaTensor *W_tensor, *dW_tensor;
     bool first_backward, changed_descriptors;
 
     std::vector<std::string> Notes;

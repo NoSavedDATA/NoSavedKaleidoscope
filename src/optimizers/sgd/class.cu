@@ -5,8 +5,8 @@
 #include "../../common/cu_commons.h"
 #include "../../cuda_kernels/calculate_grids.h"
 #include "../../mangler/scope_struct.h"
+#include "../../nsk_cuda/pool/include.h"
 #include "../../tensor/tensor_dim_functions.h"
-#include "../../tensor/pool.h"
 
 #include "../common.h"
 #include "class.h"

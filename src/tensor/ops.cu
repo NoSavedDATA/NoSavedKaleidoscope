@@ -9,6 +9,7 @@
 #include "../compiler_frontend/include.h"
 #include "../char_pool/include.h"
 #include "../cuda_kernels/include.h"
+#include "../nsk_cuda/pool/include.h"
 #include "tensor_dim_functions.h"
 #include "tensor_struct.h"
 

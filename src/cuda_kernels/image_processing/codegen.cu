@@ -4,6 +4,7 @@
 #include "../../codegen/random.h"
 #include "../../common/cu_commons.h"
 #include "../../compiler_frontend/logging.h"
+#include "../../nsk_cuda/pool/include.h"
 #include "../../tensor/include.h"
 #include "../calculate_grids.h"
 #include "../handles.h"

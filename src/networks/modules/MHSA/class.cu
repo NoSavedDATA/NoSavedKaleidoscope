@@ -18,6 +18,7 @@
 #include "../../../cuda_kernels/handles.h"
 #include "../../../cuda_kernels/elementwise_kernels_inline.cu"
 #include "../../../notators/notators.h"
+#include "../../../nsk_cuda/pool/include.h"
 #include "../../../tensor/include.h"
 #include "class.h"
 #include "kernels.h"

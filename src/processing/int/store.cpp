@@ -4,8 +4,8 @@
 #include <iostream>
 
 
+#include "../../nsk_cuda/pool/include.h"
 #include "../../tensor/tensor_struct.h"
-#include "../../tensor/pool.h"
 
 extern "C" float save_as_int(int thread_id, DT_tensor *tensor, char *bin_name)
 {

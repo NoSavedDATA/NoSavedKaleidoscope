@@ -32,8 +32,7 @@
 
 #include <cuda_fp16.h>
 
-#include "../common/include.h"
-#include "../compiler_frontend/logging.h"
+#include "../utils/include.h"
 #include "include.h"
 
 

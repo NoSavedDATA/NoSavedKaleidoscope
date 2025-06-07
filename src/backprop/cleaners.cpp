@@ -2,6 +2,8 @@
 #include "../codegen/scope.h"
 #include "../common/include.h"
 #include "../mangler/scope_struct.h"
+#include "../nsk_cuda/pool/include.h"
+#include "../nsk_cuda/utils/include.h"
 #include "cleaners.h"
 
 

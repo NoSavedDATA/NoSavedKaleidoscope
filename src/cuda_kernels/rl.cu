@@ -9,6 +9,7 @@
 #include "../backprop/include.h"
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
+#include "../nsk_cuda/pool/include.h"
 #include "../tensor/include.h"
 #include "calculate_grids.h"
 #include "rl_kernels.h"

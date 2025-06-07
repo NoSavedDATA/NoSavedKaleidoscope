@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "../cuda_threads/include.h"
+#include "../nsk_cuda/minimal_tensor.h"
 
 enum NN_Mode {
   eval_mode = 0,
@@ -134,6 +135,8 @@ struct DT_tensor {
   int op;
   std::string operation;
 
+  CudaTensor *cuda_tensor;
+
   DT_tensor *R_Node, *L_Node, *Sparse_Idx_Tensor;
   bool visited;
 
@@ -166,6 +169,9 @@ struct DT_tensor {
 };
 
 DT_tensor *createTensor(float* tensor_ptr, const std::vector<int>& dims, int kDataLen,
+                     bool is_leaf, std::string name, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
+
+DT_tensor *createCudaTensor(int thread_id, std::string type, const std::vector<int>& dims,
                      bool is_leaf, std::string name, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
                      
 DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<int>& dims, int kDataLen,

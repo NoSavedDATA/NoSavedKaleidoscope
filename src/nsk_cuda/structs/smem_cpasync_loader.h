@@ -20,7 +20,7 @@ struct smem_cpasync_wmma_loader {
   __device__ smem_cpasync_wmma_loader(T *smem, wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx, int xor_swap)
         : smem(smem), wmma_idx(wmma_idx), xor_swap(xor_swap) {
     // printf("laneId is %d\n", wmma_idx.laneId);
-    xor_addr = smem_xor_cp_async(wmma_idx.laneId);
+    // xor_addr = smem_xor_cp_async(wmma_idx.laneId);
     xor_load_offset = xor_swap;
   }
 
