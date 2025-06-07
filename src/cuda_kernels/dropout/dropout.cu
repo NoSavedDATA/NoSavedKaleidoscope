@@ -2,8 +2,9 @@
 #include <cuda_runtime.h>
 
 #include "../../codegen/random.h"
-#include "../../tensor/include.h"
 #include "../../cuda_threads/include.h"
+#include "../../nsk_cuda/pool/include.h"
+#include "../../tensor/include.h"
 #include "../include.h"
 
 

@@ -84,11 +84,16 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
       W_cpu = make_random_int(product, 1);
 
 
-    cudaMalloc(&W,       round_to_nearest_pow2(product) * sizeof(float));
-    cudaMemcpy(W, W_cpu, product * sizeof(float), cudaMemcpyHostToDevice);
+    // cudaMalloc(&W,       round_to_nearest_pow2(product) * sizeof(float));
+    // cudaMemcpy(W, W_cpu, product * sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_W = createTensor(W, {OC*C}, product, true, Name+"W");
+    // DT_tensor *tensor_W = createTensor(W, {OC*C}, product, true, Name+"W");
+    DT_tensor *tensor_W = createCudaTensor(0, "float", {OC, C}, true, Name+"W");
     tensor_W->SetIsWeight();
+    W = tensor_W->tensor_ptr;
+    W_tensor = tensor_W->cuda_tensor;
+    
+    cudaMemcpy(W, W_cpu, product * sizeof(float), cudaMemcpyHostToDevice);
 
     NamedTensorsT[Name+"W"] = tensor_W;
 
@@ -182,8 +187,6 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
   } else if (precision==2) {
 
 
-    // x8 = get_i8pool(0, B*C, "x8");
-    // w8 = get_i8pool(0, OC*C, "w8");
 
 
 
@@ -202,6 +205,8 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
 
 
     // cudaCheck(cudaGetLastError());
+
+    // std::cout << "i8 mma M " << B << " N " << OC << " K " << C << "\n";
 
     constexpr int WMMA_T{16};
     blocking_mma_i8<WMMA_T>(x8, w8, out, (float*)scale_M->tensor, (float*)scale_N->tensor, B, OC, C, stream);
@@ -240,10 +245,15 @@ void LinearCPP::FirstBackward()
 {
   dW = get_from_pool(0, OC*C, "MHSA dW");
 
-  set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C);
+  DT_tensor *tensor_W = createCudaTensor(0, "float", {OC, C}, true, Name+"W");
+  dW = tensor_W->tensor_ptr;
+  dW_tensor = tensor_W->cuda_tensor;
+
+
+  set_to_zero_kernel<<<std::ceil(tensor_W->dims_prod/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, tensor_W->dims_prod);
+
 
   NamedParamGrads[Name+"W"] = dW;
-
   first_backward=false;
 }
 

@@ -4,6 +4,7 @@
 
 #include "../../backprop/include.h"
 #include "../../mangler/scope_struct.h"
+#include "../../nsk_cuda/pool/include.h"
 #include "../../tensor/include.h"
 #include "../activation_functions/include.h"
 #include "../calculate_grids.h"

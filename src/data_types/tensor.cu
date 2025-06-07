@@ -13,6 +13,7 @@
 #include "../cuda_kernels/calculate_grids.h"
 #include "../cuda_kernels/elementwise_kernels_inline.cu"
 #include "../mangler/scope_struct.h"
+#include "../nsk_cuda/pool/include.h"
 #include "../tensor/include.h"
 #include "include.h"
 

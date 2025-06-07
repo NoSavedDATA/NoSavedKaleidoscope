@@ -4,6 +4,7 @@
 #include "../tensor/include.h"
 #include "../cuda_threads/include.h"
 #include "../mangler/scope_struct.h"
+#include "../nsk_cuda/pool/include.h"
 #include "include.h"
 
 extern "C" DT_tensor *tensor_float_mult(Scope_Struct *scope_struct, DT_tensor *tensor, float R) {

@@ -15,6 +15,7 @@
 #include "../../../common/cu_commons.h"
 #include "../../../cuda_kernels/handles.h"
 #include "../../../cuda_kernels/elementwise_kernels_inline.cu"
+#include "../../../nsk_cuda/pool/include.h"
 #include "../../../tensor/include.h"
 #include "class.h"
 #include "kernels.h"

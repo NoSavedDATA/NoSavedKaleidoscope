@@ -5,6 +5,7 @@
 #include "../mangler/scope_struct.h"
 #include "../mma/general.h"
 #include "../networks/modules/include.h"
+#include "../nsk_cuda/pool/include.h"
 #include "../tensor/tensor_struct.h"
 #include "include.h"
 

@@ -1,14 +1,16 @@
-#include<string>
-#include<map>
-#include<vector>
-#include<iostream>
 #include<algorithm>
+#include<iostream>
+#include<map>
 #include<random>
+#include<string>
 #include<thread>
+#include<vector>
 
 #include <cuda_fp16.h>
 
 #include "../common/include.h"
+#include "../nsk_cuda/minimal_tensor.h"
+#include "tensor_dim_functions.h"
 #include "tensor_struct.h"
 
 
@@ -183,6 +185,32 @@ DT_tensor *createTensor(float* tensor_ptr, const std::vector<int>& dims, int kDa
     new_tensor->NewTensor(tensor_ptr, dims, kDataLen, is_leaf, name, cuda_stream, _loader);
     return new_tensor;
 }
+
+
+
+DT_tensor *createCudaTensor(int thread_id, std::string type, const std::vector<int>& dims,
+                     bool is_leaf, std::string name, cudaStream_t cuda_stream, Loader *_loader) {
+    DT_tensor *new_tensor = new DT_tensor();
+    std::vector<int> cuda_dims;
+    
+    if (dims.size()>=2)
+      cuda_dims = format_LinearLayer_Dims(dims);
+    else
+      cuda_dims = {1, dims[0]};
+
+    CudaTensor *cuda_tensor = new CudaTensor(thread_id, cuda_dims[0], cuda_dims[1], type);
+    
+    std::vector<int> new_dims = RemoveLastDim(dims);
+    new_dims.push_back(cuda_tensor->aN);
+    int kDataLen = cuda_dims[0] * cuda_tensor->aN;
+    std::cout << "kDataLen: " << kDataLen << ".\n";
+    new_tensor->NewTensor((float*)cuda_tensor->tensor, new_dims, kDataLen, is_leaf, name, cuda_stream, _loader);
+    new_tensor->cuda_tensor = cuda_tensor;
+
+    return new_tensor;
+}
+
+
 DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<int>& dims, int kDataLen,
                      bool is_leaf, std::string name, cudaStream_t cuda_stream, Loader *_loader) {
     DT_tensor *new_tensor = new DT_tensor();
