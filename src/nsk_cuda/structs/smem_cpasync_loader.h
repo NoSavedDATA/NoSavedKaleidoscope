@@ -20,7 +20,7 @@ struct smem_cpasync_wmma_loader {
   __device__ smem_cpasync_wmma_loader(T *smem, wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx, int xor_swap)
         : smem(smem), wmma_idx(wmma_idx), xor_swap(xor_swap) {
     // printf("laneId is %d\n", wmma_idx.laneId);
-    // xor_addr = smem_xor_cp_async(wmma_idx.laneId);
+    xor_addr = smem_xor_cp_async(wmma_idx.laneId);
     xor_load_offset = xor_swap;
   }
 
@@ -49,7 +49,7 @@ struct smem_cpasync_wmma_loader {
       for(int i=0; i<M*N; ++i)
       {
         for(int j=0;j<N;++j)
-          printf("%f, ", x_smem[(i/N)*N + i%N]);
+          printf("%f, ", x_smem[(i/N)*N + i]);
         printf("\n");
       }
       printf("\n\n");
@@ -60,14 +60,12 @@ struct smem_cpasync_wmma_loader {
   __device__ void print_i8(T *x_smem, int M, int N) {
     if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
     {
-      M = M*2;
-      N = N/2;
       int8_t *i_smem = (int8_t*)x_smem;
 
       for(int i=0; i<M; ++i)
       {
         for(int j=0;j<N;++j)
-          printf("%d, ", (int)i_smem[i*N + j%N]);
+          printf("%d, ", (int)i_smem[i*N + j]);
         printf("\n");
       }
       printf("\n\n");
@@ -103,7 +101,7 @@ struct smem_cpasync_wmma_loader {
                               float *x_smem,
                               const int WMMA_N, int k_stride)
   {
-    for (int w_tile=0; w_tile<warp_cols_per_n; ++w_tile)
+    for (int w_tile=0; w_tile<warp_rows_per_m; ++w_tile) // Each warp tile handles 16 rows
       smem_xor_to_reg_A(frag_loader.x_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_N)*wmma_idx.wk, wmma_idx.wk, k_stride);
   }
 
@@ -122,7 +120,7 @@ struct smem_cpasync_wmma_loader {
                               float *x_smem,
                               const int WMMA_N, int k_stride)
   {
-    for (int w_tile=0; w_tile<warp_cols_per_n; ++w_tile)
+    for (int w_tile=0; w_tile<warp_rows_per_m; ++w_tile)
       smem_xor_to_reg_A(frag_loader.x_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_N)*32, 32, k_stride);
   }
 
@@ -216,7 +214,10 @@ struct smem_cpasync_wmma_loader {
                                          int M, int N, const int WMMA_M, const int WMMA_N, const int WMMA_K)
   {
 
-    float *out_smem = smem + wmma_idx.warp_y*WMMA_M*(wmma_idx.bx_per_wx*WMMA_K) + wmma_idx.warp_x*WMMA_N; // todo: is this correct?
+    // float *out_smem = smem + wmma_idx.warp_y*WMMA_M*(wmma_idx.bx_per_wx*WMMA_K) + wmma_idx.warp_x*WMMA_N; // todo: is this correct?
+    
+    float *out_smem = smem + wmma_idx.warpId*WMMA_K;
+
 
     for (int wx_tile=0; wx_tile<warp_rows_per_m; ++wx_tile)
     {
@@ -230,8 +231,8 @@ struct smem_cpasync_wmma_loader {
         if (threaded_row<M && threaded_col<N && (wmma_idx.warp_y*wmma_idx.wy)<M && (wmma_idx.warp_x*wmma_idx.wx)<N)
         {
           
-          frag_to_mem(frag_loader.acc_frag+(wx_tile*warp_cols_per_n + wy_tile)*8, out_smem, wmma_idx.bx_per_wx*WMMA_K);
-                  
+          frag_to_mem(frag_loader.acc_frag+(wx_tile*warp_cols_per_n + wy_tile)*8, out_smem, 64);
+          
           
           store_C(out, out_smem, scale_M, scale_N, threaded_row, threaded_col, M, N, WMMA_M, WMMA_N, WMMA_K);
         }

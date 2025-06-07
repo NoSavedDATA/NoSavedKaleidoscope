@@ -21,7 +21,7 @@ struct Wmma_Grid {
   int bx_per_w;
   int by_per_w;
 
-  int wx, wy, bx, by, bx_per_wx, by_per_wy, wx_per_wmma_m, wy_per_wmma_n;
+  int wx, wy, bx, by, bx_per_wx, by_per_wy, wx_per_wmma_m, wy_per_wmma_n, warps;
 
   Wmma_Grid(int gx, int gy, int warps, int bx, int by, int wx, int wy, int wmma_m, int wmma_n);
 };

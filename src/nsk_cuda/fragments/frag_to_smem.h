@@ -7,7 +7,7 @@ using namespace nvcuda;
 
 
 
-__inline__ __device__ void frag_to_mem(const float *frag, float *gmem, const int ld)
+__inline__ __device__ void frag_to_mem(const float *frag, float *smem, const int ld)
 {
   const auto func_y = [&](const unsigned* frag_index_list,
         const unsigned fragment_index_count,
@@ -17,7 +17,7 @@ __inline__ __device__ void frag_to_mem(const float *frag, float *gmem, const int
         
     #pragma unroll
         for (unsigned f = 0; f < fragment_index_count; f++)
-          gmem[i*ld + j] = frag[frag_index_list[f]];
+          smem[i*ld + j] = frag[frag_index_list[f]];
     };
 
   __syncwarp();
@@ -25,7 +25,7 @@ __inline__ __device__ void frag_to_mem(const float *frag, float *gmem, const int
   __syncwarp();
 }
 
-__inline__ __device__ void frag_to_mem_ec(const float *frag, const float *delta_frag, float *gmem, const int ld)
+__inline__ __device__ void frag_to_mem_ec(const float *frag, const float *delta_frag, float *smem, const int ld)
 {
   const auto func_y = [&](const unsigned* frag_index_list,
         const unsigned fragment_index_count,
@@ -35,7 +35,7 @@ __inline__ __device__ void frag_to_mem_ec(const float *frag, const float *delta_
         
     #pragma unroll
         for (unsigned f = 0; f < fragment_index_count; f++)
-          gmem[i*ld + j] = frag[frag_index_list[f]] + delta_frag[frag_index_list[f]]/2048;
+          smem[i*ld + j] = frag[frag_index_list[f]] + delta_frag[frag_index_list[f]]/2048;
     };
 
   __syncwarp();
@@ -50,7 +50,7 @@ __inline__ __device__ void frag_to_mem_ec(const float *frag, const float *delta_
 
 
 
-__inline__ __device__ void frag_to_mem(const int *frag, float *gmem, const int ld)
+__inline__ __device__ void frag_to_mem(const int *frag, float *smem, const int ld)
 {
   const auto func_y = [&](const unsigned* frag_index_list,
         const unsigned fragment_index_count,
@@ -60,7 +60,7 @@ __inline__ __device__ void frag_to_mem(const int *frag, float *gmem, const int l
         
     #pragma unroll
         for (unsigned f = 0; f < fragment_index_count; f++)
-          gmem[i*ld + j] = ((float)frag[frag_index_list[f]]);
+          smem[i*ld + j] = ((float)frag[frag_index_list[f]]);
     };
 
   __syncwarp();

@@ -190,28 +190,19 @@ __inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 
         const unsigned j) {
       
 
-          int wi = i/4;
-          int xi = i%4;
+          
 
-          int xj = j/4;
-          int wj = j%4;
 
-          int offset = k_stride*16 + xi*4 + xj;
+      int8_t tmp = * ( ((const int8_t *)smem) + k_stride*256 + i*16 + j);
 
-        
-          const float *out_smem = smem + (wi*4)*ld + offset;
+      // if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
+      // {
+      //   printf("i-%d  j-%d;   xi-%d  xj-%d;   strided: %d;   offset: %d\n", i, j, xi, xj, xj+k_stride, offset);
+      //   printf("  wi-%d  wj-%d\n", wi, wj);
+      //   printf("  tmp-%d\n", (int)tmp);       
+      // }
 
-          int8_t tmp = * ( ((const int8_t *)out_smem) + wj);
-
-          // if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
-          // {
-          //   printf("i-%d  j-%d;   xi-%d  xj-%d;   strided: %d;   offset: %d\n", i, j, xi, xj, xj+k_stride, offset);
-          //   printf("  wi-%d  wj-%d\n", wi, wj);
-          //   printf("  tmp-%d\n", (int)tmp);       
-          // }
-
-          frag.x[frag_index_list[0]] = tmp;
-
+      frag.x[frag_index_list[0]] = tmp;
     };
 
   wmma_foreach_ij(
@@ -230,20 +221,10 @@ __inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 
         const unsigned i,
         const unsigned j) {
               
-          int wi = i/4;
-          int xi = i%4;
+      
+      int8_t tmp = * ( ((const int8_t *)smem) + k_stride*256 + i*16 + j);
 
-          int xj = j/4;
-          int wj = j%4;
-
-          int offset = k_stride*16 + xi*4 + xj;
-
-        
-          const float *out_smem = smem + (wi*4)*ld + offset;
-
-          int8_t tmp = * ( ((const int8_t *)out_smem) + wj);
-
-          frag.x[frag_index_list[0]] = tmp;
+      frag.x[frag_index_list[0]] = tmp;
     };
 
   wmma_foreach_ij(

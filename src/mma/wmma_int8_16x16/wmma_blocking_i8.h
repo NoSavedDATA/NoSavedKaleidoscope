@@ -20,6 +20,7 @@ template<int WMMA_T, int wx_per_wmma_m, int wy_per_wmma_n, int wk>
 __global__ void wmma_blocking_i8(const int8_t *__restrict__ x, const int8_t *__restrict__ w,
                         float *__restrict__ out, const float *scale_M, const float *scale_N,
                         const int M, const int N, const int K,
+                        const int num_warps,
                         const int bx, const int by,
                         const int wx, const int wy,
                         const int bx_per_w,     const int by_per_w,
@@ -39,9 +40,11 @@ __global__ void wmma_blocking_i8(const int8_t *__restrict__ x, const int8_t *__r
   // frag_loader.investigate_mapping(smem);
 
 
-  wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, 32);
+  wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, 16, 1, num_warps);
   
   smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*32);
+  // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
+  //   printf("by %d by*32 %d\n", by, by*32);
   float *x_smem = smem_loader.smem_malloc(smem, by*32);
   float *w_smem = smem_loader.smem_malloc(smem);
 

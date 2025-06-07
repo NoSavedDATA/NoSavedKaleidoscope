@@ -52,8 +52,8 @@ __device__ void blocking_tiled_wmma_i8_16x16x16(i8_wmma_frags<warp_rows_per_m, w
 
         __syncthreads();
 
-        // smem_loader.print_i8(x_smem, 8, 32);
-        // smem_loader.print_i8(w_smem, 8, 32);
+        // smem_loader.print_i8(x_smem, 8, 16);
+        // smem_loader.print_i8(w_smem, 8, 16);
 
         for (int k_stride=0; k_stride<2; ++k_stride)
         {
@@ -62,7 +62,5 @@ __device__ void blocking_tiled_wmma_i8_16x16x16(i8_wmma_frags<warp_rows_per_m, w
 
             warp_tiled_wmma_i8_16x16x16(frag_loader, wmma_idx, M, N, WMMA_M, WMMA_N);
         }
-        // asm volatile("cp.async.wait_all;");
-        // __syncthreads();
     }
 }

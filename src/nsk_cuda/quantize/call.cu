@@ -11,7 +11,7 @@
 void quantize_f32_to_i8(int8_t *x8, float *x, Minimal_Tensor *scale, float quant, int M, int N, cudaStream_t stream)
 {
     int base_num_warps = 8;
-    const int num_warp_factor = 1;
+    const int num_warp_factor = 2;
     const int num_warps = base_num_warps*num_warp_factor;
     const int max_N  = 1536/num_warp_factor;
 

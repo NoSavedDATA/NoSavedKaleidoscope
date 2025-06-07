@@ -13,6 +13,9 @@ __inline__ __device__ void wmma16x16x16_i8(int *O,
 
 
 
+
+   // 1 lane handles 16 columns
+
    asm volatile(
       "wmma.mma.sync.aligned.m16n16k16.row.col.s32.s8.s8.s32 "
       "{%0,%1,%2,%3,%4,%5,%6,%7}, "    // D matrix
@@ -32,10 +35,10 @@ __inline__ __device__ void wmma16x16x16_i8(int *O,
 
 //  if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
 //    {
-//       printf("\nX: %d - %d - %d - %d\n", (int)_X[0], (int)_X[1], (int)_X[2], (int)_X[3]);
-//       printf("X: %d - %d - %d - %d\n", (int)_X[4], (int)_X[5], (int)_X[6], (int)_X[7]);
-//       printf("\nW: %d - %d - %d - %d\n", (int)_W[0], (int)_W[1], (int)_W[2], (int)_W[3]);
-//       printf("W: %d - %d - %d - %d\n\n", (int)_W[4], (int)_W[5], (int)_W[6], (int)_W[7]);
+//       printf("\nX: %d, %d, %d, %d\n", (int)_X[0], (int)_X[1], (int)_X[2], (int)_X[3]);
+//       printf("X: %d, %d, %d, %d\n", (int)_X[4], (int)_X[5], (int)_X[6], (int)_X[7]);
+//       printf("\nW: %d, %d, %d, %d\n", (int)_W[0], (int)_W[1], (int)_W[2], (int)_W[3]);
+//       printf("W: %d, %d, %d, %d\n\n", (int)_W[4], (int)_W[5], (int)_W[6], (int)_W[7]);
 //       for(int i=0; i<8; ++i)
 //       {
 //          printf("%d, ", O[i]);
