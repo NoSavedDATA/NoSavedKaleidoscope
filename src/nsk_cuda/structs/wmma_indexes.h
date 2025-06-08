@@ -17,8 +17,8 @@ struct wmma_indexes {
     warpId = threadIdx.x / warpSize;
     laneId = (threadIdx.x) % warpSize;
 
-    warp_y = warpId / bx_per_wx;
-    warp_x = warpId % bx_per_wx;
+    warp_y = warpId / 4; // BLOCK_ROW_WARPS: 2
+    warp_x = warpId % 4; // BLOCK_COL_WARPS: 4
     
     by_warp_offset = by_per_w*warpId;
     bx_warp_offset = bx_per_w*warpId;
