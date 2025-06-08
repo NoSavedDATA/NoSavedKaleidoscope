@@ -40,7 +40,8 @@ __global__ void wmma_blocking_i8(const int8_t *__restrict__ x, const int8_t *__r
   // frag_loader.investigate_mapping(smem);
 
 
-  wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, 16, 1, num_warps);
+  wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, 32, 2, num_warps);
+  // Load 2 columns of 16, because the maximum supported number of rows per ptx is wmma_m==16
   
   smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*32);
   // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)

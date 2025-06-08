@@ -86,9 +86,11 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
     // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
     //     printf("Copy chunks: %d - mem used: %d\n", copy_chunks, copy_chunks*wmma_idx.cp_rows*wmma_idx.num_warps*4);
     
+    // if(wmma_idx.warpId!=0)
     for(int block_tile=0; block_tile<copy_chunks; ++block_tile)
     {
-        int row = wmma_idx.block_y*wmma_idx.blocking_size_y + wmma_idx.by_warp_offset + block_tile*wmma_idx.cp_rows + wmma_idx.ml;
+        int row = wmma_idx.block_y*wmma_idx.blocking_size_y + (wmma_idx.warpId*copy_chunks + block_tile)*wmma_idx.cp_rows + wmma_idx.ml;
+        // int row = wmma_idx.block_y*wmma_idx.blocking_size_y + wmma_idx.by_warp_offset + block_tile*wmma_idx.cp_rows + wmma_idx.ml; // 4 from 4 ml loaded rows
         int col = next_tile+wmma_idx.mw*16;
         const int8_t *gmem_ptr = x + row*N + col;
 
@@ -101,13 +103,13 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
         int trunc_to = std::max(std::min(( (N-col)), 16), 0);
         if (trunc_to==16)
         {
-            gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.by_warp_offset + block_tile*4)*32 + wmma_idx.laneId*4), // 4 * 32 == jumps of 128
+            gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.warpId*copy_chunks + block_tile)*128 + wmma_idx.laneId*4), // 4 * 32 == jumps of 128
                 (row<M) ? trunc_to : 0); // last *4 tells that sizeof float is 4
         }
         else
         {
             // printf("Truncating to %d | N: %d\n", trunc_to, N);
-            float *smem_ptr = x_smem + xor_store_offset + (wmma_idx.by_warp_offset + block_tile*4)*32 + wmma_idx.laneId*4;
+            float *smem_ptr = x_smem + xor_store_offset + (wmma_idx.warpId*copy_chunks + block_tile)*128 + wmma_idx.laneId*4;
             int8_t *smem_i8 = (int8_t *)smem_ptr; 
             for(int i=0; i<16; ++i)
             {
@@ -117,7 +119,6 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
                     smem_i8[i] = 0.0f;
             }
         }
-        // xor addr(laneId): up to 128, jump by 4 
     }
 }
 
@@ -126,19 +127,21 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
 
     int copy_chunks = floor((wmma_idx.blocking_size_x + (wmma_idx.cp_rows*wmma_idx.num_warps-1) ) / ((float)(wmma_idx.cp_rows*wmma_idx.num_warps)) );
 
+    // if(wmma_idx.warpId!=0)
     for(int block_tile=0; block_tile<copy_chunks; ++block_tile)
     {
-        int row = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*wmma_idx.cp_rows + wmma_idx.ml;
+        int row = wmma_idx.block_x*wmma_idx.blocking_size_x + (wmma_idx.warpId*copy_chunks + block_tile)*wmma_idx.cp_rows + wmma_idx.ml;
+        // int row = wmma_idx.block_x*wmma_idx.blocking_size_x + wmma_idx.bx_warp_offset + block_tile*wmma_idx.cp_rows + wmma_idx.ml;
         int col = next_tile+wmma_idx.mw*16; 
         const int8_t *gmem_ptr = x + row*N + col;
 
         
         int trunc_to = std::max(std::min(( (N-col)), 16), 0);
         if (trunc_to==16)
-            gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*32 + wmma_idx.laneId*4),
+            gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.warpId*copy_chunks + block_tile)*128 + wmma_idx.laneId*4), 
                         (row<M) ? trunc_to : 0);
         else {
-            float *smem_ptr = x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*32 + wmma_idx.laneId*4;
+            float *smem_ptr = x_smem + xor_store_offset + (wmma_idx.warpId*copy_chunks + block_tile)*128 + wmma_idx.laneId*4;
             int8_t *smem_i8 = (int8_t *)smem_ptr;
             for(int i=0; i<16; ++i)
             {

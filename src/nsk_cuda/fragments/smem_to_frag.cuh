@@ -182,7 +182,7 @@ __inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 
 
 
 __inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 16, 16, int8_t, wmma::row_major> &frag,
-                                  const float *smem, const int ld, const int k_stride)
+                                  const int8_t *smem, const int k_stride)
 {
   const auto func = [&](const unsigned* frag_index_list,
         const unsigned fragment_index_count,
@@ -191,9 +191,8 @@ __inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 
       
 
           
+      int8_t tmp = * (smem + k_stride*256 + i*16 + j);
 
-
-      int8_t tmp = * ( ((const int8_t *)smem) + k_stride*256 + i*16 + j);
 
       // if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
       // {
@@ -214,7 +213,7 @@ __inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 
 
 
 __inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_major> &frag,
-                                  const float *smem, const int ld, const int k_stride)
+                                  const int8_t *smem, const int k_stride)
 {
   const auto func = [&](const unsigned* frag_index_list,
         const unsigned fragment_index_count,
@@ -222,7 +221,7 @@ __inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 
         const unsigned j) {
               
       
-      int8_t tmp = * ( ((const int8_t *)smem) + k_stride*256 + i*16 + j);
+      int8_t tmp = * (smem + k_stride*256 + i*16 + j);
 
       frag.x[frag_index_list[0]] = tmp;
     };
