@@ -19,9 +19,16 @@ void blocking_mma_i8(const int8_t *x, const int8_t *w, float *o, const float *sc
 
   Wmma_Grid grid = CalculateBlockingSize(N, M,
                                          8,
-                                         128, 64,
-                                         32, 32,
+                                         256, 128,
+                                         64, 64,
                                          16, 16);
+
+  // Wmma_Grid grid = CalculateBlockingSize(N, M,
+  //                                        8,
+  //                                        128, 64,
+  //                                        32, 32,
+  //                                        16, 16);
+
                                          
   // std::cout << "OC: " << OC << ", B: " << B << \
   //   "\ngx: " << grid.g.x << ", gy: " << grid.g.y << ", bx: " << grid.b.x << ", by: " << grid.b.y << \

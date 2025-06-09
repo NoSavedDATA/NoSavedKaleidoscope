@@ -84,7 +84,7 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
     int copy_chunks = floor((wmma_idx.blocking_size_y + (wmma_idx.cp_rows*wmma_idx.num_warps-1) ) / ((float)(wmma_idx.cp_rows*wmma_idx.num_warps)) );
         
     // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
-    //     printf("Copy chunks: %d - mem used: %d\n", copy_chunks, copy_chunks*wmma_idx.cp_rows*wmma_idx.num_warps*4);
+    //     printf("by: %d -  copy chunks: %d - mem used: %d\n", wmma_idx.blocking_size_y, copy_chunks, copy_chunks*wmma_idx.cp_rows*wmma_idx.num_warps*4);
     
     // if(wmma_idx.warpId!=0)
     for(int block_tile=0; block_tile<copy_chunks; ++block_tile)
@@ -126,6 +126,9 @@ template<int warp_rows_per_m, int warp_cols_per_n, typename T>
 __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::load_B(T *x_smem, const int8_t *x, int next_tile, int M, int N) {
 
     int copy_chunks = floor((wmma_idx.blocking_size_x + (wmma_idx.cp_rows*wmma_idx.num_warps-1) ) / ((float)(wmma_idx.cp_rows*wmma_idx.num_warps)) );
+
+    // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
+    //     printf("bx: %d -  copy chunks: %d - mem used: %d\n", wmma_idx.blocking_size_x, copy_chunks, copy_chunks*wmma_idx.cp_rows*wmma_idx.num_warps*4);
 
     // if(wmma_idx.warpId!=0)
     for(int block_tile=0; block_tile<copy_chunks; ++block_tile)
