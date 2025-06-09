@@ -99,19 +99,19 @@ struct smem_cpasync_wmma_loader {
 
   __device__ void store_frag_A(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n, __half> &frag_loader,
                               float *x_smem,
-                              const int WMMA_N, int k_stride)
+                              const int WMMA_M, int k_stride)
   {
     for (int w_tile=0; w_tile<warp_rows_per_m; ++w_tile) // Each warp tile handles 16 rows
-      smem_xor_to_reg_A(frag_loader.x_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_N)*32, wmma_idx.wk, k_stride);
+      smem_xor_to_reg_A(frag_loader.x_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_M)*32, wmma_idx.wk, k_stride);
         // Fixed 32 because each warp stored a fixed row * grouped_cols = 32
   }
 
   __device__ void store_frag_B(fp16_wmma_frags<warp_rows_per_m, warp_cols_per_n, __half> &frag_loader,
                               float *x_smem,
-                              const int WMMA_M, int k_stride)
+                              const int WMMA_N, int k_stride)
   {
     for (int w_tile=0; w_tile<warp_cols_per_n; ++w_tile)
-        smem_xor_to_reg_B(frag_loader.w_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_x*wmma_idx.wx + w_tile*WMMA_M)*32, wmma_idx.wk, k_stride);
+        smem_xor_to_reg_B(frag_loader.w_frag[w_tile], x_smem + xor_load_offset + (wmma_idx.warp_x*wmma_idx.wx + w_tile*WMMA_N)*32, wmma_idx.wk, k_stride);
   }
 
 
@@ -128,10 +128,9 @@ struct smem_cpasync_wmma_loader {
       // Restricted to 16 rows per iter due to the ptx instruction size
       for (int w_tile=0; w_tile<warp_rows_per_m; ++w_tile)
       {
-        if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
-          printf("store_frag_A tile %d - k_stride %d\n", w_tile, k_stride);
-
-        print_i8(x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_M)*8, 2, 16);
+        // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
+        //   printf("store_frag_A tile %d - k_stride %d\n", w_tile, k_stride);
+        // print_i8(x_smem + xor_load_offset + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_M)*8, 2, 16);
 
         smem_xor_to_reg_A(frag_loader.x_frag[w_tile], i8_smem + (wmma_idx.warp_y*wmma_idx.wy + w_tile*WMMA_M)*32, k_stride);
         // Fixed 32 because each warp stored a fixed row * grouped_cols = 32
@@ -254,7 +253,7 @@ struct smem_cpasync_wmma_loader {
         if (threaded_row<M && threaded_col<N && (wmma_idx.warp_y*wmma_idx.wy)<M && (wmma_idx.warp_x*wmma_idx.wx)<N)
         {
           
-          frag_to_mem(frag_loader.acc_frag+(wx_tile*warp_cols_per_n + wy_tile)*8, out_smem, wmma_idx.blocking_size_y);
+          frag_to_mem(frag_loader.acc_frag+(wx_tile*warp_cols_per_n + wy_tile)*8, out_smem, 64);
           
           
           store_C(out, out_smem, scale_M, scale_N, threaded_row, threaded_col, M, N, WMMA_M, WMMA_N, WMMA_K);

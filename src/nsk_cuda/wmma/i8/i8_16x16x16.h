@@ -52,8 +52,8 @@ __device__ void blocking_tiled_wmma_i8_16x16x16(i8_wmma_frags<warp_rows_per_m, w
 
         __syncthreads();
 
-        smem_loader.print_i8(x_smem+smem_loader.xor_load_offset, 130, 16);
-        // smem_loader.print_i8(w_smem, 128, 16);
+        // smem_loader.print_i8(x_smem+smem_loader.xor_load_offset, 130, 16);
+        // smem_loader.print_i8(w_smem+smem_loader.xor_load_offset, 128, 16);
 
         for (int k_stride=0; k_stride<2; ++k_stride)
         {
