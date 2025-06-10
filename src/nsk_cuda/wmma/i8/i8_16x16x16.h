@@ -27,6 +27,7 @@ __device__ void blocking_tiled_wmma_i8_16x16x16(i8_wmma_frags<warp_rows_per_m, w
     // asm volatile("cp.async.wait_all;");
     // __syncthreads();
 
+
     #pragma unroll
     for (int tile=0; tile<K; tile+=wmma_idx.wk)
     {   

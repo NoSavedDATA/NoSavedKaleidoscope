@@ -4,13 +4,28 @@
 
 
 __inline__ __device__ void wmma16x16x16_i8(int *O,
-                                        wmma::fragment<wmma::matrix_a, 16, 16, 16, int8_t, wmma::row_major> &x_frag,
-                                        wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_major> &w_frag)
+                                           int8_t *x_frag,
+                                           int8_t *w_frag
+                                       //  wmma::fragment<wmma::matrix_a, 16, 16, 16, int8_t, wmma::row_major> &x_frag,
+                                       //  wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_major> &w_frag
+                                       )
 {                       
-  const int *X = reinterpret_cast<const int *>(&x_frag.x);
-  const int *W = reinterpret_cast<const int *>(&w_frag.x);
+//   const int *X = reinterpret_cast<const int *>(&x_frag.x);
+//   const int *W = reinterpret_cast<const int *>(&w_frag.x);
+  const int *X = reinterpret_cast<const int *>(x_frag);
+  const int *W = reinterpret_cast<const int *>(w_frag);
 
 
+//   if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
+//    {
+//       printf("Previous values:\n\t");
+//       for(int i=0; i<8; ++i)
+//       {
+//          printf("%d, ", O[i]);
+//       }
+//       printf("\n------------------------------\n");
+//    }
+//   __syncwarp();
 
 
 
@@ -29,11 +44,41 @@ __inline__ __device__ void wmma16x16x16_i8(int *O,
 
 
 
+   // asm volatile(
+   //    "mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 "
+   //    "{%0,%1}, "    // D matrix
+   //    "{%2}, "                     // A matrix
+   //    "{%3}, "                   // B matrix
+   //    "{%4, %5};\n"
+   //    : "=r"(O[0]), "=r"(O[1])
+   //    : "r"(X[0]),
+   //       "r"(W[0]),
+   //       "r"(O[0]),  "r"(O[1]));
 
-//  const int8_t *_X = reinterpret_cast<const int8_t *>(&x_frag.x);
-//  const int8_t *_W = reinterpret_cast<const int8_t *>(&w_frag.x);
 
-//  if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
+
+   // asm volatile(
+   //    "wmma.mma.sync.aligned.m8n8k32.row.col.s32.s4.s4.s32 "
+   //    "{%0,%1}, "    // D matrix
+   //    "{%2}, "                     // A matrix
+   //    "{%3}, "                   // B matrix
+   //    "{%4,%5};\n"
+   //    : "=r"(O[0]), "=r"(O[1])
+   //    :  "r"(X[0]), 
+   //       "r"(W[0]),
+   //       "r"(O[0]),  "r"(O[1]));
+
+
+
+
+
+
+
+
+//   const int8_t *_X = reinterpret_cast<const int8_t *>(&x_frag);
+//   const int8_t *_W = reinterpret_cast<const int8_t *>(&w_frag);
+
+//   if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
 //    {
 //       printf("\nX: %d, %d, %d, %d\n", (int)_X[0], (int)_X[1], (int)_X[2], (int)_X[3]);
 //       printf("X: %d, %d, %d, %d\n", (int)_X[4], (int)_X[5], (int)_X[6], (int)_X[7]);

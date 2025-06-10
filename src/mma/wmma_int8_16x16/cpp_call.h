@@ -30,10 +30,11 @@ void blocking_mma_i8(const int8_t *x, const int8_t *w, float *o, const float *sc
   //                                        16, 16);
 
                                          
-  // std::cout << "OC: " << OC << ", B: " << B << \
-  //   "\ngx: " << grid.g.x << ", gy: " << grid.g.y << ", bx: " << grid.b.x << ", by: " << grid.b.y << \
+  // std::cout << "OC: " << N << ", B: " << M << \
+  //   "\ngx: " << grid.g.x << ", gy: " << grid.g.y <<  \
   //   "\nblocking warps per block x: " << grid.bx_per_w << ", y: " << grid.by_per_w << \
-  //   "\nx warps: " << grid.w.x/32 << ", y warps: " << grid.w.y <<  "\n\n";
+  //   "\nx warps: " << grid.w.x/32 << ", y warps: " << grid.w.y << \
+  //   "\nwx_per_wmma_m " << grid.wx_per_wmma_m << " wy_per_wmma_n " << grid.wy_per_wmma_n << "\n\n";
 
 
   using LaunchFn = void(*)(Wmma_Grid, const int8_t*, const int8_t *, float*, const float *, const float *, int, int, int, cudaStream_t);

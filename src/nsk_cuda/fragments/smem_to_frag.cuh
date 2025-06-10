@@ -181,7 +181,7 @@ __inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 
 
 
 
-__inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 16, 16, int8_t, wmma::row_major> &frag,
+__inline__ __device__ void smem_xor_to_reg_A(int8_t *frag,
                                   const int8_t *smem, const int k_stride)
 {
   const auto func = [&](const unsigned* frag_index_list,
@@ -190,22 +190,21 @@ __inline__ __device__ void smem_xor_to_reg_A(wmma::fragment<wmma::matrix_a, 16, 
         const unsigned j) {
       
 
-          
-      int8_t tmp = * (smem + k_stride*256 + i*16 + j);
+      int8_t tmp = *(smem + k_stride*256 + i*16 + j);
 
 
-      frag.x[frag_index_list[0]] = tmp;
+      // frag.x[frag_index_list[0]] = tmp;
+      frag[frag_index_list[0]] = tmp;
     };
 
-  wmma_foreach_ij(
-      frag,
+  wmma_foreach_ij_a(
       func
     );
   __syncwarp();
 }
 
 
-__inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 16, 16, int8_t, wmma::col_major> &frag,
+__inline__ __device__ void smem_xor_to_reg_B(int8_t *frag,
                                   const int8_t *smem, const int k_stride)
 {
   const auto func = [&](const unsigned* frag_index_list,
@@ -214,13 +213,14 @@ __inline__ __device__ void smem_xor_to_reg_B(wmma::fragment<wmma::matrix_b, 16, 
         const unsigned j) {
               
       
-      int8_t tmp = * (smem + k_stride*256 + i*16 + j);
+      int8_t tmp = *(smem + k_stride*256 + i*16 + j);
 
-      frag.x[frag_index_list[0]] = tmp;
+      
+      // frag.x[frag_index_list[0]] = tmp;
+      frag[frag_index_list[0]] = tmp;
     };
 
-  wmma_foreach_ij(
-      frag,
+  wmma_foreach_ij_b(
       func
     );
   __syncwarp();
