@@ -20,7 +20,7 @@ __device__ void warp_tiled_wmma_i8_16x16x16(i8_wmma_frags<warp_rows_per_m, warp_
         for (int wy_tile=0; wy_tile<warp_cols_per_n; ++wy_tile)
         {
             if ((wmma_idx.block_y*wmma_idx.blocking_size_y + wy_tile*WMMA_M)<M && (wmma_idx.block_x*wmma_idx.blocking_size_x + wx_tile*WMMA_N)<N)
-            wmma16x16x16_i8(frag_loader.acc_frag+(wx_tile*warp_cols_per_n + wy_tile)*8, frag_loader.x_frag[wy_tile], frag_loader.w_frag[wx_tile]); // 8 is the frag ld  
+            wmma16x16x16_i8(frag_loader.acc_frag+(wx_tile*warp_cols_per_n + wy_tile)*8, frag_loader.x_frag+wy_tile*8, frag_loader.w_frag+wx_tile*8); // 8 is the frag ld  
         }
     }
     __syncthreads();
