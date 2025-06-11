@@ -32,12 +32,22 @@ struct smem_cpasync_wmma_loader {
   }
 
 
-  __device__ T *smem_malloc(T *smem, int size) {
-    T *ret_ptr = smem + smem_offset;
+  __device__ T* smem_malloc(T* smem, int size) {
+    int alignment = alignof(T);
+    // Convert alignment from bytes to number of T-sized elements
+    int align_elements = (alignment + sizeof(T) - 1) / sizeof(T);
+    smem_offset = (smem_offset + align_elements - 1) & ~(align_elements - 1);
+
+    T* ret_ptr = smem + smem_offset;
     smem_offset += size;
     return ret_ptr;
   }
-  __device__ T *smem_malloc(T *smem) {
+
+  __device__ T* smem_malloc(T* smem) {
+    int alignment = alignof(T);
+    int align_elements = (alignment + sizeof(T) - 1) / sizeof(T);
+    smem_offset = (smem_offset + align_elements - 1) & ~(align_elements - 1);
+
     return smem + smem_offset;
   }
 
@@ -46,6 +56,7 @@ struct smem_cpasync_wmma_loader {
   __device__ void print(T *x_smem, const int M, const int N) {
     if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
     {
+      printf("\n");
       for(int i=0; i<M*N; ++i)
       {
         for(int j=0;j<N;++j)
@@ -60,6 +71,7 @@ struct smem_cpasync_wmma_loader {
   __device__ void print_i8(T *x_smem, int M, int N) {
     if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
     {
+      printf("\n");
       int8_t *i_smem = (int8_t*)x_smem;
 
       for(int i=0; i<M; ++i)
@@ -281,6 +293,14 @@ struct smem_cpasync_wmma_loader {
   }
 
 
+
+
+  __device__ void store_C_mma(float *out, float *out_smem, const float *scale_M, const float *scale_N, int threaded_row, int threaded_col,
+                          int M, int N,
+                          int WMMA_M, int WMMA_N, int WMMA_K);
+
+  __device__ void blocking_tiled_store_C_mma(float *out_tensor, const float *scale_M, const float *scale_N, int *out,
+                                         int M, int N, const int WMMA_M, const int WMMA_N, const int WMMA_K);
 
 
 
