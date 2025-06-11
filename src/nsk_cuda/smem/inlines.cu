@@ -1,5 +1,11 @@
 #include <mma.h>
 
+#include <cuda.h>          // Core CUDA driver API
+#include <cuda_runtime.h>  // Runtime API
+#include <cuda_runtime.h>
+#include <cuda_fp16.h>
+#include <cuda_bf16.h>
+
 using namespace nvcuda;
 
 // __inline__ __device__ uint32_t cast_smem_ptr_to_uint(void *smem_ptr) {

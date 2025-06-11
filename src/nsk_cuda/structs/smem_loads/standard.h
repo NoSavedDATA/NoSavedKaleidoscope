@@ -21,7 +21,7 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
         // Each thread copies 1 row  per 4  columns of floats / 16 Bytes.
         // Each warp   copies 4 rows per 32 columns of floats.
         
-        int trunc_to = std::max(std::min(( (N-col))*4, 16), 0);
+        int trunc_to = max(min(( (N-col))*4, 16), 0);
         if (trunc_to==16)
             gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.by_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr), // 4 from 4 ml loaded rows, wk=32
                         (row<M) ? trunc_to : 0); // last *4 tells that sizeof float is 4
@@ -49,10 +49,10 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
         float const *gmem_ptr = x + row*N + col;
 
         
-        int trunc_to = std::max(std::min(( (N-col))*4, 16), 0);
+        int trunc_to = max(min(( (N-col))*4, 16), 0);
         if (trunc_to==16)
             gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr),
-                        (row<M) ? std::max(std::min(( (N-(next_tile+wmma_idx.mw*4)))*4, 16), 0) : 0);
+                        (row<M) ? max(min(( (N-(next_tile+wmma_idx.mw*4)))*4, 16), 0) : 0);
         else {
             float *smem_ptr = x_smem + xor_store_offset + (wmma_idx.bx_warp_offset + block_tile*4)*wmma_idx.wk + xor_addr;
             for(int i=0;i<4;++i)
@@ -100,7 +100,7 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
 
         // Each thread copies 1 row  per 16  columns of int8 / 16 Bytes.
         // Each warp   copies 4 rows per 128 columns of int8.
-        int trunc_to = std::max(std::min(( (N-col)), 16), 0);
+        int trunc_to = max(min(( (N-col)), 16), 0);
         if (trunc_to==16)
         {
             gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.warpId*copy_chunks + block_tile)*128 + wmma_idx.laneId*4), // 4 * 32 == jumps of 128
@@ -139,7 +139,7 @@ __device__ void smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>::l
         const int8_t *gmem_ptr = x + row*N + col;
 
         
-        int trunc_to = std::max(std::min(( (N-col)), 16), 0);
+        int trunc_to = max(min(( (N-col)), 16), 0);
         if (trunc_to==16)
             gmem_to_smem_xor(gmem_ptr,  *(x_smem + xor_store_offset + (wmma_idx.warpId*copy_chunks + block_tile)*128 + wmma_idx.laneId*4), 
                         (row<M) ? trunc_to : 0);

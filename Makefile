@@ -23,7 +23,7 @@ LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native)
 
 
 # CUDA flags
-CUDA_CXXFLAGS := -I$(CUDA_PATH)/include --cuda-path=$(CUDA_PATH) --cuda-gpu-arch=$(CUDA_ARCH) -ffp-contract=fast
+CUDA_CXXFLAGS := -I$(CUDA_PATH)/include --cuda-path=$(CUDA_PATH) --cuda-gpu-arch=$(CUDA_ARCH)
 CUDA_LDFLAGS := -L$(CUDA_PATH)/lib64
 
 # Combine all flags
@@ -32,6 +32,14 @@ LDFLAGS := $(LLVM_LDFLAGS) $(CUDA_LDFLAGS)
 LIBS := $(LLVM_LIBS) $(LLVM_SYSTEM_LIBS) $(CUDA_LIBS) $(SYSTEM_LIBS) $(OPENCV_LIBS)
 
 NXXFLAGS := $(CUDA_ARCH_NVCC) -I$(EIGEN_INCLUDE) -Xptxas=-v
+
+NVCCFLAGS := -g -lineinfo \
+             -Xcompiler -fPIC \
+             -Xcompiler -rdynamic \
+             -arch=$(CUDA_ARCH) \
+             -I$(SRC_DIR) -I$(EIGEN_INCLUDE) \
+             -I$(CUDA_PATH)/include \
+             $(OTHER_FLAGS)
 
 # Directories
 LIB_PARSER_OBJ_DIR = lib_parser_obj
@@ -101,6 +109,8 @@ $(shell mkdir -p $(LIB_PARSER_OBJ_DIR);)
 all: prebuild $(CU_OBJ) $(CXX_OBJ) $(OBJ) check_done
 
 
+#$(OBJ_DIR)/mma/wmma_int8_16x16%.o: $(SRC_DIR)/mma/wmma_int8_16x16%.cu
+#	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu | prebuild
 	$(CXX) $(CXXFLAGS) -I$(SRC_DIR) -MMD -MP -c -o $@ $<

@@ -2947,6 +2947,8 @@ int main() {
 
 
   int enable_tf32 = deviceProp.major >= 8 ? 1 : 0;
+
+
   printf("enable_tf32: %d\n", enable_tf32);
   
   cublas_compute_type = enable_tf32 ? CUBLAS_COMPUTE_32F_FAST_TF32 : CUBLAS_COMPUTE_32F;
