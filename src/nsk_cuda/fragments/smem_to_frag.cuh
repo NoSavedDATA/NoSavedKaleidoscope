@@ -2,6 +2,9 @@
 
 #include <mma.h>
 
+#include <cuda.h>          // Core CUDA driver API
+#include <cuda_runtime.h>  // Runtime API
+
 using namespace nvcuda;
 
 

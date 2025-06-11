@@ -191,7 +191,7 @@ __inline__ __device__ void wmma16x16x16_i8_mma(int *O,
          "r"(W[0]),
          "r"(O[0]),  "r"(O[1]),  "r"(O[2]),  "r"(O[3]));
 
-//   __syncwarp();
+  __syncwarp();
 
    asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
@@ -204,7 +204,7 @@ __inline__ __device__ void wmma16x16x16_i8_mma(int *O,
          "r"(W[1]),
          "r"(O[4]),  "r"(O[5]),  "r"(O[6]),  "r"(O[7]));
 
-//   __syncwarp();
+  __syncwarp();
 
 
    // asm volatile(

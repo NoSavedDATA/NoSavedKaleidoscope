@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <mma.h>
+#include <cuda.h>          // Core CUDA driver API
+#include <cuda_runtime.h>  // Runtime API
 
 __inline__ __device__ uint32_t cast_smem_ptr_to_uint(void *smem_ptr) {
     return static_cast<uint32_t>(__cvta_generic_to_shared(smem_ptr));

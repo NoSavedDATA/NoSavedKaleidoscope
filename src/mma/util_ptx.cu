@@ -35,24 +35,24 @@
 
 
 
-__inline__ __device__ void ld_smem_to_reg_A(__half *frag, const float *smem)
-{
+// __inline__ __device__ void ld_smem_to_reg_A(__half *frag, const float *smem)
+// {
 
-    asm volatile("ldmatrix.sync.aligned.x4.m8n8.shared.b16 {%0, %1, %2, %3}, [%4];"
-                 : "=r"(frag[0]), "=r"(frag[1]), "=r"(frag[2]), "=r"(frag[3])
-                 : "r"(smem));
-}
-
-
+//     asm volatile("ldmatrix.sync.aligned.x4.m8n8.shared.b16 {%0, %1, %2, %3}, [%4];"
+//                  : "=r"(frag[0]), "=r"(frag[1]), "=r"(frag[2]), "=r"(frag[3])
+//                  : "r"(smem));
+// }
 
 
-__inline__ __device__ void ld_smem_to_reg_B(__half *frag, const float *smem)
-{
 
-    asm volatile("ldmatrix.sync.aligned.x2.m8n8.shared.b16 {%0, %1}, [%2];"
-                 : "=r"(frag[0]), "=r"(frag[1])
-                 : "r"(smem));
-}
+
+// __inline__ __device__ void ld_smem_to_reg_B(__half *frag, const float *smem)
+// {
+
+//     asm volatile("ldmatrix.sync.aligned.x2.m8n8.shared.b16 {%0, %1}, [%2];"
+//                  : "=r"(frag[0]), "=r"(frag[1])
+//                  : "r"(smem));
+// }
 
 
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../utils.h"
 #include "../../nsk_cuda/include.h"
 
 using namespace nvcuda;
@@ -93,10 +92,6 @@ __global__ void wmma_blocking_i8_mma(const int8_t *__restrict__ x, const int8_t 
   //   printf("WXS AND WYS IS %d/%d of %d/%d\n", wx_per_wmma_m, wy_per_wmma_n, wx, wy);
   
 
-  
-  // i8_wmma_frags<wx_per_wmma_m, wy_per_wmma_n, int8_t> frag_loader;
-
-
 
   int out[wx_per_wmma_m*wy_per_wmma_n*8];
 
@@ -114,16 +109,11 @@ __global__ void wmma_blocking_i8_mma(const int8_t *__restrict__ x, const int8_t 
   smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*8);
 
 
-  // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
-  //   printf("by %d by*32 %d\n", by, by*32);
-  float *x_smem = smem_loader.smem_malloc(smem, by*8); // 8 floats that store 2 rows of 16 columns of int8
+  float *x_smem = smem_loader.smem_malloc(smem, by*8); // 8 floats that store 2 rows per 16 columns of int8 for each row of by
   float *w_smem = smem_loader.smem_malloc(smem);
 
 
 
-  // blocking_tiled_wmma_i8_16x16x16(frag_loader, wmma_idx, smem_loader,
-  //                                   x, w, x_smem, w_smem,
-  //                                   M, N, K, WMMA_M, WMMA_N);
 
   blocking_tiled_wmma_i8_16x16x16_mma(out, wmma_idx, smem_loader,
                                     x, w, x_smem, w_smem,

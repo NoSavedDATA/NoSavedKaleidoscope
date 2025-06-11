@@ -196,7 +196,6 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
     // std::cout << "Quantize w-------------------------"  << ".\n";
     quantize_f32_to_i8(w8, W, scale_N, 0.99, OC, C, stream);
 
-    cudaCheck(cudaGetLastError());
     // PrintTensorI8(x8, 8, 8);
     // PrintTensorF(x->tensor_ptr, 8, 8);
 
