@@ -320,48 +320,60 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     */
   } else {
     
-    constexpr int WMMA_T{16};
+    // constexpr int WMMA_T{16};
 
-    float *w_T = get_from_pool(0, OC*C, "Linear w_T");
-    float *x_T = get_from_pool(0, B*C, "Linear x_T");
-    float *dy_T = get_from_pool(0, B*OC, "Linear dy_T");
+    // float *w_T = get_from_pool(0, OC*C, "Linear w_T");
+    // float *x_T = get_from_pool(0, B*C, "Linear x_T");
+    // float *dy_T = get_from_pool(0, B*OC, "Linear dy_T");
 
-    transpose_tensor(w_T, W, OC, C, main_stream);
-    transpose_tensor(x_T, x, B, C, main_stream);
-    transpose_tensor(dy_T, dy, B, OC, main_stream);
-
-
-
-    int8_t *dy8   = get_i8pool(0, B*OC, "linear dy8");
-
-    quantize_f32_to_i8(dy8, dy, scale_M, 0.99, B, OC, main_stream);
-    quantize_f32_to_i8(w8, w_T, scale_K, 0.99, C, OC, main_stream);
-
-    
-    blocking_mma_i8<WMMA_T>(dy8, w8, dx, (float*)scale_M->tensor, (float*)scale_K->tensor, B, C, OC, main_stream);
+    // transpose_tensor(w_T, W, OC, C, main_stream);
+    // transpose_tensor(x_T, x, B, C, main_stream);
+    // transpose_tensor(dy_T, dy, B, OC, main_stream);
 
 
 
-    quantize_f32_to_i8(dy8, dy_T, scale_M, 0.99, OC, B, main_stream);
-    quantize_f32_to_i8(x8, x_T, scale_K, 0.99, C, B, main_stream);
+    // int8_t *dy8   = get_i8pool(0, B*OC, "linear dy8");
 
-    blocking_mma_i8<WMMA_T>(dy8, x8, dW, (float*)scale_N->tensor, (float*)scale_K->tensor, OC, C, B, main_stream);
-
+    // quantize_f32_to_i8(dy8, dy, scale_M, 0.99, B, OC, main_stream);
+    // quantize_f32_to_i8(w8, w_T, scale_K, 0.99, C, OC, main_stream);
 
     
-    // blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
-    // blocking_mma<WMMA_T>(dy, w_T, dx, B, C, OC, main_stream);
+    // blocking_mma_i8<WMMA_T>(dy8, w8, dx, (float*)scale_M->tensor, (float*)scale_K->tensor, B, C, OC, main_stream);
 
 
 
-    move_to_pool(0, B*C, x_T, "Linear x_T");
-    move_to_pool(0, OC*C, w_T, "Linear w_T");
-    move_to_pool(0, B*OC, dy_T, "Linear dy_T");
+    // quantize_f32_to_i8(dy8, dy_T, scale_M, 0.99, OC, B, main_stream);
+    // quantize_f32_to_i8(x8, x_T, scale_K, 0.99, C, B, main_stream);
+
+    // blocking_mma_i8<WMMA_T>(dy8, x8, dW, (float*)scale_N->tensor, (float*)scale_K->tensor, OC, C, B, main_stream);
+
+
+    
+    // // blocking_mma_dw<WMMA_T>(dy, x, dW, OC, C, B, main_stream);
+    // // blocking_mma<WMMA_T>(dy, w_T, dx, B, C, OC, main_stream);
+
+
+
+    // move_to_pool(0, B*C, x_T, "Linear x_T");
+    // move_to_pool(0, OC*C, w_T, "Linear w_T");
+    // move_to_pool(0, B*OC, dy_T, "Linear dy_T");
         
     
-    move_to_i8pool(0, B*OC, dy8, "Linear w8");
+    // move_to_i8pool(0, B*OC, dy8, "Linear w8");
 
-    cudaStreamSynchronize(main_stream);
+    // cudaStreamSynchronize(main_stream);
+
+
+  // backwad to dx
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
+                             W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
+                             dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+  
+  
+  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                             x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
+                             dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
   }
 }
 

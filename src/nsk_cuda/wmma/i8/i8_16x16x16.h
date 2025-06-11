@@ -56,12 +56,9 @@ __device__ void blocking_tiled_wmma_i8_16x16x16(i8_wmma_frags<warp_rows_per_m, w
         // smem_loader.print_i8(x_smem+smem_loader.xor_load_offset, 130, 16);
         // smem_loader.print_i8(w_smem+smem_loader.xor_load_offset, 128, 16);
 
-        for (int k_stride=0; k_stride<2; ++k_stride)
-        {
-            smem_loader.store_frag_A(frag_loader, x_smem, WMMA_M, k_stride);
-            smem_loader.store_frag_B(frag_loader, w_smem, WMMA_N, k_stride);
 
-            warp_tiled_wmma_i8_16x16x16(frag_loader, wmma_idx, M, N, WMMA_M, WMMA_N);
-        }
+
+        wmma_i8_m16n16k16<warp_rows_per_m, warp_cols_per_n, T>(frag_loader, wmma_idx, smem_loader, x_smem, w_smem,
+                          M, N, K, WMMA_M, WMMA_N, 2);
     }
 }

@@ -23,7 +23,7 @@ LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native)
 
 
 # CUDA flags
-CUDA_CXXFLAGS := -I$(CUDA_PATH)/include --cuda-path=$(CUDA_PATH) --cuda-gpu-arch=$(CUDA_ARCH)
+CUDA_CXXFLAGS := -I$(CUDA_PATH)/include --cuda-path=$(CUDA_PATH) --cuda-gpu-arch=$(CUDA_ARCH) -ffp-contract=fast
 CUDA_LDFLAGS := -L$(CUDA_PATH)/lib64
 
 # Combine all flags
