@@ -129,61 +129,13 @@ __device__ inline void wmma_i8_m16n16k16_mma(int *out,
         reg_store_idx ^= 1;
         reg_load_idx ^= 1;
 
-        // reg_load_idx^=1;
-        // reg_store_idx^=1;
 
-        // __syncthreads();
 
-        // if (threadIdx.x==0)
-        // {
-        //     printf("chunk_A thread 0:\n");
-        //     for(int k=0; k<2; ++k)
-        //     {
-        //         printf("load at %d-%d-%d\n", reg_store_idx, i, k);
-        //         int8_t *i8_regA = (int8_t *)(&reg_A[k]);
 
-        //         printf("\tchunk %d/%d: %d, %d, %d, %d\n", k_stride, k, (int)i8_regA[0], (int)i8_regA[1], (int)i8_regA[2], (int)i8_regA[3]);
-        //     }
-        //     // printf("Chunk B %d loaded: %d, %d, %d, %d\n", k_stride, (int)frag_loader.x_frag[0], (int)frag_loader.x_frag[1], (int)frag_loader.x_frag[2], (int)frag_loader.x_frag[3]);
-        //     printf("\n");
-        // }
-        // __syncthreads();
 
-        // if (threadIdx.x==1)
-        // {
-        //     printf("chunk_A thread 1:\n");
-        //     for(int k=0; k<2; ++k)
-        //     {
-        //         printf("load at %d-%d-%d\n", reg_store_idx, i, k);
-        //         int8_t *i8_regA = (int8_t *)(&reg_A[k]);
-
-        //         printf("\tchunk %d/%d: %d, %d, %d, %d | %d, %d\n", k_stride, k, (int)i8_regA[0], (int)i8_regA[1], (int)i8_regA[2], (int)i8_regA[3], (int)i8_regA[8], (int)i8_regA[9]);
-        //     }
-        //     // printf("Chunk B %d loaded: %d, %d, %d, %d\n", k_stride, (int)frag_loader.x_frag[0], (int)frag_loader.x_frag[1], (int)frag_loader.x_frag[2], (int)frag_loader.x_frag[3]);
-        //     printf("\n");
-        // }
-        // __syncthreads();
-        // if (threadIdx.x==31)
-        // {
-        //     printf("chunk_A thread 31:\n");
-        //     for(int k=0; k<2; ++k)
-        //     {
-        //         printf("load at %d-%d-%d\n", reg_store_idx, i, k);
-        //         int8_t *i8_regA = (int8_t *)(&reg_A[k]);
-
-        //         printf("\tchunk %d/%d: %d, %d, %d, %d | %d, %d\n", k_stride, k, (int)i8_regA[0], (int)i8_regA[1], (int)i8_regA[2], (int)i8_regA[3], (int)i8_regA[8], (int)i8_regA[9]);
-        //     }
-        //     // printf("Chunk B %d loaded: %d, %d, %d, %d\n", k_stride, (int)frag_loader.x_frag[0], (int)frag_loader.x_frag[1], (int)frag_loader.x_frag[2], (int)frag_loader.x_frag[3]);
-        //     printf("\n");
-        // }
-        // __syncthreads();
-
-        // warp_tiled_wmma_i8_16x16x16_mma(out, reg_A, reg_B, wmma_idx, M, N, WMMA_M, WMMA_N);
-        // }
 #pragma unroll
         for (int wy_tile=0; wy_tile<warp_cols_per_n; ++wy_tile)
         { 
-            // for (int wy_tile=0; wy_tile<1; ++wy_tile)
 #pragma unroll
             for (int wx_tile=0; wx_tile<warp_rows_per_m; ++wx_tile)
             {
@@ -217,30 +169,6 @@ __device__ inline void wmma_i8_m16n16k16_mma(int *out,
                 //     "{%4,%5}, "                     // A matrix
                 //     "{%6}, "                   // B matrix
                 //     "{%7, %8, %9, %10};\n"
-                //     : "=r"(O[0]), "=r"(O[1]), "=r"(O[2]) , "=r"(O[3]) 
-                //     : "r"(reg_A[wy_tile*4]), "r"(reg_A[wy_tile*4+1]),
-                //         "r"(reg_B[j_s*4]),
-                //         "r"(O[0]),  "r"(O[1]),  "r"(O[2]),  "r"(O[3]));
-                // asm volatile(
-                //     "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
-                //     "{%0,%1,%2,%3}, "    // D matrix
-                //     "{%4,%5}, "                     // A matrix
-                //     "{%6}, "                   // B matrix
-                //     "{%7, %8, %9, %10};\n"
-                //     : "=r"(O[0]), "=r"(O[1]), "=r"(O[2]) , "=r"(O[3]) 
-                //     : "r"(reg_A[wy_tile*4]), "r"(reg_A[wy_tile*4+1]),
-                //         "r"(reg_B[j_s*4+1]),
-                //         "r"(O[0]),  "r"(O[1]),  "r"(O[2]),  "r"(O[3]));
-                    
-
-
-
-                // asm volatile(
-                //     "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
-                //     "{%0,%1,%2,%3}, "    // D matrix
-                //     "{%4,%5}, "                     // A matrix
-                //     "{%6}, "                   // B matrix
-                //     "{%7, %8, %9, %10};\n"
                 //     : "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8]), "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8+1]), "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8+2]) , "=r"(O[+(j_s*warp_cols_per_n + wy_tile)*8+3]) 
                 //     : "r"(reg_A[reg_load_idx][wy_tile][0]), "r"(reg_A[reg_load_idx][wy_tile][1]),
                 //       "r"(reg_B[reg_load_idx][j_s][0]),
@@ -256,29 +184,14 @@ __device__ inline void wmma_i8_m16n16k16_mma(int *out,
                 //       "r"(reg_B[reg_load_idx][j_s][1]),
                 //       "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+4]), "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+5]), "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+6]) , "r"(O[+(j_s*warp_cols_per_n + wy_tile)*8+7]));
 
-
-
-                // asm volatile(
-                //     "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
-                //     "{%0,%1,%2,%3}, "    // D matrix
-                //     "{%4,%5}, "                     // A matrix
-                //     "{%6}, "                   // B matrix
-                //     "{%7, %8, %9, %10};\n"
-                //     : "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8]), "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8+1]), "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8+2]) , "=r"(O[+(j_s*warp_cols_per_n + wy_tile)*8+3]) 
-                //     : "r"(reg_A[wy_tile*4]), "r"(reg_A[wy_tile*4+1]),
-                //       "r"(reg_B[j_s*4]),
-                //       "r"(O[(j_s*warp_cols_per_n + wy_tile)*8]), "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+1]), "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+2]) , "r"(O[+(j_s*warp_cols_per_n + wy_tile)*8+3]) );
-                // asm volatile(
-                //     "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
-                //     "{%0,%1,%2,%3}, "    // D matrix
-                //     "{%4,%5}, "                     // A matrix
-                //     "{%6}, "                   // B matrix
-                //     "{%7, %8, %9, %10};\n"
-                //     : "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8+4]), "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8+5]), "=r"(O[(j_s*warp_cols_per_n + wy_tile)*8+6]) , "=r"(O[+(j_s*warp_cols_per_n + wy_tile)*8+7]) 
-                //     : "r"(reg_A[wy_tile*4]), "r"(reg_A[wy_tile*4+1]),
-                //       "r"(reg_B[j_s*4+1]),
-                //       "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+4]), "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+5]), "r"(O[(j_s*warp_cols_per_n + wy_tile)*8+6]) , "r"(O[+(j_s*warp_cols_per_n + wy_tile)*8+7]));
             }
         }
     }
+
+#pragma unroll
+        for (int wy_tile=0; wy_tile<warp_cols_per_n; ++wy_tile)
+#pragma unroll
+            for (int wx_tile=0; wx_tile<warp_rows_per_m; ++wx_tile)
+                for (int i=0;i<8;++i)
+                    out[(wx_tile*warp_cols_per_n + wy_tile)*8 + i] = O[wx_tile][wy_tile][i];
 }
