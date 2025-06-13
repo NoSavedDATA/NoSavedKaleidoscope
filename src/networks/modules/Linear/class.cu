@@ -360,7 +360,6 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
     
     // move_to_i8pool(0, B*OC, dy8, "Linear w8");
 
-    // cudaStreamSynchronize(main_stream);
 
 
   // backwad to dx

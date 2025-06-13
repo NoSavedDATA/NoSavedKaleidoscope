@@ -106,7 +106,7 @@ __global__ void wmma_blocking_i8_mma(const int8_t *__restrict__ x, const int8_t 
   wmma_indexes<wx_per_wmma_m, wy_per_wmma_n> wmma_idx(bx_per_w, by_per_w, bx_per_wx, bx, by, wx, wy, 32, 2, num_warps);
   // Load 2 columns of 16, because the maximum supported number of rows per ptx is wmma_m==16
   
-  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*8);
+  smem_cpasync_wmma_loader<wx_per_wmma_m, wy_per_wmma_n, float> smem_loader(smem, wmma_idx, (bx+by)*8, 3);
 
 
   float *x_smem = smem_loader.smem_malloc(smem, by*8); // 8 floats that store 2 rows per 16 columns of int8 for each row of by
@@ -115,7 +115,7 @@ __global__ void wmma_blocking_i8_mma(const int8_t *__restrict__ x, const int8_t 
 
 
 
-  blocking_tiled_wmma_i8_16x16x16_mma(out, wmma_idx, smem_loader,
+  blocking_tiled_wmma_i8_16x16x16_mma(out_tensor, scale_M, scale_N, out, wmma_idx, smem_loader,
                                     x, w, x_smem, w_smem,
                                     M, N, K, WMMA_M, WMMA_N);
 
