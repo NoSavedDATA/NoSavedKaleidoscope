@@ -13,12 +13,13 @@ struct smem_cpasync_wmma_loader {
   int xor_addr;
   int xor_store_offset=0;
   int xor_load_offset, xor_swap;
+  int current_stage = 0, stages;
   wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx;
 
   int smem_offset=0;
 
-  __device__ smem_cpasync_wmma_loader(T *smem, wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx, int xor_swap)
-        : smem(smem), wmma_idx(wmma_idx), xor_swap(xor_swap) {
+  __device__ smem_cpasync_wmma_loader(T *smem, wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx, int xor_swap, int stages=2)
+        : smem(smem), wmma_idx(wmma_idx), xor_swap(xor_swap), stages(stages) {
     // printf("laneId is %d\n", wmma_idx.laneId);
     xor_addr = smem_xor_cp_async(wmma_idx.laneId);
     xor_load_offset = xor_swap;
@@ -27,8 +28,15 @@ struct smem_cpasync_wmma_loader {
 
 
   __device__ void swap() {
-    xor_store_offset ^= xor_swap;
-    xor_load_offset ^= xor_swap;
+    // xor_store_offset ^= xor_swap;
+    // xor_load_offset ^= xor_swap;
+    current_stage = (current_stage+1) % stages;
+    int load_stage = (current_stage+1) % stages;
+    
+    xor_load_offset = load_stage*xor_swap;
+    xor_store_offset = current_stage*xor_swap;
+    // if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
+    //   printf("store_offset: %d, load offset: %d\n", xor_store_offset, xor_load_offset);
   }
 
 
