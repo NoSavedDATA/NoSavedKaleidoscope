@@ -1,5 +1,6 @@
 #pragma once
 
+#include "i4/include.h"
 #include "i8/include.h"
 #include "indexed/include.h"
 

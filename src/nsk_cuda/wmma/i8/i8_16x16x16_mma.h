@@ -3,7 +3,9 @@
 #include <mma.h>
 
 #include "../../structs/i8_wmma_frags.h"
+#include "../../math/divs.h"
 #include "i8_16x16x16_warp_tile_mma.h"
+#include "ptx.h"
 
 using namespace nvcuda;
 
@@ -12,11 +14,7 @@ using namespace nvcuda;
 #define K_STAGE 3
 
 
-__host__ __device__ __forceinline__ constexpr size_t div_ceil(size_t a, size_t b) {
-    return (a + b - 1) / b;
 
-
-}
 template<int warp_rows_per_m, int warp_cols_per_n, typename T>
 __device__ __forceinline__ void load_reg_A(int (&reg_A)[2][warp_cols_per_n][2],
                                            const int reg_store_idx, const int k_stride,
@@ -135,6 +133,7 @@ __device__ void blocking_tiled_wmma_i8_16x16x16_mma(float *out_tensor, const flo
 
 
 
+    
 
     int tile=0;
     #pragma unroll
@@ -154,8 +153,6 @@ __device__ void blocking_tiled_wmma_i8_16x16x16_mma(float *out_tensor, const flo
 
             asm volatile("cp.async.commit_group;\n" ::);
             asm volatile("cp.async.wait_group %0;" ::"n"(2));
-        } else {
-            asm volatile("cp.async.wait_all;");
         }
 
         __syncthreads();
