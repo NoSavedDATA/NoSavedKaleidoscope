@@ -4,7 +4,6 @@
 
 #include "../../structs/i8_wmma_frags.h"
 #include "../../math/divs.h"
-#include "i8_16x16x16_warp_tile_mma.h"
 #include "ptx.h"
 
 using namespace nvcuda;
@@ -16,7 +15,7 @@ using namespace nvcuda;
 
 
 template<int warp_rows_per_m, int warp_cols_per_n, typename T>
-__device__ __forceinline__ void load_reg_A(int (&reg_A)[2][warp_cols_per_n][2],
+__device__ __forceinline__ void load_reg_A_i4(int (&reg_A)[2][warp_cols_per_n][2],
                                            const int reg_store_idx, const int k_stride,
                                            float *x_smem,
                                            wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx,
@@ -38,7 +37,7 @@ __device__ __forceinline__ void load_reg_A(int (&reg_A)[2][warp_cols_per_n][2],
 
                     
 template<int warp_rows_per_m, int warp_cols_per_n, typename T>
-__device__ __forceinline__ void load_reg_B(int (&reg_B)[2][warp_rows_per_m][2],
+__device__ __forceinline__ void load_reg_B_i4(int (&reg_B)[2][warp_rows_per_m][2],
                                            const int reg_store_idx, const int k_stride,
                                            float *w_smem,
                                            wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx,
@@ -65,7 +64,7 @@ __device__ __forceinline__ void load_reg_B(int (&reg_B)[2][warp_rows_per_m][2],
 
 
 template<int warp_rows_per_m, int warp_cols_per_n>
-__device__ __forceinline__ void matrix_multiply_add_i8(int (&reg_A)[2][warp_cols_per_n][2],
+__device__ __forceinline__ void matrix_multiply_add_i4(int (&reg_A)[2][warp_cols_per_n][2],
                                                int (&reg_B)[2][warp_rows_per_m][2],
                                                int reg_load_idx,
                                                int (&O)[warp_rows_per_m][warp_cols_per_n][8]) {
@@ -89,7 +88,7 @@ __device__ __forceinline__ void matrix_multiply_add_i8(int (&reg_A)[2][warp_cols
 
 
 template<int warp_rows_per_m, int warp_cols_per_n, typename T>
-__device__ void blocking_tiled_wmma_i8_16x16x16_mma(float *out_tensor, const float *scale_M, const float *scale_N, int *out,
+__device__ void blocking_tiled_wmma_i4_16x16x16_mma(float *out_tensor, const float *scale_M, const float *scale_N, int *out,
                                               wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx,
                                               smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>& smem_loader,
                                               const int8_t *x, const int8_t *w, float *x_smem, float *w_smem,
@@ -164,15 +163,15 @@ __device__ void blocking_tiled_wmma_i8_16x16x16_mma(float *out_tensor, const flo
         #pragma unroll
         for (int k_stride=0; k_stride<CHUNK_K; ++k_stride)
         {
-            load_reg_A(reg_A, reg_store_idx, k_stride, x_smem, wmma_idx, smem_loader, WMMA_N);
-            load_reg_B(reg_B, reg_store_idx, k_stride, w_smem, wmma_idx, smem_loader, WMMA_M);
+            load_reg_A_i4(reg_A, reg_store_idx, k_stride, x_smem, wmma_idx, smem_loader, WMMA_N);
+            load_reg_B_i4(reg_B, reg_store_idx, k_stride, w_smem, wmma_idx, smem_loader, WMMA_M);
 
             reg_store_idx ^= 1;
             reg_load_idx ^= 1;
 
 
 
-            matrix_multiply_add_i8(reg_A, reg_B, reg_load_idx, O);
+            matrix_multiply_add_i4(reg_A, reg_B, reg_load_idx, O);
         }
     }
 
@@ -185,13 +184,13 @@ __device__ void blocking_tiled_wmma_i8_16x16x16_mma(float *out_tensor, const flo
         #pragma unroll
         for (int k_stride=0; k_stride<CHUNK_K; ++k_stride)
         {
-            load_reg_A(reg_A, reg_store_idx, k_stride, x_smem, wmma_idx, smem_loader, WMMA_N);
-            load_reg_B(reg_B, reg_store_idx, k_stride, w_smem, wmma_idx, smem_loader, WMMA_M);
+            load_reg_A_i4(reg_A, reg_store_idx, k_stride, x_smem, wmma_idx, smem_loader, WMMA_N);
+            load_reg_B_i4(reg_B, reg_store_idx, k_stride, w_smem, wmma_idx, smem_loader, WMMA_M);
 
             reg_store_idx ^= 1;
             reg_load_idx ^= 1;
 
-            matrix_multiply_add_i8(reg_A, reg_B, reg_load_idx, O);
+            matrix_multiply_add_i4(reg_A, reg_B, reg_load_idx, O);
         }
     }
 
@@ -205,13 +204,13 @@ __device__ void blocking_tiled_wmma_i8_16x16x16_mma(float *out_tensor, const flo
         #pragma unroll
         for (int k_stride=0; k_stride<CHUNK_K; ++k_stride)
         {
-            load_reg_A(reg_A, reg_store_idx, k_stride, x_smem, wmma_idx, smem_loader, WMMA_N);
-            load_reg_B(reg_B, reg_store_idx, k_stride, w_smem, wmma_idx, smem_loader, WMMA_M);
+            load_reg_A_i4(reg_A, reg_store_idx, k_stride, x_smem, wmma_idx, smem_loader, WMMA_N);
+            load_reg_B_i4(reg_B, reg_store_idx, k_stride, w_smem, wmma_idx, smem_loader, WMMA_M);
 
             reg_store_idx ^= 1;
             reg_load_idx ^= 1;
 
-            matrix_multiply_add_i8(reg_A, reg_B, reg_load_idx, O);
+            matrix_multiply_add_i4(reg_A, reg_B, reg_load_idx, O);
         }
     }
 

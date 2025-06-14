@@ -37,10 +37,16 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
 
     if (in_str("fp16", Notes))
       precision = 1;
-    if (in_str("i8", Notes))
+    if (in_str("i8", Notes)||in_str("i4", Notes))
     {
-      precision = 2;
-      w8 = get_i8pool(0, OC*C, "Linear w8");
+      if (in_str("i8", Notes))
+      {
+        precision = 2;
+        w8 = get_i8pool(0, OC*C, "Linear w8");
+      } else {
+        precision = 3;
+        w8 = get_i8pool(0, OC*C/2, "Linear w8");
+      }
 
       scale_N = new Minimal_Tensor();
       scale_M = new Minimal_Tensor();
@@ -120,6 +126,19 @@ void LinearCPP::SetDescriptors(int B, int thread_id)
 
     // printf("MALLOCING %d - %d - %d\n", B, C, B*C);
   }
+  if(precision==3)
+  {
+    std::cout << "Thread id: " << thread_id << ".\n";
+    if(x8!=nullptr)
+      move_to_i8pool(thread_id, this->B*C/2, x8, "Linear x8 on set descriptors");
+    if(scale_M->tensor!=nullptr)
+      move_to_pool(thread_id, B, (float *)scale_M->tensor, "Linear i8 scale_M");
+
+    x8 = get_i8pool(thread_id, B*C/2, "Linear x8 on set descriptors");
+    scale_M->tensor = (void*)get_from_pool(thread_id, B, "Linear i8 scale_M");
+
+    // printf("MALLOCING %d - %d - %d\n", B, C, B*C);
+  }
 
   this->B=B;
   changed_descriptors=true;
@@ -187,41 +206,23 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
   } else if (precision==2) {
 
 
-
-
-
-    // std::cout << "Quantize x-------------------------"  << ".\n";
     quantize_f32_to_i8(x8, x->tensor_ptr, scale_M, 0.99, B, C, stream);
-    // cudaCheck(cudaGetLastError());
-    // std::cout << "Quantize w-------------------------"  << ".\n";
     quantize_f32_to_i8(w8, W, scale_N, 0.99, OC, C, stream);
 
-    // PrintTensorI8(x8, 8, 8);
-    // PrintTensorF(x->tensor_ptr, 8, 8);
-
-    // PrintTensorI8(x8+(31*B/32)*C, B/32, C);
-    // PrintTensorI8(w8, OC, 4);
 
 
-    // cudaCheck(cudaGetLastError());
-
-    // std::cout << "i8 mma M " << B << " N " << OC << " K " << C << "\n";
 
     constexpr int WMMA_T{16};
     blocking_mma_i8<WMMA_T>(x8, w8, out, (float*)scale_M->tensor, (float*)scale_N->tensor, B, OC, C, stream);
 
 
-
-    // std::cout << "PRINTING" << ".\n";
-    // PrintTensorF(out, B, OC);
-    // std::cout << "Printed.." << ".\n";
-
-
-
-    cudaCheck(cudaGetLastError());
-
-
     // std::cout << "Precision is int8"  << ".\n";
+  } else if (precision==3) {
+    std::cout << "Precision i4" << ".\n";
+
+    quantize_f32_to_i4(x8, x->tensor_ptr, scale_M, 0.99, B, C, stream);
+    quantize_f32_to_i4(w8, W, scale_N, 0.99, OC, C, stream);
+
   } else {
     std::cout << "Unknown precision type" << ".\n";
     std::exit(0);
@@ -268,16 +269,16 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
   if (precision==0)
   {
 
-  // backwad to dx
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
-                             W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
-                             dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-  
-  
-  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
-                             x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
-                             dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+    // backwad to dx
+    cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
+                              W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
+                              dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+    
+    
+    // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+    cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                              x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
+                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
   } else if (precision==1) {
 
     // constexpr int num_warps_x{4};
@@ -317,7 +318,7 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
                              x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
     */
-  } else {
+  } else if (precision==2) {
     
     // constexpr int WMMA_T{16};
 
@@ -362,16 +363,28 @@ void LinearCPP::Backward(float *x, float *dx, float *dy)
 
 
 
-  // backwad to dx
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
-                             W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
-                             dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-  
-  
-  // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
-  cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
-                             x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
-                             dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+    // backwad to dx
+    cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
+                              W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
+                              dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+    
+    
+    // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+    cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                              x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
+                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+  } else {
+    // backwad to dx
+    cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, C, B, OC, &one,
+                              W, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &zero,
+                              dx, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+    
+    
+    // backward to weight, uses += in the backward pass (accumulate the gradient) by setting alpha=one
+    cublasCheck(cublasGemmEx(cublas_handle, CUBLAS_OP_N, CUBLAS_OP_T, C, OC, B, &one,
+                              x, CUBLAS_LOWP, C, dy, CUBLAS_LOWP, OC, &one,
+                              dW, CUBLAS_LOWP, C, cublas_compute, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+
   }
 }
 
