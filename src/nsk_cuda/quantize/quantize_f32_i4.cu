@@ -34,7 +34,7 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
   
 
   const float *x_i = x + B_idx*N;
-  int8_t *x8_i = x8 + B_idx*N;
+  int8_t *x8_i = x8 + B_idx*N/2;
 
 
 
@@ -64,6 +64,8 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
   float maxval = -INFINITY;
   int tile=0;
+
+  #pragma unroll
   for(; tile<std::min(N, max_N); tile+=128)
   {
     col = tile + laneId*4;
@@ -91,6 +93,7 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
 
       
+    #pragma unroll
     for(int i=0; i<4; ++i)
     {
       float _maxval;
@@ -106,6 +109,7 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
       if (_maxval>top_k[5])
       {
         top_k[5] = _maxval;
+        #pragma unroll
         for (int j=5; j>0 && top_k[j]>top_k[j-1]; --j) {
             float tmp = top_k[j];
             top_k[j] = top_k[j - 1];
@@ -114,6 +118,7 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
       }
 
       float mask__maxval;
+    #pragma unroll
       for (int mask=warpSize/2; mask>0; mask>>=1)
       {
         __syncwarp();
@@ -135,8 +140,10 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
 
 
+  #pragma unroll
   for (int k = 0; k < 6; ++k) {
     float v = top_k[k];
+    #pragma unroll
     for (int mask = warpSize / 2; mask > 0; mask >>= 1) {
         __syncwarp();
         float shuffled = __shfl_down_sync(0xFFFFFFFF, v, mask);
@@ -169,11 +176,11 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
 
   // maxval = min(maxval, 30.0f);
-  float scale = 7/maxval;
+  float scale = 8/maxval;
 
 
-  if (std::isinf(scale)||scale<=0)
-    scale = 1;
+  if (std::isinf(scale)||scale<=0.0f)
+    scale = 1.0f;
 
   // scale = min(scale, 1000000.0f);
 
@@ -187,12 +194,14 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
   __syncthreads();
 
+  #pragma unroll
   for(tile=0; tile<std::min(N, max_N); tile+=128)
   {
     int col = tile+laneId*4;
     int col2 = col/2;
     float *smem_ij = smem_i+col;
 
+    #pragma unroll
     for(int i=0; i<2; ++i) // 4 floats of cp_async jumped by 2 for packing
     {
       if(B_idx<M && col+i*2<std::min(N, max_N))
@@ -205,8 +214,11 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
           val1 = 0.0f;
 
         // Quantize to [-8, 7]
-        int8_t q0 = max(-8, min(7, __float2int_rn(val0 / scale)));
-        int8_t q1 = max(-8, min(7, __float2int_rn(val1 / scale)));
+        int8_t q0 = max(-8, min(7, __float2int_rn(val0)));
+        int8_t q1 = max(-8, min(7, __float2int_rn(val1)));
+
+        // if(blockIdx.x==0&&blockIdx.y==0&&threadIdx.x==0)
+        //   printf("packing %d and %d from %f - %f, converted from %f - %f\n", (int)q0, (int)q1, val0, val1, smem_ij[i*2], smem_ij[i*2+1]);
 
         // Pack into 1 byte (2x int4)
         int8_t packed = (q1 << 4) | (q0 & 0xF);
@@ -232,6 +244,7 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
   __syncthreads();
 
+  #pragma unroll
   for(; tile<N; tile+=128)
   {
     col = tile + laneId*4;
@@ -260,6 +273,7 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
 
 
+    #pragma unroll
     for(int i=0; i<2; ++i)
     {
       if(B_idx<M && col+i*2<N)
@@ -273,8 +287,8 @@ __global__ void quantize_f32_i4_kernel(int8_t *x8, const float *x, float *scale_
 
 
         // Quantize to [-8, 7]
-        int8_t q0 = max(-8, min(7, __float2int_rn(val0 / scale)));
-        int8_t q1 = max(-8, min(7, __float2int_rn(val1 / scale)));
+        int8_t q0 = max(-8, min(7, __float2int_rn(val0)));
+        int8_t q1 = max(-8, min(7, __float2int_rn(val1)));
 
         // Pack into 1 byte (2x int4)
 

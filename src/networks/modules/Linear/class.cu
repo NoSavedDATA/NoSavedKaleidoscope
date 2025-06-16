@@ -45,6 +45,7 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
         w8 = get_i8pool(0, OC*C, "Linear w8");
       } else {
         precision = 3;
+        // w8 = get_i8pool(0, OC*C, "Linear w8");
         w8 = get_i8pool(0, OC*C/2, "Linear w8");
       }
 
@@ -130,10 +131,12 @@ void LinearCPP::SetDescriptors(int B, int thread_id)
   {
     std::cout << "Thread id: " << thread_id << ".\n";
     if(x8!=nullptr)
-      move_to_i8pool(thread_id, this->B*C/2, x8, "Linear x8 on set descriptors");
+    move_to_i8pool(thread_id, this->B*C/2, x8, "Linear x8 on set descriptors");
+    // move_to_i8pool(thread_id, this->B*C, x8, "Linear x8 on set descriptors");
     if(scale_M->tensor!=nullptr)
       move_to_pool(thread_id, B, (float *)scale_M->tensor, "Linear i8 scale_M");
 
+    // x8 = get_i8pool(thread_id, B*C, "Linear x8 on set descriptors");
     x8 = get_i8pool(thread_id, B*C/2, "Linear x8 on set descriptors");
     scale_M->tensor = (void*)get_from_pool(thread_id, B, "Linear i8 scale_M");
 
@@ -218,10 +221,12 @@ float *LinearCPP::Forward(DT_tensor *x, int thread_id)
 
     // std::cout << "Precision is int8"  << ".\n";
   } else if (precision==3) {
-    std::cout << "Precision i4" << ".\n";
 
     quantize_f32_to_i4(x8, x->tensor_ptr, scale_M, 0.99, B, C, stream);
     quantize_f32_to_i4(w8, W, scale_N, 0.99, OC, C, stream);
+
+    constexpr int WMMA_T{16};
+    blocking_mma_i4<WMMA_T>(x8, w8, out, (float*)scale_M->tensor, (float*)scale_N->tensor, B, OC, C, stream);
 
   } else {
     std::cout << "Unknown precision type" << ".\n";
