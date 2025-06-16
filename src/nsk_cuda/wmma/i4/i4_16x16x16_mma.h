@@ -13,6 +13,9 @@ using namespace nvcuda;
 #define K_STAGE 3
 
 
+#define WK 64
+
+
 
 template<int warp_rows_per_m, int warp_cols_per_n, typename T>
 __device__ __forceinline__ void load_reg_A_i4(int (&reg_A)[2][warp_cols_per_n][2],
@@ -78,8 +81,11 @@ __device__ __forceinline__ void matrix_multiply_add_i4(int (&reg_A)[2][warp_cols
             size_t j_s = (wy_tile % 2) ? (warp_rows_per_m - wx_tile - 1) : wx_tile;
 
                                 
-            I8_MMA(O[j_s][wy_tile][0], O[j_s][wy_tile][1], O[j_s][wy_tile][2], O[j_s][wy_tile][3], reg_A[reg_load_idx][wy_tile][0], reg_A[reg_load_idx][wy_tile][1], reg_B[reg_load_idx][j_s][0]);
-            I8_MMA(O[j_s][wy_tile][4], O[j_s][wy_tile][5], O[j_s][wy_tile][6], O[j_s][wy_tile][7], reg_A[reg_load_idx][wy_tile][0], reg_A[reg_load_idx][wy_tile][1], reg_B[reg_load_idx][j_s][1]);
+            I4_MMA(O[j_s][wy_tile][0], O[j_s][wy_tile][1], reg_A[reg_load_idx][wy_tile][0], reg_B[reg_load_idx][j_s][0]);
+            I4_MMA(O[j_s][wy_tile][2], O[j_s][wy_tile][3], reg_A[reg_load_idx][wy_tile][1], reg_B[reg_load_idx][j_s][0]);
+            I4_MMA(O[j_s][wy_tile][4], O[j_s][wy_tile][5], reg_A[reg_load_idx][wy_tile][0], reg_B[reg_load_idx][j_s][1]);
+            I4_MMA(O[j_s][wy_tile][6], O[j_s][wy_tile][7], reg_A[reg_load_idx][wy_tile][1], reg_B[reg_load_idx][j_s][1]);
+
         }
     }
 }
@@ -92,8 +98,10 @@ __device__ void blocking_tiled_wmma_i4_16x16x16_mma(float *out_tensor, const flo
                                               wmma_indexes<warp_rows_per_m, warp_cols_per_n>& wmma_idx,
                                               smem_cpasync_wmma_loader<warp_rows_per_m, warp_cols_per_n, T>& smem_loader,
                                               const int8_t *x, const int8_t *w, float *x_smem, float *w_smem,
-                                              const int M, const int N, const int K, const int WMMA_M, const int WMMA_N)
+                                              const int M, const int N, const int oK, const int WMMA_M, const int WMMA_N)
 {
+
+    int K = oK/2;
 
     smem_loader.load_A(x_smem, x, 0, M, K);
     smem_loader.load_B(w_smem, w, 0, N, K);
@@ -131,6 +139,9 @@ __device__ void blocking_tiled_wmma_i4_16x16x16_mma(float *out_tensor, const flo
     __syncthreads();
 
 
+    asm volatile("cp.async.wait_all;");
+
+    // smem_loader.print_i4(x_smem, 5, 16);
 
     
 

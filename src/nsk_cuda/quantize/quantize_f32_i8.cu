@@ -64,6 +64,8 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
   float maxval = -INFINITY;
   int tile=0;
+
+  #pragma unroll
   for(; tile<std::min(N, max_N); tile+=128)
   {
     col = tile + laneId*4;
@@ -91,6 +93,7 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
 
       
+    #pragma unroll
     for(int i=0; i<4; ++i)
     {
       float _maxval;
@@ -106,6 +109,7 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
       if (_maxval>top_k[5])
       {
         top_k[5] = _maxval;
+        #pragma unroll
         for (int j=5; j>0 && top_k[j]>top_k[j-1]; --j) {
             float tmp = top_k[j];
             top_k[j] = top_k[j - 1];
@@ -114,6 +118,7 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
       }
 
       float mask__maxval;
+      #pragma unroll
       for (int mask=warpSize/2; mask>0; mask>>=1)
       {
         __syncwarp();
@@ -135,8 +140,10 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
 
 
+  #pragma unroll
   for (int k = 0; k < 6; ++k) {
     float v = top_k[k];
+    #pragma unroll
     for (int mask = warpSize / 2; mask > 0; mask >>= 1) {
         __syncwarp();
         float shuffled = __shfl_down_sync(0xFFFFFFFF, v, mask);
@@ -187,11 +194,13 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
   __syncthreads();
 
+  #pragma unroll
   for(tile=0; tile<std::min(N, max_N); tile+=128)
   {
     int col = tile+laneId*4;
     float *smem_ij = smem_i+col;
 
+    #pragma unroll
     for(int i=0; i<4; ++i)
     {
       if(B_idx<M && col+i<std::min(N, max_N))
@@ -222,6 +231,7 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
   __syncthreads();
 
+  #pragma unroll
   for(; tile<N; tile+=128)
   {
     col = tile + laneId*4;
@@ -249,6 +259,7 @@ __global__ void quantize_f32_i8_kernel(int8_t *x8, const float *x, float *scale_
 
 
 
+    #pragma unroll
     for(int i=0; i<4; ++i)
     {
       if(B_idx<M && col+i<N)
@@ -313,6 +324,7 @@ __global__ void quantize_f32_i8_kernel_truncmax(int8_t *x8, const float *x, floa
 
   float maxval = -INFINITY;
   int tile=0;
+  #pragma unroll
   for(; tile<std::min(N, max_N); tile+=128)
   {
     col = tile + laneId*4;

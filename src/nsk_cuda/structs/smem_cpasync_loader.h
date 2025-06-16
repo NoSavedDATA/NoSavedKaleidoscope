@@ -6,6 +6,27 @@
 #include "i8_wmma_frags.h"
 
 
+__device__ __forceinline__ int8_t unpack_int4(int8_t val, bool high) {
+    int8_t nibble = high ? ((val >> 4) & 0xF) : (val & 0xF);
+    return (nibble << 4) >> 4; // Sign-extend from 4 bits
+}
+
+__device__ __forceinline__ int8_t unpack_int4_signed(int8_t packed, bool high) {
+    int8_t nibble;
+
+    if (high)
+        nibble = (packed >> 4) & 0x0F;
+    else
+        nibble = packed & 0x0F;
+
+    // Sign-extend 4-bit value to int8_t
+    if (nibble & 0x08)  // if sign bit is set
+        nibble |= 0xF0;
+
+    return nibble;
+}
+
+
 template<int warp_rows_per_m, int warp_cols_per_n, typename T>
 struct smem_cpasync_wmma_loader {
 
@@ -86,6 +107,29 @@ struct smem_cpasync_wmma_loader {
       {
         for(int j=0;j<N;++j)
           printf("%d, ", (int)i_smem[i*N + j]);
+        printf("\n");
+      }
+      printf("\n\n");
+    }
+    __syncthreads();
+  }
+
+
+  __device__ void print_i4(T *x_smem, int M, int N) {
+    if(threadIdx.x==0&&blockIdx.x==0&&blockIdx.y==0)
+    {
+      printf("\n");
+      int8_t *i_smem = (int8_t*)x_smem;
+
+      for(int i=0; i<M; ++i)
+      {
+        for(int j=0;j<N;++j)
+        {
+          int8_t low = unpack_int4_signed(i_smem[i*N + j], false);
+          int8_t high = unpack_int4_signed(i_smem[i*N + j], true);
+          printf("%d, ", low);
+          printf("%d, ", high);
+        }
         printf("\n");
       }
       printf("\n\n");
@@ -254,7 +298,7 @@ struct smem_cpasync_wmma_loader {
         // if (blockIdx.x==0&&threadIdx.x==0)
         // {
         //   printf("Storing %f - %f\n", out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col], out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col] / (scale_M[threaded_row+row] * scale_N[threaded_col+col]));
-        //   printf("Scale is: %f - %f\n", scale_M[threaded_row+row], scale_N[threaded_col+col]);
+        //   printf("Scale is: %f - %f\n\n", scale_M[threaded_row+row], scale_N[threaded_col+col]);
         // }
         
         out[(threaded_row+row)*N + threaded_col+col] = out_smem[row*(wmma_idx.bx_per_wx*WMMA_M)+col] / (scale_M[threaded_row+row] * scale_N[threaded_col+col]);

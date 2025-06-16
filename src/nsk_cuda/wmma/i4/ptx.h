@@ -8,7 +8,7 @@
 
 
 
-#define I4_MMA(O0, O1, X0, W0)                                    \
+#define I4_MMA(O0, O1, X0, W0)                                  \
    asm volatile(                                                \
       "wmma.mma.sync.aligned.m8n8k32.row.col.s32.s4.s4.s32 "    \
       "{%0,%1}, "                                               \
