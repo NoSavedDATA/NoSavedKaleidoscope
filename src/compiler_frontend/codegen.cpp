@@ -1039,14 +1039,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       Lvar_name = LHSE->NameSolver->codegen(scope_struct);
     
     
-    std::cout << "ATTRIBUTION: " << LType << " .\n";
+    // std::cout << "ATTRIBUTION: " << LType << " .\n";
     
     
-    std::cout << "NAME " << Lname << ".\n";
-    std::cout << "IS VEC: " << LHS->GetIsVec() << ".\n";
+    // std::cout << "NAME " << Lname << ".\n";
+    // std::cout << "IS VEC: " << LHS->GetIsVec() << ".\n";
 
      
-    // std::cout << "NOT VEC" << ".\n";
     
 
     // if (LType!="float")
@@ -1061,8 +1060,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       // return nullptr;
     } else
     {
-      std::cout << "HEAP STORE FOR " << Lname << ".\n";
-      // call("print", {scope_struct, Lvar_name});
+      // std::cout << "HEAP STORE FOR " << Lname << ".\n";
 
       if(LHS->GetSelf()&&LType!="pinned_tensor")
       {
@@ -1070,7 +1068,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
 
         if(LType=="float"||LType=="int")
+        {
+          // p2t("object_Attr_on_Offset_" + LType + " at " + std::to_string(obj_ptr_offset) + " from attribute " + attribute_name + ", class " + parser_struct.class_name);
           call("object_Attr_on_Offset_"+LType, {scope_struct, Val, const_int(obj_ptr_offset)});
+        }
         else
         {
           std::cout << "SELF STORE OF " << attribute_name << ".\n";
@@ -1919,7 +1920,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         function_allocas[parser_struct.function_name][VarName] = alloca;
 
 
-        std::cout << "CREATED STACK ALLOCA FOR " << VarName << ".\n";
+        // std::cout << "CREATED STACK ALLOCA FOR " << parser_struct.function_name << "/" <<  VarName << " WITH SIZE " << Size << ".\n";
         continue;
       }
 
@@ -2279,7 +2280,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     return const_float(0);
   // Look up the name in the global module table.
 
-   
+  
 
   std::string tgt_function = (CalleeOverride!="none") ? CalleeOverride : Callee;
   
@@ -2373,29 +2374,95 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   // Handle self or object attribute expressions
   if(isSelf || isAttribute)
   {
-    bool not_coding_language_method = (!in_str(tgt_function, native_methods));
-    is_user_cpp_function = in_str(tgt_function, user_cpp_functions);
+    bool is_nsk_fn = in_str(tgt_function, native_methods);
 
-    if (not_coding_language_method)
-      tgt_function = Class+tgt_function;  
+    if (!is_nsk_fn) {
+      tgt_function = Class+tgt_function;
+
+
+
+      if (isAttribute) {
+        NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
+        std::string object_name;
+        int type;
+        type = std::get<1>(name_solver->Names[0]);
+
+        if(!isSelf)
+        {        
+          object_name = std::get<0>(name_solver->Names[0]);
+
+          AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
+
+          Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
+          call("set_scope_object", {scope_struct_copy, obj});
+        } else {
+          Value *obj;
+          // std::cout << "Names size: " << name_solver->Names.size() << ".\n";
+
+          int names_size = name_solver->Names.size();
+          names_size = names_size-1;
+
+
+          std::string method_name = std::get<0>(name_solver->Names[names_size]);
+          if (method_name=="__init__") {
+            names_size--;
+          }
+
+          obj = callret("get_scope_object", {scope_struct});
+
+          
+          std::string cur;
+          int object_ptr_offset;
+          for (int i=1; i<names_size; ++i)
+          {
+            cur = std::get<0>(name_solver->Names[i]);
+            // std::cout << "solve " << i << ": " << cur << ".\n";
+            if (i==1)
+            {
+              object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
+              // std::cout << "SET obj_ptr OF nested FUNCTION ALLOCA " << parser_struct.function_name << ", object: " << cur <<  " offset " << object_ptr_offset << ".\n";
+              obj = callret("object_ptr_Load_on_Offset", {obj, const_int(object_ptr_offset)});
+            }
+          }
+
+
+          if (method_name=="__init__") { 
+            cur = std::get<0>(name_solver->Names[names_size]);
+
+            object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
+            
+
+            Value *obj_ptr;
+            int obj_size = ClassSize[Object_toClass[cur]];
+            // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
+            obj_ptr = callret("malloc", {const_int64(obj_size)});
+
+            call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
+
+            
+            obj = obj_ptr;
+          }
+
+          // AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, int8PtrTy);
+          // Value *ptr = callret("malloc", {const_int64(Size)});
+          // Builder->CreateStore(ptr, alloca);
+          // function_allocas[parser_struct.function_name][VarName] = alloca;
+
+
+          call("set_scope_object", {scope_struct_copy, obj});
+        }
+      }
+    }
     
     first_arg = NameSolver->codegen(scope_struct_copy);
     call("set_scope_first_arg", {scope_struct_copy, first_arg});
 
-    if (isAttribute&&not_coding_language_method) {
-      NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-      std::string object_name = std::get<0>(name_solver->Names[0]);
-
-      std::cout << "SET SCOPE OF FUNCTION ALLOCA " << parser_struct.function_name << ".\n";
-      AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
-      Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
-      call("set_scope_object", {scope_struct_copy, obj});
-
-    }
-
     changed_first_arg = true;  
   }
+  
+  
   call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
+
 
   std::cout << "TARGET FUNCTION IS " << tgt_function << ".\n";
 
@@ -2464,21 +2531,29 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   // --- Args --- //
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
+    // std::cout << "Load of: " << LoadOf << ".\n";
+    // p2t("Load of: " + LoadOf);
     Value *arg;
     if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int") && !isSelf)
     {
-      // std::cout << "CALLEXPR LOAD OF " << LoadOf << ".\n";
+      // p2t("It is an alloca");
+
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 
     } else if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="tensor"||Load_Type=="int"||Load_Type=="str_vec"||Load_Type=="int_vec")&&isSelf) {
+      // p2t("It is an attribute");
       int object_ptr_offset = ClassVariables[parser_struct.class_name][LoadOf];
       arg = callret("object_Load_on_Offset", {scope_struct_copy, const_int(object_ptr_offset)});
     } else {
+      // p2t("It is unknown");
       std::string load_fn = Load_Type+"_Load";
       arg = callret(load_fn, {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});  
     }
     ArgsV.push_back(arg);
   }
+
+
+
 
   // Sends the non-changed scope_struct to load/codegen the arguments from the argument list
   ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, tgt_function);
@@ -2492,27 +2567,24 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
 
   
-  Value *ret;
+  Value *ret = ConstantFP::get(*TheContext, APFloat(0.0f));
   if (CalleeOverride=="none")
   {
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-    // if (tgt_function=="Testincrement_yield_ptr")
     call("scope_struct_Delete", {scope_struct_copy});
-    // {
-    //   p2t("Function value is");
-    //   call("print_float", {ret});
-    // }
+
 
     if (Type!="float"&&Type!="int"&&Type!="")
     {
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
     }
+
+    // std::cout << "Returning" << ".\n";
     return ret;
   }
   else
   {
     
-    // std::cout << "Calling " << CalleeOverride << ".\n";
     if (in_str(CalleeOverride, native_modules))
     {
       CalleeF = getFunction(CalleeOverride);

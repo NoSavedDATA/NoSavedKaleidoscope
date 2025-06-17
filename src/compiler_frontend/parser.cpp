@@ -130,7 +130,8 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
       return LogError("Expected object identifier names.");
   }
 
-  auto aux = std::make_unique<ObjectExprAST>(parser_struct, std::move(VarNames), "object", std::move(VecInitSize), ClassSize[Name]);
+
+  auto aux = std::make_unique<ObjectExprAST>(parser_struct, std::move(VarNames), "object", std::move(VecInitSize), ClassSize[_class]);
   aux->SetSelf(is_self);
   aux->SetIsAttribute(is_attr);
   aux->SetPreDot(pre_dot);
@@ -952,6 +953,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string 
     if (i==0&&CurTok==(tok_class_attr))
     {
       Prev_IdName = IdentifierStr;
+      // Robust check for emtpy
+
       Names.push_back(std::make_tuple(IdentifierStr, _type, std::vector<std::unique_ptr<ExprAST>>{}));
       _type = type_attr;
     }
@@ -990,7 +993,10 @@ std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string 
       Names.push_back(std::make_tuple(IdName, _type, std::move(idx)));
       is_vec=true;
     } else
-      Names.push_back(std::make_tuple(IdName, _type, std::vector<std::unique_ptr<ExprAST>>{}));
+    {
+      if (!IdName.empty() && IdName.find_first_not_of(" \t\n\r") != std::string::npos)
+        Names.push_back(std::make_tuple(IdName, _type, std::vector<std::unique_ptr<ExprAST>>{}));
+    }
 
     //std::cout << "tok: " << ReverseToken(CurTok) << "\n";
     i+=1;
@@ -2147,10 +2153,13 @@ std::unique_ptr<ExprAST> ParseClass() {
   
 
   int last_offset=0;
-  std::vector<Type *> llvm_types;
-  while(CurTok==tok_data)
+  std::vector<llvm::Type *> llvm_types;
+  while(CurTok==tok_data||CurTok==tok_identifier)
   { 
     std::string data_type = IdentifierStr;
+
+    bool is_object = in_str(data_type, Classes);
+
     getNextToken();
     while(true)
     {
@@ -2158,7 +2167,14 @@ std::unique_ptr<ExprAST> ParseClass() {
         LogError("Class " + Name + " variables definition requires simple non-attribute names.");
 
 
-      typeVars[IdentifierStr] = data_type;
+
+      if (is_object) {
+        objectVars.push_back(IdentifierStr);
+        Object_toClass[IdentifierStr] = data_type; 
+      }
+      else
+       typeVars[IdentifierStr] = data_type;
+      
       ClassVariables[Name][IdentifierStr] = last_offset;
       
       if (data_type=="float")
@@ -2186,13 +2202,13 @@ std::unique_ptr<ExprAST> ParseClass() {
     if (CurTok==tok_space)
       getNextToken();
   }
+  ClassSize[Name] = last_offset;
 
   // for (auto &pair : ClassVariables[Name])
   // {
   //   std::cout << Name << ": " << pair.first << " - " << pair.second << ".\n";
   // }
   
-  // ClassSize[Name] = last_offset;
   // llvm::Type *class_struct = StructType::create(*TheContext);
   // class_struct->setBody(llvm_types);
   // ClassStructs[Name] = class_struct; // I fear this approach may lead to stack overflow, like what happend to the previous string allocas.
@@ -2203,7 +2219,7 @@ std::unique_ptr<ExprAST> ParseClass() {
 
 
   if (CurTok!=tok_def)
-    return LogError("A class definition requires it's functions.");
+    return LogError("A class definition requires it's functions. Got token: " + ReverseToken(CurTok));
 
   int i=0;
 

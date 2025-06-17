@@ -156,95 +156,95 @@ class VecIdxExprAST : public ExprAST {
   
   
   
-  class ObjectVecIdxExprAST : public ExprAST {
-  
-    public:
-      std::unique_ptr<ExprAST> Vec, Idx;
-      std::string _post_dot;
-  
-      ObjectVecIdxExprAST(std::unique_ptr<ExprAST> Vec, std::string _post_dot, std::unique_ptr<ExprAST> Idx);
-  
-      Value *codegen(Value *scope_struct) override;
-  };
-  
-  /// VarExprAST - Expression class for var/in
-  class VarExprAST : public ExprAST {
-  
-    public:
-      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-      
-      std::string Type;
-      VarExprAST(
-          std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-          std::string Type);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  
-  class StrVecExprAST : public ExprAST {
-  
-    public:
-      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-      std::string Type;
-      
-      StrVecExprAST(
-          std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-          std::string Type);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  class NewVecExprAST : public ExprAST {
-  
-    public:
-      std::vector<std::unique_ptr<ExprAST>> Values;
-      std::string Type;
-      
-      NewVecExprAST(
-          std::vector<std::unique_ptr<ExprAST>> Values,
-          std::string Type);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  class ObjectExprAST : public VarExprAST {
-  
+class ObjectVecIdxExprAST : public ExprAST {
+
   public:
-    Parser_Struct parser_struct;
-    std::unique_ptr<ExprAST> Init;
-    int Size;
-  
-    ObjectExprAST(
-        Parser_Struct parser_struct,
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> Init, int Size);
-  
+    std::unique_ptr<ExprAST> Vec, Idx;
+    std::string _post_dot;
+
+    ObjectVecIdxExprAST(std::unique_ptr<ExprAST> Vec, std::string _post_dot, std::unique_ptr<ExprAST> Idx);
+
     Value *codegen(Value *scope_struct) override;
-  };
+};
+
+/// VarExprAST - Expression class for var/in
+class VarExprAST : public ExprAST {
+
+  public:
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+    
+    std::string Type;
+    VarExprAST(
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+        std::string Type);
+
+  Value *codegen(Value *scope_struct) override;
+};
+  
+  
+  
+class StrVecExprAST : public ExprAST {
+
+  public:
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+    std::string Type;
+    
+    StrVecExprAST(
+        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+        std::string Type);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+class NewVecExprAST : public ExprAST {
+
+  public:
+    std::vector<std::unique_ptr<ExprAST>> Values;
+    std::string Type;
+    
+    NewVecExprAST(
+        std::vector<std::unique_ptr<ExprAST>> Values,
+        std::string Type);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+class ObjectExprAST : public VarExprAST {
+
+public:
+  Parser_Struct parser_struct;
+  std::unique_ptr<ExprAST> Init;
+  int Size;
+
+  ObjectExprAST(
+      Parser_Struct parser_struct,
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::unique_ptr<ExprAST> Init, int Size);
+
+  Value *codegen(Value *scope_struct) override;
+};
   
   
    
   
   
   
-  class DataExprAST : public VarExprAST {
-    public:
-      std::vector<std::unique_ptr<ExprAST>> Notes;
-      Parser_Struct parser_struct;
-  
-      DataExprAST(
-        Parser_Struct,
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::vector<std::unique_ptr<ExprAST>> Notes);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
+class DataExprAST : public VarExprAST {
+  public:
+    std::vector<std::unique_ptr<ExprAST>> Notes;
+    Parser_Struct parser_struct;
+
+    DataExprAST(
+      Parser_Struct,
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::vector<std::unique_ptr<ExprAST>> Notes);
+
+  Value *codegen(Value *scope_struct) override;
+};
 
 
   
