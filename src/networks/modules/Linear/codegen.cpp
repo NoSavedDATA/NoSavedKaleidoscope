@@ -152,7 +152,6 @@ extern "C" float Linear_Create(Scope_Struct *scope_struct, char *name, char *sco
 
   NamedLinear[name] = std::move(linear);
 
-  std::cout << "***Created Linear: " << name << ".\n";
 
   return 0;
 }

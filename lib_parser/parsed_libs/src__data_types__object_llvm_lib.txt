@@ -1,4 +1,4 @@
-1821-05-20 13:48:31
+1821-06-17 19:24:29
 
 	FunctionType *InstantiateObjectTy= FunctionType::get(
 		int8PtrTy,
@@ -118,3 +118,17 @@
 		false
 	);
 	TheModule->getOrInsertFunction("object_Load_on_Offset", object_Load_on_OffsetTy);
+
+	FunctionType *object_ptr_Load_on_OffsetTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("object_ptr_Load_on_Offset", object_ptr_Load_on_OffsetTy);
+
+	FunctionType *object_ptr_Attribute_objectTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("object_ptr_Attribute_object", object_ptr_Attribute_objectTy);

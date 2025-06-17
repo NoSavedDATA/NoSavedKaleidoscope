@@ -47,7 +47,7 @@ void set_user_functions() {
 		"LockMutex", "UnlockMutex", 
 		"FirstArgOnDemand", 
 		"EmbeddingLn", "EmbeddingLn_Create", 
-		"InstantiateObject", "objHash", "LoadObject", "InitObjectVecWithNull", "is_null", "objAttr_var_from_var", "objAttr_var_from_vec", "objAttr_vec_from_var", "objAttr_vec_from_vec", "append", "LoadObjectScopeName", "object_Attr_on_Offset_float", "object_Attr_on_Offset_int", "object_Attr_on_Offset", "object_Load_on_Offset_float", "object_Load_on_Offset_int", "object_Load_on_Offset", 
+		"InstantiateObject", "objHash", "LoadObject", "InitObjectVecWithNull", "is_null", "objAttr_var_from_var", "objAttr_var_from_vec", "objAttr_vec_from_var", "objAttr_vec_from_vec", "append", "LoadObjectScopeName", "object_Attr_on_Offset_float", "object_Attr_on_Offset_int", "object_Attr_on_Offset", "object_Load_on_Offset_float", "object_Load_on_Offset_int", "object_Load_on_Offset", "object_ptr_Load_on_Offset", "object_ptr_Attribute_object", 
 		"mse", "mse_with_priorities", 
 		"min", "max", "logE2f", "roundE", "floorE", "logical_not", 
 		"str_Create", "str_Load", "str_Store", "str_Copy", "str_str_add", "str_int_add", "str_float_add", "int_str_add", "float_str_add", "PrintStr", "cat_str_float", "SplitString", "str_split_idx", "str_to_float", "StrToFloat", "str_Delete", 

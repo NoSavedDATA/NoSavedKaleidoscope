@@ -136,6 +136,20 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("object_Load_on_Offset", object_Load_on_OffsetTy);
 
+	FunctionType *object_ptr_Load_on_OffsetTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("object_ptr_Load_on_Offset", object_ptr_Load_on_OffsetTy);
+
+	FunctionType *object_ptr_Attribute_objectTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("object_ptr_Attribute_object", object_ptr_Attribute_objectTy);
+
 	FunctionType *reluTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
