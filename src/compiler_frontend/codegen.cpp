@@ -168,6 +168,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       continue;
     }
 
+
     Value *var_name, *scopeless_name;
 
     // --- Name Solving --- //
@@ -225,6 +226,17 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     p2t("DataExpr Call create for " + create_fn);
     
     initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
+
+
+    if(is_self)
+    {
+      p2t("GOTCHA");
+      int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
+      p2t(VarName+" offset is "+std::to_string(object_ptr_offset));
+  
+      Value *obj = callret("get_scope_object", {scope_struct});
+      call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
+    }
       
     // p2t("DataExpr Dispose notes vector");
     // p2t("Dispose notes vector of " + Type + "/" + Name + "/" + std::to_string(is_self) + "/" + std::to_string(is_attr));
@@ -2396,62 +2408,137 @@ Value *CallExprAST::codegen(Value *scope_struct) {
           Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
           call("set_scope_object", {scope_struct_copy, obj});
         } else {
-          Value *obj;
-          // std::cout << "Names size: " << name_solver->Names.size() << ".\n";
+          // Value *obj;
+          // // std::cout << "Names size: " << name_solver->Names.size() << ".\n";
 
-          int names_size = name_solver->Names.size();
-          names_size = names_size-1;
+          // int names_size = name_solver->Names.size();
+          // names_size = names_size-1;
 
 
-          std::string method_name = std::get<0>(name_solver->Names[names_size]);
-          if (method_name=="__init__") {
-            names_size--;
-          }
+          // std::string method_name = std::get<0>(name_solver->Names[names_size]);
+          // if (method_name=="__init__") {
+          //   names_size--;
+          // }
 
-          obj = callret("get_scope_object", {scope_struct});
+          // obj = callret("get_scope_object", {scope_struct});
 
           
-          std::string cur;
-          int object_ptr_offset;
-          for (int i=1; i<names_size; ++i)
-          {
-            cur = std::get<0>(name_solver->Names[i]);
-            // std::cout << "solve " << i << ": " << cur << ".\n";
-            if (i==1)
-            {
-              object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
-              // std::cout << "SET obj_ptr OF nested FUNCTION ALLOCA " << parser_struct.function_name << ", object: " << cur <<  " offset " << object_ptr_offset << ".\n";
-              obj = callret("object_ptr_Load_on_Offset", {obj, const_int(object_ptr_offset)});
-            }
-          }
+          // std::string cur;
+          // int object_ptr_offset;
+          // for (int i=1; i<names_size; ++i)
+          // {
+          //   cur = std::get<0>(name_solver->Names[i]);
+          //   // std::cout << "solve " << i << ": " << cur << ".\n";
+          //   if (i==1)
+          //   {
+          //     object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
+          //     std::cout << "SET obj_ptr OF nested FUNCTION ALLOCA " << parser_struct.function_name << ", object: " << cur <<  " offset " << object_ptr_offset << ".\n";
+          //     obj = callret("object_ptr_Load_on_Offset", {obj, const_int(object_ptr_offset)});
+          //   }
+          // }
 
 
-          if (method_name=="__init__") { 
-            cur = std::get<0>(name_solver->Names[names_size]);
+          // if (method_name=="__init__") { 
+          //   cur = std::get<0>(name_solver->Names[names_size]);
 
-            object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
+          //   object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
             
 
-            Value *obj_ptr;
-            int obj_size = ClassSize[Object_toClass[cur]];
-            // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
-            obj_ptr = callret("malloc", {const_int64(obj_size)});
+          //   Value *obj_ptr;
+          //   int obj_size = ClassSize[Object_toClass[cur]];
+          //   // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
+          //   obj_ptr = callret("malloc", {const_int64(obj_size)});
 
-            call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
+          //   call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
 
             
-            obj = obj_ptr;
-          }
+          //   obj = obj_ptr;
+          // }
 
-          // AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, int8PtrTy);
-          // Value *ptr = callret("malloc", {const_int64(Size)});
-          // Builder->CreateStore(ptr, alloca);
-          // function_allocas[parser_struct.function_name][VarName] = alloca;
+          // if (method_name=="__init__") { 
+          //   cur = std::get<0>(name_solver->Names[names_size]);
+
+          //   object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
+            
+
+          //   Value *obj_ptr;
+          //   int obj_size = ClassSize[Object_toClass[cur]];
+          //   // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
+          //   obj_ptr = callret("malloc", {const_int64(obj_size)});
+
+          //   call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
+
+            
+          //   obj = obj_ptr;
+          // }
 
 
-          call("set_scope_object", {scope_struct_copy, obj});
+          // call("set_scope_object", {scope_struct_copy, obj});
         }
       }
+    }
+
+
+    if (isSelf) { 
+      NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
+      std::string object_name;
+      int type;
+      type = std::get<1>(name_solver->Names[0]);
+
+
+      Value *obj;
+      std::cout << "----------------------------Names size: " << name_solver->Names.size() << ".\n";
+      int name_solve_to_last = name_solver->GetNameSolveToLast();
+      std::cout << "name_solve_to_last " << name_solve_to_last << ".\n";
+
+      int names_size = name_solver->Names.size();
+      names_size = names_size-1;
+      
+      
+
+
+      std::string method_name = std::get<0>(name_solver->Names[names_size]);
+      if (method_name=="__init__") {
+        names_size--;
+      }
+
+      names_size += name_solve_to_last;
+
+      obj = callret("get_scope_object", {scope_struct});
+
+      
+      std::cout << "solve to: " << names_size << ".\n";
+
+      std::string cur;
+      int object_ptr_offset;
+      for (int i=1; i<names_size; ++i)
+      {
+        cur = std::get<0>(name_solver->Names[i]);
+        std::cout << "---------------solve " << i << ": " << cur << ".\n";
+        if (i==1)
+        {
+          object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
+          std::cout << "SET obj_ptr OF nested FUNCTION ALLOCA " << parser_struct.function_name << ", object: " << cur <<  " offset " << object_ptr_offset << ".\n";
+          obj = callret("object_ptr_Load_on_Offset", {obj, const_int(object_ptr_offset)});
+        }
+      }
+
+
+      if (method_name=="__init__") { 
+        cur = std::get<0>(name_solver->Names[names_size]);
+        object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
+        
+        Value *obj_ptr;
+        int obj_size = ClassSize[Object_toClass[cur]];
+        obj_ptr = callret("malloc", {const_int64(obj_size)});
+        // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
+
+        call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
+ 
+        obj = obj_ptr;
+      }
+
+      call("set_scope_object", {scope_struct_copy, obj});
     }
     
     first_arg = NameSolver->codegen(scope_struct_copy);
@@ -2531,8 +2618,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   // --- Args --- //
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
-    // std::cout << "Load of: " << LoadOf << ".\n";
-    // p2t("Load of: " + LoadOf);
+    std::cout << "Load of: " << LoadOf << ".\n";
+    p2t("Load of: " + LoadOf);
     Value *arg;
     if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int") && !isSelf)
     {

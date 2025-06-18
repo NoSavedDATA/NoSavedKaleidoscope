@@ -1,4 +1,4 @@
-1821-06-17 19:46:08
+1821-06-18 19:20:00
 
 	FunctionType *Conv2dTy= FunctionType::get(
 		int8PtrTy,
@@ -8,7 +8,7 @@
 	TheModule->getOrInsertFunction("Conv2d", Conv2dTy);
 
 	FunctionType *Conv2d_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);

@@ -41,13 +41,18 @@ void conv2d_backward(float *inp, int size, float *out,
 
 extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
+
+  std::cout << "Conv2d pointer is: " << scope_struct->object_ptr << ".\n";
+
+  
+
   std::string conv_name = scope_struct->first_arg;
   int thread_id = scope_struct->thread_id;
 
+  std::cout << "Conv forward of " << conv_name << " and tensor " << tensor->name << "\n";
+  // std::cout << "Conv forward for conv: " << conv_name <<"\n";  
 
-  // std::cout << "Conv forward of " << conv_name << " and tensor " << tensor->name << "\n";
-  // std::cout << "Conv forward for conv: " << conv_name <<"\n";
-  
+
 
   float *output;
   std::vector<int> dims = tensor->dims;
@@ -57,8 +62,7 @@ extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   int H = dims[dims.size()-2];
   int W = dims[dims.size()-1];
 
-
-  std::unique_ptr<Conv2dCPP> conv = std::move(NamedConv2d[conv_name]);
+  Conv2dCPP *conv = (Conv2dCPP*) scope_struct->object_ptr;
 
 
   if ((int)C!=(int)conv->C)
@@ -66,23 +70,15 @@ extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
     std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the convolution are: " + std::to_string(conv->C);
     LogError(error);
     
-    NamedConv2d[conv_name] = std::move(conv);
     return nullptr;
   }
 
-
   tensor->Sync();
-
   output = conv->Forward(tensor, H, W, B, thread_id);
-
  
-  
 
-  std::vector<int> new_dims = {conv->B, conv->OC, conv->out_H, conv->out_W};
+  std::vector<int> new_dims = {conv->B, conv->OC, conv->out_H, conv->out_W};  
   
-  
-  NamedConv2d[conv_name] = std::move(conv);
-
 
   return customOpTensor(output, new_dims, DimsProd(new_dims), "conv2d_backward", conv_name, tensor);
 }
@@ -94,11 +90,10 @@ extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-extern "C" float Conv2d_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
+extern "C" void *Conv2d_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
 
   // std::cout << "\n\n\n----------------------EXECUTION: CREATING CONV2D: " << name << ".\n\n\n\n";
-
 
   std::string init = "xavu";
 
@@ -108,11 +103,8 @@ extern "C" float Conv2d_Create(Scope_Struct *scope_struct, char *name, char *sco
   int stride = notes_vector->get<int>(3);
   int padding = notes_vector->get<int>(4);
 
-
-
   std::vector<std::string> notes;
   
-
   for (int i=2; i<notes_vector->data->size(); i++)
   {
     if(notes_vector->data_types->at(i)=="str")
@@ -127,12 +119,12 @@ extern "C" float Conv2d_Create(Scope_Struct *scope_struct, char *name, char *sco
   }
 
 
-  std::unique_ptr<Conv2dCPP> conv2d = std::make_unique<Conv2dCPP>(C, OC, ks, stride, padding, init, notes, name);
+  Conv2dCPP *conv = new Conv2dCPP(C, OC, ks, stride, padding, init, notes, name);
+
+  // std::unique_ptr<Conv2dCPP> conv2d = std::make_unique<Conv2dCPP>(C, OC, ks, stride, padding, init, notes, name);
+
+  // NamedConv2d[name] = std::move(conv2d);
 
 
-  NamedConv2d[name] = std::move(conv2d);
-
-  // std::cout << "***Created Conv2d: " << name << ".\n";
-
-  return 0;
+  return conv;
 }

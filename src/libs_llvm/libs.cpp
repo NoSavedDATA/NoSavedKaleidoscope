@@ -1040,7 +1040,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("Conv2d", Conv2dTy);
 
 	FunctionType *Conv2d_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
@@ -1537,7 +1537,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("Linear_weight", Linear_weightTy);
 
 	FunctionType *Linear_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
