@@ -1,4 +1,4 @@
-1821-06-17 15:22:24
+1821-06-18 19:30:52
 
 	FunctionType *LinearTy= FunctionType::get(
 		int8PtrTy,
@@ -22,7 +22,7 @@
 	TheModule->getOrInsertFunction("Linear_weight", Linear_weightTy);
 
 	FunctionType *Linear_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
