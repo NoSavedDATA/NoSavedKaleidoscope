@@ -2690,7 +2690,13 @@ static void InitializeModule() {
 
 
 
-
+  TheModule->getOrInsertFunction(
+    "posix_memalign",
+    FunctionType::get(Type::getInt32Ty(*TheContext),
+                      {int8PtrTy->getPointerTo(), // void**
+                       Type::getInt64Ty(*TheContext),                   // alignment
+                       Type::getInt64Ty(*TheContext)},                  // size
+                      false));
   
 
 

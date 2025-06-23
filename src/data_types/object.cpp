@@ -194,7 +194,7 @@ extern "C" void object_Attr_on_Offset_int(Scope_Struct *scope_struct, int value,
   *(int *)((char*)scope_struct->object_ptr + offset) = value;
 }
 extern "C" void object_Attr_on_Offset(Scope_Struct *scope_struct, void *value, int offset) {
-  // std::cout << "STORING VOID " << value << " ON OFFSET " << offset << ".\n";
+  // std::cout << "STORING VOID " << value << " ON OFFSET " << offset << " on object " << scope_struct->object_ptr  << ".\n";
   *(void**)((char*)scope_struct->object_ptr + offset) = value;
 }
 
@@ -208,17 +208,17 @@ extern "C" int object_Load_on_Offset_int(Scope_Struct *scope_struct, int offset)
 }
 
 extern "C" void *object_Load_on_Offset(Scope_Struct *scope_struct, int offset) {
-  // std::cout << "LOADING VOID" << ".\n";
-  void *value = *(void**)((char*)scope_struct->object_ptr + offset);
-  // std::cout << "LOADING VOID GOT " << value << ".\n";
-  return value;
+  void **slot = (void **)((char *)scope_struct->object_ptr + offset);
+  // std::cout << "Loading " << slot << " from " << scope_struct->object_ptr << " on offset " << offset << ".\n"; 
+  
+  return *slot;
 }
 
 
 extern "C" void *object_ptr_Load_on_Offset(void *object_ptr, int offset) {
   // Read a void* stored at object_ptr + offset
   void **slot = (void **)((char *)object_ptr + offset);
-  std::cout << "Loading " << slot << " from " << object_ptr << " on offset " << offset << ".\n";
+  // std::cout << "Loading " << slot << " from " << object_ptr << " on offset " << offset << ".\n";
 
   return *slot;
 }
@@ -227,5 +227,5 @@ extern "C" void object_ptr_Attribute_object(void *object_ptr, int offset, void *
   // Write the pointer to object_ptr + offset
   void **slot = (void **)((char *)object_ptr + offset);
   *slot = object_attribute;
-  std::cout << "Attributing " << object_attribute << " to " << object_ptr << " on offset " << offset << ".\n";
+  // std::cout << "Attributing " << object_attribute << " to " << object_ptr << " on offset " << offset << ".\n";
 }

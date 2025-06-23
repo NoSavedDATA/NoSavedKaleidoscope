@@ -1,4 +1,4 @@
-1821-06-06 14:51:19
+1821-06-23 16:51:35
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -37,7 +37,7 @@
 
 	FunctionType *tensor_gpuwTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_gpuw", tensor_gpuwTy);

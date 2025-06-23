@@ -236,6 +236,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
   
       Value *obj = callret("get_scope_object", {scope_struct});
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
+      // std::exit(0);
     }
       
     // p2t("DataExpr Dispose notes vector");
@@ -752,7 +753,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
     return load_alloca(Name, type, parser_struct.function_name);
   }
 
-  if ((type=="float"||type=="str"||type=="tensor"||type=="int"||type=="str_vec"||type=="int_vec")&&is_self) {
+  if ((type=="float"||type=="str"||type=="tensor"||type=="int"||type=="str_vec"||type=="int_vec"||type=="pinned_tensor")&&is_self) {
     int object_ptr_offset = ClassVariables[parser_struct.class_name][Name];
     if (type=="float"||type=="int")
       return callret("object_Load_on_Offset_"+type, {scope_struct, const_int(object_ptr_offset)});
@@ -1929,10 +1930,12 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, int8PtrTy);
         Value *ptr = callret("malloc", {const_int64(Size)});
         Builder->CreateStore(ptr, alloca);
+        // Value *ptr = callret("posix_memalign", {alloca, const_int64(8), const_int64(Size)});
         function_allocas[parser_struct.function_name][VarName] = alloca;
 
 
         // std::cout << "CREATED STACK ALLOCA FOR " << parser_struct.function_name << "/" <<  VarName << " WITH SIZE " << Size << ".\n";
+        // std::exit(0);
         continue;
       }
 
@@ -2253,7 +2256,8 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     Value *arg; 
-    if ((Args[i]->GetType()=="tensor" && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf()) || (Args[i]->GetType()=="pinned_tensor"&&Args[i]->GetIsVarLoad()))
+    // if ((Args[i]->GetType()=="tensor" && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf()) || (Args[i]->GetType()=="pinned_tensor"&&Args[i]->GetIsVarLoad()))
+    if ((Args[i]->GetType()=="tensor" && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf()))
     {      
       VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
       arg = Arg->NameSolver->codegen(scope_struct);
@@ -2619,7 +2623,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
     std::cout << "Load of: " << LoadOf << ".\n";
-    p2t("Load of: " + LoadOf);
+    // p2t("Load of: " + LoadOf);
     Value *arg;
     if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int") && !isSelf)
     {
@@ -2629,8 +2633,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     } else if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="tensor"||Load_Type=="int"||Load_Type=="str_vec"||Load_Type=="int_vec")&&isSelf) {
       // p2t("It is an attribute");
-      int object_ptr_offset = ClassVariables[parser_struct.class_name][LoadOf];
-      arg = callret("object_Load_on_Offset", {scope_struct_copy, const_int(object_ptr_offset)});
+      // int object_ptr_offset = ClassVariables[parser_struct.class_name][LoadOf];
+      // arg = callret("object_Load_on_Offset", {scope_struct_copy, const_int(object_ptr_offset)});
+      arg = callret("get_scope_object", {scope_struct_copy});
     } else {
       // p2t("It is unknown");
       std::string load_fn = Load_Type+"_Load";
