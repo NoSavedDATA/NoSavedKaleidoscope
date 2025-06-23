@@ -125,8 +125,10 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char 
 
 extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char *img_name, int worker_idx, int batch_idx)
 {
-  //std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
-  //std::cout << "Image: " << img_name <<  "\n";
+  // std::cout << "Image: " << img_name <<  "\n";
+  // std::cout << "LOADING IMAGE FOR: " << tensor->name <<  "\n";
+
+
 
 
   int width, height, channels;
@@ -138,6 +140,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
   if (image_data) {
     
     std::vector<int> dims = tensor->dims;
+    // PrintDims(dims);
 
     
     
@@ -174,7 +177,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
     float *image_data_float = tensor->cpu_tensor_ptr;
     int idx_offset =  (batchless_dims_prod*batch_idx + workerless_dims_prod*worker_idx);
 
-    //std::cout << "worker idx: " << worker_idx << ", batch idx: " << batch_idx << ", batch offset: " << idx_offset << "\n";
+    // std::cout << "worker idx: " << worker_idx << ", batch idx: " << batch_idx << ", batch offset: " << idx_offset << "\n";
   
     // Loop through each pixel and convert to float between 0.0 and 1.0
     for (int y = 0; y < height; ++y) {

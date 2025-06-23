@@ -851,7 +851,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("tensor_transpose", tensor_transposeTy);
 
 	FunctionType *pinned_tensor_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
@@ -1230,7 +1230,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *tensor_gpuwTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_gpuw", tensor_gpuwTy);

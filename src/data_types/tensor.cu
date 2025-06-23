@@ -399,11 +399,11 @@ extern "C" DT_tensor *gpu(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tens
 
 
 
-extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tensor *pinned_tensor, float idx)
+extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tensor *pinned_tensor, int idx)
 {
   int thread_id = scope_struct->thread_id;
 
-  // std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << " and thread id: " << thread_id << "\n";
+  std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << " and thread id: " << thread_id << "\n";
 
   float *tensor_ptr, *tensor_cpu;
 

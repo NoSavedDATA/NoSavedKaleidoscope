@@ -18,10 +18,10 @@
 
 
 
-extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector)
+extern "C" void *pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector)
 {
 
-  // std::cout << "PINNED TENSOR CREATE"  << ".\n";
+  std::cout << "PINNED TENSOR CREATE"  << ".\n";
 
   DT_tensor *tensor;
 
@@ -36,7 +36,6 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
   }
 
 
-  // PrintDims(dims);
 
   int product = DimsProd(dims);
   float *tensor_ptr, *pool_tensor;
@@ -44,7 +43,6 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
 
 
   cudaMallocHost(&tensor_cpu, round_to_nearest_pow2(product)*sizeof(float));
-  //tensor_cpu = new float[product];
 
   for (int i = 0; i < product; ++i) {
     tensor_cpu[i] = 0.0f;
@@ -53,7 +51,7 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
 
   cudaMalloc(&tensor_ptr, round_to_nearest_pow2(product)*sizeof(float));  
   tensor = createPinned(tensor_ptr, tensor_cpu, dims, product, tensor_name);
-  NamedTensorsT[tensor_name] = tensor;
+  // NamedTensorsT[tensor_name] = tensor;
   
 
   
@@ -66,7 +64,7 @@ extern "C" float pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
   move_to_pool(0, pool_product, pool_tensor, "create pinned");
   
 
-  return 0;
+  return tensor;
 }
 
 

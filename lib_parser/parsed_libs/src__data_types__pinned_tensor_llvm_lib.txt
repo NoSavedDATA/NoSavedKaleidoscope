@@ -1,7 +1,7 @@
-1821-06-06 14:51:13
+1821-06-23 15:45:52
 
 	FunctionType *pinned_tensor_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
