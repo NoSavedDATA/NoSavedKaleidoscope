@@ -1214,13 +1214,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
 
-	FunctionType *tensor_opaTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tensor_opa", tensor_opaTy);
-
 	FunctionType *gpuTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy},

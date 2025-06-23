@@ -12,7 +12,7 @@
 std::vector<DT_tensor *> todo_backward_tensors;
 std::map<std::string, float *> NamedParamGrads;
 
-std::map<std::string, std::function<void(float *, int, float *, float *, float *, std::string, DT_tensor *)>> backward_functions;
+std::map<std::string, std::function<void(float *, int, float *, float *, float *, void *, DT_tensor *)>> backward_functions;
 
 
 
@@ -208,7 +208,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
       //   d_rhs = device_dy;
       //   break;
       case gather_last_dim_op:
-        gather_last_dim_backward(lhs, lhs_size, out, d_lhs, device_dy, back_node->scopeless_name, back_node);
+        gather_last_dim_backward(lhs, lhs_size, out, d_lhs, device_dy, back_node->network_module, back_node);
         d_rhs = device_dy;
         break;
       case broadcast_lastdim_add_op:
@@ -236,7 +236,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
 
       case custom_op:
         // std::cout << "custom: " << back_node->operation << ".\n";
-        backward_functions[back_node->operation](lhs, lhs_size, out, d_lhs, device_dy, back_node->scopeless_name, back_node);
+        backward_functions[back_node->operation](lhs, lhs_size, out, d_lhs, device_dy, back_node->network_module, back_node);
         break;
 
       default:

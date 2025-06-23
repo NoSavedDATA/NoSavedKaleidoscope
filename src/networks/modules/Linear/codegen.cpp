@@ -27,13 +27,15 @@
 
 void linear_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
-  std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[module_name]);
+
+  
+  LinearCPP *linear = (LinearCPP*) network_module;
+  // std::cout << "linear backward of " << linear->Name << ".\n";
 
   linear->Backward(inp, dinp, dout);
 
-  NamedLinear[module_name] = std::move(linear);
 }
 
 
@@ -47,7 +49,7 @@ void linear_backward(float *inp, int size, float *out,
 
 extern "C" DT_tensor *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
-  std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
+  // std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
   int thread_id = scope_struct->thread_id;
   
   
@@ -88,7 +90,7 @@ extern "C" DT_tensor *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-  DT_tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "linear_backward", conv_name, tensor);
+  DT_tensor *new_tensor = customOpTensor(output, new_dims, DimsProd(new_dims), "linear_backward", linear, tensor);
   return new_tensor;
 }
 

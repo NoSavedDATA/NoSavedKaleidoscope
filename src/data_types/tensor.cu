@@ -339,11 +339,6 @@ void tensor_Clean_Up(void *data_ptr) {
   // std::cout << "tensor_Clean_Up" << ".\n";
 }
 
-extern "C" float tensor_opa(Scope_Struct *scope_struct, void *data_ptr) {
-  std::cout << "opa tensor"  << ".\n";
-  PrintDims(static_cast<DT_tensor *>(data_ptr)->dims);
-  return 25;
-}
 
 
 
@@ -403,7 +398,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
 {
   int thread_id = scope_struct->thread_id;
 
-  std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << " and thread id: " << thread_id << "\n";
+  // std::cout << "\nGpu transfer for: " << tensor->name << " on worker " << idx << " and thread id: " << thread_id << "\n";
 
   float *tensor_ptr, *tensor_cpu;
 
@@ -758,7 +753,7 @@ extern "C" DT_tensor *zeros_like(Scope_Struct *scope_struct, DT_tensor *tensor) 
   cudaStream_t stream = ThreadsStream[thread_id];
   set_to_zero_kernel<<<grid_size, block_size, 0, stream>>>(y, dims_prod);
 
-  return customOpTensor(y, dims, DimsProd(dims), "set_to_zero", "", tensor);
+  return customOpTensor(y, dims, DimsProd(dims), "set_to_zero", nullptr, tensor);
 }
 
 

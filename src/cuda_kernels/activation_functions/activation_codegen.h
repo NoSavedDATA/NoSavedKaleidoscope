@@ -11,16 +11,16 @@
 
 void relu_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node);
+                     void *, DT_tensor *node);
 
 void gelu_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node);
+                     void *, DT_tensor *node);
 
 void sigmoid_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node);
+                     void *, DT_tensor *node);
 
 void tanh_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node);
+                     void *, DT_tensor *node);

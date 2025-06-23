@@ -34,13 +34,13 @@ extern "C" DT_tensor *relu(Scope_Struct *scope_struct, DT_tensor *tensor)
   relu_forward<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
 
 
-  return customOpTensor(y, dims, DimsProd(dims), "relu_backward", "", tensor);
+  return customOpTensor(y, dims, DimsProd(dims), "relu_backward", nullptr, tensor);
 }
 
 
 void relu_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node) {
+                     void *network_module, DT_tensor *node) {
   int grid_size, block_size;
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   relu_backward1<<<grid_size, block_size, 0, main_stream>>>(inp, dinp, dout, dims_prod);
@@ -50,7 +50,7 @@ void relu_backward(float *inp, int dims_prod, float *out,
 // void gelu_backward(const float* inp, float dims_prod, float* dinp, const float* dout) {
 void gelu_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node) {  
+                     void *network_module, DT_tensor *node) {  
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
   gelu_backward1<<<grid_size, block_size, 0, main_stream>>>(dinp, inp, dout, dims_prod);  
@@ -78,7 +78,7 @@ extern "C" DT_tensor *gelu(Scope_Struct *scope_struct, DT_tensor *tensor)
   gelu_forward_kernel1<<<grid_size, block_size, 0, stream>>>(tensor_ptr, y, dims_prod);
   
  
-  return customOpTensor(y, dims, DimsProd(dims), "gelu_backward", "", tensor);
+  return customOpTensor(y, dims, DimsProd(dims), "gelu_backward", nullptr, tensor);
 }
 
 
@@ -86,7 +86,7 @@ extern "C" DT_tensor *gelu(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 void sigmoid_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node) {  
+                     void *network_module, DT_tensor *node) {  
   
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
@@ -119,13 +119,13 @@ extern "C" DT_tensor *sigmoid(Scope_Struct *scope_struct, DT_tensor *tensor)
   int is_forward_func=1;
 
 
-  return customOpTensor(y, dims, DimsProd(dims), "sigmoid_backward", "", tensor);
+  return customOpTensor(y, dims, DimsProd(dims), "sigmoid_backward", nullptr, tensor);
 }
 
 
 void tanh_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node) {  
+                     void *network_module, DT_tensor *node) {  
   
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
@@ -160,7 +160,7 @@ extern "C" DT_tensor *_tanh(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   //std::cout << "tanh tensor attribution from " << tensor->name<<"/"<<tensor->scopeless_name << "\n";
 
-  return customOpTensor(y, dims, DimsProd(dims), "tanh_backward", "", tensor);
+  return customOpTensor(y, dims, DimsProd(dims), "tanh_backward", nullptr, tensor);
 }
 
 

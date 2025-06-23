@@ -62,7 +62,7 @@ extern "C" DT_tensor *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   std::vector<int> new_dims = {B, C, H, W};
 
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "batchnorm2d_backward", bn_name, tensor);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "batchnorm2d_backward", nullptr, tensor);
 }
 
 
@@ -71,15 +71,12 @@ extern "C" DT_tensor *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   // float *dout, std::string bn_name)
 void batchnorm2d_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
 
   // std::cout << "batchnorm2d_backward for " << bn_name << "\n";
-  std::unique_ptr<BatchNorm2dCPP> bn = std::move(NamedBatchNorm2d[module_name]);
-
+  BatchNorm2dCPP *bn = (BatchNorm2dCPP*) network_module;
   bn->Backward(inp, dinp, dout);
-
-  NamedBatchNorm2d[module_name] = std::move(bn);
 }
 
 

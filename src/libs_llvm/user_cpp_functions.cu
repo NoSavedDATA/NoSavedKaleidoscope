@@ -41,7 +41,7 @@ void set_user_functions() {
 		"BatchNorm2d", "BatchNorm2d_Create", 
 		"tensor_float_mult", "tensor_float_div", "tensor_float_add", "tensor_float_sub", "tensor_float_equal", "tensor_float_diff", "tensor_float_minor", "tensor_float_minor_eq", "tensor_float_higher", "tensor_float_higher_eq", "opa_gangnam_style", 
 		"print_randoms", "randint", 
-		"tensor_Create", "tensor_Load", "tensor_Store", "tensor_opa", "gpu", "tensor_gpuw", "cpu", "cpu_idx", "randu_like", "write_zerosw", "tensor_view", "tensor_CalculateIdx", "zeros_like", "tensor_print", 
+		"tensor_Create", "tensor_Load", "tensor_Store", "gpu", "tensor_gpuw", "cpu", "cpu_idx", "randu_like", "write_zerosw", "tensor_view", "tensor_CalculateIdx", "zeros_like", "tensor_print", 
 		"ConcatScopeStr", 
 		"load_img", "gload_img", "wload_img", "wload_img_resize", "load_preprocess_img", 
 		"LockMutex", "UnlockMutex", 
