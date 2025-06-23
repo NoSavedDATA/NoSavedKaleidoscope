@@ -58,7 +58,7 @@ extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_tensor *tensor)
   
   
 
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "embedding_backward", conv_name, tensor);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "embedding_backward", nullptr, tensor);
 }
 
 
@@ -102,11 +102,9 @@ extern "C" float Embedding_Create(Scope_Struct *scope_struct, char *name, char *
 
 void embedding_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
-  std::unique_ptr<DT_Embedding> embedding = std::move(NamedEmbedding[module_name]);
-
+  DT_Embedding *embedding = (DT_Embedding*)network_module;
   embedding->Backward(inp, dout);
 
-  NamedEmbedding[module_name] = std::move(embedding);
 }

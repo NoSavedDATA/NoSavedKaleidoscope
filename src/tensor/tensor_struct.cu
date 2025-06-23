@@ -218,10 +218,11 @@ DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<int>& dims, int 
     return new_tensor;
 }
 DT_tensor *customOpTensor(float* tensor_ptr, const std::vector<int>& dims, int kDataLen,
-                     std::string operation, std::string module_name, DT_tensor *LTensor, cudaStream_t cuda_stream, Loader *_loader) {
+                     std::string operation, void *network_module, DT_tensor *LTensor, cudaStream_t cuda_stream, Loader *_loader) {
     DT_tensor *new_tensor = new DT_tensor();
     new_tensor->NewTensor(tensor_ptr, dims, kDataLen, false, "", cuda_stream, _loader);
-    new_tensor->scopeless_name = module_name;
+    // new_tensor->scopeless_name = module_name;
+    new_tensor->network_module = network_module;
     new_tensor->operation = operation;
     new_tensor->AttrLNode(LTensor, custom_op);
     

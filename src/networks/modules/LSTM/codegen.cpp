@@ -22,13 +22,11 @@
 
 void lstm_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
-  std::unique_ptr<DT_LSTM> lstm = std::move(NamedLSTM[module_name]);
+  DT_LSTM *lstm = (DT_LSTM*) network_module;
 
   lstm->Backward(inp, dinp, dout);
-
-  NamedLSTM[module_name] = std::move(lstm);
 }
 
 
@@ -100,7 +98,7 @@ extern "C" DT_tensor *LSTM(Scope_Struct *scope_struct, DT_tensor *tensor, DT_ten
 
 
  
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "lstm_backward", conv_name, tensor);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "lstm_backward", nullptr, tensor);
 }
 
 

@@ -63,7 +63,7 @@ extern "C" DT_tensor *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   NamedMaxPool2d[pool_name] = std::move(conv);
 
 
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "pool2d_backward", pool_name, tensor);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "pool2d_backward", nullptr, tensor);
 }
 
 
@@ -72,16 +72,13 @@ extern "C" DT_tensor *Pool2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 void pool2d_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
   //std::cout << "maxpool2d_backward of " << pool_name << "\n";
-  std::unique_ptr<MaxPool2dCPP> conv = std::move(NamedMaxPool2d[module_name]);
 
-  conv->Backward(inp, out, dinp, dout);
-
-  NamedMaxPool2d[module_name] = std::move(conv);
-
+  MaxPool2dCPP *conv = (MaxPool2dCPP*) network_module;
   
+  conv->Backward(inp, out, dinp, dout);  
 }
 
 

@@ -172,7 +172,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
     mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
 
-    return customOpTensor(summed, new_dims, new_dims_prod, "mean_over_semilast_dim_backward", "", tensor);
+    return customOpTensor(summed, new_dims, new_dims_prod, "mean_over_semilast_dim_backward", nullptr, tensor);
   }
 
   /*
@@ -309,7 +309,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
     // TODO: is this kernel grid_size correct?
     mean_over_semilast_dim_kernel<<<dims_prod, warps_per_block*WARP_SIZE, 0, stream>>>(tensor_ptr, summed, dims_prod, dims[dims.size()-2], dims[dims.size()-1], warps_per_block);
 
-    return customOpTensor(summed, new_dims, new_dims_prod, "mean_over_semilast_dim_backward", "", tensor);
+    return customOpTensor(summed, new_dims, new_dims_prod, "mean_over_semilast_dim_backward", nullptr, tensor);
   }
 
   /*
@@ -334,7 +334,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
 
 void mean_over_semilast_dim_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
   std::vector<int> dims = node->L_Node->dims;
   int x_dims_prod = node->L_Node->dims_prod;
@@ -630,7 +630,7 @@ extern "C" DT_tensor *gather(int thread_id, DT_tensor *tensor, DT_tensor *idx_te
 
 void gather_last_dim_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
   // consider dx was set to zero already
   

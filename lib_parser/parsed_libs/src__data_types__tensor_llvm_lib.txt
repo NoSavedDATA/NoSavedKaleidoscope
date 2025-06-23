@@ -1,4 +1,4 @@
-1821-06-23 16:51:35
+1821-06-23 17:52:58
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -20,13 +20,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
-
-	FunctionType *tensor_opaTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tensor_opa", tensor_opaTy);
 
 	FunctionType *gpuTy= FunctionType::get(
 		int8PtrTy,

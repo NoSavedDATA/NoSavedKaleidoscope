@@ -118,6 +118,7 @@ struct DT_tensor {
   int thread_id;
   bool is_pinned;
   bool is_last_version = false;
+  void *network_module=nullptr;
 
   int scope_refs=0;
   int scopeless_refs=0;
@@ -178,11 +179,11 @@ DT_tensor *createTensorHalf(half* tensor_ptr, const std::vector<int>& dims, int 
                      bool is_leaf, std::string name, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
 
 DT_tensor *customOpTensor(float* tensor_ptr, const std::vector<int>& dims, int kDataLen,
-                     std::string operation, std::string module_name, DT_tensor *LTensor, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
+                     std::string operation, void *, DT_tensor *LTensor, cudaStream_t cuda_stream=nullptr, Loader *_loader=nullptr);
 
 DT_tensor *createPinned(float* tensor_ptr, float *tensor_cpu, const std::vector<int>& dims, int kDataLen,
-                     std::string name)
-                     ;
+                     std::string name);
+                     
 DT_tensor *createBackward(std::string name, DT_tensor *tensor);
 
 DT_tensor *wrapTensorWithDetached(DT_tensor* tensor);

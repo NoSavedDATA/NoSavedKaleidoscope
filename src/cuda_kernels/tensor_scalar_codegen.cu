@@ -27,7 +27,7 @@ extern "C" DT_tensor *tensor_float_mult(Scope_Struct *scope_struct, DT_tensor *t
   vec_mult<<<grid_size, block_size, 0, stream>>>(R, tensor->tensor_ptr, device_y, kDataLen);
 
 
-  DT_tensor *new_tensor = customOpTensor(device_y, tensor->dims, kDataLen, "scalarmult_backward", "", tensor);
+  DT_tensor *new_tensor = customOpTensor(device_y, tensor->dims, kDataLen, "scalarmult_backward", nullptr, tensor);
   new_tensor->scalar = R;
 
   return new_tensor;
@@ -262,7 +262,7 @@ extern "C" DT_tensor *tensor_float_higher_eq(Scope_Struct *scope_struct, DT_tens
 
 void scalarmult_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
   //std::cout << "scalar mult backward with scalar " << scalar <<  "\n";
   int grid_size, block_size;

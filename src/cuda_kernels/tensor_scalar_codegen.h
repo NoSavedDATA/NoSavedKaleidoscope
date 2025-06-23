@@ -10,4 +10,4 @@
 
 void scalarmult_backward(float *inp, int dims_prod, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node);
+                     void *, DT_tensor *node);

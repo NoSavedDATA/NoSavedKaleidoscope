@@ -23,13 +23,10 @@
 
 void mhsa_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
-  std::unique_ptr<MHSA> mhsa = std::move(NamedMHSA[module_name]);
-
+  MHSA *mhsa = (MHSA*) network_module;
   mhsa->Backward(inp, dinp, dout);
-
-  NamedMHSA[module_name] = std::move(mhsa);
 }
 
 
@@ -90,7 +87,7 @@ extern "C" void *MHSAForward(char *self, DT_tensor *tensor, int thread_id, char 
   
 
 
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "mhsa_backward", conv_name, tensor);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "mhsa_backward", nullptr, tensor);
 }
 
 

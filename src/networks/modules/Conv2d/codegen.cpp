@@ -26,11 +26,13 @@
 
 void conv2d_backward(float *inp, int size, float *out,
                      float *dinp, float *dout,
-                     std::string module_name, DT_tensor *node)
+                     void *network_module, DT_tensor *node)
 {
-  std::unique_ptr<Conv2dCPP> conv = std::move(NamedConv2d[module_name]);
+  
+  Conv2dCPP *conv = (Conv2dCPP*)network_module;
+  // std::cout << "conv2d backward of " << conv->Name << ".\n";
+
   conv->Backward(inp, dinp, dout);
-  NamedConv2d[module_name] = std::move(conv);  
 }
 
 
@@ -42,14 +44,14 @@ void conv2d_backward(float *inp, int size, float *out,
 extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
 
-  std::cout << "Conv2d pointer is: " << scope_struct->object_ptr << ".\n";
+  // std::cout << "Conv2d pointer is: " << scope_struct->object_ptr << ".\n";
 
   
 
   std::string conv_name = scope_struct->first_arg;
   int thread_id = scope_struct->thread_id;
 
-  std::cout << "Conv forward of " << conv_name << " and tensor " << tensor->name << "\n";
+  // std::cout << "Conv forward of " << conv_name << " and tensor " << tensor->name << "\n";
   // std::cout << "Conv forward for conv: " << conv_name <<"\n";  
 
 
@@ -80,7 +82,7 @@ extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   std::vector<int> new_dims = {conv->B, conv->OC, conv->out_H, conv->out_W};  
   
 
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "conv2d_backward", conv_name, tensor);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "conv2d_backward", conv, tensor);
 }
 
 
