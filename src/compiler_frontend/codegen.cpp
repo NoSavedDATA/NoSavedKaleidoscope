@@ -157,6 +157,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     Value *initial_value = Init->codegen(scope_struct);
 
+    // if((Type=="float"||Type=="str"||Type=="int")&&!(is_self||is_attr))
     if((Type=="float"||Type=="str"||Type=="int")&&!(is_self||is_attr))
     { 
       std::cout << "DataExpr STORE OF " << parser_struct.function_name << "/" << VarName << " type " << Type << ".\n";
@@ -237,7 +238,15 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       Value *obj = callret("get_scope_object", {scope_struct});
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
       // std::exit(0);
+    } else {
+      p2t("Store " + Type + " as alloca");
+      llvm::Type *alloca_type = get_type_from_str(Type);
+      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
+      Builder->CreateStore(initial_value, alloca);
+      function_allocas[parser_struct.function_name][VarName] = alloca;
+      // continue;
     }
+
       
     // p2t("DataExpr Dispose notes vector");
     // p2t("Dispose notes vector of " + Type + "/" + Name + "/" + std::to_string(is_self) + "/" + std::to_string(is_attr));
@@ -747,13 +756,17 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   // p2t("is self: " + (int)is_self);
 
 
-  if ((type=="float"||type=="str"||type=="int")&&!(is_self||is_attr))
-  {
 
+
+  if ((type=="float"||type=="str"||type=="int"||type=="tensor")&&!(is_self||is_attr))
+  {
+    // p2t("Variable LOAD ALLOCA TYPE "+type);
     return load_alloca(Name, type, parser_struct.function_name);
   }
 
-  if ((type=="float"||type=="str"||type=="tensor"||type=="int"||type=="str_vec"||type=="int_vec"||type=="pinned_tensor")&&is_self) {
+  
+
+  if (is_self) {
     int object_ptr_offset = ClassVariables[parser_struct.class_name][Name];
     if (type=="float"||type=="int")
       return callret("object_Load_on_Offset_"+type, {scope_struct, const_int(object_ptr_offset)});
@@ -777,8 +790,10 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
   if (type=="object")
     return var_name;
-  if (type=="tensor" && !seen_var_attr)
-    call("PrintTensor", {scope_struct, var_name});
+
+
+  // if (type=="tensor" && !seen_var_attr)
+  //   call("PrintTensor", {scope_struct, loaded_tensor});
   
 
   
@@ -1045,7 +1060,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     std::string Lname = std::get<0>(name_solver->Names[0]);
 
-    bool is_alloca = ((LType=="float"||LType=="str"||LType=="int")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
+    bool is_alloca = ((LType=="float"||LType=="str"||LType=="int"||LType=="tensor")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
 
     Value *Lvar_name;
     if (!is_alloca && !LHS->GetIsVec())
@@ -1065,9 +1080,28 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
     if (is_alloca)
     {
+      std::string store_trigger = LType + "_StoreTrigger";
+      std::string copy_fn = LType + "_Copy";
 
-      std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
       AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
+
+      if(auto Rvar = dynamic_cast<VariableExprAST *>(RHS.get()));
+      {
+        Function *F = TheModule->getFunction(copy_fn);
+        if (F)
+          Val = callret(copy_fn, {scope_struct, Val});
+      }
+
+      Function *F = TheModule->getFunction(store_trigger);
+      if (F)
+      {
+        Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
+        Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+        call(store_trigger, {Lvar_name, old_val, Val, scope_struct});
+      }
+
+      // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
+
       Builder->CreateStore(Val, alloca);
       return const_float(0);
       // return nullptr;
@@ -1878,7 +1912,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
       // std::cout << "VALUE TYPE IS: " << type << ".\n";
       if (type!="float"&&type!="int")
       {
-        std::string copy_fn = type + "_" + "Copy";
+        std::string copy_fn = type + "_Copy";
         value = callret(copy_fn, {scope_struct, value});
       }
       is_type=true;
@@ -2256,25 +2290,12 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
   // Get Arguments
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     Value *arg; 
-    // if ((Args[i]->GetType()=="tensor" && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf()) || (Args[i]->GetType()=="pinned_tensor"&&Args[i]->GetIsVarLoad()))
-    if ((Args[i]->GetType()=="tensor" && Args[i]->GetIsVarLoad() && !Args[i]->GetSelf()))
-    {      
-      VariableExprAST *Arg = static_cast<VariableExprAST *>(Args[i].get());
-      arg = Arg->NameSolver->codegen(scope_struct);
 
-      arg = callret("tensor_Load", {scope_struct, arg});
-    }
-    else
-    {
-      arg = Args[i]->codegen(scope_struct);
-      std::string type = Args[i]->GetType();
+    arg = Args[i]->codegen(scope_struct);
+    std::string type = Args[i]->GetType();
       
-      p2t("CallExpr Argument type is " + type);
+    // p2t("CallExpr Argument type is " + type);
       
-      // Todo: str does not get cleaned after copy
-      // if (type!="float"&&Args[i]->GetIsVarLoad())
-      //   arg = callret(type+"_Copy", {scope_struct, arg});
-    }
 
     ArgsV.push_back(arg);
 
@@ -2625,9 +2646,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     std::cout << "Load of: " << LoadOf << ".\n";
     // p2t("Load of: " + LoadOf);
     Value *arg;
-    if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int") && !isSelf)
+    if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int"||Load_Type=="tensor") && !isSelf)
     {
-      // p2t("It is an alloca");
+      p2t("It is an alloca");
 
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 

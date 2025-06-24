@@ -9,35 +9,6 @@
 
 
 
-extern "C" float CopyArgTensor(Scope_Struct *scope_struct, DT_tensor *tensor, char *new_tensor_name)
-{
-
-  char *scope = scope_struct->scope;
-  int thread_id = scope_struct->thread_id;
-  std::string tensor_name = tensor->name;
-
-  
-  
-  std::string arg_tensor_name = scope;
-  arg_tensor_name = arg_tensor_name + new_tensor_name;
-  
-
-  std::vector<int> dims = tensor->dims;
-  int dims_prod = tensor->dims_prod;
-
-  float *tensor_ptr = tensor->tensor_ptr;
-
-  
-
-  DT_tensor *new_tensor = createTensor(tensor_ptr, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
-  new_tensor->scopeless_name = tensor->scopeless_name;
-
-  NamedTensorsT[arg_tensor_name] = new_tensor;
-
-  return 0;
-}
-
-
 
 
 

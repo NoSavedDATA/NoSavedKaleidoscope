@@ -617,11 +617,23 @@ Function *FunctionAST::codegen() {
         // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
         // Coder args
-        if (type=="float"||type=="str"||type=="int") {
+        if (type=="float"||type=="str"||type=="int"||type=="tensor") {
             // std::cout << "Arg STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
             llvm::Type *alloca_type = get_type_from_str(type);
             AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
-            Builder->CreateStore(&Arg, arg_alloca);
+
+            
+            std::string copy_fn = type+"_CopyArg";
+            Function *F = TheModule->getFunction(copy_fn);
+            if (F)
+            {
+                Value *copied_value = callret(copy_fn,
+                                {scope_struct,
+                                &Arg,
+                                global_str(arg_name)});
+                Builder->CreateStore(copied_value, arg_alloca);
+            } else
+                Builder->CreateStore(&Arg, arg_alloca);
             function_allocas[current_codegen_function][arg_name] = arg_alloca;
         }
         else if (type!="tensor")
@@ -635,12 +647,8 @@ Function *FunctionAST::codegen() {
             if (type!="float")
                 call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
 
-        } else {
-            call("CopyArgTensor",
-                            {scope_struct,
-                            &Arg,
-                            global_str(arg_name)});
-        }
+        } 
+        
     }
     // else if (type!="tensor")
     // {

@@ -14,13 +14,13 @@
 #include "include.h"
 
 
-extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
+extern "C" float PrintTensor(Scope_Struct *scope_struct, DT_tensor *tensor){
   int thread_id = scope_struct->thread_id;
+  std::string tensorName = tensor->name;
   std::cout << "Printing tensor " << tensorName << " at stream " << thread_id << "\n";
 
 
 
-  DT_tensor *tensor = NamedTensorsT[tensorName];
   int arr_size = tensor->dims_prod;
   float *tensor_cpu = new float[arr_size];
 
@@ -119,15 +119,6 @@ extern "C" float PrintTensor(Scope_Struct *scope_struct, char* tensorName){
 
 
 
-extern "C" float print_tensor(DT_tensor tensor){
-  char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
-  std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
-
-  PrintTensor(0, tensorName);
-
-  delete[] tensorName;
-  return 0;
-}
 
 
 extern "C" float PrintTensorF(const float *cuda_tensor, int d1, int d2){

@@ -1,1 +1,1 @@
-"tensor_Create", "tensor_Load", "tensor_Store", "gpu", "tensor_gpuw", "cpu", "cpu_idx", "randu_like", "write_zerosw", "tensor_view", "tensor_CalculateIdx", "zeros_like", "tensor_print", 
+"tensor_Create", "tensor_Load", "tensor_Copy", "tensor_StoreTrigger", "gpu", "tensor_gpuw", "cpu", "cpu_idx", "randu_like", "write_zerosw", "tensor_view", "tensor_CalculateIdx", "zeros_like", "tensor_CopyArg", "tensor_print", 
