@@ -102,18 +102,16 @@ extern "C" char *Linear_Load(Scope_Struct *scope_struct, char *name) {
 
 
 extern "C" float Linear_weight(Scope_Struct *scope_struct, char *name) {
-  std::string conv_name = scope_struct->first_arg;
-  std::cout << "Linear name is " << name << ".\n";
+  // std::string conv_name = scope_struct->first_arg;
+  // std::cout << "Linear name is " << name << ".\n";
 
 
-  std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[conv_name]);
+  // std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[conv_name]);
 
-  std::string _a = linear->Name+"W";
-  char *a = _a.data();
 
-  PrintTensor(scope_struct, a);
+  // PrintTensor(scope_struct, a);
 
-  NamedLinear[conv_name] = std::move(linear);
+  // NamedLinear[conv_name] = std::move(linear);
   
   return 0;
 }

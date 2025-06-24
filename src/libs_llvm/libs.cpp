@@ -815,13 +815,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("PrintTensor", PrintTensorTy);
 
-	FunctionType *print_tensorTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("print_tensor", print_tensorTy);
-
 	FunctionType *PrintTensorFTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -1207,12 +1200,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("tensor_Load", tensor_LoadTy);
 
-	FunctionType *tensor_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+	FunctionType *tensor_CopyTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
+	TheModule->getOrInsertFunction("tensor_Copy", tensor_CopyTy);
+
+	FunctionType *tensor_StoreTriggerTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_StoreTrigger", tensor_StoreTriggerTy);
 
 	FunctionType *gpuTy= FunctionType::get(
 		int8PtrTy,
@@ -1276,6 +1276,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("zeros_like", zeros_likeTy);
+
+	FunctionType *tensor_CopyArgTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_CopyArg", tensor_CopyArgTy);
 
 	FunctionType *tensor_printTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -1423,13 +1430,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("topk", topkTy);
-
-	FunctionType *CopyArgTensorTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("CopyArgTensor", CopyArgTensorTy);
 
 	FunctionType *tensor_float_multTy= FunctionType::get(
 		int8PtrTy,

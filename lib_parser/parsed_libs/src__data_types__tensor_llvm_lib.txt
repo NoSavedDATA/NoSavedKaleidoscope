@@ -1,4 +1,4 @@
-1821-06-23 17:52:58
+1821-06-24 18:36:03
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -14,12 +14,19 @@
 	);
 	TheModule->getOrInsertFunction("tensor_Load", tensor_LoadTy);
 
-	FunctionType *tensor_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+	FunctionType *tensor_CopyTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("tensor_Store", tensor_StoreTy);
+	TheModule->getOrInsertFunction("tensor_Copy", tensor_CopyTy);
+
+	FunctionType *tensor_StoreTriggerTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_StoreTrigger", tensor_StoreTriggerTy);
 
 	FunctionType *gpuTy= FunctionType::get(
 		int8PtrTy,
@@ -83,6 +90,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("zeros_like", zeros_likeTy);
+
+	FunctionType *tensor_CopyArgTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tensor_CopyArg", tensor_CopyArgTy);
 
 	FunctionType *tensor_printTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
