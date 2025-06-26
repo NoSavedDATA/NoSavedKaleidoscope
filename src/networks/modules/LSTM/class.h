@@ -14,7 +14,9 @@
 class DT_LSTM
 {
   public:
-    
+  
+    DT_tensor *W_Tensor, *U_Tensor, *Bias_Tensor;
+
     int C, OC, B, T;
     std::string Init, Name;
     float *W, *U, *x_out, *fused_out, *b, *all_ht, *all_ct, *dW, *dU, *dB, *d_ht, *d_ct, *d_ifoc;

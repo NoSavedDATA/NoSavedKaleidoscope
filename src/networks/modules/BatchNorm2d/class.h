@@ -15,8 +15,12 @@ class BatchNorm2dCPP
 {
   public:
     cudnnTensorDescriptor_t input_desc, output_desc, scale_bias_mean_var_desc;
+
+
     
     bool first_backward=true;
+
+    DT_tensor *Scale_Tensor, *Bias_Tensor;
 
     float *dW, *dB;
     float* scale=nullptr;

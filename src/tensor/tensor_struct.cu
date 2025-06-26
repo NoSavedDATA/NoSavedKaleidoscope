@@ -190,6 +190,7 @@ DT_tensor *createTensor(float* tensor_ptr, const std::vector<int>& dims, int kDa
 
 DT_tensor *createCudaTensor(int thread_id, std::string type, const std::vector<int>& dims,
                      bool is_leaf, std::string name, cudaStream_t cuda_stream, Loader *_loader) {
+    // Rounds the last dimension to the nereast number % 16. This satisfies cp.async alignment.
     DT_tensor *new_tensor = new DT_tensor();
     std::vector<int> cuda_dims;
     

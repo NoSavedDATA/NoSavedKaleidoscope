@@ -10,7 +10,7 @@
 #include "include.h"
 
 std::vector<DT_tensor *> todo_backward_tensors;
-std::map<std::string, float *> NamedParamGrads;
+std::unordered_map<DT_tensor *, float *> NamedParamGrads;
 
 std::map<std::string, std::function<void(float *, int, float *, float *, float *, void *, DT_tensor *)>> backward_functions;
 
@@ -59,22 +59,22 @@ inline void Acquire_Simple_Derivative(float *&d_ptr, int size, int op, bool from
 }
 
 
-inline void Acquire_Weight_Gradient(float *&d_ptr, int size, std::string param_name, int op, bool from_custom) {
+inline void Acquire_Weight_Gradient(float *&d_ptr, int size, DT_tensor *tensor_data, int op, bool from_custom) {
   if (op==hadamard_op||op==add_op)
     return;
 
   int grid_size, block_size; 
   CalculateGridAndBlockSizes(size, grid_size, block_size);
   
-  if (NamedParamGrads[param_name]==nullptr)
+  if (NamedParamGrads[tensor_data]==nullptr)
   {
     float *new_grad_ptr;
     
     new_grad_ptr = get_from_pool(0, size, "weight grad pointer");
     set_to_zero_kernel<<<grid_size, block_size, 0, main_stream>>>(new_grad_ptr, size);
-    NamedParamGrads[param_name] = new_grad_ptr;
+    NamedParamGrads[tensor_data] = new_grad_ptr;
   }
-  d_ptr = NamedParamGrads[param_name];
+  d_ptr = NamedParamGrads[tensor_data];
 }
 
 
@@ -92,7 +92,7 @@ inline void Alloc_Child_Nodes_Derivatives(DT_tensor* back_node, float*& d_lhs, f
       }
     }
     else
-      Acquire_Weight_Gradient(d_lhs, lhs_size, back_node->L_Node->name, op, from_custom);
+      Acquire_Weight_Gradient(d_lhs, lhs_size, back_node->L_Node, op, from_custom);
   }
 
 
@@ -104,7 +104,7 @@ inline void Alloc_Child_Nodes_Derivatives(DT_tensor* back_node, float*& d_lhs, f
         Acquire_Simple_Derivative(d_rhs, rhs_size, op, from_custom, "rhs");
     }
     else  
-      Acquire_Weight_Gradient(d_rhs, rhs_size, back_node->R_Node->name, op, from_custom);
+      Acquire_Weight_Gradient(d_rhs, rhs_size, back_node->R_Node, op, from_custom);
   }
 }
 
@@ -128,7 +128,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
   if(!in_int(op, gradless_ops))
   {
 
-    //std::cout << "\nTraversing: " << back_node->name << "/" << back_node->scopeless_name << ", op: " << back_node->op << ", parent_op: " << parent_op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
+    // std::cout << "\nTraversing: " << back_node->name << "/" << back_node->scopeless_name << ", op: " << back_node->op << ", parent_op: " << parent_op << ", leaf: " << back_node->leaf << ", weight: " << back_node->weight << "\n";
     if(device_dy==nullptr && !in_int(op, loss_ops) && !from_custom)
     {
     
@@ -183,7 +183,6 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
 
 
 
-    // std::cout << "BACKPROP OF " << op << ".\n";
     switch (op)
     {
       // Simple Leaf Nodes Ops
@@ -235,7 +234,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
         break;
 
       case custom_op:
-        // std::cout << "custom: " << back_node->operation << ".\n";
+        // std::cout << "custom backward: " << back_node->operation << ".\n";
         backward_functions[back_node->operation](lhs, lhs_size, out, d_lhs, device_dy, back_node->network_module, back_node);
         break;
 
@@ -283,12 +282,13 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
 
 extern "C" float backprop(Scope_Struct *scope_struct)
 {
-
+  
   int op; 
   std::string tensor_name;
   float *device_dy=nullptr;
-
-
+  
+  
+  // std::cout << "backprop of " << todo_backward_tensors.size() << " nodes.\n";
 
   while(todo_backward_tensors.size()>0)
   {
@@ -302,7 +302,6 @@ extern "C" float backprop(Scope_Struct *scope_struct)
     if (op==attribution)
     {
       tensor_name = back_node->name;
-      //std::cout << "\n\n\n   backward attribution of " << tensor_name << "\n";
       device_dy = var_to_grad[tensor_name];
       var_to_grad.erase(tensor_name);
       

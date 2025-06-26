@@ -15,6 +15,8 @@ class DT_EmbeddingLn
 {
   public:
     
+    DT_tensor *Book_Tensor, *Weight_Tensor;
+
     int V, C, OC, B;
     std::string Init, Name;
     float *Book, *dBook, *W, *dW;

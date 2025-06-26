@@ -1,4 +1,4 @@
-1821-06-24 18:36:03
+1821-06-25 21:44:26
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -22,7 +22,7 @@
 	TheModule->getOrInsertFunction("tensor_Copy", tensor_CopyTy);
 
 	FunctionType *tensor_StoreTriggerTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);

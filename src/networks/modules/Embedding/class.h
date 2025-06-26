@@ -14,7 +14,9 @@
 class DT_Embedding
 {
   public:
-    
+  
+    DT_tensor *Book_Tensor;
+
     int C, OC, B;
     std::string Init, Name;
     float *W, *dW;

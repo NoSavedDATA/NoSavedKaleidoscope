@@ -37,7 +37,7 @@ DT_Embedding::DT_Embedding(int C, int OC, std::string Init, std::string Name)
     W = get_from_pool(0, OC*C, "Embedding W");
     cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_W = createTensor(W, {C, OC}, OC*C, true, Name);
+    Book_Tensor = createTensor(W, {C, OC}, OC*C, true, Name);
     
     
     
@@ -46,8 +46,8 @@ DT_Embedding::DT_Embedding(int C, int OC, std::string Init, std::string Name)
     dW = get_from_pool(0, OC*C, "embedding dW");
     set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C);
 
-    NamedTensorsT[Name] = tensor_W;
-    NamedParamGrads[Name] = dW;
+
+    NamedParamGrads[Book_Tensor] = dW;
 
     delete[] w_cpu;
 

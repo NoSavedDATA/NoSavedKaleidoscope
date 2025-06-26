@@ -15,7 +15,9 @@
 class MHSA
 {
   public:
-    
+  
+    DT_tensor *Weight_Tensor, *Proj_Weight_Tensor;
+
     int B, T, maxT, nh, C, d, B_back, T_back;
     int M, Br, Bc, Tr, Tc;
     int Br_back, Bc_back, Tr_back, Tc_back;

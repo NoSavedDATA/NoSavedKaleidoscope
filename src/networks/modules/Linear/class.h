@@ -24,7 +24,11 @@ class LinearCPP
     
     int B, C, OC;
     std::string Init, Name;
+
+
+    DT_tensor *Weight_Tensor;
     float *W, *dW;
+    
     int8_t *x8=nullptr, *w8;
     Minimal_Tensor *scale_M=nullptr, *scale_N=nullptr, *scale_K=nullptr;
     CudaTensor *W_tensor, *dW_tensor;

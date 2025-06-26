@@ -22,7 +22,6 @@
 
 Conv2dCPP::Conv2dCPP(int C, int OC, int ks, int stride, int padding, std::string Init, std::vector<std::string> Notes, std::string Name)
     : C(C), OC(OC), ks(ks), stride(stride), padding(padding), Init(Init), Notes(Notes), Name(Name) {
-    NamedTensorsT[Name+"W"] = new DT_tensor();
     d_filter=nullptr;
     d_workspace=nullptr;
     d_workspace_w_back=nullptr;
@@ -256,10 +255,8 @@ void Conv2dCPP::InitFilters()
 
   std::vector<int> kernel_dims = {OC, C, ks, ks}; 
 
-  DT_tensor *tensor_W = createTensor(d_filter, kernel_dims, DimsProd(kernel_dims), true, Name+"W");
-  tensor_W->SetIsWeight();
-
-  NamedTensorsT[Name+"W"] = tensor_W;
+  Filter_Tensor = createTensor(d_filter, kernel_dims, DimsProd(kernel_dims), true, Name+"W");
+  Filter_Tensor->SetIsWeight();
 }
 
 
@@ -272,7 +269,7 @@ void Conv2dCPP::FirstBackward()
     dW = get_from_pool(0, OC*C*ks*ks, "conv2d gradient");
     set_to_zero_kernel<<<std::ceil((OC*C*ks*ks)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C*ks*ks);
 
-    NamedParamGrads[Name+"W"] = dW;
+    NamedParamGrads[Filter_Tensor] = dW;
     first_backward = false;
   }
   
@@ -329,7 +326,7 @@ float *Conv2dCPP::Forward(DT_tensor *tensor, int H, int W, int B, int thread_id)
 
 void Conv2dCPP::Backward(float *tensor, float *dx, float *dy)
 {
-  //std::cout << "\nConv2d Backward with H: " << H << " W: " << W << "\n";
+  // std::cout << "\nConv2d Backward with H: " << H << " W: " << W << "\n";
 
 
   constexpr float one = 1.0f;
