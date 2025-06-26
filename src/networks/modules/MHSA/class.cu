@@ -58,13 +58,11 @@ MHSA::MHSA(int nh, int C, int maxT, std::string Init, int_vec *Notators, std::st
     cudaMemcpy(W, W_cpu, 3*C*C * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(W_proj, W_proj_cpu, C*C * sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_W = createTensor(W, {3*C*C}, 3*C*C, true, Name+"W");
-    DT_tensor *tensor_W_proj = createTensor(W_proj, {C*C}, C*C, true, Name+"W_proj");
-    tensor_W->SetIsWeight();
-    tensor_W_proj->SetIsWeight();
+    Weight_Tensor = createTensor(W, {3*C*C}, 3*C*C, true, Name+"W");
+    Proj_Weight_Tensor = createTensor(W_proj, {C*C}, C*C, true, Name+"W_proj");
+    Weight_Tensor->SetIsWeight();
+    Proj_Weight_Tensor->SetIsWeight();
 
-    NamedTensorsT[Name+"W"] = tensor_W;
-    NamedTensorsT[Name+"W_proj"] = tensor_W_proj;
 
     delete[] W_cpu;
     delete[] W_proj_cpu;
@@ -403,8 +401,8 @@ void MHSA::FirstBackward()
   set_to_zero_kernel<<<std::ceil((3*C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, 3*C*C);
   set_to_zero_kernel<<<std::ceil((C*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW_proj, C*C);
 
-  NamedParamGrads[Name+"W"] = dW;
-  NamedParamGrads[Name+"W_proj"] = dW_proj;
+  NamedParamGrads[Weight_Tensor] = dW;
+  NamedParamGrads[Proj_Weight_Tensor] = dW_proj;
 
   first_backward=false;
 }

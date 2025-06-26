@@ -1208,7 +1208,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("tensor_Copy", tensor_CopyTy);
 
 	FunctionType *tensor_StoreTriggerTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);

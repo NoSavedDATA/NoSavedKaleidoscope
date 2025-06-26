@@ -94,15 +94,14 @@ LinearCPP::LinearCPP(int C, int OC, std::string Init, std::vector<std::string> N
     // cudaMalloc(&W,       round_to_nearest_pow2(product) * sizeof(float));
     // cudaMemcpy(W, W_cpu, product * sizeof(float), cudaMemcpyHostToDevice);
 
-    // DT_tensor *tensor_W = createTensor(W, {OC*C}, product, true, Name+"W");
-    DT_tensor *tensor_W = createCudaTensor(0, "float", {OC, C}, true, Name+"W");
-    tensor_W->SetIsWeight();
-    W = tensor_W->tensor_ptr;
-    W_tensor = tensor_W->cuda_tensor;
+    // DT_tensor *Weight_Tensor = createTensor(W, {OC*C}, product, true, Name+"W");
+    Weight_Tensor = createCudaTensor(0, "float", {OC, C}, true, Name+"W");
+    Weight_Tensor->SetIsWeight();
+    W = Weight_Tensor->tensor_ptr;
+    W_tensor = Weight_Tensor->cuda_tensor;
     
     cudaMemcpy(W, W_cpu, product * sizeof(float), cudaMemcpyHostToDevice);
 
-    NamedTensorsT[Name+"W"] = tensor_W;
 
     delete[] W_cpu;
 
@@ -247,7 +246,7 @@ void LinearCPP::SetBackwardDescriptors()
 
 void LinearCPP::FirstBackward()
 {
-  dW = get_from_pool(0, OC*C, "MHSA dW");
+  dW = get_from_pool(0, OC*C, "Linear dW");
 
   DT_tensor *tensor_W = createCudaTensor(0, "float", {OC, C}, true, Name+"W");
   dW = tensor_W->tensor_ptr;
@@ -257,7 +256,7 @@ void LinearCPP::FirstBackward()
   set_to_zero_kernel<<<std::ceil(tensor_W->dims_prod/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, tensor_W->dims_prod);
 
 
-  NamedParamGrads[Name+"W"] = dW;
+  NamedParamGrads[Weight_Tensor] = dW;
   first_backward=false;
 }
 

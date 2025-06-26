@@ -31,8 +31,9 @@ class Conv2dCPP
 
     bool first_backward=true;
 
+    DT_tensor *Filter_Tensor=nullptr;
     float* d_filter=nullptr;
-    float* dW=nullptr;
+    float* dW=nullptr;    
     int C, OC, ks, stride, padding, out_H, out_W;
     int B = 0;
     int H = 0;

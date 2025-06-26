@@ -44,8 +44,8 @@ DT_EmbeddingLn::DT_EmbeddingLn(int V, int C, int OC, std::string Init, std::stri
     cudaMemcpy(Book, book_cpu, V*C*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(W, w_cpu, OC*C*sizeof(float), cudaMemcpyHostToDevice);
 
-    DT_tensor *tensor_Book = createTensor(Book, {V, C}, V*C, true, Name+"_Book");
-    DT_tensor *tensor_W = createTensor(W, {OC, C}, OC*C, true, Name+"_W");
+    Book_Tensor = createTensor(Book, {V, C}, V*C, true, Name+"_Book");
+    Weight_Tensor = createTensor(W, {OC, C}, OC*C, true, Name+"_W");
     
     
     
@@ -56,11 +56,9 @@ DT_EmbeddingLn::DT_EmbeddingLn(int V, int C, int OC, std::string Init, std::stri
     set_to_zero_kernel<<<std::ceil((V*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dBook, V*C);
     set_to_zero_kernel<<<std::ceil((OC*C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, OC*C);
 
-    NamedTensorsT[Name+"_Book"] = tensor_Book;
-    NamedParamGrads[Name+"_Book"] = dBook;
     
-    NamedTensorsT[Name+"_W"] = tensor_W;
-    NamedParamGrads[Name+"_W"] = dW;
+    NamedParamGrads[Book_Tensor] = dBook;
+    NamedParamGrads[Weight_Tensor] = dW;
 
     delete[] book_cpu;
     delete[] w_cpu;

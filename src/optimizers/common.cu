@@ -25,16 +25,17 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 
   cudaStreamSynchronize(main_stream);
 
+
   int i=0;
   for (auto& pair : NamedParamGrads)
   {
-    std::string param_name = pair.first;
+    DT_tensor *tensor = pair.first;
+    std::string param_name = tensor->name;
     // std::cout << "Optimizing " << param_name << "\n";
 
     if (param_name!="none")
     {
       float *grad = pair.second;
-      DT_tensor *tensor = NamedTensorsT[param_name];
       
       
       // std::cout << "param dims: "  << "\n";

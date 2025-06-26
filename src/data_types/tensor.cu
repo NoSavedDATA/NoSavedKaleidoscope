@@ -154,7 +154,8 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
 extern "C" DT_tensor *tensor_Load(Scope_Struct *scope_struct, char *tensor_name) {
 
   
-  // std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
+  std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
+  std::exit(0);
   DT_tensor *ret = NamedTensorsT[tensor_name];
 
   if(scope_struct->is_at_return && (nn_mode==eval_mode||scope_struct->thread_id!=0))
@@ -165,7 +166,9 @@ extern "C" DT_tensor *tensor_Load(Scope_Struct *scope_struct, char *tensor_name)
 
 
 extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor) {
-  std::cout << "-------**tensor_Copy" <<  ".\n";
+  // std::cout << "-------**tensor_Copy" <<  ".\n";
+  if(!tensor->leaf)
+    return tensor;
 
   int thread_id = scope_struct->thread_id;
 
@@ -216,73 +219,70 @@ extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-inline void create_backward_tensor(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
-  // RHS does not need to be saved. So we just move the pointer to LHS
-  // if(nn_mode==eval_mode||thread_id!=0)
-  // {
-  //   if(tensor->from_grad_or_load) //if(DoesTreeContainWeight(tensor)>0)
-  //     ForwardCleanupToPool(tensor, scope);
-  //   ForwardCleanupToPool(stored_tensor, scope);
-  // }
-  // else {
-
-  DT_tensor *attr_tensor;
-  if (has_grad==0)
-      tensor->op = detach_op;
-  attr_tensor = createBackward(stored_tensor->scopeless_name, tensor);
-  todo_backward_tensors.push_back(attr_tensor);
-  // } 
-}
 
 
 inline void clean_tensor(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   if (nn_mode==eval_mode||stored_tensor->thread_id!=0)
     CleanTreeNow(stored_tensor->thread_id, stored_tensor, stored_tensor->name);
-  // Else, save the tensor for the backrpop.
-}
-
-inline DT_tensor *change_tensor_dims(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
-  stored_tensor->tensor_ptr = get_from_pool(thread_id, tensor->dims_prod, "z=x");
-  stored_tensor->dims = tensor->dims;
-  stored_tensor->dims_prod = tensor->dims_prod;
-  
-  return stored_tensor;
+  // Else, save the tensor for backrpop.
 }
 
 
+inline void create_backward_tensor(std::string scopeless_name, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
 
-inline DT_tensor *sync_and_copy_tensors(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
-  int grid_size, block_size; 
-  CalculateGridAndBlockSizes(tensor->dims_prod, grid_size, block_size);
-
-  stored_tensor->Sync();
-  tensor->Sync();
-  
-  cudaStream_t stream = ThreadsStream[thread_id];
-  copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(stored_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
-  return stored_tensor;
-}
-
-inline DT_tensor *store_leaf_backward(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
   if(nn_mode==training_mode&&thread_id==0)
   {
-    DT_tensor *attribution_tensor;
-  
+    DT_tensor *attr_tensor;
     if (has_grad==0)
-      tensor->op = detach_op;  
-    attribution_tensor = createBackward(stored_tensor->scopeless_name, tensor);
-    todo_backward_tensors.push_back(attribution_tensor);
-
-    std::string scopeless_name = stored_tensor->scopeless_name;
-    stored_tensor = createTensor(stored_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, stored_tensor->cuda_stream, stored_tensor->loader);
-    
-    stored_tensor->scopeless_name = scopeless_name;
+      tensor->op = detach_op;
+    attr_tensor = createBackward(scopeless_name, tensor);
+    todo_backward_tensors.push_back(attr_tensor);
   }
-
-  return stored_tensor;
 }
 
-extern "C" float tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor, DT_tensor *tensor, Scope_Struct *scope_struct)
+// inline DT_tensor *change_tensor_dims(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+//   stored_tensor->tensor_ptr = get_from_pool(thread_id, tensor->dims_prod, "z=x");
+//   stored_tensor->dims = tensor->dims;
+//   stored_tensor->dims_prod = tensor->dims_prod;
+  
+//   return stored_tensor;
+// }
+
+
+
+// inline DT_tensor *sync_and_copy_tensors(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+//   int grid_size, block_size; 
+//   CalculateGridAndBlockSizes(tensor->dims_prod, grid_size, block_size);
+
+//   stored_tensor->Sync();
+//   tensor->Sync();
+  
+//   cudaStream_t stream = ThreadsStream[thread_id];
+//   copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(stored_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
+//   return stored_tensor;
+// }
+
+// inline DT_tensor *store_leaf_backward(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
+//   if(nn_mode==training_mode&&thread_id==0)
+//   {
+//     DT_tensor *attribution_tensor;
+  
+//     if (has_grad==0)
+//       tensor->op = detach_op;  
+//     attribution_tensor = createBackward(stored_tensor->scopeless_name, tensor);
+//     todo_backward_tensors.push_back(attribution_tensor);
+
+//     // tensor_ptr is a copy of the incoming tensor
+//     std::string scopeless_name = stored_tensor->scopeless_name;
+//     stored_tensor = createTensor(stored_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, stored_tensor->cuda_stream, stored_tensor->loader);
+    
+//     stored_tensor->scopeless_name = scopeless_name;
+//   }
+
+//   return stored_tensor;
+// }
+
+extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor, DT_tensor *tensor, Scope_Struct *scope_struct)
 {
   // std::cout << "tensor_Store execution for " << tensor_name << ".\n";
 
@@ -298,33 +298,28 @@ extern "C" float tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
   // DT_tensor *stored_tensor = NamedTensorsT[tensor_name];
   stored_tensor->is_last_version = false;
   
+
+
   // View op
   if (tensor->view_of == tensor_name)
   {
-    delete stored_tensor;
+    stored_tensor->dims = tensor->dims;
+    delete tensor;
+    tensor = stored_tensor;
   }
-  // Non-leaf RHS.
-  // Free current and point to operation result
-  else if (tensor->name==""||!tensor->leaf) 
+  else
   {
     clean_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope); // Remove current if evaluating
-    create_backward_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);
-  }
-  else {
 
-   
-    // Is Leaf
-    if(tensor->op==tensor_leaf||tensor->op==create_tensor_op||nn_mode==eval_mode||thread_id!=0)
-    {
-      clean_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope); // Remove current if evaluating
-      // stored_tensor = store_leaf_backward(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);       
-      create_backward_tensor(stored_tensor, tensor, tensor_name, thread_id, has_grad, scope);
-    } 
+    //todo: handle residual/copy tensor backprop cut
+    create_backward_tensor(scopeless_name, tensor, tensor_name, thread_id, has_grad, scope);
+
+    tensor = createTensor(tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, stored_tensor->cuda_stream, stored_tensor->loader);
   }
 
-
-  tensor->name = tensor_name;
   tensor->scopeless_name = scopeless_name;
+
+  
 
 
   tensor->thread_id = thread_id;
@@ -332,7 +327,8 @@ extern "C" float tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
   
   // NamedTensorsT[tensor_name] = stored_tensor;
   cudaCheck(cudaGetLastError());
-  return 0;
+
+  return tensor;
 }
 
 
@@ -569,7 +565,6 @@ extern "C" float write_zerosw(Scope_Struct *scope_struct, DT_tensor *tensor, int
 
 extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor, int first_dim, ...)
 {
-
   // std::cout << "Executing: " << tensor->name << "." << "view" << "\n";
    
   std::vector<int> new_dims, new_dims_no_minus, current_dims;
@@ -594,7 +589,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
     if (i==9)
     {
       LogErrorS("A tensor with 10 dimensions??? (view)");
-      return 0;
+      return nullptr;
     }
 
     int dim = va_arg(args, int);
@@ -628,7 +623,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
       std::cout << "Current dims product: " << current_dims_prod  << ".\n";
       PrintDims(new_dims);
       std::cout << "New dims product: " << std::to_string(DimsProd(new_dims_no_minus))  << ".\n";
-      return 0;
+      return nullptr;
     }
     
     for (int i=0; i<new_dims.size(); i++)
@@ -643,7 +638,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
       std::cout << "Current dims product: " << current_dims_prod  << ".\n";
       PrintDims(new_dims);
       std::cout << "New dims product: " << new_dims_prod  << ".\n";
-      return 0;
+      return nullptr;
     }
   }
 
@@ -652,6 +647,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
   DT_tensor *new_tensor = createTensor(tensor->tensor_ptr, new_dims, DimsProd(new_dims), false, "");
   new_tensor->view_of = tensor->name;
   new_tensor->op=view_op;
+
   return new_tensor;
 }
 
@@ -765,7 +761,7 @@ extern "C" DT_tensor *zeros_like(Scope_Struct *scope_struct, DT_tensor *tensor) 
 
 extern "C" void *tensor_CopyArg(Scope_Struct *scope_struct, DT_tensor *tensor, char *new_tensor_name)
 {
-  std::cout << "CopyArgTensor " << new_tensor_name << ".\n";
+  // std::cout << "CopyArgTensor " << new_tensor_name << ".\n";
 
   char *scope = scope_struct->scope;
   int thread_id = scope_struct->thread_id;

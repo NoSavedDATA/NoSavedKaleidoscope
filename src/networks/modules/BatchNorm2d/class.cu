@@ -109,15 +109,12 @@ void BatchNorm2dCPP::InitMovingAverages()
   delete[] aux;
 
 
-  DT_tensor *scale_tensor, *bias_tensor;
-  scale_tensor = new DT_tensor();
-  scale_tensor->NewTensor(scale, {C}, C, true, Name);
+  Scale_Tensor = new DT_tensor();
+  Scale_Tensor->NewTensor(scale, {C}, C, true, Name);
 
-  bias_tensor = new DT_tensor();
-  bias_tensor->NewTensor(bias, {C}, C, true, Name);
+  Bias_Tensor = new DT_tensor();
+  Bias_Tensor->NewTensor(bias, {C}, C, true, Name);
 
-  NamedTensorsT[Name+"W"] = scale_tensor;
-  NamedTensorsT[Name+"B"] = bias_tensor;
 }
 
 float *BatchNorm2dCPP::Forward(DT_tensor *tensor, int H, int W, int B, int C, int thread_id)
@@ -206,8 +203,8 @@ void BatchNorm2dCPP::FirstBackward() {
     set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dW, C);
     set_to_zero_kernel<<<std::ceil(C/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dB, C);
 
-    NamedParamGrads[Name+"W"] = dW;
-    NamedParamGrads[Name+"B"] = dB;
+    NamedParamGrads[Scale_Tensor] = dW;
+    NamedParamGrads[Bias_Tensor] = dB;
 
     first_backward=false;
   }

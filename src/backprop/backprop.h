@@ -9,7 +9,7 @@
 #include "../tensor/tensor_struct.h"
 
 extern std::vector<DT_tensor *> todo_backward_tensors;
-extern std::map<std::string, float *> NamedParamGrads;
+extern std::unordered_map<DT_tensor *, float *> NamedParamGrads;
 
 extern std::map<std::string, std::function<void(float *, int, float *, float *, float *, void *, DT_tensor *)>> backward_functions;
 

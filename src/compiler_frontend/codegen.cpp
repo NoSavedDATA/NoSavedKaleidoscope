@@ -239,12 +239,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
       // std::exit(0);
     } else {
-      p2t("Store " + Type + " as alloca");
       llvm::Type *alloca_type = get_type_from_str(Type);
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
       Builder->CreateStore(initial_value, alloca);
       function_allocas[parser_struct.function_name][VarName] = alloca;
-      // continue;
     }
 
       
@@ -1015,10 +1013,23 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
         // std::cout << "ATTRIBUTION: " << LType << " for " << i << ".\n";
         
-        std::string store_op = LType + "_Store";
-        
-        call(store_op, {Lvar_name, callret("assign_wise_list_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)}), scope_struct});
+        std::string store_trigger = LType + "_StoreTrigger";
+        Value *Val_indexed = callret("assign_wise_list_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)});
 
+
+        AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
+
+        Function *F = TheModule->getFunction(store_trigger);
+        if (F)
+        {
+          Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
+          Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+          call(store_trigger, {Lvar_name, old_val, Val_indexed, scope_struct});
+        }
+
+        // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
+        
+        Builder->CreateStore(Val_indexed, alloca);
       }
 
       return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -1097,14 +1108,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       {
         Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
         Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-        call(store_trigger, {Lvar_name, old_val, Val, scope_struct});
+        Val = callret(store_trigger, {Lvar_name, old_val, Val, scope_struct});
       }
 
       // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
 
       Builder->CreateStore(Val, alloca);
       return const_float(0);
-      // return nullptr;
     } else
     {
       // std::cout << "HEAP STORE FOR " << Lname << ".\n";
@@ -2648,7 +2658,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     Value *arg;
     if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int"||Load_Type=="tensor") && !isSelf)
     {
-      p2t("It is an alloca");
+      // p2t("It is an alloca");
 
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 
@@ -2725,15 +2735,10 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
     }
     return ret;
-  }
-
-  
-
-
-  
-  ret = ConstantFP::get(*TheContext, APFloat(0.0f));
-  return ret;
+  }  
 }
+
+
 
 
 Value *ChainCallExprAST::codegen(Value *scope_struct) {

@@ -49,16 +49,14 @@ DT_LSTM::DT_LSTM(int C, int OC, std::string Init, std::string Name)
     cudaMemcpy(U, u_cpu, 4*OC* C*sizeof(float), cudaMemcpyHostToDevice); // x weight
     cudaMemcpy(b, b_cpu, 4*OC*   sizeof(float), cudaMemcpyHostToDevice); // bias
 
-    DT_tensor *tensor_W = createTensor(W, {4*OC, OC}, 4*OC*OC, true, Name+"W");
-    DT_tensor *tensor_U = createTensor(U, {4*OC, C},  4*OC* C, true, Name+"U");
-    DT_tensor *tensor_B = createTensor(b, {4*OC},            4*OC   , true, Name+"b");
-    tensor_W->SetIsWeight();
-    tensor_U->SetIsWeight();
+    DT_tensor *W_Tensor = createTensor(W, {4*OC, OC}, 4*OC*OC, true, Name+"W");
+    DT_tensor *U_Tensor = createTensor(U, {4*OC, C},  4*OC* C, true, Name+"U");
+    DT_tensor *Bias_Tensor = createTensor(b, {4*OC},            4*OC   , true, Name+"b");
+
+    W_Tensor->SetIsWeight();
+    U_Tensor->SetIsWeight();
 
 
-    NamedTensorsT[Name+"W"] = tensor_W;
-    NamedTensorsT[Name+"U"] = tensor_U;
-    NamedTensorsT[Name+"B"] = tensor_B;
 
     delete[] w_cpu;
     delete[] u_cpu;
@@ -212,9 +210,9 @@ void DT_LSTM::FirstBackward()
   set_to_zero_kernel<<<std::ceil((4*OC* C)/(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dU, 4*OC*C);
   set_to_zero_kernel<<<std::ceil((4*OC)   /(float)TILE_SIZE_SQ), TILE_SIZE_SQ, 0, main_stream>>>(dB, 4*OC);
 
-  NamedParamGrads[Name+"W"] = dW;
-  NamedParamGrads[Name+"U"] = dU;
-  NamedParamGrads[Name+"B"] = dB;
+  NamedParamGrads[W_Tensor] = dW;
+  NamedParamGrads[U_Tensor] = dU;
+  NamedParamGrads[Bias_Tensor] = dB;
 
   first_backward=false;
 }
