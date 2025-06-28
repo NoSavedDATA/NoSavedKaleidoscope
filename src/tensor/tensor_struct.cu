@@ -151,6 +151,7 @@ void DT_tensor::AttributionBackwardNode(std::string _name, DT_tensor *new_R_Tens
 }
 void DT_tensor::SetIsWeight()
 {
+  refcount++;
   weight=true;
   is_pinned=false;
 }

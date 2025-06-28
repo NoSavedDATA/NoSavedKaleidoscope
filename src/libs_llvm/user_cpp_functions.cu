@@ -34,7 +34,7 @@ void set_user_functions() {
 		"load_bin", "load_bin_idx", "wload_bin", 
 		"LSTM", "LSTM_Create", 
 		"tensor_onehot", "priority_sample", "priority_sample_val", "importance_sample_idx", "importance_sample_weight", "tmax", "tensor_argmax", "topk", 
-		"nullptr_get", 
+		"nullptr_get", "check_is_null", 
 		"repeat_interleave", "mean_tensor", "sum", "prod", "gather", 
 		"dive_void", "emerge_void", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", 
 		"Embedding", "Embedding_Create", 

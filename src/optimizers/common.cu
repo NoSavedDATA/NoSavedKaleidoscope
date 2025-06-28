@@ -25,7 +25,7 @@ std::unique_ptr<Optimizer> optimize(std::unique_ptr<Optimizer> optimizer)
 
   cudaStreamSynchronize(main_stream);
 
-
+  // std::cout << "Optimizing"  << ".\n";
   int i=0;
   for (auto& pair : NamedParamGrads)
   {

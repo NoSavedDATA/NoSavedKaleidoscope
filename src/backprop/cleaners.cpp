@@ -217,6 +217,9 @@ void CleanTreeNow(int thread_id, DT_tensor *tensor, std::string root_name) {
   
   if (tensor->weight || (tensor->leaf && tensor->name!=root_name))
     return;
+  // std::cout << "refcount is " << tensor->refcount << ".\n";
+  // if (tensor->refcount>=1)
+  //   return;
 
   CleanTreeNow(thread_id, tensor->L_Node, root_name);
   CleanTreeNow(thread_id, tensor->R_Node, root_name);

@@ -1,4 +1,4 @@
-1821-06-25 21:42:10
+1821-06-26 16:17:13
 
 	FunctionType *backpropTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

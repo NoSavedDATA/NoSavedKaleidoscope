@@ -794,6 +794,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("nullptr_get", nullptr_getTy);
 
+	FunctionType *check_is_nullTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("check_is_null", check_is_nullTy);
+
 	FunctionType *rl_discounted_returnTy= FunctionType::get(
 		int8PtrTy,
 		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
@@ -1222,7 +1229,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("gpu", gpuTy);
 
 	FunctionType *tensor_gpuwTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
@@ -1964,7 +1971,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("Embedding", EmbeddingTy);
 
 	FunctionType *Embedding_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);

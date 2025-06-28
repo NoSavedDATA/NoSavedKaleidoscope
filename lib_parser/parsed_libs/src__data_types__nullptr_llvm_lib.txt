@@ -1,4 +1,4 @@
-1821-05-10 22:56:56
+1821-06-28 13:35:56
 
 	FunctionType *nullptr_getTy= FunctionType::get(
 		int8PtrTy,
@@ -6,3 +6,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("nullptr_get", nullptr_getTy);
+
+	FunctionType *check_is_nullTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("check_is_null", check_is_nullTy);

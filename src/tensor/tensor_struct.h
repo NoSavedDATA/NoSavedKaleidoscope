@@ -123,6 +123,8 @@ struct DT_tensor {
   int scope_refs=0;
   int scopeless_refs=0;
 
+  int refcount=0;
+
 
   // CudaStreams *cuda_stream = nullptr;
   cudaStream_t cuda_stream = nullptr;

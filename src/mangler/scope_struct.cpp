@@ -269,7 +269,7 @@ inline void delete_scope(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
-    // scope_struct->mark_sweep_map->clean_up();
+    scope_struct->mark_sweep_map->clean_up();
 }  
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
@@ -280,7 +280,7 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     }
 
     // std::cout << "\n\n\n\nCLEANING SCOPE OF " <<  scope_struct->function_name << "-----------------------------------------------------------*****************----------------.\n\n\n\n\n";
-    // scope_struct->mark_sweep_map->clean_up();
+    scope_struct->mark_sweep_map->clean_up();
     delete_scope(scope_struct);
 }
 
