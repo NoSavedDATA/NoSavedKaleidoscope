@@ -136,6 +136,7 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
   }
     
 
+  tensor->refcount++;
 
   // NamedTensorsT[tensor_name] = tensor;
   
@@ -222,8 +223,9 @@ extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 inline void clean_tensor(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
-  if (nn_mode==eval_mode||stored_tensor->thread_id!=0)
-    CleanTreeNow(stored_tensor->thread_id, stored_tensor, stored_tensor->name);
+  // if (nn_mode==eval_mode||stored_tensor->thread_id!=0)
+  //   CleanTreeNow(stored_tensor->thread_id, stored_tensor, stored_tensor->name);
+
   // Else, save the tensor for backrpop.
 }
 
@@ -282,6 +284,9 @@ inline void create_backward_tensor(std::string scopeless_name, DT_tensor *tensor
 //   return stored_tensor;
 // }
 
+
+
+
 extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor, DT_tensor *tensor, Scope_Struct *scope_struct)
 {
   // std::cout << "tensor_Store execution for " << tensor_name << ".\n";
@@ -297,8 +302,7 @@ extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
 
   // DT_tensor *stored_tensor = NamedTensorsT[tensor_name];
   stored_tensor->is_last_version = false;
-  
-
+  stored_tensor->refcount--;
 
   // View op
   if (tensor->view_of == tensor_name)
@@ -319,11 +323,12 @@ extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
 
   tensor->scopeless_name = scopeless_name;
 
-  
 
 
   tensor->thread_id = thread_id;
   tensor->is_last_version = true;
+  tensor->refcount++;
+
   
   // NamedTensorsT[tensor_name] = stored_tensor;
   cudaCheck(cudaGetLastError());
@@ -335,6 +340,18 @@ extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
 
 void tensor_Clean_Up(void *data_ptr) {
   // std::cout << "tensor_Clean_Up" << ".\n";
+  DT_tensor *tensor = (DT_tensor*) data_ptr;
+  // PrintDims(tensor->dims);
+
+  // if (nn_mode==eval_mode||tensor->thread_id!=0)
+  //   CleanTreeNow(tensor->thread_id, tensor, tensor->name);
+
+  if (nn_mode==eval_mode||tensor->thread_id!=0)
+  {
+    // std::cout << "MOVE TO POOL" << ".\n";
+    move_to_pool(tensor->thread_id, tensor->dims_prod, tensor->tensor_ptr, "eval/thread_id!=0 cleaning");
+    free(tensor);
+  }
 }
 
 
@@ -387,12 +404,12 @@ extern "C" DT_tensor *gpu(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tens
 
   tensor->AttrTensor(tensor_ptr, dims, dims_prod, cuda_stream, loader);
 
-  return 0;
+  return tensor;
 }
 
 
 
-extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tensor *pinned_tensor, int idx)
+extern "C" DT_tensor *tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tensor *pinned_tensor, int idx)
 {
   int thread_id = scope_struct->thread_id;
 
@@ -404,24 +421,23 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
   
   std::vector<int> dims, batchless_dims;
   dims = pinned_tensor->dims;
-  
-
   batchless_dims = BatchLessDims(dims);
   float batchless_dims_prod = (float)DimsProd(batchless_dims);
 
-
   tensor_cpu = pinned_tensor->cpu_tensor_ptr + static_cast<int>(idx*batchless_dims_prod);
 
+
+  // if(tensor->tensor_ptr!=nullptr)
+  //   move_to_pool(thread_id, tensor->dims_prod, tensor->tensor_ptr, "gpuw"); // No effect.
   
-  if (tensor->dims_prod==batchless_dims_prod)
-    tensor_ptr = tensor->tensor_ptr;
-  else
+  
+  // if (tensor->dims_prod==batchless_dims_prod)
+  //   tensor_ptr = tensor->tensor_ptr;
+  // else
     tensor_ptr = get_from_pool(thread_id, batchless_dims_prod, "gpuw");
   
-  //tensor_ptr = get_from_pool(batchless_dims_prod, "gpuw");
-
-
   
+
   Loader *loader=nullptr;
   cudaStream_t cuda_stream = nullptr;
   
@@ -452,6 +468,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
 
   } else {
     
+    // Create a backward tensor for cleaning
     DT_tensor *attr_tensor;
     attr_tensor = createTensor(tensor_ptr, batchless_dims, batchless_dims_prod, true, "");
     attr_tensor->op = gpu_op;
@@ -463,7 +480,7 @@ extern "C" float tensor_gpuw(Scope_Struct *scope_struct, DT_tensor *tensor, DT_t
   tensor->leaf=true;
 
 
-  return 0;
+  return tensor;
 }
 
 

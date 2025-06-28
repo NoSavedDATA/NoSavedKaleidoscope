@@ -1,4 +1,4 @@
-1821-06-25 21:44:26
+1821-06-28 11:56:05
 
 	FunctionType *tensor_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -36,7 +36,7 @@
 	TheModule->getOrInsertFunction("gpu", gpuTy);
 
 	FunctionType *tensor_gpuwTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);

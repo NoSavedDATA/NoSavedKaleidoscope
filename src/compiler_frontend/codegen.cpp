@@ -46,6 +46,21 @@ Value* FloatPtr_toValue(float* vec)
     return Builder->CreateIntToPtr(LLVMValue, float_ptr_ty);
 }
 
+Value *load_alloca(std::string name, std::string type, std::string from_function) {
+
+    llvm::Type *load_type;
+    if(type=="float")
+      load_type = Type::getFloatTy(*TheContext);
+    else if(type=="int")
+      load_type = Type::getInt32Ty(*TheContext);
+    else
+      load_type = int8PtrTy;
+
+    // std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << " type " << type << ".\n";
+    AllocaInst *alloca = function_allocas[from_function][name];
+
+    return Builder->CreateLoad(load_type, alloca, name.c_str());
+}
 
 
 Function *getFunction(std::string Name) {
@@ -71,7 +86,13 @@ AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
                                           StringRef VarName, Type *alloca_type) {
   IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
                    TheFunction->getEntryBlock().begin());
-  return TmpB.CreateAlloca(alloca_type, nullptr, VarName);
+
+  AllocaInst *alloca = TmpB.CreateAlloca(alloca_type, nullptr, VarName);
+
+  // if (alloca_type==int8PtrTy)
+  //   Builder->CreateStore(callret("nullptr_get", {}), alloca);
+
+  return alloca;
 }
 
 
@@ -157,7 +178,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     Value *initial_value = Init->codegen(scope_struct);
 
-    // if((Type=="float"||Type=="str"||Type=="int")&&!(is_self||is_attr))
     if((Type=="float"||Type=="str"||Type=="int")&&!(is_self||is_attr))
     { 
       std::cout << "DataExpr STORE OF " << parser_struct.function_name << "/" << VarName << " type " << Type << ".\n";
@@ -239,10 +259,29 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
       // std::exit(0);
     } else {
+      
+
+
       llvm::Type *alloca_type = get_type_from_str(Type);
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
       Builder->CreateStore(initial_value, alloca);
+
+
       function_allocas[parser_struct.function_name][VarName] = alloca;
+
+
+
+      if(Type!="float"&&Type!="int")
+      {
+        if(!(is_self||is_attr))
+        {
+          call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
+        }
+        else
+        {
+          call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
+        }
+      }
     }
 
       
@@ -251,17 +290,17 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     call("Dispose_NotesVector", {notes_vector, scopeless_name});
 
-    if(Type!="float"&&Type!="int")
-    {
-      if(!(is_self||is_attr))
-      {
-        call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
-      }
-      else
-      {
-        call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
-      }
-    }
+    // if(Type!="float"&&Type!="int")
+    // {
+    //   if(!(is_self||is_attr))
+    //   {
+    //     call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
+    //   }
+    //   else
+    //   {
+    //     call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
+    //   }
+    // }
     call("str_Delete", {var_name});
   }
 
@@ -702,21 +741,6 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *load_alloca(std::string name, std::string type, std::string from_function) {
-
-    llvm::Type *load_type;
-    if(type=="float")
-      load_type = Type::getFloatTy(*TheContext);
-    else if(type=="int")
-      load_type = Type::getInt32Ty(*TheContext);
-    else
-      load_type = int8PtrTy;
-
-    // std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << " type " << type << ".\n";
-    AllocaInst *alloca = function_allocas[from_function][name];
-
-    return Builder->CreateLoad(load_type, alloca, name.c_str());
-}
 
 
 bool seen_var_attr = false;
@@ -757,10 +781,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
 
   if ((type=="float"||type=="str"||type=="int"||type=="tensor")&&!(is_self||is_attr))
-  {
-    // p2t("Variable LOAD ALLOCA TYPE "+type);
-    return load_alloca(Name, type, parser_struct.function_name);
-  }
+    return load_alloca(Name, type, parser_struct.function_name); 
 
   
 
@@ -1114,7 +1135,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
 
       Builder->CreateStore(Val, alloca);
-      return const_float(0);
+      // return const_float(0);
     } else
     {
       // std::cout << "HEAP STORE FOR " << Lname << ".\n";
@@ -2690,12 +2711,11 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
 
   
-  Value *ret = ConstantFP::get(*TheContext, APFloat(0.0f));
+  Value *ret;
   if (CalleeOverride=="none")
   {
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
     call("scope_struct_Delete", {scope_struct_copy});
-
 
     if (Type!="float"&&Type!="int"&&Type!="")
     {
@@ -2729,11 +2749,12 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     call("scope_struct_Delete", {scope_struct_copy});
 
     
-      
+
     if (Type!="float"&&Type!=""&&Type!="int")
     {
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
     }
+    
     return ret;
   }  
 }

@@ -650,15 +650,6 @@ Function *FunctionAST::codegen() {
         } 
         
     }
-    // else if (type!="tensor")
-    // {
-    //   AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
-    //   Builder->CreateStore(&Arg, Alloca);
-    //   //Builder->CreateStore(Builder->CreateLoad(Type::getFloatTy(*TheContext), &Arg), Alloca);
-
-    //   NamedValues[std::string(Arg.getName())] = Alloca;
-
-    // }
   }
   
 

@@ -42,7 +42,7 @@ void set_functions_return_type() {
 						{"scope_struct_Create", ""}, {"scope_struct_Copy", ""}, {"scope_struct_Overwrite", ""}, {"scope_struct_Dive", ""}, {"get_scope_first_arg", "str"}, {"get_scope_scope", "str"}, {"get_scope_thread_id", "int"}, {"get_scope_has_grad", "int"}, {"scope_struct_Load_for_Async", ""}, 
 						{"tensor_onehot", "tensor"}, {"tmax", "tensor"}, {"tensor_argmax", "tensor"}, {"topk", "tensor"}, 
 						{"relu", "tensor"}, {"gelu", "tensor"}, {"sigmoid", "tensor"}, {"_tanh", "tensor"}, {"softmax", "tensor"}, 
-						{"tensor_Create", "tensor"}, {"tensor_Load", "tensor"}, {"tensor_Copy", "tensor"}, {"gpu", "tensor"}, {"randu_like", "tensor"}, {"tensor_view", "tensor"}, {"tensor_CalculateIdx", "int"}, {"zeros_like", "tensor"}, 
+						{"tensor_Create", "tensor"}, {"tensor_Load", "tensor"}, {"tensor_Copy", "tensor"}, {"gpu", "tensor"}, {"tensor_gpuw", "tensor"}, {"randu_like", "tensor"}, {"tensor_view", "tensor"}, {"tensor_CalculateIdx", "int"}, {"zeros_like", "tensor"}, 
 						{"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"}, {"Jitter", "tensor"}, 
 						{"FirstArgOnDemand", "str"}, 
 						{"LenStrVec", "int"}, {"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"str_vec_CalculateIdx", "int"}, 

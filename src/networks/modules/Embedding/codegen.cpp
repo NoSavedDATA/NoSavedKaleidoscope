@@ -37,7 +37,7 @@ extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_tensor *tensor)
   int input_dims_prod = DimsProd(dims);
 
 
-  std::unique_ptr<DT_Embedding> embedding = std::move(NamedEmbedding[conv_name]);
+  DT_Embedding *embedding = (DT_Embedding*) scope_struct->object_ptr;
 
   tensor->Sync();
 
@@ -54,11 +54,10 @@ extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_tensor *tensor)
   
 
 
-  NamedEmbedding[conv_name] = std::move(embedding);
   
   
 
-  return customOpTensor(output, new_dims, DimsProd(new_dims), "embedding_backward", nullptr, tensor);
+  return customOpTensor(output, new_dims, DimsProd(new_dims), "embedding_backward", embedding, tensor);
 }
 
 
@@ -69,7 +68,7 @@ extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
 
-extern "C" float Embedding_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
+extern "C" void *Embedding_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
   std::string init = "xavu";
 
@@ -93,11 +92,10 @@ extern "C" float Embedding_Create(Scope_Struct *scope_struct, char *name, char *
 
   std::cout << "\nCreate embedding on demand:\n   C: " << C << " OC " << OC << "\n";
 
-  auto embedding = std::make_unique<DT_Embedding>(C, OC, init, name);
+  DT_Embedding *embedding = new DT_Embedding(C, OC, init, name);
 
   std::cout << "Adding " << name << " to NamedEmbedding dict\n";
-  NamedEmbedding[name] = std::move(embedding);
-  return 0;
+  return embedding;
 }
 
 void embedding_backward(float *inp, int size, float *out,
