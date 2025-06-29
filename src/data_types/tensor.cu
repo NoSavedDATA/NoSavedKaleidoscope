@@ -186,7 +186,7 @@ extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor)
 
   tensor_ptr = tensor->tensor_ptr;
 
-  std::string where_from = "arg tensor of ";
+  std::string where_from = "tensor copy of ";
   where_from = where_from + tensor_name;
   arg_tensor = get_from_pool(thread_id, dims_prod, where_from);
   

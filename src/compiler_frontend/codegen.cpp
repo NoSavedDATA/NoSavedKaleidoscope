@@ -1049,10 +1049,14 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         }
 
         // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
-        
         Builder->CreateStore(Val_indexed, alloca);
-      }
 
+        if (LType!="float"&&LType!="int")
+        {
+          call("MarkToSweep_Mark", {scope_struct, Val_indexed, global_str(LType)});
+        }
+        
+      }
       return ConstantFP::get(*TheContext, APFloat(0.0f));
     }
 
@@ -1063,15 +1067,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     if(LHS->GetIsVec())
     {
 
-      // VecIdxExprAST   *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-      // tensor_name = LHSE->NameSolver->codegen(scope_struct);
-  
-  
-      // Value *idx_at = Builder->CreateCall(TheModule->getFunction("CalculateIdxOffset"),
-      //                       idx_calc_args);
-  
-      // Builder->CreateCall(TheModule->getFunction("AttrPinnedOnIdx"),
-      //                       {tensor_name, Val, idx_at});
 
       VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
       Value *vec = LHSV->Loaded_Var->codegen(scope_struct);
@@ -1121,7 +1116,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       {
         Function *F = TheModule->getFunction(copy_fn);
         if (F)
+        {
           Val = callret(copy_fn, {scope_struct, Val});
+          call("MarkToSweep_Mark", {scope_struct, Val, global_str(LType)});
+        }
       }
 
       Function *F = TheModule->getFunction(store_trigger);
@@ -1135,7 +1133,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
 
       Builder->CreateStore(Val, alloca);
-      // return const_float(0);
     } else
     {
       // std::cout << "HEAP STORE FOR " << Lname << ".\n";
@@ -1155,12 +1152,11 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
           std::cout << "SELF STORE OF " << attribute_name << ".\n";
           call("object_Attr_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
         }
-        // call();
-        // std::exit(0);
+
         return ConstantFP::get(*TheContext, APFloat(0.0f));
+
       } else
         call(store_op, {Lvar_name, Val, scope_struct});
-
     }
     
 
@@ -1177,7 +1173,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val});
       }
     }
-    // call("str_Delete", {Lvar_name});
     
 
     seen_var_attr=false;
@@ -1874,8 +1869,10 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   { 
     // p2t("Reached if");
     Value *ret = Vars[0]->codegen(scope_struct);
-    if(Vars[0]->GetType()!="float"&&Vars[0]->GetType()!="int")
+    std::string type = Vars[0]->GetType();
+    if(type!="float"&&type!="int")
       call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
+      // call("MarkToSweep_Mark", {scope_struct, ret, global_str(type)});
     seen_var_attr=false;
     call("set_scope_not_at_return", {scope_struct});
     call("scope_struct_Clean_Scope", {scope_struct}); 
@@ -2625,7 +2622,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   }
 
   target_args_size+=1; //always add scope_struct
-  if (Load_Type!="none") // x.view -> tensor_Load
+  if (Load_Type!="none") // x.view() -> tensor_Load(x)
     target_args_size += 1;
 
 

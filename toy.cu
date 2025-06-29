@@ -641,12 +641,10 @@ Function *FunctionAST::codegen() {
             Value *var_name = global_str(arg_name);
             var_name = callret("ConcatStr", {scope_string, var_name});
 
-
             call(type+"_Store", {var_name, &Arg, scope_struct});
 
-            if (type!="float")
+            if (type!="float"&&type!="int")
                 call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
-
         } 
         
     }
