@@ -63,7 +63,8 @@ float *get_from_pool(int thread_id, int dims_prod, std::string from, bool is_new
     return nullptr;
 
   dims_prod = round_to_nearest_pow2(dims_prod);
-  // if (dims_prod==393216)
+
+  // if (dims_prod==64)
   //   std::cout << "*************Get " << from << ".\n";
 
 
@@ -95,7 +96,7 @@ void move_to_pool(int thread_id, int dims_prod, float *tensor_ptr, std::string f
   //if (dims_prod==50*256)
   //  std::cout << "push B*OC of " << from << "\n";
 
-  // if (dims_prod==393216)
+  // if (dims_prod==64)
   //   std::cout << "-------------Move " << from << ".\n";
 
   if (dims_prod==0)
