@@ -243,6 +243,7 @@ std::unique_ptr<Expr> Parse_Extern_Function() {
 
 
 
+// todo: this function may break recursion stack
 std::vector<std::unique_ptr<Expr>> Parse_Primary(std::vector<std::unique_ptr<Expr>> functions) {
 
     getNextToken();

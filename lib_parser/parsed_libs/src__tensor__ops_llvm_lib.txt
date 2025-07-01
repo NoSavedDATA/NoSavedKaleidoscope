@@ -1,5 +1,12 @@
 1821-06-06 14:45:18
 
+	FunctionType *AttrTensorNoFreeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
+
 	FunctionType *AttrTensorOnIdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},

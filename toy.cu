@@ -616,8 +616,10 @@ Function *FunctionAST::codegen() {
             type = typeVars[arg_name];
         // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
+
+        
         // Coder args
-        if (type=="float"||type=="str"||type=="int"||type=="tensor") {
+        // if (type=="float"||type=="str"||type=="int"||type=="tensor") {
             // std::cout << "Arg STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
             llvm::Type *alloca_type = get_type_from_str(type);
             AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
@@ -635,17 +637,17 @@ Function *FunctionAST::codegen() {
             } else
                 Builder->CreateStore(&Arg, arg_alloca);
             function_allocas[current_codegen_function][arg_name] = arg_alloca;
-        }
-        else if (type!="tensor")
-        {
-            Value *var_name = global_str(arg_name);
-            var_name = callret("ConcatStr", {scope_string, var_name});
+        // }
+        // else if (type!="tensor")
+        // {
+        //     Value *var_name = global_str(arg_name);
+        //     var_name = callret("ConcatStr", {scope_string, var_name});
 
-            call(type+"_Store", {var_name, &Arg, scope_struct});
+        //     call(type+"_Store", {var_name, &Arg, scope_struct});
 
-            if (type!="float"&&type!="int")
-                call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
-        } 
+        //     if (type!="float"&&type!="int")
+        //         call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
+        // } 
         
     }
   }
@@ -735,6 +737,7 @@ static void InitializeModule() {
 
 
   Generate_LLVM_Functions();
+  Generate_Lib_Functions();
 
 
   //===----------------------------------------------------------------------===//

@@ -20,6 +20,9 @@ struct LibFunction {
   LibFunction(std::string ReturnType, bool IsPointer, std::string Name,
               std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer);
 
+  void Link_to_LLVM(void *);
+  void Add_to_Nsk_Dicts(void *);
+
   void Print(); 
 };
 

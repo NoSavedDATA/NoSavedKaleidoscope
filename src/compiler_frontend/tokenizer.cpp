@@ -368,7 +368,7 @@ static int get_token() {
     // Comment until end of line.
     do
       LastChar = getchar();
-    while (LastChar != EOF && LastChar != '\n' && LastChar != tok_space && LastChar != '\r');
+    while (LastChar != EOF && LastChar != '\n' && LastChar != 10 && LastChar != '\r');
 
     if (LastChar != EOF)
       return get_token();

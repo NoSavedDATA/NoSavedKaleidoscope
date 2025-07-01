@@ -17,6 +17,9 @@
 // #include "modules.h"
 // #include "tokenizer.h"
 
+#include "../clean_up/clean_up.h"
+#include "../common/extension_functions.h"
+#include "../libs_llvm/so_libs.h"
 #include "include.h"
 
 
@@ -70,7 +73,127 @@ void LibFunction::Print() {
       std::cout << ", ";
     }
 
-    std::cout << ")\n";
+    std::cout << ")\n\n";
+}
+
+void LibFunction::Link_to_LLVM(void *func_ptr) {
+
+    llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+    llvm::Type *floatTy = Type::getFloatTy(*TheContext);
+    llvm::Type *intTy = Type::getInt32Ty(*TheContext);
+
+    llvm::Type *fn_return_type;
+    std::vector<llvm::Type *> arg_types;
+
+    std::string fn_return_type_str;
+    std::vector<std::string> arg_types_str;
+
+
+    
+    if(ReturnType=="int"&&!IsPointer)
+    {
+        fn_return_type = intTy;
+        fn_return_type_str = "int";
+    }
+    else if(ReturnType=="float"&&!IsPointer)
+    {
+        fn_return_type = floatTy;
+        fn_return_type_str = "float";
+    }
+    else
+    {
+        fn_return_type = int8PtrTy;
+        fn_return_type_str = "void_ptr";
+    }
+
+    for(int i=0; i<ArgNames.size(); ++i) {
+        if(ArgNames[i]=="int"&&!ArgIsPointer[i])
+        {
+            arg_types.push_back(intTy);
+            arg_types_str.push_back("int");
+        }
+        else if(ArgNames[i]=="float"&&!ArgIsPointer[i])
+        {
+            arg_types.push_back(floatTy);
+            arg_types_str.push_back("float");
+        }
+        else
+        {
+            arg_types.push_back(int8PtrTy);
+            arg_types_str.push_back("void_ptr");
+        }
+    }
+
+
+
+    Lib_Functions_Return[Name] = fn_return_type_str;
+    Lib_Functions_Args[Name] = std::move(arg_types_str);
+
+
+    FunctionType *llvm_function = FunctionType::get(
+        fn_return_type,
+        arg_types,
+        false
+    );
+
+    Function* funcDecl = cast<Function>(
+        TheModule->getOrInsertFunction(Name, llvm_function).getCallee()
+    );
+
+    
+    auto &JD = TheJIT->getMainJITDylib();
+    
+    SymbolMap symbols;
+    symbols[TheJIT->Mangle(Name)] = {
+        ExecutorAddr::fromPtr(func_ptr),
+        JITSymbolFlags::Exported | JITSymbolFlags::Callable
+    };
+
+    if (auto Err = JD.define(absoluteSymbols(symbols)))
+        LogError("Failed to define native function in JIT: " + toString(std::move(Err)));
+}
+
+void LibFunction::Add_to_Nsk_Dicts(void *func_ptr) {
+    user_cpp_functions.push_back(Name);
+    native_methods.push_back(Name);
+    native_functions.push_back(Name);
+    native_fn.push_back(Name);
+
+    if(ReturnType!="float"||IsPointer)
+    {
+        functions_return_type[Name] = ReturnType;
+        if(begins_with(ReturnType, "DT_"))
+        {
+            std::string nsk_data_type = ReturnType;
+            nsk_data_type.erase(0, 3);
+            data_tokens.push_back(nsk_data_type);
+        }
+    }
+
+    
+
+    
+    if(ends_with(Name, "_Clean_Up"))
+    {
+        std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
+
+        std::string nsk_type = Name;
+        size_t pos = nsk_type.rfind("_Clean_Up");
+        if (pos != std::string::npos) {
+            nsk_type.replace(pos, 9, "");
+        }
+
+        using CleanupFunc = void(*)(void*);
+        CleanupFunc casted_func_ptr = reinterpret_cast<CleanupFunc>(func_ptr);
+        clean_up_functions[nsk_type] = casted_func_ptr;
+
+    } else if (ends_with(Name, "_backward")) {
+        std::cout << "FOUND BACKWARD FN" << ".\n";
+    }    
+    else {
+
+    }
+
 }
 
 
@@ -85,13 +208,13 @@ char LibParser::_getCh() {
     if(!file.is_open()) {
         file_idx++;
         file.open(files[file_idx]);
-        std::cout << "Now parsing" << files[file_idx] << ".\n";
+        // std::cout << "Now parsing" << files[file_idx] << ".\n";
     }
 
     if (file.get(ch)) {
         return ch;
     } else {
-        std::cout << "Reached file ending" << ".\n";
+        // std::cout << "Reached file ending" << ".\n";
         file.close();
 
         file_idx++;
@@ -113,8 +236,11 @@ int LibParser::_getTok() {
     LastChar = _getCh();
     if(LastChar=='/')
     {
-        while(LastChar!=tok_space&&LastChar!=tok_eof&&LastChar!=tok_finish)
         LastChar = _getCh();
+        while(LastChar!=10 && LastChar!=tok_eof && LastChar!=tok_finish)
+            LastChar = _getCh();
+
+        return tok_commentary;
     } else
         return LastChar;
     }
@@ -252,14 +378,13 @@ void LibParser::ParseExtern() {
     Functions[file_name].push_back(lib_fn);
 
 
-    std::cout << "\n\n";
-
+    // std::cout << "\n\n";
 }
 
 void LibParser::ParseLibs() {
     token=0;
 
-    std::cout << "Begin parsing" << ".\n";
+    // std::cout << "Begin parsing" << ".\n";
 
     token = _getToken();
     
@@ -270,7 +395,7 @@ void LibParser::ParseLibs() {
 
       token = _getToken();
     }
-    std::cout << "\n\n";
+    // std::cout << "\n\n";
 }
 
 void LibParser::PrintFunctions() {
@@ -282,93 +407,28 @@ void LibParser::PrintFunctions() {
 
 
 void LibParser::ImportLibs(std::string so_lib_path) {
-    std::cout << "IMPORTING LIB: " << so_lib_path << ".\n\n";
+
+
+
     void* handle = dlopen(so_lib_path.c_str(), RTLD_LAZY);
 
 
-    if (!handle) {
-        LogError("Lib " + so_lib_path + " not found.");
-        return;
-    }
 
-    llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
-    llvm::Type *floatTy = Type::getFloatTy(*TheContext);
-    llvm::Type *intTy = Type::getInt32Ty(*TheContext);
-    
-
-
-
-    for (auto pair : Functions) {
+    for (auto pair : Functions) { 
         for (auto fn : pair.second)
         {
             std::cout << "Importing function:" << "\n";
             fn->Print();
             
-            void* funcPtr = dlsym(handle, fn->Name.c_str());
-            if (!funcPtr) {
+
+            void* func_ptr = dlsym(handle, fn->Name.c_str());
+            if (!func_ptr) {
                 LogError("Function " + fn->Name + " not found in library");
                 continue;
             }
 
-
-            user_cpp_functions.push_back(fn->Name);
-            native_methods.push_back(fn->Name);
-
-
-            
-            llvm::Type *fn_return_type;
-            std::vector<llvm::Type *> arg_types;
-
-            
-            if(fn->ReturnType=="int"&&!fn->IsPointer)
-                fn_return_type = intTy;
-            else if(fn->ReturnType=="float"&&!fn->IsPointer)
-                fn_return_type = floatTy;
-            else
-                fn_return_type = int8PtrTy;
-
-            for(int i=0; i<fn->ArgNames.size(); ++i) {
-                if(fn->ArgNames[i]=="int"&&!fn->ArgIsPointer[i])
-                    arg_types.push_back(intTy);
-                else if(fn->ArgNames[i]=="float"&&!fn->ArgIsPointer[i])
-                    arg_types.push_back(floatTy);
-                else
-                    arg_types.push_back(int8PtrTy);
-            }
-
-            std::cout << "jitting with " << arg_types.size() << " args.\n";
-
-
-            FunctionType *llvm_function = FunctionType::get(
-                fn_return_type,
-                arg_types,
-                false
-            );
-
-
-            Function* funcDecl = cast<Function>(
-                TheModule->getOrInsertFunction(fn->Name, llvm_function).getCallee()
-            );
-
-            
-            auto &JD = TheJIT->getMainJITDylib();
-            
-            std::cout << "Adding symbol"  << ".\n";
-            SymbolMap symbols;
-            symbols[TheJIT->Mangle(fn->Name)] = {
-                ExecutorAddr::fromPtr(funcPtr),
-                JITSymbolFlags::Exported | JITSymbolFlags::Callable
-            };
-        
-            if (auto Err = JD.define(absoluteSymbols(symbols))) {
-                LogError("Failed to define native function in JIT: " + toString(std::move(Err)));
-                continue;
-            }
-
-            
-
-
-            std::cout << "\n";
+            fn->Link_to_LLVM(func_ptr);
+            fn->Add_to_Nsk_Dicts(func_ptr);
         }
     }
 }
