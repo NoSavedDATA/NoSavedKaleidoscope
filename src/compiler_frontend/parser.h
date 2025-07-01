@@ -192,6 +192,9 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
 std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct); 
   
   
+
+
+std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct, std::string class_name);
   
   /// definition ::= 'def' prototype expression
 std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::string class_name=""); 

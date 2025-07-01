@@ -6,6 +6,8 @@
 #include <vector>
 
 
+#include <filesystem>
+#include <fstream>
 
 #include "../data_types/include.h"
 #include "../notators/include.h"
@@ -308,6 +310,310 @@ Value *DataExprAST::codegen(Value *scope_struct) {
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
+
+
+namespace fs = std::filesystem;
+
+
+std::vector<fs::path> glob_cpp(const fs::path& rootDir, std::string extension=".cpp") {
+    std::vector<fs::path> cppFiles;
+    std::mutex mtx;
+
+    for (const auto& entry : fs::recursive_directory_iterator(rootDir)) {
+        const std::string filename = entry.path().string();
+        if (filename.size() >= extension.size() &&
+            filename.compare(filename.size() - extension.size(), extension.size(), extension) == 0) {
+            std::lock_guard<std::mutex> lock(mtx);
+            cppFiles.push_back(entry.path());
+        }
+    }
+    return std::move(cppFiles);
+}
+
+inline std::vector<fs::path> get_lib_files(std::string lib_dir)
+{
+  std::vector<fs::path> files = glob_cpp(lib_dir);
+  std::vector<fs::path> cu_files = glob_cpp(lib_dir, ".cu");
+
+  files.insert(files.end(), cu_files.begin(), cu_files.end());
+
+  return files;
+}
+
+
+struct LibFunction {
+  std::string ReturnType;
+  std::string Name;
+  bool IsPointer;
+  std::vector<std::string> ArgNames;
+  std::vector<int> ArgIsPointer;
+
+  LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer)
+    : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer) {}
+
+  void Print() {
+    std::cout << "extern \"C\" " << ReturnType << " ";
+    if(IsPointer)
+      std::cout << "*";
+    std::cout << Name << "(";
+
+    for(int i=0;i<ArgNames.size(); ++i)
+    {
+      std::cout << ArgNames[i];
+      if (ArgIsPointer[i])
+        std::cout << " *"; 
+
+      if(i<ArgNames.size()-1)
+      std::cout << ", ";
+    }
+
+    std::cout << ")\n";
+  }
+};
+
+
+struct LibParser {
+  int file_idx=-1;
+  std::string running_string="";
+  int token;
+  char LastChar = ' ';
+
+  char ch;
+  std::ifstream file;
+  std::vector<fs::path> files;
+  std::vector<std::string> function_names;
+
+  std::vector<LibFunction*> Functions;
+
+  LibParser(std::string lib_dir) {
+    files = get_lib_files(lib_dir);
+  }
+
+
+  char _getCh() {
+
+    if(!file.is_open()) {
+      file_idx++;
+      file.open(files[file_idx]);
+      std::cout << "Now parsing" << files[file_idx] << ".\n";
+    }
+
+    if (file.get(ch)) {
+      return ch;
+    } else {
+      std::cout << "Reached file ending" << ".\n";
+      file.close();
+
+      file_idx++;
+      if (file_idx<files.size())
+        file.open(files[file_idx]);
+
+      return tok_eof;
+    }
+  }
+
+
+  int _getTok() {
+
+
+
+    while (LastChar==32 || LastChar==tok_tab)
+      LastChar = _getCh();
+
+    if(LastChar=='/')
+    {
+      LastChar = _getCh();
+      if(LastChar=='/')
+      {
+        while(LastChar!=tok_space&&LastChar!=tok_eof&&LastChar!=tok_finish)
+          LastChar = _getCh();
+      } else
+        return LastChar;
+    }
+
+
+    if(LastChar=='('||LastChar==')'||LastChar=='*'||LastChar==',')
+    {
+      char ret_char = LastChar;
+      LastChar = _getCh();
+      return ret_char;
+    }
+
+
+    if (LastChar=='"') {
+      
+      LastChar = _getCh();
+      running_string = "";
+
+      while(LastChar!='"')
+      {
+        running_string += LastChar;
+        LastChar = _getCh();
+      }
+      LastChar = _getCh();
+
+      return tok_str;
+    }
+
+    
+    if (isalpha(LastChar)||LastChar=='_') {
+      running_string = "";
+
+      while(isalpha(LastChar)||LastChar=='_')
+      {
+        running_string += LastChar;
+        LastChar = _getCh();
+      }
+
+      if(running_string=="extern")
+        return tok_extern;
+
+      // std::cout << "Found word: " << running_string << ".\n";
+      // std::cout << "cur char: " << LastChar << ".\n";
+
+      return tok_identifier;
+    }
+
+
+    while (LastChar==tok_space||LastChar==tok_tab||LastChar==32) // skip blanks
+      LastChar = _getCh();
+    
+
+    LastChar = _getCh();
+
+    if(LastChar==tok_eof||LastChar==tok_finish)
+      return tok_eof;
+
+    return LastChar;
+  }
+
+  int _getToken() {
+    token = _getTok();
+    return token;
+  }
+
+
+  void ParseExtern() {
+
+    _getToken(); // eat extern
+
+
+
+
+    if (token!=tok_str)
+      return;
+    _getToken(); // eat "C"
+
+
+    std::string return_type = running_string;
+    _getToken(); // eat return type
+
+
+    std::cout << "\nextern \"C\" " << return_type << " " << running_string << ".\n";
+    std::cout << "" << ReverseToken(token) << ".\n";
+
+
+    bool is_pointer = false;
+    if (token=='*')
+    {
+      _getToken();
+      is_pointer = true;
+    }
+
+    
+    std::string fn_name = running_string;
+
+    _getToken(); // eat fn name
+
+
+
+
+
+    std::vector<std::string> arg_types;
+    std::vector<int> arg_is_pointer;
+
+    if(token!='(')
+      return;
+    std::cout << "--------------Got parenthesis (" << ".\n";
+
+
+    _getToken(); 
+
+    while(token!=')')
+    {
+      arg_types.push_back(running_string);      
+      _getToken(); // eat arg type
+
+      if (token=='*')
+      {
+        _getToken();
+        arg_is_pointer.push_back(1);
+      } else
+        arg_is_pointer.push_back(0);
+
+      _getToken(); // eat arg name
+
+
+      if(token==',')
+        _getToken();
+
+    }
+
+    LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_is_pointer);
+    Functions.push_back(lib_fn);
+
+
+    std::cout << "\n\n";
+
+  }
+
+  void ParseLibs() {
+    token=0;
+
+    std::cout << "Begin parsing" << ".\n";
+
+    token = _getToken();
+    
+    while(file_idx<files.size())
+    {  
+      if (token==tok_extern)
+        ParseExtern();
+
+      token = _getToken();
+    }
+    std::cout << "\n\n";
+  }
+
+  void PrintFunctions() {
+    for (auto fn : Functions) {
+      fn->Print();
+    }
+  }
+
+};
+
+
+Value *LibImportExprAST::codegen(Value *scope_struct) {
+
+  // Get Files
+
+  std::string lib_dir = "lib/" + LibName;
+  std::string so_file = lib_dir + ".so";
+
+
+  LibParser *lib_parser = new LibParser(lib_dir);
+
+  
+  
+  
+  // Parse extern "C" functions
+  
+  lib_parser->ParseLibs();
+  lib_parser->PrintFunctions();
+
+  
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
 
 
 
@@ -1921,6 +2227,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
 
 
 
+
 Value *NewVecExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -1942,6 +2249,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
       {
         std::string copy_fn = type + "_Copy";
         value = callret(copy_fn, {scope_struct, value});
+        call("MarkToSweep_Mark", {scope_struct, value, global_str(type)});
       }
       is_type=true;
     } else
