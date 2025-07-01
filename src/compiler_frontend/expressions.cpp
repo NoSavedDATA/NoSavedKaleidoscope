@@ -205,6 +205,10 @@ DataExprAST::DataExprAST(
   : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)),
                 Notes(std::move(Notes)) {}
 
+
+LibImportExprAST::LibImportExprAST(std::string LibName)
+  : LibName(LibName) {}
+
   
   
   

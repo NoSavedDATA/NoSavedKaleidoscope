@@ -1594,6 +1594,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseStringExpr(parser_struct);
   case '(':
     return ParseParenExpr(parser_struct);
+  case tok_import:
+    return ParseImport(parser_struct, class_name);
   case tok_if:
     return ParseIfExpr(parser_struct, class_name);
   case tok_for:
@@ -2047,6 +2049,23 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
   return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
                                          BinaryPrecedence);
+}
+
+
+std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct, std::string class_name) {
+
+  getNextToken(); // eat import
+
+  if(CurTok!=tok_identifier)
+    return LogError("Expected library name.");
+
+  std::string lib_name = IdentifierStr;
+
+  getNextToken();
+
+  return std::make_unique<LibImportExprAST>(lib_name);
+  // return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
+  //                                        BinaryPrecedence);
 }
 
 

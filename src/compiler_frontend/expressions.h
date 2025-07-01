@@ -248,6 +248,14 @@ class DataExprAST : public VarExprAST {
 
 
   
+class LibImportExprAST : public ExprAST {
+  public:
+    std::string LibName;
+
+  LibImportExprAST(std::string LibName); 
+
+  Value *codegen(Value *scope_struct) override;
+};
   
   
   

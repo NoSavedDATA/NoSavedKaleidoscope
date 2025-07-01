@@ -15,6 +15,7 @@
 // of these for known words.
 enum Token {
     tok_eof = -1,
+    tok_finish = -52,
 
     // functions/classes
     tok_def = -2,
@@ -22,6 +23,7 @@ enum Token {
     tok_self = -78,
     tok_class_attr = -79,
     tok_extern = -3,
+    tok_import = -51,
 
     // primary
     tok_identifier = -4,

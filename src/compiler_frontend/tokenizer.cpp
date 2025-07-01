@@ -31,6 +31,7 @@ std::map<int, std::string> token_to_string = {
   // functions/classes
   { tok_def, "def" },
   { tok_class, "class" },
+  { tok_import, "import" },
   { tok_self, "self" },
   { tok_class_attr, "object attr" },
   { tok_extern, "extern" },
@@ -258,12 +259,8 @@ static int get_token() {
         IdentifierStr += LastChar;
       else
         name_ok = false;
-      // if (in_str(IdentifierStr, data_tokens))
-      // {
-      //   LastChar = getchar();
-      //   if (!(isalnum(LastChar) || LastChar=='_'))
-      //     return tok_data;
-      // }
+
+        
       if (LastChar=='.')
       {
         LastChar = getchar();
@@ -282,6 +279,8 @@ static int get_token() {
       return tok_class;
     if (IdentifierStr == "extern")
       return tok_extern;
+    if (IdentifierStr == "import")
+      return tok_import;
     if (IdentifierStr == "if")
       return tok_if;
     if (IdentifierStr == "then")
