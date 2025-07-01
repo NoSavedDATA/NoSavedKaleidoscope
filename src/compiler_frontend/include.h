@@ -7,6 +7,7 @@
 
 #include "codegen.h"
 #include "expressions.h"
+#include "libs_parser.h"
 #include "logging.h"
 #include "modules.h"
 #include "name_solver.h"
