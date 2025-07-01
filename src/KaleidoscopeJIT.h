@@ -118,7 +118,6 @@ private:
   std::unique_ptr<EPCIndirectionUtils> EPCIU;
 
   DataLayout DL;
-  MangleAndInterner Mangle;
 
   RTDyldObjectLinkingLayer ObjectLayer;
   IRCompileLayer CompileLayer;
@@ -130,6 +129,7 @@ private:
   static void handleLazyCallThroughError(); 
 
 public:
+  MangleAndInterner Mangle;
   KaleidoscopeJIT(std::unique_ptr<ExecutionSession> ES,
                   std::unique_ptr<EPCIndirectionUtils> EPCIU,
                   JITTargetMachineBuilder JTMB, DataLayout DL);
