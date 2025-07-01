@@ -207,7 +207,23 @@ DataExprAST::DataExprAST(
 
 
 LibImportExprAST::LibImportExprAST(std::string LibName)
-  : LibName(LibName) {}
+  : LibName(LibName) {
+
+  std::string lib_dir = "lib/" + LibName;
+  std::string so_lib_path = lib_dir + "/lib.so";
+
+  if(!fs::exists(so_lib_path))
+  { 
+      LogError("- Failed to import library;\n\t    - " + so_lib_path + " file not found.");
+      return;
+  }
+
+
+  LibParser *lib_parser = new LibParser(lib_dir);
+  
+  lib_parser->ParseLibs();
+  lib_parser->ImportLibs(so_lib_path);
+}
 
   
   

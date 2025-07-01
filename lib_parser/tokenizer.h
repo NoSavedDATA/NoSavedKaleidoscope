@@ -20,6 +20,7 @@ enum Token {
     tok_identifier = -5,
     tok_three_dots = -6,
     tok_non_idented_identifier = -7,
+    tok_commentary = -8,
 
 
     tok_space=10,

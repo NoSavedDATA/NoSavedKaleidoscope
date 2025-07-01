@@ -6,13 +6,12 @@
 #include <sstream>
 #include <iomanip>
 
+#include "../char_pool/include.h"
 #include "../common/extension_functions.h"
-#include "../codegen/random.h"
-#include "../codegen/string.h"
+// #include "../codegen/random.h"
+// #include "../codegen/string.h"
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
-#include "../tensor/tensor_dim_functions.h"
-#include "include.h"
 
 
 
@@ -117,8 +116,6 @@ extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *sc
   // std::cout << "Building list from type: " << list_type << ".\n";
 
 
-  // auto list = std::make_list(3.14f, (char *)"Hello", new Tensor());
-  // using Mylist = listFromString<"float_str_tensor">;
 
 
 

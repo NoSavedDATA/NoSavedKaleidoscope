@@ -314,19 +314,9 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 Value *LibImportExprAST::codegen(Value *scope_struct) {
 
-  // Get Files
-
-  std::string lib_dir = "lib/" + LibName;
-  std::string so_file = lib_dir + "/lib.so";
-
-  LibParser *lib_parser = new LibParser(lib_dir);
+  // Library import is made before codegen
   
-  lib_parser->ParseLibs();
-  // lib_parser->PrintFunctions();
-  lib_parser->ImportLibs(so_file);
-
-  
-  return ConstantFP::get(*TheContext, APFloat(0.0));
+  return const_float(0.0f);
 }
 
 
@@ -800,7 +790,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
 
 
-  if ((type=="float"||type=="str"||type=="int"||type=="tensor")&&!(is_self||is_attr))
+  if (!(is_self||is_attr))
     return load_alloca(Name, type, parser_struct.function_name); 
 
   
@@ -1107,7 +1097,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     std::string Lname = std::get<0>(name_solver->Names[0]);
 
-    bool is_alloca = ((LType=="float"||LType=="str"||LType=="int"||LType=="tensor")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
+    // bool is_alloca = ((LType=="float"||LType=="str"||LType=="int"||LType=="tensor")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
+    bool is_alloca = (!LHS->GetSelf()&&!LHS->GetIsAttribute());
 
     Value *Lvar_name;
     if (!is_alloca && !LHS->GetIsVec())
@@ -2696,7 +2687,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     std::cout << "Load of: " << LoadOf << ".\n";
     // p2t("Load of: " + LoadOf);
     Value *arg;
-    if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="int"||Load_Type=="tensor") && !isSelf)
+    if (!isSelf)
     {
       // p2t("It is an alloca");
 

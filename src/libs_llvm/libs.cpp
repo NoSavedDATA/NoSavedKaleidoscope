@@ -206,20 +206,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("int_Store", int_StoreTy);
 
-	FunctionType *btc_multTy= FunctionType::get(
-		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("btc_mult", btc_multTy);
-
-	FunctionType *btc_multTTy= FunctionType::get(
-		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("btc_multT", btc_multTTy);
-
 	FunctionType *PrintDimsTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
@@ -703,6 +689,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("clip", clipTy);
 
+	FunctionType *AttrTensorNoFreeTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("AttrTensorNoFree", AttrTensorNoFreeTy);
+
 	FunctionType *AttrTensorOnIdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -996,6 +989,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("ShuffleStrVec", ShuffleStrVecTy);
+
+	FunctionType *shuffle_strTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
 
 	FunctionType *_glob_b_Ty= FunctionType::get(
 		int8PtrTy,
@@ -1360,6 +1360,13 @@ void Generate_LLVM_Functions() {
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("mean_tensor", mean_tensorTy);
+
+	FunctionType *tensor_meanTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("tensor_mean", tensor_meanTy);
 
 	FunctionType *sumTy= FunctionType::get(
 		int8PtrTy,

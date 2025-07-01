@@ -42,6 +42,13 @@
 	);
 	TheModule->getOrInsertFunction("ShuffleStrVec", ShuffleStrVecTy);
 
+	FunctionType *shuffle_strTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
+
 	FunctionType *_glob_b_Ty= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},

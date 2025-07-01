@@ -5,7 +5,6 @@
 #include <vector>
 #include <iostream>
 
-#include "cuda_fp16.h"
 
 #include "../common/extension_functions.h"
 #include "../threads/include.h"
