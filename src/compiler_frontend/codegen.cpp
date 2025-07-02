@@ -276,6 +276,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       {
         if(!(is_self||is_attr))
         {
+          // p2t("DATA MARK TO SWEEP OF "+Type);
           call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
         }
         else
@@ -1307,6 +1308,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       std::string return_type = ops_type_return[Elements];
       // std::cout << "Operation of " << Elements << " has a return of " << return_type << ".\n";
 
+      // p2t("MARK TO SWEEP OF "+return_type);
       if (return_type!="float"&&return_type!="int")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(return_type)});
     }
@@ -2684,7 +2686,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   // --- Args --- //
   if (Load_Type!="none") // x.view() -> tensor_Load
   {
-    std::cout << "Load of: " << LoadOf << ".\n";
+    // std::cout << "Load of: " << LoadOf << ".\n";
     // p2t("Load of: " + LoadOf);
     Value *arg;
     if (!isSelf)
