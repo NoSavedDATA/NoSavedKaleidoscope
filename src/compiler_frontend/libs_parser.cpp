@@ -159,6 +159,8 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr) {
     native_functions.push_back(Name);
     native_fn.push_back(Name);
 
+
+    // Check if it is a data-type
     if(ReturnType!="float"||IsPointer)
     {
         functions_return_type[Name] = ReturnType;
@@ -166,16 +168,47 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr) {
         {
             std::string nsk_data_type = ReturnType;
             nsk_data_type.erase(0, 3);
-            data_tokens.push_back(nsk_data_type);
+
+            if(!in_str(nsk_data_type, data_tokens))
+                data_tokens.push_back(nsk_data_type);
         }
     }
 
+
+    // Check for data-type operations return type
+    for (std::string operation : op_map_names)
+    {
+        if (ends_with(Name, operation))
+        {
+            // std::cout << "OPERATION FUNCTION FOUND " << Name << ".\n\n\n\n\n";
+
+            std::string operands = Name;
+
+            size_t pos = operands.rfind(operation)-1;
+            if (pos != std::string::npos) {
+                operands.replace(pos, operation.length()+1, "");
+            }
+
+
+
+            std::string nsk_data_type = ReturnType;
+            if(begins_with(nsk_data_type, "DT_"))
+                nsk_data_type.erase(0, 3);
+
+
+
+
+            ops_type_return.insert(std::make_pair(operands, nsk_data_type));
+
+            break;
+        }
+    }
     
 
-    
+    // Check if it is a _Clean_Up or _backward function    
     if(ends_with(Name, "_Clean_Up"))
     {
-        std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
+        // std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
 
         std::string nsk_type = Name;
         size_t pos = nsk_type.rfind("_Clean_Up");
@@ -188,7 +221,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr) {
         clean_up_functions[nsk_type] = casted_func_ptr;
 
     } else if (ends_with(Name, "_backward")) {
-        std::cout << "FOUND BACKWARD FN" << ".\n";
+        // std::cout << "FOUND BACKWARD FN" << ".\n";
     }    
     else {
 
@@ -417,8 +450,8 @@ void LibParser::ImportLibs(std::string so_lib_path) {
     for (auto pair : Functions) { 
         for (auto fn : pair.second)
         {
-            std::cout << "Importing function:" << "\n";
-            fn->Print();
+            // std::cout << "Importing function:" << "\n";
+            // fn->Print();
             
 
             void* func_ptr = dlsym(handle, fn->Name.c_str());

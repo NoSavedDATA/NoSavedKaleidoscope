@@ -23,6 +23,7 @@ using namespace llvm;
 
 std::map<std::string, std::string> ops_type_return;
 std::map<int, std::string> op_map;
+std::vector<std::string> op_map_names;
 
 std::map<std::string, std::vector<std::string>> data_typeVars;
 std::map<std::string, std::string> typeVars;

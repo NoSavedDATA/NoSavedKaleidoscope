@@ -73,11 +73,12 @@ void MarkSweep::unmark_scopeless(void *data_ptr) {
 
 
 void MarkSweep::clean_up() {
-    // std::cout << "clean_up" << ".\n";;
+    // std::cout << "-----clean_up" << ".\n";;
 
     for (auto it = mark_sweep_map.begin(); it != mark_sweep_map.end(); ) {
-        // std::cout << "cleaning" << ".\n";
         MarkSweepAtom *atom = it->second;
+        // std::cout << "cleaning " << it->first << " - " << atom->data_type <<  ".\n";
+        // std::cout << "refs " << atom->scope_refs << "/" << atom->scopeless_refs << ".\n";
 
         if (atom->scope_refs==0 && atom->scopeless_refs==0) {
             // std::cout << "delete " << it->first << " fn: " << atom->data_type << ".\n";
@@ -96,7 +97,7 @@ extern "C" void MarkToSweep_Mark(Scope_Struct *scope_struct, void *value, char *
     // std::cout << "MARK OF " << data_type << ".\n";
     if (value==nullptr)
         return;
-    // // std::cout << "Mark to sweep of " << data_type << ".\n";
+    // std::cout << "Mark to sweep of " << data_type << ".\n";
     scope_struct->mark_sweep_map->append(value, data_type);
 }
 

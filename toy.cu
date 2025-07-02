@@ -3140,6 +3140,13 @@ int main() {
             {tok_diff, "different"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
             {77, "error"}};
 
+  for (auto pair : op_map)
+    op_map_names.push_back(pair.second);
+
+
+
+
+
 
 
   tensor_inits = {"binary", "arange", "ints", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal", "fixed8i", "fixed42i"};
