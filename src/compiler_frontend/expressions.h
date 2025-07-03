@@ -250,7 +250,7 @@ class DataExprAST : public VarExprAST {
   
 class LibImportExprAST : public ExprAST {
   public:
-    std::string LibName;
+    std::string LibName, LibName_HighLevel;
 
   LibImportExprAST(std::string LibName); 
 

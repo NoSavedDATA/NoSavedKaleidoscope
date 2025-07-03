@@ -101,6 +101,14 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
   std::cout << "\nLine: " << LineCounter << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
+
+
+  // while (true) {
+  //   char c = tokenizer.get();
+  //   std::cout << "c is " << c << ".\n";
+  //   // tokenizer.get_word() >> tokenizer.token;
+  //   // std::cout << "tokenized: " << tokenizer.token << ".\n";
+  // }
   
   while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
     getNextToken();

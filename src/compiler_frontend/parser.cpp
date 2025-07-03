@@ -1,7 +1,8 @@
 #include "llvm/IR/Value.h"
 
 
-
+#include <cstdio>
+#include <stdio.h>
 #include <iostream>
 #include <map>
 #include <random>
@@ -1595,8 +1596,6 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseStringExpr(parser_struct);
   case '(':
     return ParseParenExpr(parser_struct);
-  case tok_import:
-    return ParseImport(parser_struct, class_name);
   case tok_if:
     return ParseIfExpr(parser_struct, class_name);
   case tok_for:
@@ -2053,7 +2052,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 }
 
 
-std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct, std::string class_name) {
+std::unique_ptr<ExprAST> ParseImport() {
 
   getNextToken(); // eat import
 
@@ -2062,9 +2061,30 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct, std::string cl
 
   std::string lib_name = IdentifierStr;
 
-  getNextToken();
 
-  return std::make_unique<LibImportExprAST>(lib_name);
+  if(fs::exists(lib_name+".ai"))
+  {
+
+    std::string ai_lib = lib_name+".ai";
+    std::cout << "READING AI LIB " << ai_lib << ".\n";
+    
+    char c=' ';
+    while(c!=10)
+      c = tokenizer.get();
+    CurTok = tok_space;
+
+
+    tokenizer.importFile(ai_lib);
+
+    
+    return nullptr;
+  }
+  else
+  {
+    
+    getNextToken(); // eat lib name
+    return std::make_unique<LibImportExprAST>(lib_name);
+  }
   // return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
   //                                        BinaryPrecedence);
 }

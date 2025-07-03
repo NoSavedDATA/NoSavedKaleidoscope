@@ -1,6 +1,13 @@
 #pragma once
 
 
+#include <iostream>
+#include <fstream>
+#include <stack>
+#include <string>
+#include <memory>
+
+
 
 //===----------------------------------------------------------------------===//
 // Lexer
@@ -75,9 +82,26 @@ enum Token {
     tok_data = -44,
 };
 
+
+struct Tokenizer {
+    std::stack<std::unique_ptr<std::istream>> inputStack;
+    std::istream* current;
+
+    std::string token;
+    
+    public:
+        Tokenizer();
+
+
+        char get();
+        std::istream& get_word();
+        bool importFile(const std::string& filename);
+};
   
 std::string ReverseToken(int _char);
 static int get_token();
+
+extern Tokenizer tokenizer;
 
 extern std::map<int, std::string> token_to_string;
 

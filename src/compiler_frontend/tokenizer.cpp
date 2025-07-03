@@ -7,6 +7,13 @@
 #include<string>
 #include<iostream>
 
+#include <iostream>
+#include <fstream>
+#include <functional>
+#include <memory>
+#include <stack>
+#include <string>
+
 #include "../common/extension_functions.h"
 #include "tokenizer.h"
 
@@ -18,6 +25,8 @@
 
 
 
+Tokenizer::Tokenizer() : current(&std::cin) {}
+
 
 
 
@@ -27,6 +36,7 @@
 
 std::map<int, std::string> token_to_string = {
   { tok_eof, "eof" },
+  { tok_finish, "finish" },
 
   // functions/classes
   { tok_def, "def" },
@@ -51,7 +61,7 @@ std::map<int, std::string> token_to_string = {
   { tok_while, "while" },
   { tok_async, "async" },
   { tok_asyncs, "asyncs" },
-  { tok_async_finish, "finish" },
+  { tok_async_finish, "finish finish/async" },
   { tok_tab, "tok tab" },
   { tok_return, "tok return"},
   { tok_as, "tok as"},
@@ -78,8 +88,12 @@ std::map<int, std::string> token_to_string = {
   
 
   { 10, "tok space"},
+  { 32, "blank space"},
+  { 13, "carriage return"},
 
   
+  { '.', "dot<.>" },
+
   { 40, "(" },
   { 41, ")" },
 
@@ -172,10 +186,99 @@ int LineCounter = 1;
 int SeenTabs = 0;
 int LastSeenTabs = 0;
 
+
+
+
+std::istream& Tokenizer::get_word() {
+    while ((current == nullptr || current->eof()) && !inputStack.empty()) {
+        inputStack.pop();
+        current = inputStack.empty() ? nullptr : inputStack.top().get();
+    }
+    return *current;
+}
+
+
+char Tokenizer::get() {
+    while (true) {
+        if (!current) return tok_eof;
+
+
+        
+        char c = current->get();
+        // std::cout << "get: " << c << ".\n";
+
+        if (c != EOF) {
+            return c;
+        }
+
+        // Handle EOF
+        if (!inputStack.empty()) {
+            inputStack.pop();
+            current = inputStack.empty() ? &std::cin : inputStack.top().get();
+            // Don't return EOF here - immediately try reading from the new source
+        } else if (current != &std::cin) {
+            current = &std::cin;
+            // Don't return EOF here - immediately try reading from std::cin
+        } else {
+            // We're already at std::cin and got EOF - this is a real EOF
+            return tok_eof;
+        }
+    }
+}
+
+
+bool Tokenizer::importFile(const std::string& filename) {
+    std::cout << "Tokenizer::importFile " << filename << ".\n";
+    auto file = std::make_unique<std::ifstream>(filename);
+    if (!file->is_open()) return false;
+    std::cout << "importing" << ".\n";
+
+
+
+    // Then push the new file
+    inputStack.push(std::move(file));
+    current = inputStack.top().get();
+
+    return true;
+}
+
+
+
+
+
+
+Tokenizer tokenizer = Tokenizer();
+
+
 /// get_token - Return the next token from standard input.
 static int get_token() {
   static int LastChar = ' ';
-  // std::cout << "\nGet token. " << " last char: " << LastChar << ".\n";
+
+
+
+  // if(!(tokenizer.get() >> tokenizer.token));
+  //   return tok_eof;
+  // tokenizer.get() >> tokenizer.token;
+  // if(tokenizer.token=="import")
+  // {
+  //   tokenizer.get() >> tokenizer.token;
+  //   std::cout << "LIB IS " << tokenizer.token << ".\n";
+  //   tokenizer.importFile(tokenizer.token+".ai");
+  //   tokenizer.get() >> tokenizer.token;
+  // }
+
+  // LastChar = tokenizer.get();
+
+ 
+  // while (tokenizer.get() >> tokenizer.token) {
+  //   std::cout << "Token is: " << tokenizer.token << ".\n";
+  //   if(tokenizer.token=="import")
+  //   {
+  //     tokenizer.get() >> tokenizer.token;
+  //     std::cout << "LIB IS " << tokenizer.token << ".\n";
+  //     tokenizer.importFile(tokenizer.token+".ai");
+  //   }
+  // }
 
   
 
@@ -187,12 +290,12 @@ static int get_token() {
   // Skip any whitespace and backspace.
   
   
-  while (LastChar==32 || LastChar==tok_tab)
-    LastChar = getchar();
+  while (LastChar==32 || LastChar==tok_tab || LastChar==13)
+    LastChar = tokenizer.get();
     
   if (LastChar=='[')
   {
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     return '[';
   }
 
@@ -201,32 +304,36 @@ static int get_token() {
   if (LastChar=='"')
   {
 
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     IdentifierStr = LastChar;
 
     while (true)
     {
-      LastChar = getchar();
+      LastChar = tokenizer.get();
       if(LastChar=='"')
         break;
       IdentifierStr += LastChar;
     }
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     
     return tok_str;
   }
 
 
 
+
+  // std::cout << "\nGet token. " << " last char: " << LastChar << ".\n";
+
+  
   
   if (LastChar=='.')
   {
-    LastChar = getchar(); // eat .
+    LastChar = tokenizer.get(); // eat .
     IdentifierStr = LastChar;
     bool name_ok=true;
     while (name_ok)
     {
-      LastChar = getchar();
+      LastChar = tokenizer.get();
       
       
       if(isalnum(LastChar) || LastChar=='_')
@@ -237,7 +344,7 @@ static int get_token() {
       
       if (LastChar=='.')
       {
-        LastChar = getchar();
+        LastChar = tokenizer.get();
         return tok_post_class_attr_attr;
       }
     }
@@ -250,7 +357,7 @@ static int get_token() {
     bool name_ok=true;
     while (name_ok)
     {
-      LastChar = getchar();
+      LastChar = tokenizer.get();
 
       if (LastChar=='[')
         break;
@@ -263,14 +370,14 @@ static int get_token() {
         
       if (LastChar=='.')
       {
-        LastChar = getchar();
+        LastChar = tokenizer.get();
         if (IdentifierStr == "self")
           return tok_self;
         return tok_class_attr;
       }
     }
 
-
+    
     if (in_str(IdentifierStr, data_tokens))
       return tok_data;
     if (IdentifierStr == "def")
@@ -328,12 +435,12 @@ static int get_token() {
 
 
   // if (LastChar=='@') {
-  //   LastChar = getchar();
+  //   LastChar = tokenizer.get();
 
   //   std::string NumStr;
   //   do {
   //     NumStr += LastChar;
-  //     LastChar = getchar();
+  //     LastChar = tokenizer.get();
   //   } while(isdigit(LastChar));
 
   //   NumVal = strtod(NumStr.c_str(), nullptr);
@@ -347,7 +454,7 @@ static int get_token() {
     std::string NumStr;
     if (LastChar == '-') { // Check for optional minus sign
       NumStr += LastChar;
-      LastChar = getchar();
+      LastChar = tokenizer.get();
     }
     do {
       if(LastChar=='.')
@@ -356,7 +463,7 @@ static int get_token() {
         is_float=true;
       }
       NumStr += LastChar;
-      LastChar = getchar();
+      LastChar = tokenizer.get();
     } while (isdigit(LastChar) || LastChar == '.');
 
     NumVal = strtod(NumStr.c_str(), nullptr);
@@ -367,7 +474,7 @@ static int get_token() {
   if (LastChar == '#') {
     // Comment until end of line.
     do
-      LastChar = getchar();
+      LastChar = tokenizer.get();
     while (LastChar != EOF && LastChar != '\n' && LastChar != 10 && LastChar != '\r');
 
     if (LastChar != EOF)
@@ -406,7 +513,7 @@ static int get_token() {
       }
 
       ThisChar = (int)LastChar;
-      LastChar = getchar(); 
+      LastChar = tokenizer.get(); 
     }
     //std::cout << "\nThisChar: " << ThisChar << " LastChar " << LastChar << "\n";
 
@@ -415,34 +522,34 @@ static int get_token() {
   }
 
 
-  LastChar = getchar();
+  LastChar = tokenizer.get();
   int otherChar = LastChar;
 
 
 
   if (ThisChar=='=' && otherChar=='=')
   {
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     return tok_equal;
   }
   if (ThisChar=='!' && otherChar=='=')
   {
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     return tok_diff;
   }
   if (ThisChar=='>' && otherChar=='=')
   {
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     return tok_higher_eq;
   }
   if (ThisChar=='<' && otherChar=='=')
   {
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     return tok_minor_eq;
   }
 
   if((ThisChar=='/')&&(otherChar == '/')){
-    LastChar = getchar();
+    LastChar = tokenizer.get();
     return tok_int_div;
   }
 

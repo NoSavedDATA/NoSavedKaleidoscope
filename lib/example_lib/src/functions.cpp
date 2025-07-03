@@ -13,21 +13,6 @@ extern "C" DT_placeholder *placeholder_Create(Scope_Struct *scope_struct, char *
     int x, y;
     x = notes_vector->get<int>(0);
     y = notes_vector->get<int>(1);
-    // for (int i=0; i<notes_vector->data->size(); i++)
-    // {
-    //   if(notes_vector->data_types->at(i)=="int")
-    //     dims.push_back(notes_vector->get<int>(i));
-    //   if(notes_vector->data_types->at(i)=="str")
-    //   {
-    //     std::cout << "get char" << ".\n";
-    //     char *note = notes_vector->get<char *>(i);
-    //     if (std::strcmp(note,"param") == 0)
-    //       is_weight = true;
-    //     else
-    //       init = note; 
-    //     std::cout << "got char" << ".\n";
-    //   }
-    // }
 
 
     DT_placeholder *placeholder = new DT_placeholder(name, x, y);
@@ -42,8 +27,19 @@ extern "C" DT_placeholder *placeholder_placeholder_add(Scope_Struct *scope_struc
     int x = px->x + py->x;
     int y = px->y + py->y;
 
-    
-   
+       
+    DT_placeholder *placeholder = new DT_placeholder("", x, y);
+
+    return placeholder;
+}
+
+
+extern "C" DT_placeholder *placeholder_int_add(Scope_Struct *scope_struct, DT_placeholder *px, int z) {
+
+    int x = px->x + z;
+    int y = px->y + z;
+
+       
     DT_placeholder *placeholder = new DT_placeholder("", x, y);
 
     return placeholder;
@@ -63,14 +59,5 @@ extern "C" float placeholder_print(Scope_Struct *scope_struct, DT_placeholder *p
 
     return 0;
 }
-
-
-extern "C" float testing_fn(Scope_Struct *scope_struct, float y) {
-    
-    std::cout << "testing_fn: " << y << " ooo.\n";
-    
-    return 0;
-}
-
 
 
