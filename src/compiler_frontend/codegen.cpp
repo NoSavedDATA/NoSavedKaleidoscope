@@ -18,6 +18,7 @@
 
 
 using namespace llvm;
+namespace fs = std::filesystem;
 
 
 std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
@@ -316,6 +317,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 Value *LibImportExprAST::codegen(Value *scope_struct) {
 
   // Library import is made before codegen
+
   
   return const_float(0.0f);
 }

@@ -2779,6 +2779,10 @@ ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
 
 
 
+  
+
+static void HandleImport() { ParseImport(); }
+
 static void HandleClass() { ParseClass(); }
 
 static void HandleDefinition() {
@@ -2878,6 +2882,9 @@ static void MainLoop() {
     
 
     switch (CurTok) {
+      case 13:
+        std::cout << "FOUND CARRIAGE RETURN" << ".\n";
+        break;
       case tok_eof:
         return;
       case ';': // ignore top-level semicolons.
@@ -2895,10 +2902,14 @@ static void MainLoop() {
       case tok_class:
         HandleClass();
         break;
+      case tok_import:
+        HandleImport();
+        break;
       case tok_extern:
         HandleExtern();
         break;
       default:
+        // std::cout << "TOP LEVEL WITH " << CurTok << "/" << ReverseToken(CurTok) << "/" << NumVal << ".\n";
         HandleTopLevelExpression();
         break;
     }

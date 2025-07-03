@@ -9,9 +9,12 @@
 #include "include.h"
 
 
+#include <filesystem>
+#include <fstream>
 
 
 using namespace llvm;
+namespace fs = std::filesystem;
 
 
 
@@ -209,20 +212,34 @@ DataExprAST::DataExprAST(
 LibImportExprAST::LibImportExprAST(std::string LibName)
   : LibName(LibName) {
 
-  std::string lib_dir = "lib/" + LibName;
-  std::string so_lib_path = lib_dir + "/lib.so";
 
-  if(!fs::exists(so_lib_path))
-  { 
-      LogError("- Failed to import library;\n\t    - " + so_lib_path + " file not found.");
-      return;
+  std::string ai_path = LibName+".ai";
+
+  if (fs::exists(ai_path)) {
+
+    std::cout << "Importing high-level lib " << ai_path << ".\n";
+    LibName_HighLevel = ai_path;
+
+  } else {
+
+    
+    std::string lib_path = std::getenv("NSK_LIBS");
+
+    std::string lib_dir = lib_path + "/" + LibName;
+    std::string so_lib_path = lib_dir + "/lib.so";
+
+    if(!fs::exists(so_lib_path))
+    { 
+        LogError("- Failed to import library;\n\t    - " + so_lib_path + " file not found.");
+        return;
+    }
+
+
+    LibParser *lib_parser = new LibParser(lib_dir);
+    
+    lib_parser->ParseLibs();
+    lib_parser->ImportLibs(so_lib_path);
   }
-
-
-  LibParser *lib_parser = new LibParser(lib_dir);
-  
-  lib_parser->ParseLibs();
-  lib_parser->ImportLibs(so_lib_path);
 }
 
   
