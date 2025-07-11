@@ -4,6 +4,7 @@
 
 
 #include <map>
+#include <string>
 #include <vector>
 
 #include "include.h"
@@ -16,6 +17,10 @@
 using namespace llvm;
 namespace fs = std::filesystem;
 
+
+
+std::vector<std::string> imported_libs;
+std::map<std::string, std::vector<std::string>> lib_submodules;
 
 
 //===----------------------------------------------------------------------===//
@@ -209,16 +214,14 @@ DataExprAST::DataExprAST(
                 Notes(std::move(Notes)) {}
 
 
-LibImportExprAST::LibImportExprAST(std::string LibName)
-  : LibName(LibName) {
+LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
+  : LibName(LibName), IsDefault(IsDefault) {
+
 
 
   std::string ai_path = LibName+".ai";
 
   if (fs::exists(ai_path)) {
-
-    std::cout << "Importing high-level lib " << ai_path << ".\n";
-    LibName_HighLevel = ai_path;
 
   } else {
 
@@ -233,12 +236,11 @@ LibImportExprAST::LibImportExprAST(std::string LibName)
         LogError("- Failed to import library;\n\t    - " + so_lib_path + " file not found.");
         return;
     }
-
-
     LibParser *lib_parser = new LibParser(lib_dir);
     
     lib_parser->ParseLibs();
-    lib_parser->ImportLibs(so_lib_path);
+    lib_parser->ImportLibs(so_lib_path, LibName, IsDefault);
+    imported_libs.push_back(LibName);
   }
 }
 

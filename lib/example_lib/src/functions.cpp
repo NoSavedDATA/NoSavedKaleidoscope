@@ -61,3 +61,12 @@ extern "C" float placeholder_print(Scope_Struct *scope_struct, DT_placeholder *p
 }
 
 
+
+extern "C" DT_placeholder *example_lib__multiply_placeholder(Scope_Struct *scope_struct, DT_placeholder *x, DT_placeholder *y) {
+
+    DT_placeholder *placeholder = new DT_placeholder("", x->x*y->x, x->y*y->y);
+        
+
+    return placeholder;
+}
+

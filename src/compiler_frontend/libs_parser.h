@@ -21,7 +21,7 @@ struct LibFunction {
               std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer);
 
   void Link_to_LLVM(void *);
-  void Add_to_Nsk_Dicts(void *);
+  void Add_to_Nsk_Dicts(void *, std::string, bool);
 
   void Print(); 
 };
@@ -52,5 +52,5 @@ struct LibParser {
   void ParseLibs(); 
 
   void PrintFunctions(); 
-  void ImportLibs(std::string); 
+  void ImportLibs(std::string, std::string, bool); 
 };

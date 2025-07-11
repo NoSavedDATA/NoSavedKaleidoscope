@@ -2616,6 +2616,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     changed_first_arg = true;  
   }
+
+  if(lib_function_remaps.count(tgt_function)>0)
+    tgt_function = lib_function_remaps[tgt_function];
   
   
   call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
