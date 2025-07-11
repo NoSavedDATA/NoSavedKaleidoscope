@@ -23,6 +23,12 @@ return_pinned_methods, vararg_methods, string_methods, native_methods, native_fu
 return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str, user_cpp_functions;
 
 
+extern std::vector<std::string> imported_libs;
+extern std::map<std::string, std::vector<std::string>> lib_submodules;
+
+extern std::map<std::string, std::string> lib_function_remaps;
+
+
 extern std::map<std::string, std::string> functions_return_type, reverse_ops;
 
 

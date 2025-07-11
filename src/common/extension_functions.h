@@ -25,6 +25,9 @@ std::string remove_substring(const std::string& str, const std::string& substr);
 
 bool starts_with(const char* str, const char* sub);
 
+
+std::string erase_before_pattern(std::string s, std::string pattern);
+
 char *str_to_char(std::string str);
 
 

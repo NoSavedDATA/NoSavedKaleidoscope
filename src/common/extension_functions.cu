@@ -61,6 +61,15 @@ bool begins_with(const std::string& str_input, const std::string& str_start) {
 bool contains_str(const std::string& str_input, const std::string& str_sub) {
     return str_input.find(str_sub) != std::string::npos;
 }
+
+std::string erase_before_pattern(std::string s, std::string pattern) {
+    size_t pos = s.find(pattern);
+    if (pos != std::string::npos) {
+        s.erase(0, pos + 2);
+    }
+    return s;
+}
+
 std::string remove_substring(const std::string& str, const std::string& substr) {
     std::string result = str;  // Copy the original string
     size_t pos = result.find(substr);

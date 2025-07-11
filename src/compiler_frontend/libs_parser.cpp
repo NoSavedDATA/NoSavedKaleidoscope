@@ -23,6 +23,8 @@
 #include "include.h"
 
 
+std::map<std::string, std::string> lib_function_remaps;
+
 
 using namespace llvm;
 namespace fs = std::filesystem;
@@ -153,7 +155,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         LogError("Failed to define native function in JIT: " + toString(std::move(Err)));
 }
 
-void LibFunction::Add_to_Nsk_Dicts(void *func_ptr) {
+void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is_default) {
     user_cpp_functions.push_back(Name);
     native_methods.push_back(Name);
     native_functions.push_back(Name);
@@ -190,13 +192,9 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr) {
             }
 
 
-
             std::string nsk_data_type = ReturnType;
             if(begins_with(nsk_data_type, "DT_"))
                 nsk_data_type.erase(0, 3);
-
-
-
 
             ops_type_return.insert(std::make_pair(operands, nsk_data_type));
 
@@ -227,6 +225,13 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr) {
 
     }
 
+
+    // Create a remap when using "import default"
+    if(is_default && begins_with(Name, lib_name)) {
+        std::string remaped_fn = erase_before_pattern(Name, "__");
+
+        lib_function_remaps[remaped_fn] = Name;
+    }
 }
 
 
@@ -404,15 +409,15 @@ void LibParser::ParseExtern() {
 
       if(token==',')
         _getToken();
-
     }
 
+    
     LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_is_pointer);
     Functions[file_name].push_back(lib_fn);
 
-
     // std::cout << "\n\n";
 }
+
 
 void LibParser::ParseLibs() {
     token=0;
@@ -439,7 +444,7 @@ void LibParser::PrintFunctions() {
 }
 
 
-void LibParser::ImportLibs(std::string so_lib_path) {
+void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool is_default) {
 
 
 
@@ -461,7 +466,7 @@ void LibParser::ImportLibs(std::string so_lib_path) {
             }
 
             fn->Link_to_LLVM(func_ptr);
-            fn->Add_to_Nsk_Dicts(func_ptr);
+            fn->Add_to_Nsk_Dicts(func_ptr, lib_name, is_default);
         }
     }
 }

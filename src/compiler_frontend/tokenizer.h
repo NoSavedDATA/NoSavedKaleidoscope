@@ -86,6 +86,7 @@ enum Token {
 struct Tokenizer {
     std::stack<std::unique_ptr<std::istream>> inputStack;
     std::istream* current;
+    std::string current_dir="";
 
     std::string token;
     
@@ -95,7 +96,7 @@ struct Tokenizer {
 
         char get();
         std::istream& get_word();
-        bool importFile(const std::string& filename);
+        bool importFile(std::string, int);
 };
   
 std::string ReverseToken(int _char);

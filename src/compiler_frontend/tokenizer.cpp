@@ -17,6 +17,15 @@
 #include "../common/extension_functions.h"
 #include "tokenizer.h"
 
+#include <filesystem>
+#include <fstream>
+
+#include "include.h"
+
+
+namespace fs = std::filesystem;
+
+
 
 
 //===----------------------------------------------------------------------===//
@@ -227,10 +236,20 @@ char Tokenizer::get() {
 }
 
 
-bool Tokenizer::importFile(const std::string& filename) {
+bool Tokenizer::importFile(std::string filename, int dots) {
     std::cout << "Tokenizer::importFile " << filename << ".\n";
+    std::cout << "importing with " << dots << " dots.\n";
+    
+    if (dots>0)
+      filename = current_dir + "/" + filename;
+  
+    std::cout << "importFile " << filename << ".\n";
+    
     auto file = std::make_unique<std::ifstream>(filename);
     if (!file->is_open()) return false;
+    
+    current_dir = fs::path(filename).parent_path().string();
+
     std::cout << "importing" << ".\n";
 
 
@@ -373,9 +392,20 @@ static int get_token() {
         LastChar = tokenizer.get();
         if (IdentifierStr == "self")
           return tok_self;
-        return tok_class_attr;
+
+        if(in_str(IdentifierStr, imported_libs)) // If it is from a library
+        {
+          IdentifierStr += "__";
+          while(isalnum(LastChar)||LastChar=='_')
+          {
+            IdentifierStr+=LastChar;
+            LastChar = tokenizer.get();
+          }
+        } else
+          return tok_class_attr;
       }
     }
+
 
     
     if (in_str(IdentifierStr, data_tokens))

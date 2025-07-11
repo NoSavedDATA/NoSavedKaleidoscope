@@ -2056,34 +2056,65 @@ std::unique_ptr<ExprAST> ParseImport() {
 
   getNextToken(); // eat import
 
-  if(CurTok!=tok_identifier)
-    return LogError("Expected library name.");
+  if(CurTok!=tok_identifier&&CurTok!=tok_class_attr&&CurTok!=tok_post_class_attr_identifier)
+    return LogError("Expected library name after \"import\".");
 
-  std::string lib_name = IdentifierStr;
+  bool is_default = false;
+  if(IdentifierStr=="default")
+  {
+    std::cout << "Got a default import" << ".\n";
+    is_default=true;
+    getNextToken();
+  }
 
 
-  if(fs::exists(lib_name+".ai"))
+
+  // Get lib name
+  std::string lib_name = "";
+
+  int dots=0; // dots before beggining the lib name.
+  if(CurTok==tok_post_class_attr_identifier)
+  {
+    lib_name += IdentifierStr;
+    getNextToken();
+    dots++;
+    IdentifierStr="";
+  }
+
+  while(CurTok==tok_class_attr)
+  {
+    lib_name += IdentifierStr + "/";
+    getNextToken();
+  }
+
+  lib_name += IdentifierStr;
+
+
+
+
+  // Import logic
+  if(fs::exists(lib_name+".ai")||dots>0)
   {
 
     std::string ai_lib = lib_name+".ai";
     std::cout << "READING AI LIB " << ai_lib << ".\n";
-    
+
     char c=' ';
     while(c!=10)
       c = tokenizer.get();
     CurTok = tok_space;
 
 
-    tokenizer.importFile(ai_lib);
+    tokenizer.importFile(ai_lib, dots);
 
-    
+
     return nullptr;
   }
   else
   {
     
     getNextToken(); // eat lib name
-    return std::make_unique<LibImportExprAST>(lib_name);
+    return std::make_unique<LibImportExprAST>(lib_name, is_default);
   }
   // return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
   //                                        BinaryPrecedence);
