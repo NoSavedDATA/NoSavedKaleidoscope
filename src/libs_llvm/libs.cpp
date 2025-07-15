@@ -388,6 +388,20 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("MarkToSweep_Mark", MarkToSweep_MarkTy);
 
+	FunctionType *MarkToSweep_Mark_ScopefulTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("MarkToSweep_Mark_Scopeful", MarkToSweep_Mark_ScopefulTy);
+
+	FunctionType *MarkToSweep_Mark_ScopelessTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("MarkToSweep_Mark_Scopeless", MarkToSweep_Mark_ScopelessTy);
+
 	FunctionType *MarkToSweep_Unmark_ScopefulTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},

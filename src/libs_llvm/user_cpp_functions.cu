@@ -62,7 +62,7 @@ void set_user_functions() {
 		"tensor_transpose", 
 		"save_img", 
 		"OneCycleLR", 
-		"MarkToSweep_Mark", "MarkToSweep_Unmark_Scopeful", "MarkToSweep_Unmark_Scopeless", 
+		"MarkToSweep_Mark", "MarkToSweep_Mark_Scopeful", "MarkToSweep_Mark_Scopeless", "MarkToSweep_Unmark_Scopeful", "MarkToSweep_Unmark_Scopeless", 
 		"save_as_bin", 
 		"cross_entropy", "cross_entropy_idx", 
 		"int_vec_Create", "int_vec_Load", "int_vec_Store", "int_vec_Store_Idx", "arange_int", "zeros_int", "ones_int", "int_vec_Idx", "int_vec_Idx_num", "int_vec_CalculateIdx", "int_vec_first_nonzero", "int_vec_print", "int_vec_Split_Parallel", "int_vec_Split_Strided_Parallel", "int_vec_size", 
