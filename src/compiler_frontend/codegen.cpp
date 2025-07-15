@@ -97,6 +97,14 @@ AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
   return alloca;
 }
 
+Value *Get_Object_Value(NameSolverAST *name_solver, Parser_Struct parser_struct)
+{
+
+  std::string object_name = std::get<0>(name_solver->Names[0]);
+  AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
+  Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
+  return obj;
+}
 
 
 Value *NumberExprAST::codegen(Value *scope_struct) {
@@ -464,12 +472,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
 
 
-
-  // Value *var_name = global_str(VarName);
-  // var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
-  // call("float_Store", {var_name, StartVal});
-
-
   Builder->CreateStore(StartVal, control_var_alloca);
 
 
@@ -493,8 +495,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Within the loop, the variable is defined equal to the PHI node.  If it
   // shadows an existing variable, we have to restore it outside this scope
-  //Value *OldVal = NamedValues[VarName];
-  //NamedValues[VarName] = Alloca;
 
 
 
@@ -557,7 +557,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Reload, increment, and restore the alloca.  This handles the case where
   // the body of the loop mutates the variable.
-  // Value *CurVal = callret("float_Load", {scope_struct, var_name});
   Value *CurVal = Builder->CreateLoad(llvm_type, control_var_alloca, VarName.c_str());
   Value *NextVal;
   if (cond_type=="int")
@@ -566,7 +565,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     NextVal = Builder->CreateFAdd(CurVal, StepVal, "nextvar"); // Increment 
   Builder->CreateStore(NextVal, control_var_alloca);
 
-  // call("print", {callret("str_float_add", {scope_struct, global_str("i is: "), NextVal})});
   
   
   Builder->CreateBr(CondBB);
@@ -578,12 +576,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   TheFunction->insert(TheFunction->end(), AfterBB);
   Builder->SetInsertPoint(AfterBB);
 
-  // Builder->CreateCall(TheModule->getFunction("FreeChar"), {var_name});
-  // Restore the unshadowed variable.
-  //if (OldVal)
-  //  NamedValues[VarName] = OldVal;
-  //else
-  //  NamedValues.erase(VarName);
 
   // for expr always returns 0.0.
   return Constant::getNullValue(Type::getInt32Ty(*TheContext));
@@ -628,44 +620,44 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
 
 
-  // // Make the new basic block for the loop header, inserting after current
-  // // block.
+  // Make the new basic block for the loop header, inserting after current
+  // block.
   BasicBlock *CondBB = BasicBlock::Create(*TheContext, "cond", TheFunction);
   BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "loop");
   BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "after");
 
 
 
-  // // Insert an explicit fall through from the current block to the LoopBB.
+  // Insert an explicit fall through from the current block to the LoopBB.
   Builder->CreateBr(CondBB);
 
   
   Builder->SetInsertPoint(CondBB);
 
 
-  // // Emit the body of the loop.  This, like any other expr, can change the
-  // // current BB.  Note that we ignore the value computed by the body, but don't
-  // // allow an error.
+  // Emit the body of the loop.  This, like any other expr, can change the
+  // current BB.  Note that we ignore the value computed by the body, but don't
+  // allow an error.
  
   Value *StepVal = const_int(1);
 
 
-  // // Compute the end condition.
+  // Compute the end condition.
   Value *EndCond=Builder->CreateLoad(Type::getInt32Ty(*TheContext), idx_alloca, VarName.c_str());
-  // // Convert condition to a bool by comparing equal to 0.0.
+  // Convert condition to a bool by comparing equal to 0.0.
   EndCond = Builder->CreateICmpNE(
       EndCond, VecSize, "loopcond");
 
 
 
 
-  // // conditional goto branch
+  // conditional goto branch
   Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
 
 
 
 
-  // // codegen body and increment
+  // codegen body and increment
   TheFunction->insert(TheFunction->end(), LoopBB);
   Builder->SetInsertPoint(LoopBB);
 
@@ -680,9 +672,8 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   call("scope_struct_Sweep", {scope_struct});
 
 
-  // // Reload, increment, and restore the alloca.  This handles the case where
-  // // the body of the loop mutates the variable.
-  // // Value *CurVal = callret("float_Load", {scope_struct, var_name});
+  // Reload, increment, and restore the alloca.  This handles the case where
+  // the body of the loop mutates the variable.
   Builder->CreateStore(NextIdx, idx_alloca);
 
  
@@ -692,12 +683,12 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
 
 
-  // // when the loop body is done, return the insertion point to outside the for loop
+  // when the loop body is done, return the insertion point to outside the for loop
   TheFunction->insert(TheFunction->end(), AfterBB);
   Builder->SetInsertPoint(AfterBB);
 
 
-  // // for expr always returns 0.0.
+  // for expr always returns 0.0.
   // return Constant::getNullValue(Type::getFloatTy(*TheContext));
   return const_float(0);
 }
@@ -818,6 +809,22 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   var_name = NameSolver->codegen(scope_struct);
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
   std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
+  
+  if(is_attr) {
+    std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
+    std::string obj_name = std::get<0>(name_solver->Names[0]);
+    
+    Value *obj = Get_Object_Value(name_solver, parser_struct);
+
+    std::string obj_class = Object_toClass[obj_name];    
+    int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
+
+    return callret("object_ptr_Load_on_Offset", {obj, const_int(obj_ptr_offset)});
+  }
+
+
+
+
   
   std::string msg = "VariableExpr Variable " + Name + " load for type: " + type;
   p2t(msg);
@@ -1014,14 +1021,6 @@ inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::vector<s
   // return ret_idx;
 }
 
-Value *Get_Object_Value(NameSolverAST *name_solver, Parser_Struct parser_struct)
-{
-
-  std::string object_name = std::get<0>(name_solver->Names[0]);
-  AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
-  Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
-  return obj;
-}
 
 
 Value *BinaryExprAST::codegen(Value *scope_struct) {
@@ -1139,22 +1138,17 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       {
         // p2t("CLEAN OLD VALUE OF " + Lname);
         Value *old_val = load_alloca(Lname, LType, parser_struct.function_name);
-        // call("MarkToSweep_Mark", {scope_struct, old_val, global_str(LType)});
+        // call("MarkToSweep_Mark_Scopeful", {scope_struct, old_val, global_str(LType)});
       }
     }
       
     
-    // std::cout << "ATTRIBUTION: " << LType << " .\n";
     
     
-    // std::cout << "NAME " << Lname << ".\n";
-    // std::cout << "IS VEC: " << LHS->GetIsVec() << ".\n";
 
      
     
 
-    // if (LType!="float")
-    //   call("MarkToSweep_Mark", {scope_struct, callret(LType+"_Load", {scope_struct, Lvar_name}), global_str(LType)});
     if (is_alloca)
     {
       std::string store_trigger = LType + "_StoreTrigger";
@@ -1201,17 +1195,25 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         {
           std::cout << "SELF STORE OF " << attribute_name << ".\n";
           call("object_Attr_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
+
+          // call("MarkToSweep_Mark_Scopeless", {scope_struct, old_val, global_str(LType)}); 
         }
 
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
       } else if (LHS->GetIsAttribute()) {
         std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
-        // int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
-
+        std::string obj_name = std::get<0>(name_solver->Names[0]);
+        
         Value *obj = Get_Object_Value(name_solver, parser_struct);
 
-        std::cout << "STORING ATTRIBUTE " << LType << "/" << attribute_name << ".\n";
+        std::string obj_class = Object_toClass[obj_name];
+        
+        int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
+
+
+        call("object_ptr_Attribute_object", {obj, const_int(obj_ptr_offset), Val});
+
       } else
         call(store_op, {Lvar_name, Val, scope_struct});
     }
@@ -2507,13 +2509,12 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       if (isAttribute) {
         NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
         int type;
-        Value *obj;
         type = std::get<1>(name_solver->Names[0]);
 
         if(!isSelf)
         {        
 
-          obj = Get_Object_Value(name_solver, parser_struct);
+          Value *obj = Get_Object_Value(name_solver, parser_struct);
           call("set_scope_object", {scope_struct_copy, obj});
         } else {
           // Value *obj;
@@ -2731,9 +2732,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     // std::cout << "Load of: " << LoadOf << ".\n";
     // p2t("Load of: " + LoadOf);
     Value *arg;
+    // if (!isSelf&&!isAttribute)
     if (!isSelf)
     {
-      // p2t("It is an alloca");
 
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 
@@ -2742,7 +2743,26 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       // int object_ptr_offset = ClassVariables[parser_struct.class_name][LoadOf];
       // arg = callret("object_Load_on_Offset", {scope_struct_copy, const_int(object_ptr_offset)});
       arg = callret("get_scope_object", {scope_struct_copy});
-    } else {
+    }
+    // else if (isAttribute) {
+    //   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
+
+    //   std::string attribute_name = std::get<0>(name_solver->Names[1]);
+    //   std::string obj_name = std::get<0>(name_solver->Names[0]);
+      
+    //   std::cout << "1" << ".\n";
+    //   Value *obj = Get_Object_Value(name_solver, parser_struct);
+    //   std::cout << "2" << ".\n";
+
+    //   std::string obj_class = Object_toClass[obj_name];    
+    //   int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
+
+
+    //   std::cout << "LOADING ATTRIBUTE " << obj_name << "." << attribute_name << " on offset " << obj_ptr_offset << ".\n";
+
+    //   arg = callret("object_ptr_Load_on_Offset", {obj, const_int(obj_ptr_offset)});
+    // }
+    else {
       // p2t("It is unknown");
       std::string load_fn = Load_Type+"_Load";
       arg = callret(load_fn, {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});  

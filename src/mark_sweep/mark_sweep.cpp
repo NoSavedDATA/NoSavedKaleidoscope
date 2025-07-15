@@ -21,6 +21,14 @@ void MarkSweepAtom::inc_scopeless() {
     this->scope_refs+=1;
     this->scopeless_refs+=1;
 }
+void MarkSweepAtom::dec_scopeful() {
+    if(this->scope_refs>0)
+        this->scope_refs-=1;
+}
+void MarkSweepAtom::dec_scopeless() {
+    if(this->scopeless_refs>0)
+        this->scopeless_refs-=1;
+}
 void MarkSweepAtom::dec() {
     if(this->scopeless_refs>0)
         this->scopeless_refs-=1;
@@ -36,6 +44,35 @@ void MarkSweep::append(void *data_ptr, std::string data_type) {
     if (it!=mark_sweep_map.end())
     {
         it->second->dec();
+        mark_sweep_map[data_ptr] = it->second;
+
+    }
+    else
+        mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
+}
+
+
+void MarkSweep::mark_scopeful(void *data_ptr, std::string data_type) {
+
+    auto it = mark_sweep_map.find(data_ptr);
+    if (it!=mark_sweep_map.end())
+    {
+        it->second->dec_scopeful();
+        mark_sweep_map[data_ptr] = it->second;
+
+    }
+    else
+        mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
+
+}
+
+
+void MarkSweep::mark_scopeless(void *data_ptr, std::string data_type) {
+
+    auto it = mark_sweep_map.find(data_ptr);
+    if (it!=mark_sweep_map.end())
+    {
+        it->second->dec_scopeless();
         mark_sweep_map[data_ptr] = it->second;
 
     }
@@ -102,6 +139,22 @@ extern "C" void MarkToSweep_Mark(Scope_Struct *scope_struct, void *value, char *
         return;
     // std::cout << "Mark to sweep of " << data_type << ".\n";
     scope_struct->mark_sweep_map->append(value, data_type);
+}
+
+extern "C" void MarkToSweep_Mark_Scopeful(Scope_Struct *scope_struct, void *value, char *data_type) {
+    // std::cout << "MARK OF " << data_type << ".\n";
+    if (value==nullptr)
+        return;
+    // std::cout << "Mark to sweep of " << data_type << ".\n";
+    scope_struct->mark_sweep_map->mark_scopeful(value, data_type);
+}
+
+extern "C" void MarkToSweep_Mark_Scopeless(Scope_Struct *scope_struct, void *value, char *data_type) {
+    // std::cout << "MARK OF " << data_type << ".\n";
+    if (value==nullptr)
+        return;
+    // std::cout << "Mark to sweep of " << data_type << ".\n";
+    scope_struct->mark_sweep_map->mark_scopeless(value, data_type);
 }
 
 
