@@ -32,15 +32,16 @@ void MarkSweepAtom::dec() {
 
 void MarkSweep::append(void *data_ptr, std::string data_type) {
 
-
     auto it = mark_sweep_map.find(data_ptr);
     if (it!=mark_sweep_map.end())
     {
-        // std::cout << "DECREMENT" << ".\n";
         it->second->dec();
+        mark_sweep_map[data_ptr] = it->second;
+
     }
     else
         mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
+
 }
 
 
@@ -72,7 +73,7 @@ void MarkSweep::unmark_scopeless(void *data_ptr) {
 }
 
 
-void MarkSweep::clean_up() {
+void MarkSweep::clean_up(bool clean_scopeful) {
     // std::cout << "-----clean_up" << ".\n";;
 
     for (auto it = mark_sweep_map.begin(); it != mark_sweep_map.end(); ) {
@@ -80,7 +81,9 @@ void MarkSweep::clean_up() {
         // std::cout << "cleaning " << it->first << " - " << atom->data_type <<  ".\n";
         // std::cout << "refs " << atom->scope_refs << "/" << atom->scopeless_refs << ".\n";
 
-        if (atom->scope_refs==0 && atom->scopeless_refs==0) {
+        
+        if ((atom->scope_refs==0||clean_scopeful) && atom->scopeless_refs==0) {
+            
             // std::cout << "delete " << it->first << " fn: " << atom->data_type << ".\n";
             clean_up_functions[atom->data_type](it->first);
             delete atom;

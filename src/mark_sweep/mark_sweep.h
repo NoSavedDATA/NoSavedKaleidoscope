@@ -28,5 +28,5 @@ struct MarkSweep {
     void append(void *, std::string);
     void unmark_scopeful(void *);
     void unmark_scopeless(void *);
-    void clean_up();
+    void clean_up(bool);
 };

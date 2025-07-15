@@ -221,7 +221,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
 
   std::string ai_path = LibName+".ai";
 
-  if (fs::exists(ai_path)) {
+  if (fs::exists(ai_path)||in_str(LibName, imported_libs)) {
 
   } else {
 
@@ -240,6 +240,8 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
     
     lib_parser->ParseLibs();
     lib_parser->ImportLibs(so_lib_path, LibName, IsDefault);
+
+
     imported_libs.push_back(LibName);
   }
 }

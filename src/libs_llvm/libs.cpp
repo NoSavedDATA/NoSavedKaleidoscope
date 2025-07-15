@@ -1711,6 +1711,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("str_Copy", str_CopyTy);
 
+	FunctionType *str_CopyArgTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_CopyArg", str_CopyArgTy);
+
 	FunctionType *str_str_addTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy},
