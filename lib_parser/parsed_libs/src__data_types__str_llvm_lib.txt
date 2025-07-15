@@ -1,4 +1,4 @@
-1821-05-19 21:59:21
+1821-07-14 18:24:18
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -27,6 +27,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("str_Copy", str_CopyTy);
+
+	FunctionType *str_CopyArgTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_CopyArg", str_CopyArgTy);
 
 	FunctionType *str_str_addTy= FunctionType::get(
 		int8PtrTy,

@@ -604,12 +604,9 @@ Function *FunctionAST::codegen() {
     if (arg_name == "scope_struct")
     {
         p2t("-------------------------------------------=============-----------------===========--------FunctionAST COPY SCOPE STRUCT");
-        
         //   scope_struct = callret("scope_struct_Dive", {&Arg});
-
         scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
-
-        scope_string = callret("get_scope_scope", {scope_struct});        
+        scope_string = callret("get_scope_scope", {scope_struct});
     } else { 
         std::string type = "";
         if (typeVars.find(arg_name) != typeVars.end())
@@ -633,9 +630,16 @@ Function *FunctionAST::codegen() {
                                 {scope_struct,
                                 &Arg,
                                 global_str(arg_name)});
+                                
                 Builder->CreateStore(copied_value, arg_alloca);
+                call("MarkToSweep_Mark", {scope_struct, copied_value, global_str(type)});
+                call("MarkToSweep_Unmark_Scopeful", {scope_struct, copied_value});
             } else
+            {
                 Builder->CreateStore(&Arg, arg_alloca);
+                if(type!="float"&&type!="int")
+                    call("MarkToSweep_Unmark_Scopeless", {scope_struct, &Arg});
+            }
             function_allocas[current_codegen_function][arg_name] = arg_alloca;
         // }
         // else if (type!="tensor")
@@ -682,7 +686,10 @@ Function *FunctionAST::codegen() {
     // Finish off the function.
     
     if(!expr_is_return)
-        Builder->CreateRet(RetVal);
+    {
+        call("scope_struct_Clean_Scope", {scope_struct}); 
+        Builder->CreateRet(RetVal); 
+    }
     
 
     // Validate the generated code, checking for consistency.

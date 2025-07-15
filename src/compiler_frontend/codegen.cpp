@@ -180,7 +180,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     Value *initial_value = Init->codegen(scope_struct);
 
-    if((Type=="float"||Type=="str"||Type=="int")&&!(is_self||is_attr))
+    if((Type=="float"||Type=="int")&&!(is_self||is_attr))
     { 
       std::cout << "DataExpr STORE OF " << parser_struct.function_name << "/" << VarName << " type " << Type << ".\n";
 
@@ -201,13 +201,13 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     p2t("DataExpr name mangle");
 
 
-    if (is_self||is_attr)
-      var_name = callret("ConcatStrFreeRight", {callret("get_scope_first_arg", {scope_struct}), var_name});
+    // if (is_self||is_attr)
+    //   var_name = callret("ConcatStrFreeRight", {callret("get_scope_first_arg", {scope_struct}), var_name});
 
     scopeless_name = callret("CopyString", {var_name});
 
-    if (!(is_self||is_attr))
-      var_name = callret("ConcatStrFreeRight", {callret("get_scope_scope", {scope_struct}), var_name});
+    // if (!(is_self||is_attr))
+    //   var_name = callret("ConcatStrFreeRight", {callret("get_scope_scope", {scope_struct}), var_name});
 
 
 
@@ -279,6 +279,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
         {
           // p2t("DATA MARK TO SWEEP OF "+Type);
           call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
+          call("MarkToSweep_Unmark_Scopeful", {scope_struct, initial_value});
         }
         else
         {
@@ -550,6 +551,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   int j=0;
   for (auto &body : Body)
     body->codegen(scope_struct);
+
   call("scope_struct_Sweep", {scope_struct});
 
 
@@ -756,6 +758,8 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 
+
+
 bool seen_var_attr = false;
 Value *VariableExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
@@ -837,6 +841,12 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
   return V;
 }
+
+
+
+
+
+
 
 
 
@@ -1004,6 +1014,14 @@ inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::vector<s
   // return ret_idx;
 }
 
+Value *Get_Object_Value(NameSolverAST *name_solver, Parser_Struct parser_struct)
+{
+
+  std::string object_name = std::get<0>(name_solver->Names[0]);
+  AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
+  Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
+  return obj;
+}
 
 
 Value *BinaryExprAST::codegen(Value *scope_struct) {
@@ -1074,8 +1092,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     }
 
 
+
+
     std::string LType = LHS->GetType();
     std::string store_op = LType + "_Store";
+
+
 
     if(LHS->GetIsVec())
     {
@@ -1100,13 +1122,27 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     std::string Lname = std::get<0>(name_solver->Names[0]);
 
+
+
+
+
+
     // bool is_alloca = ((LType=="float"||LType=="str"||LType=="int"||LType=="tensor")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
     bool is_alloca = (!LHS->GetSelf()&&!LHS->GetIsAttribute());
 
     Value *Lvar_name;
-    if (!is_alloca && !LHS->GetIsVec())
+    if (!is_alloca)
       Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-    
+    else
+    {
+      if (LType!="float"&&LType!="int")
+      {
+        // p2t("CLEAN OLD VALUE OF " + Lname);
+        Value *old_val = load_alloca(Lname, LType, parser_struct.function_name);
+        // call("MarkToSweep_Mark", {scope_struct, old_val, global_str(LType)});
+      }
+    }
+      
     
     // std::cout << "ATTRIBUTION: " << LType << " .\n";
     
@@ -1169,6 +1205,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
         return ConstantFP::get(*TheContext, APFloat(0.0f));
 
+      } else if (LHS->GetIsAttribute()) {
+        std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
+        // int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
+
+        Value *obj = Get_Object_Value(name_solver, parser_struct);
+
+        std::cout << "STORING ATTRIBUTE " << LType << "/" << attribute_name << ".\n";
       } else
         call(store_op, {Lvar_name, Val, scope_struct});
     }
@@ -1680,7 +1723,6 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
   // Create/Spawn Threads
 
   
-  // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct}); 
 
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
@@ -1730,7 +1772,6 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
   
   // Create/Spawn Threads
 
-  // scope_struct = Builder->CreateCall(TheModule->getFunction("scope_struct_Copy"), {scope_struct});   
 
   // p2t("NOW STORE ASYNCS COUNT");
   call("scope_struct_Store_Asyncs_Count", {scope_struct, const_int(AsyncsCount)});
@@ -2465,17 +2506,14 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
       if (isAttribute) {
         NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-        std::string object_name;
         int type;
+        Value *obj;
         type = std::get<1>(name_solver->Names[0]);
 
         if(!isSelf)
         {        
-          object_name = std::get<0>(name_solver->Names[0]);
 
-          AllocaInst *object_alloca = function_allocas[parser_struct.function_name][object_name];
-
-          Value *obj = Builder->CreateLoad(int8PtrTy, object_alloca);
+          obj = Get_Object_Value(name_solver, parser_struct);
           call("set_scope_object", {scope_struct_copy, obj});
         } else {
           // Value *obj;
@@ -2551,7 +2589,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     if (isSelf) { 
       NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-      std::string object_name;
       int type;
       type = std::get<1>(name_solver->Names[0]);
 
@@ -2700,7 +2737,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
       arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
 
-    } else if ((Load_Type=="float"||Load_Type=="str"||Load_Type=="tensor"||Load_Type=="int"||Load_Type=="str_vec"||Load_Type=="int_vec")&&isSelf) {
+    } else if (Load_Type!="pinned_tensor"&&isSelf) {
       // p2t("It is an attribute");
       // int object_ptr_offset = ClassVariables[parser_struct.class_name][LoadOf];
       // arg = callret("object_Load_on_Offset", {scope_struct_copy, const_int(object_ptr_offset)});

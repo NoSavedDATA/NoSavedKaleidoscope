@@ -786,8 +786,6 @@ extern "C" void *tensor_CopyArg(Scope_Struct *scope_struct, DT_tensor *tensor, c
 
   
   
-  std::string arg_tensor_name = scope;
-  arg_tensor_name = arg_tensor_name + new_tensor_name;
   
 
   std::vector<int> dims = tensor->dims;
@@ -797,7 +795,7 @@ extern "C" void *tensor_CopyArg(Scope_Struct *scope_struct, DT_tensor *tensor, c
 
   
 
-  DT_tensor *new_tensor = createTensor(tensor_ptr, dims, dims_prod, true, arg_tensor_name, tensor->cuda_stream, tensor->loader);
+  DT_tensor *new_tensor = createTensor(tensor_ptr, dims, dims_prod, true, tensor->name, tensor->cuda_stream, tensor->loader);
   new_tensor->scopeless_name = tensor->scopeless_name;
 
 

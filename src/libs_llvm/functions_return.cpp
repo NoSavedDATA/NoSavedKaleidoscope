@@ -24,7 +24,7 @@ void set_functions_return_type() {
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, 
 						{"tid", "int"}, 
 						{"EmbeddingLn", "tensor"}, 
-						{"str_Create", "str"}, {"str_Load", "str"}, {"str_Copy", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"cat_str_float", "str"}, {"SplitString", "str_vec"}, {"str_split_idx", "str"}, 
+						{"str_Create", "str"}, {"str_Load", "str"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"cat_str_float", "str"}, {"SplitString", "str_vec"}, {"str_split_idx", "str"}, 
 						{"Embedding", "tensor"}, 
 						{"ConcatScopeStr", "str"}, 
 						{"tensor_tensor_mma", "tensor"}, {"tensor_tensor_add", "tensor"}, {"tensor_tensor_sub", "tensor"}, {"tensor_tensor_equal", "tensor"}, {"tensor_tensor_mult", "tensor"}, {"tensor_tensor_div", "tensor"}, 

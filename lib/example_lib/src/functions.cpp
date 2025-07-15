@@ -46,16 +46,22 @@ extern "C" DT_placeholder *placeholder_int_add(Scope_Struct *scope_struct, DT_pl
 }
 
 
-extern "C" void placeholder_Clean_Up(void *data_ptr) {
-    std::cout << "placeholder_Clean_Up" << data_ptr << ".\n";
+extern "C" DT_placeholder *placeholder_CopyArg(Scope_Struct *scope_struct, DT_placeholder *placeholder, char *argname) {
+    DT_placeholder *copied = new DT_placeholder("", placeholder->x, placeholder->y);
+    return copied;
+}
 
+
+extern "C" void placeholder_Clean_Up(void *data_ptr) {
+    // std::cout << "placeholder_Clean_Up " << data_ptr << ".\n\n";
     free(data_ptr);
 }
 
 
 extern "C" float placeholder_print(Scope_Struct *scope_struct, DT_placeholder *placeholder) {
 
-    std::cout << "Placeholder " << placeholder->name << ": [" << placeholder->x << ", " << placeholder->y << "].\n";
+    // std::cout << "Placeholder " << placeholder->name << ": [" << placeholder->x << ", " << placeholder->y << "].\n";
+    printf("Placeholder [%d, %d].\n", placeholder->x, placeholder->y);
 
     return 0;
 }

@@ -57,7 +57,7 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
 
 void str_Clean_Up(void *data_ptr)
 {
-  // std::cout << "str_Clean_Up" << ".\n";
+  // std::cout << "str_Clean_Up" << ".\n\n";
   char *char_ptr = static_cast<char *>(data_ptr);
   move_to_char_pool(strlen(char_ptr)+1, char_ptr, "Mark sweep of str");
 }
@@ -66,6 +66,13 @@ void str_Clean_Up(void *data_ptr)
 
 
 extern "C" char *str_Copy(Scope_Struct *scope_struct, char *str) {
+  // std::cout << "Copying string: " << str << ".\n";
+  char *ret = CopyString(str);
+  return ret;
+}
+
+
+extern "C" char *str_CopyArg(Scope_Struct *scope_struct, char *str, char *argname) {
   // std::cout << "Copying string: " << str << ".\n";
   char *ret = CopyString(str);
   return ret;
