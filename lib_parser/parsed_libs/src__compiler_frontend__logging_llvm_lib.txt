@@ -1,4 +1,4 @@
-1821-07-03 12:18:31
+1821-07-16 18:29:26
 
 	FunctionType *print_codegenTy= FunctionType::get(
 		int8PtrTy,
@@ -6,3 +6,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("print_codegen", print_codegenTy);
+
+	FunctionType *print_codegen_silentTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_codegen_silent", print_codegen_silentTy);

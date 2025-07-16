@@ -121,7 +121,7 @@ IntExprAST::IntExprAST(int Val) : Val(Val) {
 } 
   
   
-  
+
   
 StringExprAST::StringExprAST(std::string Val) : Val(Val) {
   this->SetType("str");
@@ -202,7 +202,63 @@ ObjectExprAST::ObjectExprAST(
 
 
 
+void Print_Names_Str(std::vector<std::string> names_vec) {
 
+
+  if(names_vec.size()==0)
+    return;
+  if (names_vec.size() == 1) {
+    std::cout << "\n\nName: " << names_vec[0] << "\n\n\n";
+    return;
+  }
+
+  
+  std::cout << "\n\nName 2 strs: ";
+  for (int i=0; i<=names_vec.size()-2; ++i)
+    std::cout << names_vec[i] << "."; 
+  std::cout << names_vec[names_vec.size()-1] << "\n\n\n"; 
+}
+
+
+NameableExprAST::NameableExprAST() {}
+
+SelfExprAST::SelfExprAST() {
+  Expr_String = {"self"};
+  End_of_Recursion=true;
+  Name="self";
+  height=1;
+  // Print_Names_Str(Expr_String);
+}
+EmptyStrExprAST::EmptyStrExprAST() {
+  Expr_String = {};
+  End_of_Recursion=true;
+  height=0;
+}
+NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct) : parser_struct(parser_struct) {
+  this->Inner_Expr = std::move(Inner_Expr);
+  this->Inner_Expr->IsLeaf=false;
+  this->Name = name;
+  height=this->Inner_Expr->height+1;
+
+  Expr_String = this->Inner_Expr->Expr_String;
+  Expr_String.push_back(name);
+  Print_Names_Str(Expr_String);
+}
+
+
+
+NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,
+  std::vector<std::unique_ptr<ExprAST>> Args)
+  : Inner_Expr(std::move(Inner_Expr)), Callee(Callee), parser_struct(parser_struct), Args(std::move(Args)) {
+}
+
+
+NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, Parser_Struct parser_struct, std::string type)
+      : Inner_Expr(std::move(Inner_Expr)), parser_struct(parser_struct) {
+  this->SetType(type);
+
+  this->Name = this->Inner_Expr->Name;
+}
  
   
 DataExprAST::DataExprAST(
@@ -252,40 +308,6 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
   
   
   
-  
-LSTMExprAST::LSTMExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
-  const std::string &TensorInit)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                C(std::move(C)), OC(std::move(OC)),
-                TensorInit(TensorInit) {}
-  
-  
-  
-EmbeddingExprAST::EmbeddingExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
-  const std::string &TensorInit)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                C(std::move(C)), OC(std::move(OC)),
-                TensorInit(TensorInit) {}
-  
-  
-  
-  
-LinearExprAST::LinearExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
-  std::vector<int> Notators,
-  const std::string &TensorInit)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                C(std::move(C)), OC(std::move(OC)),
-                Notators(std::move(Notators)),
-                TensorInit(TensorInit) {}
   
   
   

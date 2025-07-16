@@ -31,3 +31,4 @@ Value *LogErrorV(std::string Str);
 extern "C" void print_codegen(char *msg);
 
 void p2t(std::string msg);
+void p2n();

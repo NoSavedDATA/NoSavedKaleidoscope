@@ -47,7 +47,7 @@ void set_functions_return_type() {
 						{"LenStrVec", "int"}, {"shuffle_str", "str"}, {"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"str_vec_CalculateIdx", "int"}, 
 						{"Linear", "tensor"}, {"Linear_Load", "str"}, 
 						{"int_Create", "int"}, {"int_Load", "int"}, 
-						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_on_Offset_int", "int"}, 
+						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_int", "int"}, 
 						{"logE", "tensor"}, {"logE2", "tensor"}, {"clip", "tensor"}, 
 						{"CreateNotesVector", "list"}, {"Add_To_NotesVector_float", "list"}, {"Add_To_NotesVector_int", "list"}, {"Add_To_NotesVector_str", "list"}, 
 						{"list_New", "list"}, {"list_Load", "list"}, {"list_Create", "list"}, 

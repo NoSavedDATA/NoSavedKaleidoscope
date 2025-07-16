@@ -185,8 +185,6 @@ std::map<std::string, pthread_mutex_t *> lockVars;
 
 //global
 std::vector<std::string> Classes;
-std::map<std::string, std::string> Object_toClass;
-std::map<std::string, std::string> Object_toClassVec;
 
 
 

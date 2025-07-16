@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "llvm/IR/Value.h"
 #include "parser_struct.h"
 
@@ -25,6 +28,7 @@ class ExprAST {
     bool SolverIncludeScope = true;
     bool NameSolveToLast = true;
   
+
   
   
     virtual Value *codegen(Value *scope_struct) = 0;
@@ -259,57 +263,8 @@ class LibImportExprAST : public ExprAST {
 };
   
   
-  
-  
-  
-  
-  class LSTMExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> C, OC;
-      std::string TensorInit;
-  
-      LSTMExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
-        const std::string &TensorInit);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  class EmbeddingExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> C, OC;
-      std::string TensorInit;
-  
-      EmbeddingExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
-        const std::string &TensorInit);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  
-  class LinearExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> C, OC;
-      std::string TensorInit;
-      std::vector<int> Notators;
-  
-      LinearExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> OC,
-        std::vector<int> Notators,
-        const std::string &TensorInit);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
+   
+ 
   
   
   class MHSAExprAST : public VarExprAST {
@@ -385,11 +340,71 @@ public:
 };
   
   
+class NameableExprAST : public ExprAST {
+  public:
+  std::vector<std::string> Expr_String = {};
+  std::unique_ptr<NameableExprAST> Inner_Expr;
+  std::string Name="";
+  bool End_of_Recursion=false, skip=false, IsLeaf=true, Load_Last=true;
+  int height=1;
+  NameableExprAST();
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+class EmptyStrExprAST : public NameableExprAST {
   
+  public:
+    EmptyStrExprAST();
+    Value *codegen(Value *scope_struct) override;
+};
+
+
+class SelfExprAST : public NameableExprAST {
+  
+  public:
+    SelfExprAST();
+    Value *codegen(Value *scope_struct) override;
+};
+
+
+class NestedStrExprAST : public NameableExprAST {
+  Parser_Struct parser_struct;
+  
+  public:
+    NestedStrExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct);
+    Value *codegen(Value *scope_struct) override;
+};
+  
+
+class NestedVariableExprAST : public ExprAST {
+  std::unique_ptr<NameableExprAST> Inner_Expr;
+  Parser_Struct parser_struct;
+   
+  public:
+    bool Load_Val = true;
+    
+    NestedVariableExprAST(std::unique_ptr<NameableExprAST>, Parser_Struct, std::string);
+    Value *codegen(Value *scope_struct) override;
+};
+
+class NestedCallExprAST : public ExprAST {
+  std::unique_ptr<NameableExprAST> Inner_Expr;
+  std::string Callee;
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  Parser_Struct parser_struct;
+
+  public:
+    NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,
+                            std::vector<std::unique_ptr<ExprAST>> Args);
+    Value *codegen(Value *scope_struct) override;
+};
   
   
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST {
+  std::vector<std::string> Expr_String;
   std::string Callee;
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Class;

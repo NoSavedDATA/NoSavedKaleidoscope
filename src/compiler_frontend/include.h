@@ -44,8 +44,6 @@ extern std::map<std::string, std::string> stringMethods;
 
 
 extern std::vector<std::string> Classes;
-extern std::map<std::string, std::string> Object_toClass;
-extern std::map<std::string, std::string> Object_toClassVec;
 
 
 extern int TERMINATE_VARARG;

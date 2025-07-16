@@ -94,6 +94,55 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("LoadObjectScopeName", LoadObjectScopeNameTy);
 
+	FunctionType *offset_object_ptrTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("offset_object_ptr", offset_object_ptrTy);
+
+	FunctionType *object_Attr_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("object_Attr_float", object_Attr_floatTy);
+
+	FunctionType *object_Attr_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("object_Attr_int", object_Attr_intTy);
+
+	FunctionType *object_Load_floatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("object_Load_float", object_Load_floatTy);
+
+	FunctionType *object_Load_intTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("object_Load_int", object_Load_intTy);
+
+	FunctionType *object_Load_slotTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("object_Load_slot", object_Load_slotTy);
+
+	FunctionType *tie_object_to_objectTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tie_object_to_object", tie_object_to_objectTy);
+
 	FunctionType *object_Attr_on_Offset_floatTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -1538,7 +1587,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *LinearTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("Linear", LinearTy);
@@ -1822,6 +1871,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("print_codegen", print_codegenTy);
+
+	FunctionType *print_codegen_silentTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_codegen_silent", print_codegen_silentTy);
 
 	FunctionType *save_as_intTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

@@ -145,7 +145,18 @@ Value *LogErrorV(std::string Str) {
 
 extern "C" void print_codegen(char *msg)
 {
-  std::cout << "-- print_codegen: " << msg << ".\n";
+  std::cout << "~~" << msg << ".\n";
+}
+
+
+extern "C" void print_codegen_silent(char *msg)
+{
+  std::cout << msg << "\n";
+}
+
+void p2n() {
+
+  call("print_codegen_silent", {Builder->CreateGlobalString("...")});
 }
 
 void p2t(std::string msg)
