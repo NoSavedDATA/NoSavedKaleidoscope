@@ -47,7 +47,7 @@ void linear_backward(float *inp, int size, float *out,
 
 
 
-extern "C" DT_tensor *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
+extern "C" DT_tensor *Linear(Scope_Struct *scope_struct, LinearCPP *linear, DT_tensor *tensor)
 {
   // std::cout << "-------------------------------------CALLING LINEAR " << scope_struct->first_arg << ".\n";
   int thread_id = scope_struct->thread_id;
@@ -69,7 +69,7 @@ extern "C" DT_tensor *Linear(Scope_Struct *scope_struct, DT_tensor *tensor)
 
 
   // std::unique_ptr<LinearCPP> linear = std::move(NamedLinear[conv_name]);
-  LinearCPP *linear = (LinearCPP*) scope_struct->object_ptr;
+  // linear = (LinearCPP*) scope_struct->object_ptr;
 
 
   if ((int)C!=(int)linear->C)
@@ -121,7 +121,7 @@ extern "C" float Linear_weight(Scope_Struct *scope_struct, char *name) {
 extern "C" void *Linear_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
 
-  // std::cout << "\n\n\n----------------------EXECUTION: CREATING LINEAR: " << name << ".\n\n\n\n";
+  std::cout << "\n\n\n----------------------EXECUTION: CREATING LINEAR: " << name << ".\n\n\n\n";
 
 
   std::string init = "xavu";
@@ -149,10 +149,8 @@ extern "C" void *Linear_Create(Scope_Struct *scope_struct, char *name, char *sco
 
   LinearCPP *linear = new LinearCPP(C, OC, init, notes, name);
 
-  // std::unique_ptr<LinearCPP> linear = std::make_unique<LinearCPP>(C, OC, init, notes, name);
 
-
-  // NamedLinear[name] = std::move(linear);
+  std::cout << "Linear " << C << "/" << OC << ".\n";
 
 
   return linear;

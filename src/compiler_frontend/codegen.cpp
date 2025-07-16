@@ -261,9 +261,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     if(is_self)
     {
-      p2t("GOTCHA");
       int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
-      p2t(VarName+" offset is "+std::to_string(object_ptr_offset));
+      // p2t(VarName+" offset is "+std::to_string(object_ptr_offset));
   
       Value *obj = callret("get_scope_object", {scope_struct});
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
@@ -811,15 +810,17 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
   
   if(is_attr) {
-    std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
-    std::string obj_name = std::get<0>(name_solver->Names[0]);
+    std::cout << "VARIABLEEXPRAST IS ATTR" << ".\n";
+    std::exit(0);
+    // std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
+    // std::string obj_name = std::get<0>(name_solver->Names[0]);
     
-    Value *obj = Get_Object_Value(name_solver, parser_struct);
+    // Value *obj = Get_Object_Value(name_solver, parser_struct);
 
-    std::string obj_class = Object_toClass[obj_name];    
-    int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
+    // std::string obj_class = Object_toClass[parser_struct.class_name][obj_name];    
+    // int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
 
-    return callret("object_ptr_Load_on_Offset", {obj, const_int(obj_ptr_offset)});
+    // return callret("object_ptr_Load_on_Offset", {obj, const_int(obj_ptr_offset)});
   }
 
 
@@ -1116,11 +1117,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     }
 
 
-    VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    NameSolverAST *name_solver = static_cast<NameSolverAST *>(LHSE->NameSolver.get());
-
-    std::string Lname = std::get<0>(name_solver->Names[0]);
-
 
 
 
@@ -1128,16 +1124,15 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     // bool is_alloca = ((LType=="float"||LType=="str"||LType=="int"||LType=="tensor")&&!LHS->GetSelf()&&!LHS->GetIsAttribute());
     bool is_alloca = (!LHS->GetSelf()&&!LHS->GetIsAttribute());
+    
 
     Value *Lvar_name;
-    if (!is_alloca)
-      Lvar_name = LHSE->NameSolver->codegen(scope_struct);
-    else
+    if (is_alloca)
     {
       if (LType!="float"&&LType!="int")
       {
         // p2t("CLEAN OLD VALUE OF " + Lname);
-        Value *old_val = load_alloca(Lname, LType, parser_struct.function_name);
+        // Value *old_val = load_alloca(Lname, LType, parser_struct.function_name);
         // call("MarkToSweep_Mark_Scopeful", {scope_struct, old_val, global_str(LType)});
       }
     }
@@ -1149,8 +1144,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
      
     
 
+    std::string Lname = LHS->GetName();
+
     if (is_alloca)
     {
+
+
       std::string store_trigger = LType + "_StoreTrigger";
       std::string copy_fn = LType + "_Copy";
 
@@ -1170,52 +1169,28 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       if (F)
       {
         Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
-        Lvar_name = LHSE->NameSolver->codegen(scope_struct);
+        Value *Lvar_name = callret("CopyString", {global_str(Lname)});
         Val = callret(store_trigger, {Lvar_name, old_val, Val, scope_struct});
       }
 
       // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
-
       Builder->CreateStore(Val, alloca);
     } else
     {
-      // std::cout << "HEAP STORE FOR " << Lname << ".\n";
 
-      if(LHS->GetSelf()&&LType!="pinned_tensor")
+      NestedVariableExprAST *LHSV = static_cast<NestedVariableExprAST *>(LHS.get());
+      LHSV->Load_Val = false;
+
+
+      Value *obj_ptr = LHSV->codegen(scope_struct);
+
+      
+      if(LType=="float"||LType=="int")
       {
-        std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
-        int obj_ptr_offset = ClassVariables[parser_struct.class_name][attribute_name];
+        call("object_Attr_"+LType, {obj_ptr, Val});
+      } else {
 
-        if(LType=="float"||LType=="int")
-        {
-          // p2t("object_Attr_on_Offset_" + LType + " at " + std::to_string(obj_ptr_offset) + " from attribute " + attribute_name + ", class " + parser_struct.class_name);
-          call("object_Attr_on_Offset_"+LType, {scope_struct, Val, const_int(obj_ptr_offset)});
-        }
-        else
-        {
-          std::cout << "SELF STORE OF " << attribute_name << ".\n";
-          call("object_Attr_on_Offset", {scope_struct, Val, const_int(obj_ptr_offset)});
-
-          // call("MarkToSweep_Mark_Scopeless", {scope_struct, old_val, global_str(LType)}); 
-        }
-
-        return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-      } else if (LHS->GetIsAttribute()) {
-        std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
-        std::string obj_name = std::get<0>(name_solver->Names[0]);
-        
-        Value *obj = Get_Object_Value(name_solver, parser_struct);
-
-        std::string obj_class = Object_toClass[obj_name];
-        
-        int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
-
-
-        call("object_ptr_Attribute_object", {obj, const_int(obj_ptr_offset), Val});
-
-      } else
-        call(store_op, {Lvar_name, Val, scope_struct});
+      }
     }
     
 
@@ -1617,7 +1592,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
     std::cout << "Found alloca " << pair.first << ".\n";
 
     std::string type;
-    if (Object_toClass.count(pair.first)>0)
+    if (Object_toClass[""].count(pair.first)>0)
     {
       type = "void";
       std::cout << "Type is void ptr" << ".\n";
@@ -2056,21 +2031,8 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         function_allocas[parser_struct.function_name][VarName] = alloca;
 
 
-        // std::cout << "CREATED STACK ALLOCA FOR " << parser_struct.function_name << "/" <<  VarName << " WITH SIZE " << Size << ".\n";
-        // std::exit(0);
         continue;
       }
-
-      obj_name = global_str(VarName);
-
-      if (is_attr)
-        var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), obj_name});
-      else if (is_self) 
-        var_name = callret("ConcatStr", {callret("get_scope_first_arg", {scope_struct}), obj_name});
-      else
-        var_name = obj_name;
-
-      call("InstantiateObject", {obj_name, var_name});
     }
     else if (Init) // init of vec[size]
     {
@@ -2100,150 +2062,6 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Value *LSTMExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-
-
-    std::cout << "Parsing LSTM var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateLSTMOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-Value *EmbeddingExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-
-
-    std::cout << "Parsing Embedding var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateEmbeddingOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct), OC->codegen(scope_struct)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-
-
-Value *LinearExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    
-    int_vec *notators = SetNotators(Notators);
-
-    
-
-    std::cout << "Parsing MHSA var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateLinearOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               C->codegen(scope_struct),
-                                               OC->codegen(scope_struct),
-                                               VoidPtr_toValue(notators)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
 
 
 
@@ -2399,6 +2217,230 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
 
 
 
+Value *NameableExprAST::codegen(Value *scope_struct) {}
+Value *EmptyStrExprAST::codegen(Value *scope_struct) {}
+
+Value *SelfExprAST::codegen(Value *scope_struct) {
+  return callret("get_scope_object", {scope_struct});
+}
+
+
+int Get_Nested_Class_Size(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
+
+  int last = expressions_string_vec.size();
+
+
+  std::string _class=""; 
+
+  int i=0;
+  if(expressions_string_vec[i]=="self") {
+    _class = parser_struct.class_name; 
+    i++;
+  }
+  for(; i<last; ++i)
+  {
+    _class = Object_toClass[_class][expressions_string_vec[i]];
+  }
+
+  return ClassSize[_class];
+}
+
+
+// int Get_Attribute_Type(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
+
+//   int last = expressions_string_vec.size()-1;
+
+
+//   std::string _class=""; 
+
+//   int i=0;
+//   if(expressions_string_vec[i]=="self") {
+//     _class = parser_struct.class_name; 
+//     i++;
+//   }
+
+//   for(; i<last; ++i)
+//   {
+//     _class = Object_toClass[_class][expressions_string_vec[i]];
+//   }
+//   // std::cout << "Offset of " << expressions_string_vec[last] << " is " << ClassVariables[_class][expressions_string_vec[last]] << ".\n";
+
+//   ClassVariables[_class][expressions_string_vec[last]]
+
+//   return ;
+// }
+
+int Get_Object_Offset(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
+
+  int last = expressions_string_vec.size()-1;
+
+
+  std::string _class=""; 
+
+  int i=0;
+  if(expressions_string_vec[i]=="self") {
+    _class = parser_struct.class_name; 
+    i++;
+  }
+
+  for(; i<last; ++i)
+  {
+    _class = Object_toClass[_class][expressions_string_vec[i]];
+  }
+  // p2t("Offset of " + expressions_string_vec[last] + " is " + std::to_string(ClassVariables[_class][expressions_string_vec[last]]));
+
+  return ClassVariables[_class][expressions_string_vec[last]];
+}
+
+
+
+Value *NestedStrExprAST::codegen(Value *scope_struct) {  
+  if(skip)
+    return Inner_Expr->codegen(scope_struct);
+ 
+  
+  int offset;
+  if(Inner_Expr->Name=="self")
+  {
+    Value *obj_ptr = Inner_Expr->codegen(scope_struct);
+    
+    offset = ClassVariables[parser_struct.class_name][Name];
+
+    obj_ptr = callret("offset_object_ptr", {obj_ptr, const_int(offset)});
+
+    std::string _type = typeVars[Name];
+    if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
+      obj_ptr = callret("object_Load_slot", {obj_ptr});
+
+    return obj_ptr;
+
+  } else if (height>1) { 
+
+    
+    Value *obj_ptr = Inner_Expr->codegen(scope_struct);
+
+
+
+    
+    offset = Get_Object_Offset(Expr_String, parser_struct);
+  
+    obj_ptr = callret("offset_object_ptr", {obj_ptr, const_int(offset)});
+
+
+
+    std::string _type = typeVars[Name];
+    if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
+      obj_ptr = callret("object_Load_slot", {obj_ptr});
+
+    return obj_ptr;
+
+  } else if (height==1)
+  {
+    std::string var_type = typeVars[Name];
+    return load_alloca(Name, var_type, parser_struct.function_name);    
+  }
+  else {
+    LogError("uncaught");
+  }
+}
+
+
+Value *NestedVariableExprAST::codegen(Value *scope_struct) {
+  // std::cout << "Nested Variable Expr" << ".\n";
+  Value *ptr = Inner_Expr->codegen(scope_struct);
+
+  if (Load_Val) {
+    Type = (Type=="float"||Type=="int") ? Type : "slot";
+    return callret("object_Load_"+Type, {ptr});
+  }
+
+
+  return ptr;
+}
+
+
+
+Value *NestedCallExprAST::codegen(Value *scope_struct) {
+
+  // std::cout << "--NestedCall Calling " << Callee << ".\n";
+
+  // p2t("Calling: " + Callee);
+  
+  bool is_nsk_fn = in_str(Callee, native_fn);
+
+  
+  Value *obj_ptr;
+  
+
+  Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
+
+
+
+  if(ends_with(Callee, "__init__")&&parser_struct.function_name!="__anon_expr")
+  {
+
+    Inner_Expr->Load_Last=false; // inhibits Load_slot
+    obj_ptr = Inner_Expr->codegen(scope_struct);
+
+
+    int size = Get_Nested_Class_Size(Inner_Expr->Expr_String, parser_struct);
+    Value *new_ptr = callret("malloc", {const_int64(size)});
+
+    // p2t("Malloc size of " + Inner_Expr->Name + " is " + std::to_string(size));
+
+    call("tie_object_to_object", {obj_ptr, new_ptr});
+    
+    obj_ptr = new_ptr;  
+  } else
+    obj_ptr = Inner_Expr->codegen(scope_struct);
+  
+  
+  if(!is_nsk_fn)
+    call("set_scope_object", {scope_struct_copy, obj_ptr});
+
+
+  
+
+
+
+  int target_args_size = Args.size()+1; // +1 for scope_struct
+
+  std::vector<Value *> ArgsV = {scope_struct_copy};
+
+
+
+  if (is_nsk_fn)
+  {
+    target_args_size++;
+    ArgsV.push_back(obj_ptr);
+  }
+
+  ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, Callee);
+
+
+  Function *CalleeF;
+  CalleeF = getFunction(Callee);
+  if (!CalleeF)
+  {
+    std::string _error = "The referenced function "+ Callee +" was not yet declared.";
+    return LogErrorV(_error);
+  }
+  std::string tgt_function_name = CalleeF->getName().str();
+  // If argument mismatch error.
+  if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
+  {
+    // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
+    std::string _error = "Incorrect parameters used on function " + Callee + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
+    return LogErrorV(_error);
+  }
+
+  Value *ret=callret(Callee, ArgsV);
+  call("scope_struct_Delete", {scope_struct_copy});
+
+
+  return ret;
+}
+
 
 Value *CallExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
@@ -2516,73 +2558,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
           Value *obj = Get_Object_Value(name_solver, parser_struct);
           call("set_scope_object", {scope_struct_copy, obj});
-        } else {
-          // Value *obj;
-          // // std::cout << "Names size: " << name_solver->Names.size() << ".\n";
-
-          // int names_size = name_solver->Names.size();
-          // names_size = names_size-1;
-
-
-          // std::string method_name = std::get<0>(name_solver->Names[names_size]);
-          // if (method_name=="__init__") {
-          //   names_size--;
-          // }
-
-          // obj = callret("get_scope_object", {scope_struct});
-
-          
-          // std::string cur;
-          // int object_ptr_offset;
-          // for (int i=1; i<names_size; ++i)
-          // {
-          //   cur = std::get<0>(name_solver->Names[i]);
-          //   // std::cout << "solve " << i << ": " << cur << ".\n";
-          //   if (i==1)
-          //   {
-          //     object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
-          //     std::cout << "SET obj_ptr OF nested FUNCTION ALLOCA " << parser_struct.function_name << ", object: " << cur <<  " offset " << object_ptr_offset << ".\n";
-          //     obj = callret("object_ptr_Load_on_Offset", {obj, const_int(object_ptr_offset)});
-          //   }
-          // }
-
-
-          // if (method_name=="__init__") { 
-          //   cur = std::get<0>(name_solver->Names[names_size]);
-
-          //   object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
-            
-
-          //   Value *obj_ptr;
-          //   int obj_size = ClassSize[Object_toClass[cur]];
-          //   // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
-          //   obj_ptr = callret("malloc", {const_int64(obj_size)});
-
-          //   call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
-
-            
-          //   obj = obj_ptr;
-          // }
-
-          // if (method_name=="__init__") { 
-          //   cur = std::get<0>(name_solver->Names[names_size]);
-
-          //   object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
-            
-
-          //   Value *obj_ptr;
-          //   int obj_size = ClassSize[Object_toClass[cur]];
-          //   // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
-          //   obj_ptr = callret("malloc", {const_int64(obj_size)});
-
-          //   call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
-
-            
-          //   obj = obj_ptr;
-          // }
-
-
-          // call("set_scope_object", {scope_struct_copy, obj});
         }
       }
     }
@@ -2637,9 +2612,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
         object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
         
         Value *obj_ptr;
-        int obj_size = ClassSize[Object_toClass[cur]];
+        int obj_size = ClassSize[Object_toClass[""][cur]];
         obj_ptr = callret("malloc", {const_int64(obj_size)});
-        // std::cout << "***Mallocing size " << obj_size << " for object " << cur << " of class " << Object_toClass[cur] << ".\n";
 
         call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
  
@@ -2740,28 +2714,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     } else if (Load_Type!="pinned_tensor"&&isSelf) {
       // p2t("It is an attribute");
-      // int object_ptr_offset = ClassVariables[parser_struct.class_name][LoadOf];
-      // arg = callret("object_Load_on_Offset", {scope_struct_copy, const_int(object_ptr_offset)});
       arg = callret("get_scope_object", {scope_struct_copy});
     }
-    // else if (isAttribute) {
-    //   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-
-    //   std::string attribute_name = std::get<0>(name_solver->Names[1]);
-    //   std::string obj_name = std::get<0>(name_solver->Names[0]);
-      
-    //   std::cout << "1" << ".\n";
-    //   Value *obj = Get_Object_Value(name_solver, parser_struct);
-    //   std::cout << "2" << ".\n";
-
-    //   std::string obj_class = Object_toClass[obj_name];    
-    //   int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
-
-
-    //   std::cout << "LOADING ATTRIBUTE " << obj_name << "." << attribute_name << " on offset " << obj_ptr_offset << ".\n";
-
-    //   arg = callret("object_ptr_Load_on_Offset", {obj, const_int(obj_ptr_offset)});
-    // }
     else {
       // p2t("It is unknown");
       std::string load_fn = Load_Type+"_Load";

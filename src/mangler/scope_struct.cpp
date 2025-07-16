@@ -198,6 +198,7 @@ extern "C" void set_scope_object(Scope_Struct *scope_struct, void *object_ptr) {
     // std::cout << "done" << ".\n";
 }
 extern "C" void *get_scope_object(Scope_Struct *scope_struct) {
+    // std::cout << "get scope object " << scope_struct->object_ptr << ".\n";
     return scope_struct->object_ptr;
 }
 

@@ -18,6 +18,10 @@
 
 
 
+std::map<std::string, std::map<std::string, std::string>> Object_toClass;
+std::map<std::string, std::string> Object_toClassVec;
+
+
 using namespace llvm;
 
 
@@ -83,22 +87,6 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
   std::string pre_dot;
   std::unique_ptr<ExprAST> VecInitSize = nullptr;
       
-  //std::cout << "\n\n\n\nCUR TOK IS: " << ReverseToken(CurTok) << "\n\n\n\n\n\n";
-  // if (CurTok==tok_vec)
-  // {
-  //   getNextToken();
-  //   is_vec=true;
-        
-  //   if(CurTok=='[')
-  //   {
-  //     getNextToken();
-  //     VecInitSize = ParsePrimary(parser_struct, class_name);
-  //     if (CurTok!=']')
-  //       LogError("Expected ] at object vec");
-  //     getNextToken();
-  //   }
-  //   Object_toClassVec[IdentifierStr] = _class; //todo: this doesn't deal with self. expr
-  // }
 
 
   if (CurTok==tok_self)
@@ -115,8 +103,8 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
     objectVars.push_back(Name);
     // typeVars[Name] = "object";
 
-    if (!is_vec)
-      Object_toClass[IdentifierStr] = _class;
+    if (!is_vec&&parser_struct.class_name=="")
+      Object_toClass[""][IdentifierStr] = _class;
     getNextToken(); // eat identifier.
 
         
@@ -913,183 +901,8 @@ inline std::vector<std::unique_ptr<ExprAST>> Parse_Argument_List(Parser_Struct p
 
 
 
-std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string class_name) {
-
-  std::string pre_dot = "";
-  std::string type = "None";
-  std::string object_class;
-  bool is_class_attr=false;
-  bool is_self=false;
-  bool is_vec=false;
-  std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
-  std::string Prev_IdName = "";
-  std::string IdName = "";
-
-
-
-  if (CurTok!=tok_self)
-  {
-    is_class_attr = true;
-    pre_dot="";
-  } else 
-  {
-    is_self=true;
-    getNextToken(); // eat self
-    Names.push_back(std::make_tuple("_", type_self, std::vector<std::unique_ptr<ExprAST>>{}));
-  }
-
-
-  
-  int i=0;
-  while (CurTok==tok_identifier||CurTok==tok_class_attr||CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
-  {
-    int _type = type_attr;
-    
-    if (in_str(IdentifierStr, objectVars))
-    {
-      
-      //std::cout << "\n\n" << IdentifierStr << " IS ON OBJECT VARS" <<  "\n\n";
-      _type = type_object_name;
-    }
-      
-    if (i==0&&CurTok==(tok_class_attr))
-    {
-      Prev_IdName = IdentifierStr;
-      // Robust check for emtpy
-
-      Names.push_back(std::make_tuple(IdentifierStr, _type, std::vector<std::unique_ptr<ExprAST>>{}));
-      _type = type_attr;
-    }
-      
-    if (i>0)
-      is_class_attr = true;
-
-    if (CurTok!=tok_identifier&&CurTok!=tok_post_class_attr_identifier)
-    {
-      Prev_IdName = IdentifierStr;
-      object_class=IdentifierStr;
-      pre_dot+=IdentifierStr;
-    }
-
-    is_vec=false;
-    if (CurTok==tok_identifier||CurTok==tok_post_class_attr_identifier) // Need to handle vector
-    {
-      // std::cout << "OVERWRITE PREV NAME WITH " << IdName << ".\n";
-      if(IdName!="")
-        Prev_IdName = IdName;
-      IdName = IdentifierStr;
-    } 
-
-
-    getNextToken(); // eat attr/identifier
-
-      
-    if (CurTok=='[')
-    {
-      //std::cout << "tokvec: " << ReverseToken(CurTok) << "\n";
-      getNextToken(); // eat [
-      std::vector<std::unique_ptr<ExprAST>> idx = ParseIdx(parser_struct, class_name);
-      getNextToken(); // eat ]
-      _type = type_vec;
-      //int _type = (Object_toClassVec.count(IdName)>0) ? type_object_vec : type_vec;
-      Names.push_back(std::make_tuple(IdName, _type, std::move(idx)));
-      is_vec=true;
-    } else
-    {
-      if (!IdName.empty() && IdName.find_first_not_of(" \t\n\r") != std::string::npos)
-        Names.push_back(std::make_tuple(IdName, _type, std::vector<std::unique_ptr<ExprAST>>{}));
-    }
-
-    //std::cout << "tok: " << ReverseToken(CurTok) << "\n";
-    i+=1;
-  }
-    
-
-  
-  //std::cout << "Post tok: " << ReverseToken(CurTok) << "\n";
-  
-  // Turns string from object model of class type Model into Model
-  if (Object_toClass.count(object_class)>0)
-    object_class = Object_toClass[object_class]; 
-  
-  
-  
-  
-  //std::cout << "\n\nParseSelfExpr of " << IdentifierStr << " HAS CLASS: " << class_name << " and pre-dot: " << pre_dot << "\n\n\n";
-  
-
-  if (!is_vec&&CurTok!='(') // Simple variable ref.
-  { 
-    if (typeVars.find(IdName) != typeVars.end())
-      type = typeVars[IdName];
-    else if (in_str(IdName, objectVars))
-      type = "object";
-    else if (functionVars.find(IdName) != functionVars.end())
-      type = "tensor";
-    else if (stringMethods.find(IdName) != stringMethods.end())
-      type = "str";
-    else {
-      std::string _error = "Self/attribute variable " + IdName + " was not found in scope.";
-      return LogError(_error);
-      // type = "none";
-    }
-
-      
-
-    std::cout << "Var type: " << type << "\n";
-
-    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-    auto aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
-
-    aux->SetSelf(is_self);
-    aux->SetIsAttribute(is_class_attr);
-    aux->SetPreDot(pre_dot);
-    
-    
-
-    return aux;
-  }
-
-
-
-  if (is_vec)
-  {
-    std::unique_ptr<ExprAST> aux;
-    std::vector<std::unique_ptr<ExprAST>> Idx;
-    
-    
-    
-    if (typeVars.find(IdName) != typeVars.end())
-      type = typeVars[IdName];
-    if (in_str(IdName, objectVars))
-      type = "object_vec";
-
-    if(type=="object_vec")
-      Idx = std::vector<std::unique_ptr<ExprAST>>{};
-    else
-      Idx = std::move(std::get<2>(Names[Names.size()-1]));
-
-    auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-
-    aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
-    aux->SetSelf(is_self);
-    aux->SetIsAttribute(is_class_attr);
-    aux->SetPreDot(pre_dot);
-
-    aux = std::make_unique<VecIdxExprAST>(std::move(aux), std::move(Idx), type);
-    aux->SetIsVec(true);
-
-    return std::move(aux);
-  }
-
-
-
-
-
-
-
-  // PARSE CALL.
-
+std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struct, std::string class_name)
+{
   getNextToken(); // eat (
   std::vector<std::unique_ptr<ExprAST>> Args;
   if (CurTok != ')') {
@@ -1117,23 +930,271 @@ std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string 
       }
         
       else
-        return nullptr;
+        return {};
 
       if (CurTok == ')')
         break;
 
       if (CurTok != ',')
-        return LogError("Expected ')' or ',' on the Function Call arguments list.");
+      {
+
+        LogError("Expected ')' or ',' on the Function Call arguments list.");
+        return {};
+      }
       getNextToken();
     }
   }
-
-  
-  
-  
-
   // Eat the ')'.
   getNextToken();
+  return std::move(Args);
+}
+
+
+std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_expr, Parser_Struct parser_struct, std::string class_name) {
+
+  std::string pre_dot = "";
+  std::string type = "None";
+  std::string object_class;
+  bool is_class_attr=false;
+  bool is_self=false;
+  bool is_vec=false;
+  std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
+  std::string Prev_IdName = "";
+  std::string IdName = "";
+
+
+  is_class_attr = true;
+  pre_dot="";
+
+
+  // tok_identifier: abc
+  // tok_self: self.
+  // tok_class_attr: abc.
+  // tok_post_class_attr_attr: .abc.
+  // tok_post_class_attr_identifier: .abc
+
+
+  if(CurTok==tok_self)
+  {
+    
+    std::unique_ptr<SelfExprAST> self_expr = std::make_unique<SelfExprAST>();
+    getNextToken();
+
+    return std::move(ParseSelfExpr(std::move(self_expr), parser_struct, class_name));
+  }
+
+
+
+  if (CurTok==tok_identifier||CurTok==tok_class_attr||CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
+  {
+    IdName = IdentifierStr;
+    getNextToken();
+    
+    std::unique_ptr<NestedStrExprAST> nested_expr = std::make_unique<NestedStrExprAST>(std::move(inner_expr), IdName, parser_struct);
+
+
+    return std::move(ParseSelfExpr(std::move(nested_expr), parser_struct, class_name));
+  }
+
+
+
+
+  std::cout << "Identifier: " << IdentifierStr << ".\n";
+
+  // Parse call expression
+  if (CurTok=='(')
+  {
+    std::vector<std::unique_ptr<ExprAST>> arguments = Parse_Arguments(parser_struct, class_name);
+
+    std::cout << "FOUND CALL EXPRESSION" << ".\n";
+
+    
+
+    std::string Prev_IdName;
+
+    IdName = inner_expr->Name;
+    Prev_IdName = inner_expr->Inner_Expr->Name;
+    
+
+    std::string callee = IdName;
+
+    inner_expr->skip=true; // skips the pointer object logic for the last name
+
+
+
+    // x.view()
+    if(typeVars.count(Prev_IdName)>0)
+      callee = typeVars[Prev_IdName] + "_" + IdName;
+
+    // model.linear_1(x)
+    if(typeVars.count(IdName)>0)
+    {
+      callee = typeVars[IdName];
+      inner_expr->skip=false;
+    }
+
+    if(Object_toClass[class_name].count(Prev_IdName)>0)
+      callee = Object_toClass[class_name][Prev_IdName] + callee;
+
+
+    
+      
+
+
+    if (in_str(callee, vararg_methods))
+      arguments.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+
+
+    if(inner_expr->skip)
+    {
+      inner_expr = std::move(inner_expr->Inner_Expr);
+      inner_expr->IsLeaf=true;
+    }
+
+
+    std::unique_ptr<NestedCallExprAST> call_expr = std::make_unique<NestedCallExprAST>(std::move(inner_expr), callee, parser_struct, std::move(arguments));
+    
+    return std::move(call_expr);
+  }
+
+
+
+
+
+
+
+  // Parse variable expression
+
+
+  
+  IdName = inner_expr->Name;
+  std::cout << "INNER NAME " << IdName << ".\n";
+
+  if (typeVars.find(IdName) != typeVars.end())
+    type = typeVars[IdName];
+  else if (in_str(IdName, objectVars))
+    type = "object";
+  else if (functionVars.find(IdName) != functionVars.end())
+    type = "tensor";
+  else if (stringMethods.find(IdName) != stringMethods.end())
+    type = "str";
+  else {
+    std::string _error = "Self/attribute variable " + IdName + " was not found in scope.";
+    return LogError(_error);
+    // type = "none";
+  }
+
+
+  std::cout << "RETURN A VARIABLE OF TYPE " << type << ".\n";
+  std::unique_ptr<NestedVariableExprAST> var_expr = std::make_unique<NestedVariableExprAST>(std::move(inner_expr), parser_struct, type);
+  var_expr->SetIsAttribute(true);
+
+
+  
+  return std::move(var_expr);
+
+
+
+
+
+
+
+
+
+  
+  
+  // Turns string from object model of class type Model into Model
+  if (Object_toClass[class_name].count(object_class)>0)
+    object_class = Object_toClass[class_name][object_class]; 
+  
+  
+  
+  
+  
+
+
+
+
+  // if (is_vec)
+  // {
+  //   std::unique_ptr<ExprAST> aux;
+  //   std::vector<std::unique_ptr<ExprAST>> Idx;
+    
+    
+    
+  //   if (typeVars.find(IdName) != typeVars.end())
+  //     type = typeVars[IdName];
+  //   if (in_str(IdName, objectVars))
+  //     type = "object_vec";
+
+  //   if(type=="object_vec")
+  //     Idx = std::vector<std::unique_ptr<ExprAST>>{};
+  //   else
+  //     Idx = std::move(std::get<2>(Names[Names.size()-1]));
+
+  //   auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
+
+  //   aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
+  //   aux->SetSelf(is_self);
+  //   aux->SetIsAttribute(is_class_attr);
+  //   aux->SetPreDot(pre_dot);
+
+  //   aux = std::make_unique<VecIdxExprAST>(std::move(aux), std::move(Idx), type);
+  //   aux->SetIsVec(true);
+
+  //   return std::move(aux);
+  // }
+
+
+
+
+
+
+
+  // PARSE CALL.
+
+  // getNextToken(); // eat (
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  // if (CurTok != ')') {
+  //   while (true) {
+  //     if (CurTok=='>')
+  //     {
+  //       getNextToken();
+  //       auto inner_vec = ParseExpression(parser_struct, class_name, false);
+        
+  //       auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
+  //       Args.push_back(std::move(Arg));
+  //     }
+  //     else if (CurTok==':')
+  //     {
+  //       getNextToken(); // eat >
+  //       auto inner_vec = ParseExpression(parser_struct, class_name, false);
+        
+  //       auto Arg = std::make_unique<SplitStridedParallelExprAST>(std::move(inner_vec));
+  //       Args.push_back(std::move(Arg));
+  //     }
+  //     else if (auto Arg = ParseExpression(parser_struct, class_name, false))
+  //     {
+  //       //std::cout << "Parsed arg " << Arg->GetName() << "\n";
+  //       Args.push_back(std::move(Arg));
+  //     }
+        
+  //     else
+  //       return nullptr;
+
+  //     if (CurTok == ')')
+  //       break;
+
+  //     if (CurTok != ',')
+  //       return LogError("Expected ')' or ',' on the Function Call arguments list.");
+  //     getNextToken();
+  //   }
+  // } 
+
+  // // Eat the ')'.
+  // getNextToken();
+
+
 
 
 
@@ -1227,6 +1288,14 @@ std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string 
 
   return aux;
 }
+
+
+
+
+
+
+
+
 
 
 std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::unique_ptr<ExprAST> previous_call_expr, std::string class_name) {
@@ -1483,7 +1552,7 @@ std::unique_ptr<ExprAST> ParseMustBeVar(Parser_Struct parser_struct, std::string
   std::unique_ptr<ExprAST> expr;
 
   if (CurTok==tok_class_attr||CurTok==tok_self)
-    expr = ParseSelfExpr(parser_struct, class_name);
+    expr = ParseSelfExpr(std::make_unique<EmptyStrExprAST>(), parser_struct, class_name);
   else if (CurTok==tok_identifier)
     expr = ParseIdentifierExpr(parser_struct, class_name, false, false);
   else
@@ -1585,9 +1654,9 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
   case tok_identifier:
     return ParseIdentifierExpr(parser_struct, class_name, false, can_be_list);
   case tok_class_attr:
-    return ParseSelfExpr(parser_struct, class_name);
+    return ParseSelfExpr(std::make_unique<EmptyStrExprAST>(), parser_struct, class_name);
   case tok_self:
-    return ParseSelfExpr(parser_struct, class_name);
+    return ParseSelfExpr(std::make_unique<EmptyStrExprAST>(), parser_struct, class_name);
   case tok_number:
     return ParseNumberExpr(parser_struct);
   case tok_int:
@@ -2141,6 +2210,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
 
   // std::cout << "PROTO NAME IS " << Proto->getName() << ".\n";
   parser_struct.function_name = Proto->getName();
+  // parser_struct.function_name = class_name+"_"+Proto->getName();
   
   
   std::vector<std::unique_ptr<ExprAST>> Body;
@@ -2241,7 +2311,8 @@ std::unique_ptr<ExprAST> ParseClass() {
 
       if (is_object) {
         objectVars.push_back(IdentifierStr);
-        Object_toClass[IdentifierStr] = data_type; 
+        Object_toClass[Name][IdentifierStr] = data_type; 
+        std::cout << "----PARSING OBJECT INSIDE CLASS " << IdentifierStr << "/" << data_type << ".\n";
       }
       else
        typeVars[IdentifierStr] = data_type;
