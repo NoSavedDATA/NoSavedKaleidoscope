@@ -58,11 +58,9 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     code_line = scope_to_copy->code_line;
 
     asyncs_count = scope_to_copy->asyncs_count;
-    
 }
 
 void Scope_Struct::Alloc_MarkSweepMap() {
-    // mark_sweep_map = new DT_dict();
     mark_sweep_map = new MarkSweep();
 }
 
@@ -104,13 +102,6 @@ extern "C" Scope_Struct *scope_struct_Dive(Scope_Struct *scope_struct) {
 
 
 
-extern "C" void set_scope_at_return(Scope_Struct *scope_struct) {
-    scope_struct->is_at_return = true;
-}
-extern "C" void set_scope_not_at_return(Scope_Struct *scope_struct) {
-    // std::cout << "set_scope_not_at_return" << ".\n";
-    scope_struct->is_at_return = false;
-}
 
 extern "C" void set_scope_first_arg(Scope_Struct *scope_struct, char *first_arg) {
     // std::cout << "set_scope_first_arg: " << first_arg << ".\n";
@@ -272,6 +263,8 @@ inline void delete_scope(Scope_Struct *scope_struct) {
 extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
     scope_struct->mark_sweep_map->clean_up(false);
 }  
+
+
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     if (strcmp(scope_struct->function_name,"")==0)

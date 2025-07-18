@@ -378,11 +378,20 @@ class NestedStrExprAST : public NameableExprAST {
 };
   
 
-class NestedVariableExprAST : public ExprAST {
-  std::unique_ptr<NameableExprAST> Inner_Expr;
+class NestedVectorIdxExprAST : public NameableExprAST {
   Parser_Struct parser_struct;
-   
+  
   public:
+    std::vector<std::unique_ptr<ExprAST>> Idxs;
+    NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct, std::vector<std::unique_ptr<ExprAST>>, std::string);
+    Value *codegen(Value *scope_struct) override;
+};
+
+class NestedVariableExprAST : public ExprAST {
+  
+  public:
+    Parser_Struct parser_struct;
+    std::unique_ptr<NameableExprAST> Inner_Expr;
     bool Load_Val = true;
     
     NestedVariableExprAST(std::unique_ptr<NameableExprAST>, Parser_Struct, std::string);

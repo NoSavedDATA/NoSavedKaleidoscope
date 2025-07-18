@@ -384,13 +384,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
 
     bool is_var_forward = false;
     bool return_tensor = false;
-    if (functionVars.find(IdName) != functionVars.end()) // if found
-    {
-      is_var_forward = true;
-      return_tensor = true;
-      name_solve_to_last = true;
-      callee_override = functionVars[IdName];
-    }
     if (floatFunctions.find(IdName) != floatFunctions.end()) // if found
     {
       is_var_forward = true;
@@ -973,25 +966,19 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
   // tok_post_class_attr_attr: .abc.
   // tok_post_class_attr_identifier: .abc
 
-
   if(CurTok==tok_self)
-  {
-    
+  { 
     std::unique_ptr<SelfExprAST> self_expr = std::make_unique<SelfExprAST>();
     getNextToken();
-
     return std::move(ParseSelfExpr(std::move(self_expr), parser_struct, class_name));
   }
-
-
 
   if (CurTok==tok_identifier||CurTok==tok_class_attr||CurTok==tok_post_class_attr_attr||CurTok==tok_post_class_attr_identifier)
   {
     IdName = IdentifierStr;
     getNextToken();
-    
+ 
     std::unique_ptr<NestedStrExprAST> nested_expr = std::make_unique<NestedStrExprAST>(std::move(inner_expr), IdName, parser_struct);
-
 
     return std::move(ParseSelfExpr(std::move(nested_expr), parser_struct, class_name));
   }
@@ -999,14 +986,10 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
 
 
-  std::cout << "Identifier: " << IdentifierStr << ".\n";
-
   // Parse call expression
   if (CurTok=='(')
   {
     std::vector<std::unique_ptr<ExprAST>> arguments = Parse_Arguments(parser_struct, class_name);
-
-    std::cout << "FOUND CALL EXPRESSION" << ".\n";
 
     
 
@@ -1033,8 +1016,8 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
       inner_expr->skip=false;
     }
 
-    if(Object_toClass[class_name].count(Prev_IdName)>0)
-      callee = Object_toClass[class_name][Prev_IdName] + callee;
+    // if(Object_toClass[class_name].count(Prev_IdName)>0)
+    //   callee = Object_toClass[class_name][Prev_IdName] + callee;
 
 
     
@@ -1052,30 +1035,73 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
     }
 
 
+    std::string nested_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct);
+    callee = nested_name+callee; // Add variable high-level class to the name
+
+    // if(lib_function_remaps.count(tgt_function)>0)
+    //   tgt_function = lib_function_remaps[tgt_function];
+
     std::unique_ptr<NestedCallExprAST> call_expr = std::make_unique<NestedCallExprAST>(std::move(inner_expr), callee, parser_struct, std::move(arguments));
+
+
+
     
+    if (functions_return_type.count(callee)>0)
+      call_expr->SetType(functions_return_type[callee]);
+
+    if (CurTok == tok_post_class_attr_identifier)
+      return ParseChainCallExpr(parser_struct, std::move(call_expr), class_name);
+
+    
+
+
     return std::move(call_expr);
   }
 
 
 
+  if (CurTok=='[') {
 
+
+    IdName = inner_expr->Name;
+    std::cout << "VECTOR NAME " << IdName << ".\n";
+
+    if (typeVars.find(IdName) != typeVars.end())
+      type = typeVars[IdName];
+    else if (in_str(IdName, objectVars))
+      type = "object";
+    else if (stringMethods.find(IdName) != stringMethods.end())
+      type = "str";
+    else {
+      std::string _error = "Self/attribute variable " + IdName + " was not found in scope.";
+      return LogError(_error);
+      // type = "none";
+    }
+
+
+    getNextToken(); // eat [
+    std::vector<std::unique_ptr<ExprAST>> idx = ParseIdx(parser_struct, class_name);
+    getNextToken(); // eat ]
+
+    
+    std::unique_ptr<NestedVectorIdxExprAST> vec_expr = std::make_unique<NestedVectorIdxExprAST>(std::move(inner_expr), IdName, parser_struct, std::move(idx), type);
+    vec_expr->SetIsAttribute(true);
+
+
+    return std::move(vec_expr);
+  }
 
 
 
   // Parse variable expression
 
-
   
   IdName = inner_expr->Name;
-  std::cout << "INNER NAME " << IdName << ".\n";
 
   if (typeVars.find(IdName) != typeVars.end())
     type = typeVars[IdName];
   else if (in_str(IdName, objectVars))
     type = "object";
-  else if (functionVars.find(IdName) != functionVars.end())
-    type = "tensor";
   else if (stringMethods.find(IdName) != stringMethods.end())
     type = "str";
   else {
@@ -1085,7 +1111,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
   }
 
 
-  std::cout << "RETURN A VARIABLE OF TYPE " << type << ".\n";
   std::unique_ptr<NestedVariableExprAST> var_expr = std::make_unique<NestedVariableExprAST>(std::move(inner_expr), parser_struct, type);
   var_expr->SetIsAttribute(true);
 
@@ -1115,35 +1140,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
 
 
-  // if (is_vec)
-  // {
-  //   std::unique_ptr<ExprAST> aux;
-  //   std::vector<std::unique_ptr<ExprAST>> Idx;
-    
-    
-    
-  //   if (typeVars.find(IdName) != typeVars.end())
-  //     type = typeVars[IdName];
-  //   if (in_str(IdName, objectVars))
-  //     type = "object_vec";
-
-  //   if(type=="object_vec")
-  //     Idx = std::vector<std::unique_ptr<ExprAST>>{};
-  //   else
-  //     Idx = std::move(std::get<2>(Names[Names.size()-1]));
-
-  //   auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-
-  //   aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
-  //   aux->SetSelf(is_self);
-  //   aux->SetIsAttribute(is_class_attr);
-  //   aux->SetPreDot(pre_dot);
-
-  //   aux = std::make_unique<VecIdxExprAST>(std::move(aux), std::move(Idx), type);
-  //   aux->SetIsVec(true);
-
-  //   return std::move(aux);
-  // }
 
 
 
@@ -1226,14 +1222,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
   bool return_tensor = false;
   bool return_string = false;
   // Override function calls: e.g: conv1 -> Conv2d
-  if (functionVars.count(IdName) > 0)
-  {
-    is_var_forward = true;
-    return_tensor = true;
-    name_solve_to_last = true;
-    callee_override = functionVars[IdName];
-
-  } else if (floatFunctions.find(IdName) != floatFunctions.end())
+  if (floatFunctions.find(IdName) != floatFunctions.end())
   {
     is_var_forward = true;
     callee_override = floatFunctions[IdName];

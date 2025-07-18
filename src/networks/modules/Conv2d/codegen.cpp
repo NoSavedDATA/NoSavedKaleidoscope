@@ -41,7 +41,7 @@ void conv2d_backward(float *inp, int size, float *out,
 
 
 
-extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
+extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, Conv2dCPP *conv, DT_tensor *tensor)
 {
 
   // std::cout << "Conv2d pointer is: " << scope_struct->object_ptr << ".\n";
@@ -64,7 +64,6 @@ extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   int H = dims[dims.size()-2];
   int W = dims[dims.size()-1];
 
-  Conv2dCPP *conv = (Conv2dCPP*) scope_struct->object_ptr;
 
 
   if ((int)C!=(int)conv->C)

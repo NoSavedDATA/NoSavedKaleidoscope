@@ -121,7 +121,7 @@ extern "C" float Linear_weight(Scope_Struct *scope_struct, char *name) {
 extern "C" void *Linear_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
 
-  std::cout << "\n\n\n----------------------EXECUTION: CREATING LINEAR: " << name << ".\n\n\n\n";
+  // std::cout << "\n\n\n----------------------EXECUTION: CREATING LINEAR: " << name << ".\n\n\n\n";
 
 
   std::string init = "xavu";
@@ -150,7 +150,7 @@ extern "C" void *Linear_Create(Scope_Struct *scope_struct, char *name, char *sco
   LinearCPP *linear = new LinearCPP(C, OC, init, notes, name);
 
 
-  std::cout << "Linear " << C << "/" << OC << ".\n";
+  // std::cout << "Linear " << C << "/" << OC << ".\n";
 
 
   return linear;

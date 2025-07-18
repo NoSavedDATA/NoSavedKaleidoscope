@@ -245,6 +245,20 @@ NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, 
   Print_Names_Str(Expr_String);
 }
 
+NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>> Idxs, std::string type)
+                                        : parser_struct(parser_struct), Idxs(std::move(Idxs)) {
+  this->Inner_Expr = std::move(Inner_Expr);
+  this->Inner_Expr->IsLeaf=false;
+  this->Name = name;
+  this->SetType(type);
+  
+  height=this->Inner_Expr->height+1;
+
+  Expr_String = this->Inner_Expr->Expr_String;
+  Expr_String.push_back(name);
+  Print_Names_Str(Expr_String);
+}
+
 
 
 NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,

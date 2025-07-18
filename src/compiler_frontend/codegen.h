@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "llvm/IR/Value.h"
 
@@ -43,3 +44,5 @@ AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 
 
 Type *get_type_from_str(std::string type);
+
+std::string Get_Nested_Name(std::vector<std::string>, Parser_Struct);

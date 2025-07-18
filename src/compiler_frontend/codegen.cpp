@@ -259,6 +259,19 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
 
 
+
+    if(Type!="float"&&Type!="int")
+    {
+      call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
+      if(is_self||is_attr)
+        call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
+      else
+        call("MarkToSweep_Unmark_Scopeful", {scope_struct, initial_value});
+    }
+
+
+      
+
     if(is_self)
     {
       int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
@@ -266,8 +279,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
   
       Value *obj = callret("get_scope_object", {scope_struct});
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
-      // std::exit(0);
-    } else {
+
+    } else if (is_attr) {
+    }
+    else {
       
 
 
@@ -279,20 +294,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       function_allocas[parser_struct.function_name][VarName] = alloca;
 
 
-
-      if(Type!="float"&&Type!="int")
-      {
-        if(!(is_self||is_attr))
-        {
-          // p2t("DATA MARK TO SWEEP OF "+Type);
-          call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
-          call("MarkToSweep_Unmark_Scopeful", {scope_struct, initial_value});
-        }
-        else
-        {
-          call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
-        }
-      }
     }
 
       
@@ -301,17 +302,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     call("Dispose_NotesVector", {notes_vector, scopeless_name});
 
-    // if(Type!="float"&&Type!="int")
-    // {
-    //   if(!(is_self||is_attr))
-    //   {
-    //     call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
-    //   }
-    //   else
-    //   {
-    //     call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
-    //   }
-    // }
+    
     call("str_Delete", {var_name});
   }
 
@@ -1079,7 +1070,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
           call(store_trigger, {Lvar_name, old_val, Val_indexed, scope_struct});
         }
 
-        // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
         Builder->CreateStore(Val_indexed, alloca);
 
         if (LType!="float"&&LType!="int")
@@ -1127,15 +1117,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     
 
     Value *Lvar_name;
-    if (is_alloca)
-    {
-      if (LType!="float"&&LType!="int")
-      {
-        // p2t("CLEAN OLD VALUE OF " + Lname);
-        // Value *old_val = load_alloca(Lname, LType, parser_struct.function_name);
-        // call("MarkToSweep_Mark_Scopeful", {scope_struct, old_val, global_str(LType)});
-      }
-    }
       
     
     
@@ -1155,7 +1136,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
       AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
 
-      if(auto Rvar = dynamic_cast<VariableExprAST *>(RHS.get()));
+      if(auto Rvar = dynamic_cast<VariableExprAST *>(RHS.get())) // if it is leaf
       {
         Function *F = TheModule->getFunction(copy_fn);
         if (F)
@@ -1165,6 +1146,16 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         }
       }
 
+
+
+      if (LType!="float"&&LType!="int")
+      {
+        Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
+        call("MarkToSweep_Mark_Scopeful", {scope_struct, old_val, global_str(LType)});
+      }
+
+
+
       Function *F = TheModule->getFunction(store_trigger);
       if (F)
       {
@@ -1173,40 +1164,47 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         Val = callret(store_trigger, {Lvar_name, old_val, Val, scope_struct});
       }
 
-      // std::cout << "Store " << Lname << " as alloca at " << parser_struct.function_name << "/" << parser_struct.function_name << " *********************************** type " << LType <<"/"<<RHS->GetType() << ".\n";
+      if (LType!="float"&&LType!="int")
+        call("MarkToSweep_Unmark_Scopeful", {scope_struct, Val, global_str(LType)});
+
+
       Builder->CreateStore(Val, alloca);
     } else
     {
 
-      NestedVariableExprAST *LHSV = static_cast<NestedVariableExprAST *>(LHS.get());
-      LHSV->Load_Val = false;
 
+      if(auto *LHSV = dynamic_cast<NestedVectorIdxExprAST *>(LHS.get())) {
 
-      Value *obj_ptr = LHSV->codegen(scope_struct);
+        LHSV->skip=true;
+        Value *obj_ptr = LHSV->codegen(scope_struct);
+        std::string type = LHSV->GetType();
 
-      
-      if(LType=="float"||LType=="int")
-      {
-        call("object_Attr_"+LType, {obj_ptr, Val});
-      } else {
+        Value *idx = Idx_Calc_Codegen(type, obj_ptr, LHSV->Idxs, scope_struct);
 
+        call(type+"_Store_Idx", {obj_ptr, idx, Val, scope_struct});
       }
+
+      if(auto *LHSV = dynamic_cast<NestedVariableExprAST *>(LHS.get())) {
+        LHSV->Load_Val = false;
+        LHSV->Inner_Expr->Load_Last=false;
+
+
+        Value *obj_ptr = LHSV->codegen(scope_struct);
+        
+        if(LType=="float"||LType=="int")
+          call("object_Attr_"+LType, {obj_ptr, Val});
+        else
+          call("tie_object_to_object", {obj_ptr, Val});
+      }
+      
+
+      if (LType!="float"&&LType!="int")
+        call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val, global_str(LType)});
     }
     
 
 
 
-    if (LType!="float"&&LType!="int")
-    {
-      if(!LHS->GetSelf()&&!LHS->GetIsAttribute())
-      {
-        call("MarkToSweep_Unmark_Scopeful", {scope_struct, Val});
-      } 
-      else
-      {
-        call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val});
-      }
-    }
     
 
     seen_var_attr=false;
@@ -1330,7 +1328,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       std::string return_type = ops_type_return[Elements];
       // std::cout << "Operation of " << Elements << " has a return of " << return_type << ".\n";
 
-      // p2t("MARK TO SWEEP OF "+return_type);
       if (return_type!="float"&&return_type!="int")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(return_type)});
     }
@@ -1895,7 +1892,6 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 Value *RetExprAST::codegen(Value *scope_struct) {
   seen_var_attr=true;
 
-  call("set_scope_at_return", {scope_struct});
 
 
   if(Vars.size()==1)
@@ -1905,9 +1901,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     std::string type = Vars[0]->GetType();
     if(type!="float"&&type!="int")
       call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
-      // call("MarkToSweep_Mark", {scope_struct, ret, global_str(type)});
+
     seen_var_attr=false;
-    call("set_scope_not_at_return", {scope_struct});
     call("scope_struct_Clean_Scope", {scope_struct}); 
     Builder->CreateRet(ret);
     return const_float(0);
@@ -1927,7 +1922,6 @@ Value *RetExprAST::codegen(Value *scope_struct) {
 
   seen_var_attr=false;
   Value *ret = callret("list_New", values);
-  call("set_scope_not_at_return", {scope_struct});
   call("scope_struct_Clean_Scope", {scope_struct}); 
   Builder->CreateRet(ret);
   return ret;
@@ -2225,6 +2219,29 @@ Value *SelfExprAST::codegen(Value *scope_struct) {
 }
 
 
+
+std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
+
+  int last = expressions_string_vec.size();
+
+
+  std::string _class=""; 
+
+  int i=0;
+  if(expressions_string_vec[i]=="self") {
+    _class = parser_struct.class_name; 
+    i++;
+  }
+  for(; i<last; ++i)
+  {
+    _class = Object_toClass[_class][expressions_string_vec[i]];
+  }
+
+  return _class;
+}
+
+
+
 int Get_Nested_Class_Size(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
 
   int last = expressions_string_vec.size();
@@ -2310,7 +2327,9 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 
     std::string _type = typeVars[Name];
     if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
+    {
       obj_ptr = callret("object_Load_slot", {obj_ptr});
+    }
 
     return obj_ptr;
 
@@ -2345,12 +2364,33 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 }
 
 
+
+
+Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {  
+  if(skip)
+    return Inner_Expr->codegen(scope_struct);
+
+
+  Value *obj_ptr = Inner_Expr->codegen(scope_struct);
+ 
+  Value *idx = Idx_Calc_Codegen(Type, obj_ptr, Idxs, scope_struct);
+
+
+  return callret(Type+"_Idx", {scope_struct, obj_ptr, idx});
+}
+
+
+
+
+
+
+
 Value *NestedVariableExprAST::codegen(Value *scope_struct) {
   // std::cout << "Nested Variable Expr" << ".\n";
   Value *ptr = Inner_Expr->codegen(scope_struct);
 
-  if (Load_Val) {
-    Type = (Type=="float"||Type=="int") ? Type : "slot";
+  if (Load_Val&&(Type=="float"||Type=="int")) {
+    
     return callret("object_Load_"+Type, {ptr});
   }
 
@@ -2361,22 +2401,21 @@ Value *NestedVariableExprAST::codegen(Value *scope_struct) {
 
 
 Value *NestedCallExprAST::codegen(Value *scope_struct) {
-
   // std::cout << "--NestedCall Calling " << Callee << ".\n";
-
   // p2t("Calling: " + Callee);
   
   bool is_nsk_fn = in_str(Callee, native_fn);
 
   
   Value *obj_ptr;
-  
-
   Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
 
+  call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
 
 
-  if(ends_with(Callee, "__init__")&&parser_struct.function_name!="__anon_expr")
+
+
+  if(ends_with(Callee, "__init__")&&parser_struct.function_name!="__anon_expr") // mallocs an object inside another
   {
 
     Inner_Expr->Load_Last=false; // inhibits Load_slot
@@ -2405,17 +2444,16 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
 
   int target_args_size = Args.size()+1; // +1 for scope_struct
 
+
+
   std::vector<Value *> ArgsV = {scope_struct_copy};
-
-
-
-  if (is_nsk_fn)
+  if (is_nsk_fn) // load of x at x.shape()
   {
     target_args_size++;
     ArgsV.push_back(obj_ptr);
   }
-
   ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, Callee);
+
 
 
   Function *CalleeF;
@@ -2434,12 +2472,23 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
     return LogErrorV(_error);
   }
 
-  Value *ret=callret(Callee, ArgsV);
+
+  // Call function
+  Value *ret = callret(Callee, ArgsV);
+
+  // Clean-up
   call("scope_struct_Delete", {scope_struct_copy});
-
-
+  
+  if(!in_str(Type, {"float", "int", "", "None"}))
+    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+  
   return ret;
 }
+
+
+
+
+
 
 
 Value *CallExprAST::codegen(Value *scope_struct) {
@@ -2475,7 +2524,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   Value *name;
   
 
-  int thread = 0;
 
   msg = "---\nCallExpr " + Callee;
   p2t(msg);
@@ -2483,27 +2531,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
   Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
-  Value *first_arg, *scope_string, *thread_id, *has_grad;
+  Value *first_arg, *scope_string;
 
 
-  if (starts_with(functionName.c_str(), "__async_"))
-  {
-    // msg = "\n\n\n\n\nCallExpr ASYNC\n\n\n\n\n";
-    // p2t(msg);
-    
-    std::string copy = functionName;
-    std::string prefix = "__async_";
-    
-    size_t pos = copy.find(prefix);
-    copy.erase(pos, prefix.length());
-    thread = std::stoi(copy);
-    // thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), thread);
-    thread_id = callret("get_scope_thread_id", {scope_struct});
-    has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
-    
-    call("scope_struct_Get_Async_Scope", {scope_struct_copy, thread_id, has_grad}); // Also sets scope_string to empty.
-    //todo: Solve scope_string discontinuity on async functions
-  }
   
 
 
@@ -2511,7 +2541,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
   msg = "\n\n\nCallExpr Function name: " + functionName;
   p2t(msg);
-  msg = "CallExpr THREAD IS: " + std::to_string(thread);
   msg = msg + "\n\n\n\n\n\n";
   p2t(msg);
 
@@ -2548,80 +2577,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
 
-      if (isAttribute) {
-        NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-        int type;
-        type = std::get<1>(name_solver->Names[0]);
-
-        if(!isSelf)
-        {        
-
-          Value *obj = Get_Object_Value(name_solver, parser_struct);
-          call("set_scope_object", {scope_struct_copy, obj});
-        }
-      }
     }
 
 
-    if (isSelf) { 
-      NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-      int type;
-      type = std::get<1>(name_solver->Names[0]);
-
-
-      Value *obj;
-      std::cout << "----------------------------Names size: " << name_solver->Names.size() << ".\n";
-      int name_solve_to_last = name_solver->GetNameSolveToLast();
-      std::cout << "name_solve_to_last " << name_solve_to_last << ".\n";
-
-      int names_size = name_solver->Names.size();
-      names_size = names_size-1;
-      
-      
-
-
-      std::string method_name = std::get<0>(name_solver->Names[names_size]);
-      if (method_name=="__init__") {
-        names_size--;
-      }
-
-      names_size += name_solve_to_last;
-
-      obj = callret("get_scope_object", {scope_struct});
-
-      
-      std::cout << "solve to: " << names_size << ".\n";
-
-      std::string cur;
-      int object_ptr_offset;
-      for (int i=1; i<names_size; ++i)
-      {
-        cur = std::get<0>(name_solver->Names[i]);
-        std::cout << "---------------solve " << i << ": " << cur << ".\n";
-        if (i==1)
-        {
-          object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
-          std::cout << "SET obj_ptr OF nested FUNCTION ALLOCA " << parser_struct.function_name << ", object: " << cur <<  " offset " << object_ptr_offset << ".\n";
-          obj = callret("object_ptr_Load_on_Offset", {obj, const_int(object_ptr_offset)});
-        }
-      }
-
-
-      if (method_name=="__init__") { 
-        cur = std::get<0>(name_solver->Names[names_size]);
-        object_ptr_offset = ClassVariables[parser_struct.class_name][cur];
-        
-        Value *obj_ptr;
-        int obj_size = ClassSize[Object_toClass[""][cur]];
-        obj_ptr = callret("malloc", {const_int64(obj_size)});
-
-        call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), obj_ptr});
- 
-        obj = obj_ptr;
-      }
-
-      call("set_scope_object", {scope_struct_copy, obj});
-    }
     
     first_arg = NameSolver->codegen(scope_struct_copy);
     call("set_scope_first_arg", {scope_struct_copy, first_arg});
@@ -2629,8 +2587,8 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     changed_first_arg = true;  
   }
 
-  if(lib_function_remaps.count(tgt_function)>0)
-    tgt_function = lib_function_remaps[tgt_function];
+  // if(lib_function_remaps.count(tgt_function)>0)
+  //   tgt_function = lib_function_remaps[tgt_function];
   
   
   call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
@@ -2654,8 +2612,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   }
 
   target_args_size+=1; //always add scope_struct
-  if (Load_Type!="none") // x.view() -> tensor_Load(x)
-    target_args_size += 1;
 
 
 
@@ -2668,27 +2624,24 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
   // Detect function errors
   Function *CalleeF;
-  if (!IsVarForward)
+  // std::cout << "TGT_FUNCTION " <<  tgt_function << ".\n";
+  // p2t("TGT FUNCTION " + tgt_function);
+
+  CalleeF = getFunction(tgt_function);
+  if (!CalleeF)
   {
-    // std::cout << "TGT_FUNCTION " <<  tgt_function << ".\n";
-    // p2t("TGT FUNCTION " + tgt_function);
+    std::string _error = "The referenced function "+ tgt_function +" was not yet declared.";
+    return LogErrorV(_error);
+  }
 
-    CalleeF = getFunction(tgt_function);
-    if (!CalleeF)
-    {
-      std::string _error = "The referenced function "+ tgt_function +" was not yet declared.";
-      return LogErrorV(_error);
-    }
+  tgt_function_name = CalleeF->getName().str();
 
-    tgt_function_name = CalleeF->getName().str();
-
-    // If argument mismatch error.
-    if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
-    {
-      // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
-      std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
-      return LogErrorV(_error);
-    }
+  // If argument mismatch error.
+  if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
+  {
+    // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
+    std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
+    return LogErrorV(_error);
   }
   // std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
   msg = "CallExpr Calling function: " + tgt_function;
@@ -2700,29 +2653,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
  
-  // --- Args --- //
-  if (Load_Type!="none") // x.view() -> tensor_Load
-  {
-    // std::cout << "Load of: " << LoadOf << ".\n";
-    // p2t("Load of: " + LoadOf);
-    Value *arg;
-    // if (!isSelf&&!isAttribute)
-    if (!isSelf)
-    {
-
-      arg = load_alloca(LoadOf, Load_Type, parser_struct.function_name);
-
-    } else if (Load_Type!="pinned_tensor"&&isSelf) {
-      // p2t("It is an attribute");
-      arg = callret("get_scope_object", {scope_struct_copy});
-    }
-    else {
-      // p2t("It is unknown");
-      std::string load_fn = Load_Type+"_Load";
-      arg = callret(load_fn, {scope_struct_copy, callret("get_scope_first_arg", {scope_struct_copy})});  
-    }
-    ArgsV.push_back(arg);
-  }
 
 
 
@@ -2766,7 +2696,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
         return LogErrorV(_error);
       }
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-
     }
     else
     {

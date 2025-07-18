@@ -176,7 +176,6 @@ std::map<std::string, std::string> reverse_ops;
 //global
 std::vector<std::string> objectVars;
 std::vector<std::string> globalVars;
-std::map<std::string, std::string> functionVars;
 std::map<std::string, std::string> floatFunctions;
 std::map<std::string, std::string> stringMethods;
 std::map<std::string, pthread_mutex_t *> lockVars;
@@ -551,7 +550,7 @@ Function *FunctionAST::codegen() {
 
   
   // Record the function arguments in the NamedValues map.
-  Value *scope_string, *thread_id, *has_grad, *scope_struct;
+  Value *thread_id, *has_grad, *scope_struct;
 
   
   scope_struct = callret("scope_struct_Create", {});
@@ -602,9 +601,7 @@ Function *FunctionAST::codegen() {
     if (arg_name == "scope_struct")
     {
         p2t("-------------------------------------------=============-----------------===========--------FunctionAST COPY SCOPE STRUCT");
-        //   scope_struct = callret("scope_struct_Dive", {&Arg});
         scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
-        scope_string = callret("get_scope_scope", {scope_struct});
     } else { 
         std::string type = "";
         if (typeVars.find(arg_name) != typeVars.end())
@@ -613,43 +610,33 @@ Function *FunctionAST::codegen() {
 
 
         
-        // Coder args
-        // if (type=="float"||type=="str"||type=="int"||type=="tensor") {
-            // std::cout << "Arg STORE OF " << current_codegen_function << "/" << arg_name << ".\n";
-            llvm::Type *alloca_type = get_type_from_str(type);
-            AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
+        llvm::Type *alloca_type = get_type_from_str(type);
+        AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
 
-            
-            std::string copy_fn = type+"_CopyArg";
-            Function *F = TheModule->getFunction(copy_fn);
-            if (F)
+
+        
+        std::string copy_fn = type+"_CopyArg";
+        Function *F = TheModule->getFunction(copy_fn);
+        if (F)
+        {
+            Value *copied_value = callret(copy_fn,
+                            {scope_struct,
+                            &Arg,
+                            global_str(arg_name)});
+                            
+            Builder->CreateStore(copied_value, arg_alloca);
+            call("MarkToSweep_Mark", {scope_struct, copied_value, global_str(type)});
+            call("MarkToSweep_Unmark_Scopeful", {scope_struct, copied_value});
+        } else
+        {
+            Builder->CreateStore(&Arg, arg_alloca);
+            if(type!="float"&&type!="int")
             {
-                Value *copied_value = callret(copy_fn,
-                                {scope_struct,
-                                &Arg,
-                                global_str(arg_name)});
-                                
-                Builder->CreateStore(copied_value, arg_alloca);
-                call("MarkToSweep_Mark", {scope_struct, copied_value, global_str(type)});
-                call("MarkToSweep_Unmark_Scopeful", {scope_struct, copied_value});
-            } else
-            {
-                Builder->CreateStore(&Arg, arg_alloca);
-                if(type!="float"&&type!="int")
-                    call("MarkToSweep_Unmark_Scopeless", {scope_struct, &Arg});
+                p2t("HELLO FROM ELSE");
+                // call("MarkToSweep_Unmark_Scopeless", {scope_struct, &Arg});
             }
-            function_allocas[current_codegen_function][arg_name] = arg_alloca;
-        // }
-        // else if (type!="tensor")
-        // {
-        //     Value *var_name = global_str(arg_name);
-        //     var_name = callret("ConcatStr", {scope_string, var_name});
-
-        //     call(type+"_Store", {var_name, &Arg, scope_struct});
-
-        //     if (type!="float"&&type!="int")
-        //         call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
-        // } 
+        }
+        function_allocas[current_codegen_function][arg_name] = arg_alloca;
         
     }
   }
@@ -672,12 +659,8 @@ Function *FunctionAST::codegen() {
   }
 
 
-//   call("scope_struct_Clean_Scope", {scope_struct}); 
 
-
-  
-  
-  
+ 
 
 
   if (RetVal) {
