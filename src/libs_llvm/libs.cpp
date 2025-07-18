@@ -493,20 +493,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
 
-	FunctionType *set_scope_at_returnTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_at_return", set_scope_at_returnTy);
-
-	FunctionType *set_scope_not_at_returnTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_not_at_return", set_scope_not_at_returnTy);
-
 	FunctionType *set_scope_first_argTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -1097,7 +1083,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *Conv2dTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("Conv2d", Conv2dTy);
@@ -2049,7 +2035,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *EmbeddingTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("Embedding", EmbeddingTy);

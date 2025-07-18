@@ -218,7 +218,7 @@ extern "C" int object_Load_int(void *object_ptr) {
 extern "C" void *object_Load_slot(void *object_ptr) {
   // Read a void* attribute stored at object_ptr
   void **slot = (void **)((char *)object_ptr);
-  // std::cout << "Loading " << slot << " from " << object_ptr << " on offset " << offset << ".\n";
+  // std::cout << "Loading slot " << *slot << " from " << object_ptr << ".\n";
 
   return *slot;
 }

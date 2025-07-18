@@ -4,23 +4,24 @@
 #include <map>
 #include <string>
 
+#include "../compiler_frontend/logging.h"
 #include "../clean_up/clean_up.h"
 #include "../mangler/scope_struct.h"
+#include "../tensor/include.h"
 #include "mark_sweep.h"
 
 
-MarkSweepAtom::MarkSweepAtom(const std::string & data_type, bool marked) {
-    this->data_type = data_type;
-    this->marked = marked;
+
+MarkSweepAtom::MarkSweepAtom(std::string data_type) : data_type(data_type) {
 }
 
-void MarkSweepAtom::inc() {
+void MarkSweepAtom::inc_scopeful() {
     this->scope_refs+=1;
 }
 void MarkSweepAtom::inc_scopeless() {
-    this->scope_refs+=1;
     this->scopeless_refs+=1;
 }
+
 void MarkSweepAtom::dec_scopeful() {
     if(this->scope_refs>0)
         this->scope_refs-=1;
@@ -29,6 +30,7 @@ void MarkSweepAtom::dec_scopeless() {
     if(this->scopeless_refs>0)
         this->scopeless_refs-=1;
 }
+
 void MarkSweepAtom::dec() {
     if(this->scopeless_refs>0)
         this->scopeless_refs-=1;
@@ -42,13 +44,9 @@ void MarkSweep::append(void *data_ptr, std::string data_type) {
 
     auto it = mark_sweep_map.find(data_ptr);
     if (it!=mark_sweep_map.end())
-    {
-        it->second->dec();
-        mark_sweep_map[data_ptr] = it->second;
-
-    }
+    {}
     else
-        mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
+        mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type);
 }
 
 
@@ -58,12 +56,12 @@ void MarkSweep::mark_scopeful(void *data_ptr, std::string data_type) {
     if (it!=mark_sweep_map.end())
     {
         it->second->dec_scopeful();
-        mark_sweep_map[data_ptr] = it->second;
-
+        // mark_sweep_map[data_ptr] = it->second;
+        if(it->second->scope_refs+it->second->scope_refs&&data_type=="tensor")
+            clean_up_functions[data_type](data_ptr);
     }
-    else
-        mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
-
+    // else
+    //     mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
 }
 
 
@@ -73,11 +71,11 @@ void MarkSweep::mark_scopeless(void *data_ptr, std::string data_type) {
     if (it!=mark_sweep_map.end())
     {
         it->second->dec_scopeless();
-        mark_sweep_map[data_ptr] = it->second;
+        // mark_sweep_map[data_ptr] = it->second;
 
     }
-    else
-        mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
+    // else
+    //     mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
 
 }
 
@@ -88,11 +86,9 @@ void MarkSweep::unmark_scopeful(void *data_ptr) {
 
     if (it!=mark_sweep_map.end())
     {
-
-        it->second->inc();
+        it->second->inc_scopeful();
     } else {
         // std::cout << "UNMARK NOT FOUND" << ".\n";
-        // auto [it, inserted] = mark_sweep_map.try_emplace(data_ptr, new MarkSweepAtom(data_type, true));
     }
 }
 
@@ -102,7 +98,6 @@ void MarkSweep::unmark_scopeless(void *data_ptr) {
 
     if (it!=mark_sweep_map.end())
     {
-        // std::cout << "INCREMENT" << ".\n";
         it->second->inc_scopeless();
     } else {
         // std::cout << "UNMARK NOT FOUND" << ".\n";
@@ -111,7 +106,9 @@ void MarkSweep::unmark_scopeless(void *data_ptr) {
 
 
 void MarkSweep::clean_up(bool clean_scopeful) {
-    // std::cout << "-----clean_up" << ".\n";;
+    // std::cout << "\n\n-----clean_up" << ".\n";;
+
+
 
     for (auto it = mark_sweep_map.begin(); it != mark_sweep_map.end(); ) {
         MarkSweepAtom *atom = it->second;
@@ -123,13 +120,16 @@ void MarkSweep::clean_up(bool clean_scopeful) {
             
             // std::cout << "delete " << it->first << " fn: " << atom->data_type << ".\n";
             clean_up_functions[atom->data_type](it->first);
-            delete atom;
+            free(atom);
             it = mark_sweep_map.erase(it); // erase returns the next valid iterator
         } else {
             ++it;
         }
     }
+    // std::cout << "-----" << "\n\n\n";
 }
+
+
 
 
 

@@ -127,7 +127,7 @@ extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *sc
 void list_Clean_Up(void *data_ptr) {
   if (data_ptr==nullptr)
     return;
-  std::cout << "list cleanup" << ".\n";
+  // std::cout << "list cleanup" << ".\n";
 }
 
 

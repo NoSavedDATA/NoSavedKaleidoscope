@@ -132,7 +132,6 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
       // std::cout << "0000000000000000000000000000000000000CLEANING " << tensor_name << ".\n";
       move_to_pool(thread_id, tensor_to_clean->dims_prod, tensor_to_clean->tensor_ptr, "tensor_Create tensor substitution of " + tensor_to_clean->name + ".");
     // }
-    // delete tensor_to_clean;
   }
     
 
@@ -159,15 +158,15 @@ extern "C" DT_tensor *tensor_Load(Scope_Struct *scope_struct, char *tensor_name)
   std::exit(0);
   DT_tensor *ret = NamedTensorsT[tensor_name];
 
-  if(scope_struct->is_at_return && (nn_mode==eval_mode||scope_struct->thread_id!=0))
-    ret->leaf = false; // Marks to clean
+  // if(scope_struct->is_at_return && (nn_mode==eval_mode||scope_struct->thread_id!=0))
+  //   ret->leaf = false; // Marks to clean
 
   return ret;
 }
 
 
 extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor) {
-  // std::cout << "-------**tensor_Copy" <<  ".\n";
+
   if(!tensor->leaf)
     return tensor;
 
@@ -242,47 +241,6 @@ inline void create_backward_tensor(std::string scopeless_name, DT_tensor *tensor
   }
 }
 
-// inline DT_tensor *change_tensor_dims(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
-//   stored_tensor->tensor_ptr = get_from_pool(thread_id, tensor->dims_prod, "z=x");
-//   stored_tensor->dims = tensor->dims;
-//   stored_tensor->dims_prod = tensor->dims_prod;
-  
-//   return stored_tensor;
-// }
-
-
-
-// inline DT_tensor *sync_and_copy_tensors(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
-//   int grid_size, block_size; 
-//   CalculateGridAndBlockSizes(tensor->dims_prod, grid_size, block_size);
-
-//   stored_tensor->Sync();
-//   tensor->Sync();
-  
-//   cudaStream_t stream = ThreadsStream[thread_id];
-//   copy_tensor_kernel<<<grid_size,block_size,0,stream>>>(stored_tensor->tensor_ptr, tensor->tensor_ptr, tensor->dims_prod);
-//   return stored_tensor;
-// }
-
-// inline DT_tensor *store_leaf_backward(DT_tensor *stored_tensor, DT_tensor *tensor, char *tensor_name, int thread_id, int has_grad, char *scope) {
-//   if(nn_mode==training_mode&&thread_id==0)
-//   {
-//     DT_tensor *attribution_tensor;
-  
-//     if (has_grad==0)
-//       tensor->op = detach_op;  
-//     attribution_tensor = createBackward(stored_tensor->scopeless_name, tensor);
-//     todo_backward_tensors.push_back(attribution_tensor);
-
-//     // tensor_ptr is a copy of the incoming tensor
-//     std::string scopeless_name = stored_tensor->scopeless_name;
-//     stored_tensor = createTensor(stored_tensor->tensor_ptr, tensor->dims, tensor->dims_prod, true, tensor_name, stored_tensor->cuda_stream, stored_tensor->loader);
-    
-//     stored_tensor->scopeless_name = scopeless_name;
-//   }
-
-//   return stored_tensor;
-// }
 
 
 
@@ -308,7 +266,7 @@ extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
   if (tensor->view_of == tensor_name)
   {
     stored_tensor->dims = tensor->dims;
-    delete tensor;
+    // delete tensor;
     tensor = stored_tensor;
   }
   else
@@ -346,12 +304,13 @@ void tensor_Clean_Up(void *data_ptr) {
   // if (nn_mode==eval_mode||tensor->thread_id!=0)
   //   CleanTreeNow(tensor->thread_id, tensor, tensor->name);
 
+
   if (nn_mode==eval_mode||tensor->thread_id!=0)
   {
-    // std::cout << "MOVE TO POOL" << ".\n";
     move_to_pool(tensor->thread_id, tensor->dims_prod, tensor->tensor_ptr, "eval/thread_id!=0 cleaning");
     free(tensor);
   }
+
 }
 
 

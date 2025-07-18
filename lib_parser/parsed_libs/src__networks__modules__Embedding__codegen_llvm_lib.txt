@@ -1,8 +1,8 @@
-1821-06-26 16:18:00
+1821-07-17 16:47:38
 
 	FunctionType *EmbeddingTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("Embedding", EmbeddingTy);

@@ -84,6 +84,7 @@ extern "C" DT_int_vec *zeros_int(Scope_Struct *scope_struct, int size) {
     vec->vec[i] = 0;
    
 
+  std::cout << "Returning vec " << vec << ".\n";
   return vec;
 }
 
@@ -100,12 +101,12 @@ extern "C" DT_int_vec *ones_int(Scope_Struct *scope_struct, int size) {
 
 extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
 {
-  // std::cout << "int_vec_Idx on idx " << idx << " for the vector " << vec_name << ".\n";
+  // std::cout << "int_vec_Idx on idx " << idx << " for the vector " << vec << ".\n";
 
   // std::cout << "Loaded vec" << ".\n";
   int ret = vec->vec[idx];
-  // std::cout << "got: " << ret << ".\n";
   // std::cout << "returning" << ".\n"; 
+  // std::cout << "got: " << ret << ".\n";
   return ret;
 }
 

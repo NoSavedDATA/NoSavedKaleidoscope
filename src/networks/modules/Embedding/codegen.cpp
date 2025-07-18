@@ -22,7 +22,7 @@
 
 
 
-extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_tensor *tensor)
+extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_Embedding *embedding, DT_tensor *tensor)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -37,7 +37,6 @@ extern "C" DT_tensor *Embedding(Scope_Struct *scope_struct, DT_tensor *tensor)
   int input_dims_prod = DimsProd(dims);
 
 
-  DT_Embedding *embedding = (DT_Embedding*) scope_struct->object_ptr;
 
   tensor->Sync();
 

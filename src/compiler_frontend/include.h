@@ -38,7 +38,6 @@ extern std::map<std::string, std::string> typeVars;
 
 extern std::vector<std::string> objectVars;
 extern std::vector<std::string> globalVars;
-extern std::map<std::string, std::string> functionVars;
 extern std::map<std::string, std::string> floatFunctions;
 extern std::map<std::string, std::string> stringMethods;
 

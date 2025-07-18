@@ -9,13 +9,12 @@
 
 struct MarkSweepAtom {
     std::string data_type;
-    bool marked;
     int scope_refs=0;
     int scopeless_refs=0;
 
-    MarkSweepAtom(const std::string &, bool);
+    MarkSweepAtom(std::string);
 
-    void inc();
+    void inc_scopeful();
     void inc_scopeless();
     void dec();
     void dec_scopeful();
