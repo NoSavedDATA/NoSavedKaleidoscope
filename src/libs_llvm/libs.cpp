@@ -985,7 +985,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *list_IdxTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);

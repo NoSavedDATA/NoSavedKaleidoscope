@@ -227,6 +227,7 @@ SelfExprAST::SelfExprAST() {
   End_of_Recursion=true;
   Name="self";
   height=1;
+  From_Self=true;
   // Print_Names_Str(Expr_String);
 }
 EmptyStrExprAST::EmptyStrExprAST() {
@@ -234,10 +235,13 @@ EmptyStrExprAST::EmptyStrExprAST() {
   End_of_Recursion=true;
   height=0;
 }
-NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct) : parser_struct(parser_struct) {
+NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct) : parser_struct(parser_struct)
+                                    {
   this->Inner_Expr = std::move(Inner_Expr);
   this->Inner_Expr->IsLeaf=false;
-  this->Name = name;
+  Name = name;
+  
+  From_Self = this->Inner_Expr->From_Self;
   height=this->Inner_Expr->height+1;
 
   Expr_String = this->Inner_Expr->Expr_String;

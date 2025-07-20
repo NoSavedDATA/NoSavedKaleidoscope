@@ -19,7 +19,6 @@
 
 
 std::map<std::string, std::map<std::string, std::string>> Object_toClass;
-std::map<std::string, std::string> Object_toClassVec;
 
 
 using namespace llvm;
@@ -81,7 +80,6 @@ std::unique_ptr<ExprAST> ParseParenExpr(Parser_Struct parser_struct, std::string
 std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struct, std::string _class, std::string class_name) {
   getNextToken();
   //std::cout << "Object name: " << IdentifierStr << " and Class: " << Classes[i]<< "\n";
-  bool is_vec=false;
   bool is_self=false;
   bool is_attr=false;
   std::string pre_dot;
@@ -103,8 +101,15 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
     objectVars.push_back(Name);
     // typeVars[Name] = "object";
 
-    if (!is_vec&&parser_struct.class_name=="")
+    if (!is_self||parser_struct.class_name=="")
+    {
+      // std::cout << "========Object instatiation of " << IdentifierStr << "/" << _class << ".\n";
       Object_toClass[""][IdentifierStr] = _class;
+    } else {
+
+      std::cout << "++++++++Object instatiation of " << IdentifierStr << "/" << _class << ".\n";
+    }
+
     getNextToken(); // eat identifier.
 
         
@@ -125,7 +130,6 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
   aux->SetSelf(is_self);
   aux->SetIsAttribute(is_attr);
   aux->SetPreDot(pre_dot);
-  aux->SetIsVec(is_vec);
 
 
   return aux;
@@ -812,20 +816,25 @@ std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string
     while (true) {
       // std::cout << "CURRENT TOKEN: " << ReverseToken(CurTok) << ".\n";
       std::string element_type;
-      if (CurTok==tok_number)
-        element_type = "float";
-      else
-      {
-        std::cout << "IDENTIFIER STR IS " << IdentifierStr << ".\n";
-        if (typeVars.count(IdentifierStr)>0)
-          element_type = typeVars[IdentifierStr];
-        else
-          LogError(IdentifierStr + " variable was not found on the Tuple definition scope.");
-      }
-      Elements.push_back(std::make_unique<StringExprAST>(element_type));
+      // if (CurTok==tok_number)
+      //   element_type = "float";
+      // else
+      // {
+      //   std::cout << "IDENTIFIER STR IS " << IdentifierStr << ".\n";
+      //   if (typeVars.count(IdentifierStr)>0)
+      //     element_type = typeVars[IdentifierStr];
+      //   else if (Object_toClass[].count(IdentifierStr)>0)
+      //     element_type = Object_toClass[][IdentifierStr];
+      //   else
+      //     LogError(IdentifierStr + " variable was not found on the List definition scope.");
+      // } 
+      // Elements.push_back(std::make_unique<StringExprAST>(element_type));
 
       if (auto element = ParseExpression(parser_struct, class_name, false))
       {
+        element_type = element->GetType();
+        
+        Elements.push_back(std::make_unique<StringExprAST>(element_type));
         Elements.push_back(std::move(element));
       } 
       else
@@ -835,7 +844,7 @@ std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string
         break;
       if (CurTok != ',')
       {
-        LogError("Expected ']' or ',' on the Tuple elements list.");
+        LogError("Expected ']' or ',' on the List elements list.");
       }
       getNextToken();
     }
@@ -1016,8 +1025,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
       inner_expr->skip=false;
     }
 
-    // if(Object_toClass[class_name].count(Prev_IdName)>0)
-    //   callee = Object_toClass[class_name][Prev_IdName] + callee;
 
 
     
@@ -1036,6 +1043,7 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
 
     std::string nested_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct);
+    std::cout << "-------------------GOT NESTED NAME: " << nested_name << ".\n";
     callee = nested_name+callee; // Add variable high-level class to the name
 
     // if(lib_function_remaps.count(tgt_function)>0)
@@ -1128,17 +1136,10 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
   
   
-  // Turns string from object model of class type Model into Model
-  if (Object_toClass[class_name].count(object_class)>0)
-    object_class = Object_toClass[class_name][object_class]; 
   
   
   
   
-  
-
-
-
 
 
 

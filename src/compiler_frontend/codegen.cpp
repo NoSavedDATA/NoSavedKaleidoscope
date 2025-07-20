@@ -1968,9 +1968,15 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
       // std::cout << "VALUE TYPE IS: " << type << ".\n";
       if (type!="float"&&type!="int")
       {
+
         std::string copy_fn = type + "_Copy";
-        value = callret(copy_fn, {scope_struct, value});
-        call("MarkToSweep_Mark", {scope_struct, value, global_str(type)});
+        
+        Function *F = TheModule->getFunction(copy_fn);
+        if (F)
+        {
+          value = callret(copy_fn, {scope_struct, value});
+          call("MarkToSweep_Mark", {scope_struct, value, global_str(type)});
+        }
       }
       is_type=true;
     } else
@@ -2022,6 +2028,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         Value *ptr = callret("malloc", {const_int64(Size)});
         Builder->CreateStore(ptr, alloca);
         // Value *ptr = callret("posix_memalign", {alloca, const_int64(8), const_int64(Size)});
+        std::cout << "ADDING OBJECT " << VarName << " TO FUNCTION " << parser_struct.function_name << ".\n";
         function_allocas[parser_struct.function_name][VarName] = alloca;
 
 
@@ -2232,8 +2239,10 @@ std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Par
     _class = parser_struct.class_name; 
     i++;
   }
+
   for(; i<last; ++i)
   {
+    std::cout << "---------------------Class " << _class << " to " << Object_toClass[_class][expressions_string_vec[i]] << ".\n";
     _class = Object_toClass[_class][expressions_string_vec[i]];
   }
 
@@ -2350,12 +2359,14 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
     std::string _type = typeVars[Name];
     if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
       obj_ptr = callret("object_Load_slot", {obj_ptr});
+    
 
     return obj_ptr;
 
   } else if (height==1)
   {
     std::string var_type = typeVars[Name];
+    std::cout << "----LOADING HEIGHT==1 ALLOCA " << Name << " OF TYPE " << var_type << " AT FUNCTION " << parser_struct.function_name << ".\n"; 
     return load_alloca(Name, var_type, parser_struct.function_name);    
   }
   else {
@@ -2386,11 +2397,13 @@ Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {
 
 
 Value *NestedVariableExprAST::codegen(Value *scope_struct) {
-  // std::cout << "Nested Variable Expr" << ".\n";
+  std::cout << "Nested Variable Expr" << ".\n";
+
+  // Print_Names_Str(Inner_Expr->Expr_String);
+
   Value *ptr = Inner_Expr->codegen(scope_struct);
 
-  if (Load_Val&&(Type=="float"||Type=="int")) {
-    
+  if (Load_Val&&(Type=="float"||Type=="int")) { 
     return callret("object_Load_"+Type, {ptr});
   }
 
@@ -2415,8 +2428,9 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
 
 
 
-  if(ends_with(Callee, "__init__")&&parser_struct.function_name!="__anon_expr") // mallocs an object inside another
+  if(ends_with(Callee, "__init__")&&Inner_Expr->From_Self) // mallocs an object inside another
   {
+    p2t("RUN INIT FOR CALLEE "+ Callee);
 
     Inner_Expr->Load_Last=false; // inhibits Load_slot
     obj_ptr = Inner_Expr->codegen(scope_struct);
