@@ -27,7 +27,7 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
   DT_list *notes_vector = new DT_list();  
 
   bool is_type = false;
-  for (int i=0; i<10; i++)
+  for (int i=0; i<1000; i++)
   {
     if (is_type)
     {
@@ -41,6 +41,10 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
       {
         // std::cout << "appending float" << ".\n";
         float value = va_arg(args, float);
+        notes_vector->append(value, type);
+      } else if (strcmp(type, "int")==0) {
+        // std::cout << "appending float" << ".\n";
+        int value = va_arg(args, int);
         notes_vector->append(value, type);
       } else {
         // std::cout << "appending void *: " << type << ".\n";
@@ -95,8 +99,8 @@ extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *sc
   std::cout << "list_Create"  << ".\n";
 
 
-  if (init_val!=nullptr)
-    NamedVectors[name] = init_val;
+  // if (init_val!=nullptr)
+  //   NamedVectors[name] = init_val;
 
 
   // std::string list_type = "";
@@ -137,14 +141,10 @@ void list_Clean_Up(void *data_ptr) {
 
 
 
-extern "C" void *list_Idx(Scope_Struct *scope_struct, char *name, float _idx)
+extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
 {
-  int idx = (int)_idx;
-
-
+  std::cout << "INDEX AT " << idx << ".\n";
   
-  DT_list *vec = NamedVectors[name];
-  move_to_char_pool(strlen(name)+1, name, "free");
 
   
   std::string type = vec->data_types->at(idx);
@@ -155,6 +155,11 @@ extern "C" void *list_Idx(Scope_Struct *scope_struct, char *name, float _idx)
     float* float_ptr = new float(vec->get<float>(idx));
     return (void*)float_ptr;
     // return (void *)vec->get<float>(idx);
+  }
+  if (type=="int")
+  {
+    int* ptr = new int(vec->get<int>(idx));
+    return (void*)ptr;
   }
   return std::any_cast<void *>((*vec->data)[idx]);
 }
@@ -171,6 +176,12 @@ extern "C" void *assign_wise_list_Idx(DT_list *vec, int idx)
   {
     float* float_ptr = new float(vec->get<float>(idx));
     return (void*)float_ptr;
+    // return (void *)vec->get<float>(idx);
+  }
+  if (type=="int")
+  {
+    int* ptr = new int(vec->get<int>(idx));
+    return (void*)ptr;
     // return (void *)vec->get<float>(idx);
   }
 

@@ -345,7 +345,7 @@ class NameableExprAST : public ExprAST {
   std::vector<std::string> Expr_String = {};
   std::unique_ptr<NameableExprAST> Inner_Expr;
   std::string Name="";
-  bool End_of_Recursion=false, skip=false, IsLeaf=true, Load_Last=true;
+  bool End_of_Recursion=false, skip=false, IsLeaf=true, Load_Last=true, From_Self=false;
   int height=1;
   NameableExprAST();
 
@@ -386,6 +386,9 @@ class NestedVectorIdxExprAST : public NameableExprAST {
     NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct, std::vector<std::unique_ptr<ExprAST>>, std::string);
     Value *codegen(Value *scope_struct) override;
 };
+
+
+void Print_Names_Str(std::vector<std::string>);
 
 class NestedVariableExprAST : public ExprAST {
   
