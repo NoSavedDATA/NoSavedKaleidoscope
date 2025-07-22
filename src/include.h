@@ -9,6 +9,7 @@
 #include"cuda_kernels/include.h"
 #include"cuda_threads/include.h"
 #include"data_types/include.h"
+#include"idx/include.h"
 #include"libs_llvm/include.h"
 #include"math/include.h"
 #include"mangler/include.h"

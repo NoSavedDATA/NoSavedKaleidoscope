@@ -3,14 +3,12 @@
 #include <map>
 
 #include "../codegen/random.h"
+#include "../compiler_frontend/global_vars.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
 
 
-DT_int_vec::DT_int_vec(int size) : size(size) {
-  vec = (int*)malloc(size*sizeof(int));
-}
 
 
 extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
@@ -79,12 +77,11 @@ extern "C" DT_int_vec *arange_int(Scope_Struct *scope_struct, int begin, int end
 
 
 extern "C" DT_int_vec *zeros_int(Scope_Struct *scope_struct, int size) {
+
   DT_int_vec *vec = new DT_int_vec(size);
   for(int i=0; i<size; ++i)
     vec->vec[i] = 0;
-   
 
-  std::cout << "Returning vec " << vec << ".\n";
   return vec;
 }
 
@@ -123,7 +120,56 @@ extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int 
 
 
 extern "C" int int_vec_CalculateIdx(DT_int_vec *vec, int first_idx, ...) {
+
+  if (first_idx<0)
+    first_idx = vec->size+first_idx;
+
+
   return first_idx;
+}
+
+
+extern "C" DT_int_vec *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx, ...) {
+
+  DT_int_vec *slices;
+
+  int second_idx;
+
+  va_list args;
+  va_start(args, first_idx);
+  va_arg(args, int); // get terminate symbol
+  second_idx = va_arg(args, int); // get second idx
+  va_end(args);
+
+
+  int size = vec->size;
+  if (first_idx<0)
+    first_idx = size + first_idx;
+  if (second_idx<0)
+    second_idx = size + second_idx;
+
+  slices = new DT_int_vec(2);
+  slices->vec[0] = first_idx;
+  slices->vec[1] = second_idx;
+
+ 
+  return slices;
+}
+
+
+
+extern "C" DT_int_vec *int_vec_Slice(Scope_Struct *scope_struct, DT_int_vec *vec, DT_int_vec *slices) {
+
+  int start=slices->vec[0], end=slices->vec[1];
+
+  int size = end-start;
+
+  DT_int_vec *out_vec = new DT_int_vec(size);
+
+  for (int i=0; i<size; ++i)
+    out_vec->vec[i] = vec->vec[start+i];
+
+  return out_vec;
 }
 
 

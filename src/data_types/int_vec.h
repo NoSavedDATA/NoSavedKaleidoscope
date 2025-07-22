@@ -5,13 +5,7 @@
 
 
 #include "../mangler/scope_struct.h"
+#include "nsk_vector.h"
 
-
-struct DT_int_vec {
-    int size;
-    int *vec;
-
-    DT_int_vec(int size);
-};
 
 void int_vec_Clean_Up(void *);

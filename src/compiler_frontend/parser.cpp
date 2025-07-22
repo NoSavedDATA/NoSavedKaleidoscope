@@ -136,19 +136,45 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
 }
 
 
-std::vector<std::unique_ptr<ExprAST>> ParseIdx(Parser_Struct parser_struct, std::string class_name) {
+std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string class_name) {
 
-  std::vector<std::unique_ptr<ExprAST>> Idx;
+  
+  std::vector<std::unique_ptr<ExprAST>> idx, second_idx;
     
-  Idx.push_back(ParseExpression(parser_struct, class_name, false));
+  idx.push_back(ParseExpression(parser_struct, class_name, false));
+  bool has_sliced_vec=false;
+
+  if (CurTok==':')
+  {
+    getNextToken();
+    second_idx.push_back(ParseExpression(parser_struct, class_name, false));
+    has_sliced_vec=true;
+  } else
+    second_idx.push_back(std::make_unique<IntExprAST>(0));
+
+
+
   while(CurTok==',')
   {
     getNextToken(); // eat ,
-    Idx.push_back(ParseExpression(parser_struct, class_name, false));
-  }
-  Idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+    idx.push_back(ParseExpression(parser_struct, class_name, false));
 
-  return Idx;
+    if (CurTok==':')
+    {
+      getNextToken();
+      second_idx.push_back(ParseExpression(parser_struct, class_name, false));
+      has_sliced_vec=true;
+    } else
+      second_idx.push_back(std::make_unique<IntExprAST>(0));
+  }
+  idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+  second_idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+
+
+  
+
+
+  return std::make_unique<IndexExprAST>(std::move(idx), std::move(second_idx), has_sliced_vec);
 }
 
 
@@ -308,8 +334,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
   {
     getNextToken(); // eat [
     
-    std::vector<std::unique_ptr<ExprAST>> Idx;
-    Idx = ParseIdx(parser_struct, class_name);
+    std::unique_ptr<IndexExprAST> Idx = ParseIdx(parser_struct, class_name);
     
     if (typeVars.find(IdName) != typeVars.end())
       type = typeVars[IdName];
@@ -346,7 +371,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
         }
         else if (CurTok==':')
         {
-          getNextToken(); // eat >
+          getNextToken(); // eat :
           auto inner_vec = ParseExpression(parser_struct, class_name, false);
           
           auto Arg = std::make_unique<SplitStridedParallelExprAST>(std::move(inner_vec));
@@ -806,9 +831,6 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
 std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string class_name) {
   std::cout << "Parsing new vector" << ReverseToken(CurTok)  << "\n";
 
-  // getNextToken(); // [
-  // std::vector<std::unique_ptr<ExprAST>> Elements = ParseIdx(class_name);
-  // getNextToken(); // ]
 
   getNextToken(); // [
   std::vector<std::unique_ptr<ExprAST>> Elements;
@@ -911,7 +933,7 @@ std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struc
     while (true) {
       if (CurTok=='>')
       {
-        getNextToken();
+        getNextToken(); // eat >
         auto inner_vec = ParseExpression(parser_struct, class_name, false);
         
         auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
@@ -919,7 +941,7 @@ std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struc
       }
       else if (CurTok==':')
       {
-        getNextToken(); // eat >
+        getNextToken(); // eat :
         auto inner_vec = ParseExpression(parser_struct, class_name, false);
         
         auto Arg = std::make_unique<SplitStridedParallelExprAST>(std::move(inner_vec));
@@ -1088,11 +1110,11 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
 
     getNextToken(); // eat [
-    std::vector<std::unique_ptr<ExprAST>> idx = ParseIdx(parser_struct, class_name);
+    std::unique_ptr<IndexExprAST> Idx = ParseIdx(parser_struct, class_name);
     getNextToken(); // eat ]
 
     
-    std::unique_ptr<NestedVectorIdxExprAST> vec_expr = std::make_unique<NestedVectorIdxExprAST>(std::move(inner_expr), IdName, parser_struct, std::move(idx), type);
+    std::unique_ptr<NestedVectorIdxExprAST> vec_expr = std::make_unique<NestedVectorIdxExprAST>(std::move(inner_expr), IdName, parser_struct, std::move(Idx), type);
     vec_expr->SetIsAttribute(true);
 
 
@@ -1126,158 +1148,13 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
   
   return std::move(var_expr);
 
-
-
-
-
-
-
-
-
-  
-  
-  
-  
-  
-  
-
-
-
-
-
-
-
-
-  // PARSE CALL.
-
-  // getNextToken(); // eat (
-  std::vector<std::unique_ptr<ExprAST>> Args;
-  // if (CurTok != ')') {
-  //   while (true) {
-  //     if (CurTok=='>')
-  //     {
-  //       getNextToken();
-  //       auto inner_vec = ParseExpression(parser_struct, class_name, false);
-        
-  //       auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
-  //       Args.push_back(std::move(Arg));
-  //     }
-  //     else if (CurTok==':')
-  //     {
-  //       getNextToken(); // eat >
-  //       auto inner_vec = ParseExpression(parser_struct, class_name, false);
-        
-  //       auto Arg = std::make_unique<SplitStridedParallelExprAST>(std::move(inner_vec));
-  //       Args.push_back(std::move(Arg));
-  //     }
-  //     else if (auto Arg = ParseExpression(parser_struct, class_name, false))
-  //     {
-  //       //std::cout << "Parsed arg " << Arg->GetName() << "\n";
-  //       Args.push_back(std::move(Arg));
-  //     }
-        
-  //     else
-  //       return nullptr;
-
-  //     if (CurTok == ')')
-  //       break;
-
-  //     if (CurTok != ',')
-  //       return LogError("Expected ')' or ',' on the Function Call arguments list.");
-  //     getNextToken();
-  //   }
-  // } 
-
-  // // Eat the ')'.
-  // getNextToken();
-
-
-
-
-
-
-  std::string callee_override = "none";
-  std::string load_type = "none";
-  std::string load_of = "none";
-  bool name_solve_to_last = false;
-  // x.view()
-  if(typeVars.count(Prev_IdName)>0)
-  {
-    name_solve_to_last = false;
-    callee_override = typeVars[Prev_IdName] + "_" + IdName;
-    load_type = typeVars[Prev_IdName];
-    // std::cout << "Triggered from Prev_IdName, override as: " << callee_override << ".\n";
-    load_of = Prev_IdName;
-  }
-  // model.linear_1(x)
-  if(typeVars.count(IdName)>0)
-  {
-    // std::cout << "Triggered from IdName" << ".\n";
-    name_solve_to_last = true;
-    callee_override = typeVars[IdName];
-    load_of = IdName;
-  }
-  // std::cout << "typeVars.count(Prev_IdName)>0: " << Prev_IdName << " is " <<  std::to_string(typeVars.count(Prev_IdName)>0) << ".\n";
-  std::string callee = IdName;
-  bool is_var_forward = false;
-  bool return_tensor = false;
-  bool return_string = false;
-  // Override function calls: e.g: conv1 -> Conv2d
-  if (floatFunctions.find(IdName) != floatFunctions.end())
-  {
-    is_var_forward = true;
-    callee_override = floatFunctions[IdName];
-
-  } else if (stringMethods.find(IdName) != stringMethods.end())
-  {
-    is_var_forward = true;
-    return_string = true;
-    callee_override = stringMethods[IdName];
-
-  } else {
-    if (is_self && !is_class_attr)
-    {
-      callee = class_name + IdName;
-    }
-  }
-
-
-  std::string call_of = (callee_override!="none") ? callee_override : IdName;
-  
-  // varargs
-  if (in_str(call_of, vararg_methods))
-    Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
-
-  // std::cout << "\nCalling method: " << IdName << "/" << callee << " for pre-dot: " << pre_dot << "\n\n";
-  // std::cout << "LOAD TYPE IS: " << load_type << ".\n";
-
-  std::string scope_random_string = RandomString(14);
-
-  auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-  name_solver_expr->SetNameSolveToLast(name_solve_to_last);
-  auto aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), callee, IdName, std::move(Args),
-                                        object_class, pre_dot, load_type, is_var_forward, callee_override, scope_random_string, load_of, parser_struct);
-
-
-  if (functions_return_type.count(call_of)>0)
-    aux->SetType(functions_return_type[call_of]);
-  if (return_tensor)
-    aux->SetType("tensor");  
-  if (return_string)
-    aux->SetType("str");
-
-
-  if (is_self)
-    aux->SetSelf(true);    
-  if (is_class_attr)
-    aux->SetIsAttribute(true);
-  aux->SetPreDot(pre_dot);
-
-  if (CurTok == tok_post_class_attr_identifier)  
-    return ParseChainCallExpr(parser_struct, std::move(aux), class_name);
-
-  return aux;
 }
+
+
+
+
+
+
 
 
 
@@ -1394,7 +1271,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
   }
 
   if (CurTok != tok_identifier)
-    return LogError("Expected tensor identifier name.");
+    return LogError("Expected " + data_type + " identifier name.");
 
 
 
@@ -1760,11 +1637,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
     // consume it, otherwise we are done.
     
 
-    if (TokPrec==BinopPrecedence[':'])
-    {
-      getNextToken();
-      return std::make_tuple(std::move(LHS), L_cuda, L_type);
-    }
     if (TokPrec < ExprPrec)
       return std::make_tuple(std::move(LHS), L_cuda, L_type);
     
@@ -1797,11 +1669,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
 
 
 
-    if(CurTok==':')
-    {
-      getNextToken();
-      return std::make_tuple(std::move(LHS), L_cuda, L_type);
-    }
 
     if (CurTok==')')
       return std::make_tuple(std::move(LHS), L_cuda, L_type);

@@ -1,4 +1,4 @@
-1821-07-19 23:18:45
+1821-07-21 16:53:20
 
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,
@@ -27,6 +27,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("list_Load", list_LoadTy);
+
+	FunctionType *list_CalculateIdxTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("list_CalculateIdx", list_CalculateIdxTy);
 
 	FunctionType *list_CreateTy= FunctionType::get(
 		int8PtrTy,

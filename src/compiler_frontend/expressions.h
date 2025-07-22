@@ -68,17 +68,31 @@ class ExprAST {
     
   };
   
+class IndexExprAST : public ExprAST {
   
-  
-  class NameSolverAST : public ExprAST {
-  
-    public:
-      std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
-      NameSolverAST(std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names);
-    
-  
+  public:
+    int Size;
+    std::vector<std::unique_ptr<ExprAST>> Idxs;
+    std::vector<std::unique_ptr<ExprAST>> Second_Idxs;
+    bool IsSlice=false;
+
+    IndexExprAST(std::vector<std::unique_ptr<ExprAST>>, std::vector<std::unique_ptr<ExprAST>>, bool);
+
     Value *codegen(Value *scope_struct) override;
-  };
+    int size() {
+      return Size;
+    }
+}; 
+
+class NameSolverAST : public ExprAST {
+
+  public:
+    std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names;
+    NameSolverAST(std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names);
+  
+
+  Value *codegen(Value *scope_struct) override;
+};
   
   
 /// NumberExprAST - Expression class for numeric literals like "1.0".
@@ -149,9 +163,9 @@ class VecIdxExprAST : public ExprAST {
   
   public:
     std::unique_ptr<ExprAST> Loaded_Var;
-    std::vector<std::unique_ptr<ExprAST>> Idx;
+    std::unique_ptr<IndexExprAST> Idx;
 
-    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type);
+    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::unique_ptr<IndexExprAST> Idx, std::string Type);
 
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const;
@@ -267,45 +281,21 @@ class LibImportExprAST : public ExprAST {
  
   
   
-  class MHSAExprAST : public VarExprAST {
-    public:
-      std::unique_ptr<ExprAST> nh, C, T;
-      std::string TensorInit;
-      std::vector<int> Notators;
-  
-      MHSAExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type,
-        std::unique_ptr<ExprAST> nh, std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> T,
-        std::vector<int> Notators,
-        const std::string &TensorInit);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
   
   
   
-  class ReluExprAST : public VarExprAST {
-    public:
-  
-      ReluExprAST(
-        std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-        std::string Type);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
-  
-  
-  /// UnaryExprAST - Expression class for a unary operator.
-  class UnaryExprAST : public ExprAST {
-    char Opcode;
-    std::unique_ptr<ExprAST> Operand;
-  
-  public:
-    UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand);
-  
-    Value *codegen(Value *scope_struct) override;
-  };
+
+
+/// UnaryExprAST - Expression class for a unary operator.
+class UnaryExprAST : public ExprAST {
+  char Opcode;
+  std::unique_ptr<ExprAST> Operand;
+
+public:
+  UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand);
+
+  Value *codegen(Value *scope_struct) override;
+};
   
   
 /// BinaryExprAST - Expression class for a binary operator.
@@ -321,6 +311,7 @@ public:
 
   Value *codegen(Value *scope_struct) override;
 };
+
 
 
 
@@ -382,8 +373,8 @@ class NestedVectorIdxExprAST : public NameableExprAST {
   Parser_Struct parser_struct;
   
   public:
-    std::vector<std::unique_ptr<ExprAST>> Idxs;
-    NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct, std::vector<std::unique_ptr<ExprAST>>, std::string);
+    std::unique_ptr<IndexExprAST> Idx;
+    NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct, std::unique_ptr<IndexExprAST> Idx, std::string);
     Value *codegen(Value *scope_struct) override;
 };
 

@@ -7,6 +7,7 @@
 
 #include "codegen.h"
 #include "expressions.h"
+#include "global_vars.h"
 #include "libs_parser.h"
 #include "logging.h"
 #include "modules.h"
@@ -45,7 +46,6 @@ extern std::map<std::string, std::string> stringMethods;
 extern std::vector<std::string> Classes;
 
 
-extern int TERMINATE_VARARG;
 
 
 extern std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;

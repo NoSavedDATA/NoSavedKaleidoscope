@@ -69,7 +69,6 @@
 
 
 
-int TERMINATE_VARARG = 2147483646;
 
 
 
@@ -3040,7 +3039,6 @@ int main() {
   // 1 is lowest precedence.
   BinopPrecedence[tok_space] = 1;
   BinopPrecedence['='] = 4;
-  BinopPrecedence[':'] = 9;
   BinopPrecedence['!'] = 9;
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;

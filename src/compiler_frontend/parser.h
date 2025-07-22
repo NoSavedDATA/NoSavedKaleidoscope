@@ -56,7 +56,8 @@ std::unique_ptr<ExprAST> ParseParenExpr(Parser_Struct parser_struct, std::string
 std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struct, std::string _class, std::string class_name);
 
 
-std::vector<std::unique_ptr<ExprAST>> ParseIdx(Parser_Struct parser_struct, std::string class_name=""); 
+
+std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string class_name="");
 
 
 
@@ -113,48 +114,21 @@ std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::un
   
 
 
-std::unique_ptr<ExprAST> ParsePinnedTensorExpr(Parser_Struct parser_struct); 
    
 
 std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string class_name=""); 
 
 
     
-  
-std::unique_ptr<ExprAST> ParseLSTMExpr(Parser_Struct parser_struct); 
-  
-  
-std::unique_ptr<ExprAST> ParseEmbeddingExpr(Parser_Struct parser_struct); 
-  
-  
-std::unique_ptr<ExprAST> ParseLinearExpr(Parser_Struct parser_struct); 
-  
-  
-  
-  
-  
-  
-std::unique_ptr<ExprAST> ParseMHSAExpr(Parser_Struct parser_struct); 
-  
-  
+   
   
 
-std::unique_ptr<ExprAST> ParseMaxPool2dExpr(Parser_Struct parser_struct); 
   
   
   
   
   
   //
-std::unique_ptr<ExprAST> ParseBatchNorm2dExpr(Parser_Struct parser_struct); 
-  
-  
-  
-std::unique_ptr<ExprAST> ParseBN2dReluExpr(Parser_Struct parser_struct); 
-  
-  
-
-std::unique_ptr<ExprAST> ParseReluExpr(Parser_Struct parser_struct); 
   
     
 std::unique_ptr<ExprAST> ParseLockExpr(Parser_Struct parser_struct, std::string class_name=""); 
