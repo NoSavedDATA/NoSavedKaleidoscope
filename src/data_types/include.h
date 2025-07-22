@@ -12,6 +12,7 @@
 #include "int.h"
 #include "int_vec.h"
 #include "list.h"
+#include "nsk_vector.h"
 #include "nullptr.h"
 #include "str.h"
 #include "str_vec.h"

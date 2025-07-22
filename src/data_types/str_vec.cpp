@@ -159,6 +159,8 @@ extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, std::vector<char*> vec
 
 
 extern "C" int str_vec_CalculateIdx(std::vector<char *> vec, int first_idx, ...) {
+  if (first_idx<0)
+    first_idx = vec.size()+first_idx;
   return first_idx;
 }
 

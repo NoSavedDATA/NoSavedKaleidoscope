@@ -80,6 +80,45 @@ Function *getFunction(std::string Name) {
   return nullptr;
 }
 
+Value *IndexExprAST::codegen(Value *scope_struct) {
+  
+  return const_float(0);
+}
+
+
+inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::unique_ptr<IndexExprAST> &idxs, Value *scope_struct)
+{
+  std::vector<Value *> idxs_values;
+
+  idxs_values.push_back(vec); // e.g, tensor uses its dims as a support to calculcate the index
+
+  for (int i=0; i<idxs->size(); i++)
+    idxs_values.push_back(idxs->Idxs[i]->codegen(scope_struct));
+
+
+  if (!idxs->IsSlice)
+  {
+    
+    std::string fn = type+"_CalculateIdx";
+    
+    Function *F = TheModule->getFunction(fn);
+    if (F)
+      return callret(fn, idxs_values);
+    else
+      return callret("__idx__", idxs_values);
+  } else {
+
+    for (int i=0; i<idxs->size(); i++)
+      idxs_values.push_back(idxs->Second_Idxs[i]->codegen(scope_struct));
+
+    std::string fn = type+"_CalculateSliceIdx";
+    Function *F = TheModule->getFunction(fn);
+    if (F)
+      return callret(fn, idxs_values);
+    else
+      return callret("__sliced_idx__", idxs_values);
+  }
+}
 
 
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
@@ -857,121 +896,100 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   std::string msg = "VecIdxExpr Now Loading Vec indexation for type: " + Type;
   p2t(msg);
 
-
-
-
-
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
-  
-  
-  Value * ret = ConstantFP::get(*TheContext, APFloat(0.0f));
-  Value *V, *idx;
-
-  if (Type!="object_vec")
-    idx = Idx[0]->codegen(scope_struct);
 
 
-  Value *var_name, *object_name, *object_var_name;
-
-
+  Value *V, *var_name;
 
 
   Value *loaded_var = Loaded_Var->codegen(scope_struct);
 
-
-
-
-  bool is_self = GetSelf();
-  bool is_attr = GetIsAttribute();
-
-  // std::cout << "INDEX " << Name << ", type: " << Type << ".\n";
-  if (Type!="tensor")
-  {
-    std::string idx_fn = Type + "_Idx";
-    std::cout << "Calling: " << idx_fn << ".\n";
-    return callret(idx_fn, {scope_struct, loaded_var, idx});
-  }
-
-
-
+  Value *idx = Idx_Calc_Codegen(Type, loaded_var, Idx, scope_struct);
 
 
   if (Type=="tensor")
   {
-    std::cout << "vec idx of tensor, idx type: " << Idx[0]->GetType() << "\n";
+    std::cout << "vec idx of tensor, idx type: " << Idx->Idxs[0]->GetType() << "\n";
 
-    if (Idx[0]->GetType()!="tensor")
+    if (Idx->Idxs[0]->GetType()!="tensor")
     {
       std::vector<Value *> idx_calc_args;
       idx_calc_args.push_back(var_name);
       idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}));
       idx_calc_args.push_back(Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct}));
-      for (int i=0; i<Idx.size(); i++)
-        idx_calc_args.push_back(Idx[i]->codegen(scope_struct));
+      for (int i=0; i<Idx->size(); i++)
+        idx_calc_args.push_back(Idx->Idxs[i]->codegen(scope_struct));
 
       return Builder->CreateCall(TheModule->getFunction("IdxTensor"), idx_calc_args);
     } else {
-      VariableExprAST *idx = static_cast<VariableExprAST *>(Idx[0].get());
+      VariableExprAST *idx = static_cast<VariableExprAST *>(Idx->Idxs[0].get());
       Value *idx_tensor_name = idx->NameSolver->codegen(scope_struct);
       
-      return Builder->CreateCall(TheModule->getFunction("IdxTensorWithTensor"), {var_name, idx_tensor_name, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});
-      
-    }
-    
+      return Builder->CreateCall(TheModule->getFunction("IdxTensorWithTensor"), {var_name, idx_tensor_name, Builder->CreateCall(TheModule->getFunction("get_scope_thread_id"), {scope_struct})});      
+    } 
   }
 
-  std::string _error = "Unknown vector: " + Name + ".";
-  LogErrorS(_error);
-  std::cout << "Type " << Type << "\n";
+  if (!Idx->IsSlice) {
+    std::string idx_fn = Type + "_Idx";
+    
+    return callret(idx_fn, {scope_struct, loaded_var, idx});
+  } else {
+    std::cout << "ITS A SLICE FUNCTION" << ".\n";
 
-  return ret;
+    std::string slice_fn = Type + "_Slice";
+    
+    return callret(slice_fn, {scope_struct, loaded_var, idx});
+  }
 }
 
 
+
+
+
 Value *ObjectVecIdxExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // Look this variable up in the function.
-  std::cout << "ObjectVecIdxExprAST codegen" << "\n";
+  // if (not ShallCodegen)
+  //   return ConstantFP::get(*TheContext, APFloat(0.0f));
+  // // Look this variable up in the function.
+  // std::cout << "ObjectVecIdxExprAST codegen" << "\n";
   
-  VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(Vec.get());
-  // std::cout << "vec name " << vec->GetName() << "\n";
-  // std::cout << "ObjectVecIdxExprAST is vec: " << GetIsVec() << "\n";
+  // VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(Vec.get());
+  // // std::cout << "vec name " << vec->GetName() << "\n";
+  // // std::cout << "ObjectVecIdxExprAST is vec: " << GetIsVec() << "\n";
 
-  Value *idx = vec->Idx[0]->codegen(scope_struct);
+  // Value *idx = vec->Idx[0]->codegen(scope_struct);
 
 
-  Value *var_name, *object_name, *object_var_name, *post_dot_str;
-  var_name = Builder->CreateGlobalString(vec->GetName());
-  post_dot_str = Builder->CreateGlobalString(_post_dot);
+  // Value *var_name, *object_name, *object_var_name, *post_dot_str;
+  // var_name = Builder->CreateGlobalString(vec->GetName());
+  // post_dot_str = Builder->CreateGlobalString(_post_dot);
   
-  std::string pre_dot = GetPreDot();
-  bool is_self = GetSelf();
-  bool is_attr = GetIsAttribute();
+  // std::string pre_dot = GetPreDot();
+  // bool is_self = GetSelf();
+  // bool is_attr = GetIsAttribute();
   
   
-  if (is_self||is_attr)
-  {
-    // Gets from pre_dot if it is a class attribute
-    if (is_attr) {
-      object_name = Builder->CreateGlobalString(pre_dot);
-      var_name = Builder->CreateGlobalString(Name);
+  // if (is_self||is_attr)
+  // {
+  //   // Gets from pre_dot if it is a class attribute
+  //   if (is_attr) {
+  //     object_name = Builder->CreateGlobalString(pre_dot);
+  //     var_name = Builder->CreateGlobalString(Name);
 
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {object_name, var_name});
-    }
-    if (is_self)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                                      {Builder->CreateLoad(int8PtrTy, Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct})), var_name});
-  }
+  //     var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+  //                                                     {object_name, var_name});
+  //   }
+  //   if (is_self)
+  //     var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
+  //                                                     {Builder->CreateLoad(int8PtrTy, Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct})), var_name});
+  // }
 
-  if (Type=="tensor")
-    return Builder->CreateCall(TheModule->getFunction("object_vec_idxTensor"),
-                                                      {var_name, idx, post_dot_str});
-  if (Type=="object")
-    return Builder->CreateCall(TheModule->getFunction("object_vec_idxObject"),
-                                                      {var_name, idx, post_dot_str});
+  // if (Type=="tensor")
+  //   return Builder->CreateCall(TheModule->getFunction("object_vec_idxTensor"),
+  //                                                     {var_name, idx, post_dot_str});
+  // if (Type=="object")
+  //   return Builder->CreateCall(TheModule->getFunction("object_vec_idxObject"),
+  //                                                     {var_name, idx, post_dot_str});
 
 
   return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -996,22 +1014,6 @@ Value *ObjectVecIdxExprAST::codegen(Value *scope_struct) {
 
 
 
-inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::vector<std::unique_ptr<ExprAST>> &idxs, Value *scope_struct)
-{
-  std::vector<Value *> idxs_values;
-
-  idxs_values.push_back(vec); // e.g, tensor uses its dims as a support to calculcate the index
-
-  for (int i=0; i<idxs.size(); i++)
-    idxs_values.push_back(idxs[i]->codegen(scope_struct));
-
-  
-  std::string fn = type+"_CalculateIdx";
-  // p2t(fn);
-
-  return callret(fn, idxs_values);
-  // return ret_idx;
-}
 
 
 
@@ -1091,13 +1093,11 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if(LHS->GetIsVec())
     {
-
-
       VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
       Value *vec = LHSV->Loaded_Var->codegen(scope_struct);
 
 
-      Value *idx = Idx_Calc_Codegen(LHS->GetType(), vec, std::move(LHSV->Idx), scope_struct);
+      Value *idx = Idx_Calc_Codegen(LHS->GetType(), vec, LHSV->Idx, scope_struct);
 
       store_op = store_op + "_Idx";
       
@@ -1179,7 +1179,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         Value *obj_ptr = LHSV->codegen(scope_struct);
         std::string type = LHSV->GetType();
 
-        Value *idx = Idx_Calc_Codegen(type, obj_ptr, LHSV->Idxs, scope_struct);
+        Value *idx = Idx_Calc_Codegen(type, obj_ptr, LHSV->Idx, scope_struct);
 
         call(type+"_Store_Idx", {obj_ptr, idx, Val, scope_struct});
       }
@@ -2066,88 +2066,6 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
 
 
 
-
-Value *MHSAExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    ExprAST *Init = VarNames[i].second.get();
-
-
-    Value *var_name;
-    var_name = Builder->CreateGlobalString(VarName);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-    int_vec *notators = SetNotators(Notators);
-
-
-    std::cout << "Parsing MHSA var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateMHSAOnDemand"),
-                                              {var_name, Builder->CreateGlobalString(TensorInit),
-                                               nh->codegen(scope_struct),
-                                               C->codegen(scope_struct),
-                                               T->codegen(scope_struct),
-                                               VoidPtr_toValue(notators)});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
-Value *ReluExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
-  // Register all variables and emit their initializer.
-  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
-    const std::string &VarName = VarNames[i].first;
-    
-    Value *var_name, *type;
-    var_name = Builder->CreateGlobalString(VarName);
-    type = Builder->CreateGlobalString(Type);
-
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
-
-    if (is_self||is_attr)
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct}), var_name});
-                                            
-    if (!(is_self||is_attr))
-      var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-                                            {Builder->CreateCall(TheModule->getFunction("get_scope_scope"), {scope_struct}), var_name});
-    
-
-    
-    std::cout << "Parsing Relu var for: " << VarName << "\n";
-
-    Builder->CreateCall(TheModule->getFunction("CreateReluOnDemand"),
-                                              {var_name});
-  }
-  return ConstantFP::get(*TheContext, APFloat(0.0));
-}
-
-
 Function *PrototypeAST::codegen() {
   if (not ShallCodegen)
     return nullptr;
@@ -2384,7 +2302,7 @@ Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {
 
   Value *obj_ptr = Inner_Expr->codegen(scope_struct);
  
-  Value *idx = Idx_Calc_Codegen(Type, obj_ptr, Idxs, scope_struct);
+  Value *idx = Idx_Calc_Codegen(Type, obj_ptr, Idx, scope_struct);
 
 
   return callret(Type+"_Idx", {scope_struct, obj_ptr, idx});

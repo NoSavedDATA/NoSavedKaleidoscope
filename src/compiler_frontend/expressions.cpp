@@ -153,9 +153,9 @@ const std::string &VariableExprAST::getName() const { return Name; }
 std::string VariableExprAST::GetName()  {
   return Name;
 }
-  
-  
-VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::vector<std::unique_ptr<ExprAST>> Idx, std::string Type)
+
+
+VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::unique_ptr<IndexExprAST> Idx, std::string Type)
               : Loaded_Var(std::move(Loaded_Var)), Idx(std::move(Idx)) {
   this->isVarLoad = true; //todo: remove this?
   this->SetType(Type);
@@ -249,8 +249,8 @@ NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, 
   Print_Names_Str(Expr_String);
 }
 
-NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::vector<std::unique_ptr<ExprAST>> Idxs, std::string type)
-                                        : parser_struct(parser_struct), Idxs(std::move(Idxs)) {
+NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
+                                        : parser_struct(parser_struct), Idx(std::move(Idx)) {
   this->Inner_Expr = std::move(Inner_Expr);
   this->Inner_Expr->IsLeaf=false;
   this->Name = name;
@@ -330,24 +330,6 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
   
   
   
-MHSAExprAST::MHSAExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
-  std::unique_ptr<ExprAST> nh, std::unique_ptr<ExprAST> C, std::unique_ptr<ExprAST> T,
-  std::vector<int> Notators,
-  const std::string &TensorInit)
-  : VarExprAST(std::move(VarNames), std::move(Type)),
-                nh(std::move(nh)), C(std::move(C)), T(std::move(T)),
-                Notators(std::move(Notators)),
-                TensorInit(TensorInit) {}
-  
-  
-  
-  
-ReluExprAST::ReluExprAST(
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type)
-  : VarExprAST(std::move(VarNames), std::move(Type)) {}
   
   
   
@@ -443,7 +425,13 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprA
   /// WhileExprAST - Expression class for while.
 WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
   : Cond(std::move(Cond)), Body(std::move(Body)) {}
-  
+
+
+
+IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vector<std::unique_ptr<ExprAST>> Second_Idxs, bool IsSlice)
+            : Idxs(std::move(Idxs)), Second_Idxs(std::move(Second_Idxs)), IsSlice(IsSlice) {
+  Size = this->Idxs.size();
+}
   
   
   /// AsyncExprAST - Expression class for async.

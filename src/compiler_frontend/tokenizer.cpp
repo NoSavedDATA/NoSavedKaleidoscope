@@ -140,6 +140,10 @@ std::map<int, std::string> token_to_string = {
   { tok_mod, "//" },
 
 
+  { static_cast<int>(','), "," },
+  { static_cast<int>(';'), ";" },
+  { static_cast<int>(':'), ":" },
+
   { static_cast<int>('a'), "a" },
   { static_cast<int>('b'), "b" },
   { static_cast<int>('c'), "c" },

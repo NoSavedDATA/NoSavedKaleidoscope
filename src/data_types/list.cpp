@@ -90,6 +90,12 @@ extern "C" DT_list *list_Load(Scope_Struct *scope_struct, char *name){
 
 
 
+extern "C" int list_CalculateIdx(DT_list *list, int first_idx, ...) {
+  if (first_idx<0)
+    first_idx = list->size()+first_idx;
+  return first_idx;
+}
+
 
 
 

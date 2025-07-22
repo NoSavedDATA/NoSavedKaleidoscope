@@ -123,6 +123,8 @@ extern "C" float float_vec_Idx_num(Scope_Struct *scope_struct, DT_float_vec *vec
 
 
 extern "C" int float_vec_CalculateIdx(DT_float_vec *vec, int first_idx, ...) {
+  if (first_idx<0)
+    first_idx = vec->size+first_idx;
   return first_idx;
 }
 

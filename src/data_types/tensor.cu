@@ -10,6 +10,7 @@
 #include "../backprop/include.h"
 #include "../common/include.h"
 #include "../compiler_frontend/logging.h"
+#include "../compiler_frontend/global_vars.h"
 #include "../cuda_kernels/calculate_grids.h"
 #include "../cuda_kernels/elementwise_kernels_inline.cu"
 #include "../mangler/scope_struct.h"
