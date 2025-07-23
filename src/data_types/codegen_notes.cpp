@@ -7,14 +7,15 @@
 #include "../tensor/tensor_dim_functions.h"
 #include "../tensor/tensor_struct.h"
 #include "codegen_notes.h"
+#include "nsk_vector.h"
 
 
-std::map<std::string, DT_list *> NamedVectors;
 
 
 
 
 template char *DT_list::get<char *>(size_t);
+template void *DT_list::get<void *>(size_t);
 template DT_tensor *DT_list::get<DT_tensor *>(size_t);
 
 
@@ -48,7 +49,7 @@ int DT_list::get<int>(size_t index) {
     return std::any_cast<int>((*data)[index]);
 }
 
-DT_list::DT_list() {
+DT_list::DT_list() : Nsk_Vector(0) {
     data = new std::vector<std::any>(); // Allocate memory
     data_types = new std::vector<std::string>();
 }
@@ -59,13 +60,14 @@ DT_list::~DT_list() {
 }
 
 void DT_list::append(std::any value, std::string data_type) {
+    size++;
     data->push_back(value);
     data_types->push_back(data_type);
 }
 
 
-size_t DT_list::size() const {
-    return data->size();
+size_t DT_list::Size() const {
+    return size;
 }
 
 
@@ -101,7 +103,7 @@ extern "C" DT_list *CreateNotesVector() {
 
 extern "C" float Dispose_NotesVector(DT_list *notes_vector, char *scopeless_name) {
 
-    for (int i=0; i<notes_vector->size(); i++)
+    for (int i=0; i<notes_vector->size; i++)
     {
         if (notes_vector->data_types->at(i)=="str")
         {

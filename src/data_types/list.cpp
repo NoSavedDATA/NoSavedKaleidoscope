@@ -10,6 +10,7 @@
 #include "../common/extension_functions.h"
 // #include "../codegen/random.h"
 // #include "../codegen/string.h"
+#include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
 
@@ -66,14 +67,6 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
 
 
 
-extern "C" float list_Store(char *name, DT_list *vector, Scope_Struct *scope_struct)
-{
-  // std::cout << "list_Store of " << name << ".\n";
-
-  NamedVectors[name] = vector;
-
-  return 0;
-}
 
 extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
   // std::cout << "\n";
@@ -81,20 +74,6 @@ extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
   return 0;
 }
 
-extern "C" DT_list *list_Load(Scope_Struct *scope_struct, char *name){
-  std::cout << "list_Load of " << name << ".\n";
-  DT_list *ret = NamedVectors[name];
-  // list_print(scope_struct, ret);
-  return ret;
-}
-
-
-
-extern "C" int list_CalculateIdx(DT_list *list, int first_idx, ...) {
-  if (first_idx<0)
-    first_idx = list->size()+first_idx;
-  return first_idx;
-}
 
 
 
@@ -104,30 +83,8 @@ extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *sc
 {
   std::cout << "list_Create"  << ".\n";
 
-
-  // if (init_val!=nullptr)
-  //   NamedVectors[name] = init_val;
-
-
-  // std::string list_type = "";
-  // for (int i=0; i<notes_vector->data->size(); i++)
-  // {
-  //   if(notes_vector->data_types->at(i)=="float")
-  //   {}
-  //   if(notes_vector->data_types->at(i)=="string")
-  //   {
-  //     char *note = notes_vector->get<char *>(i);
-  //     if (i==0)
-  //       list_type = note;
-  //     else
-  //       list_type = list_type + "_" + note;
-  //   }
-  // }
-  // std::cout << "Building list from type: " << list_type << ".\n";
-
-
-
-
+  if (init_val==nullptr)
+    init_val = new DT_list();  
 
   return init_val;
 }
@@ -144,15 +101,19 @@ void list_Clean_Up(void *data_ptr) {
 
 
 
+extern "C" int list_CalculateIdx(DT_list *list, int first_idx, ...) {
+  if (first_idx<0)
+    first_idx = list->size+first_idx;
+  return first_idx;
+}
+
 
 
 
 extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
 {
-  std::cout << "INDEX AT " << idx << ".\n";
-  
-
-  
+  // std::cout << "INDEX AT " << idx << ".\n";
+    
   std::string type = vec->data_types->at(idx);
   // std::cout << "list_Idx on index " << idx << " for data type " << type << ".\n";
 
@@ -167,8 +128,71 @@ extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
     int* ptr = new int(vec->get<int>(idx));
     return (void*)ptr;
   }
+
   return std::any_cast<void *>((*vec->data)[idx]);
 }
+
+
+extern "C" DT_int_vec *list_CalculateSliceIdx(DT_list *vec, int first_idx, ...) {
+
+  DT_int_vec *slices;
+
+  int second_idx;
+
+  va_list args;
+  va_start(args, first_idx);
+  va_arg(args, int); // get terminate symbol
+  second_idx = va_arg(args, int); // get second idx
+  va_end(args);
+
+
+  int size = vec->size;
+  if (first_idx<0)
+    first_idx = size + first_idx;
+  if (second_idx<0)
+    second_idx = size + second_idx;
+
+  slices = new DT_int_vec(2);
+  slices->vec[0] = first_idx;
+  slices->vec[1] = second_idx;
+
+  std::cout << "Slice list from " << first_idx << " to " << second_idx << ".\n";
+ 
+  return slices;
+}
+
+
+
+extern "C" DT_list *list_Slice(Scope_Struct *scope_struct, DT_list *vec, DT_int_vec *slices) {
+
+  int start=slices->vec[0], end=slices->vec[1];
+
+  if (end==COPY_TO_END_INST)
+    end = vec->size;
+
+
+  int size = end-start;
+
+  DT_list *out_vec = new DT_list();
+
+  for (int i=0; i<size; ++i)
+  {
+    int idx = start+i;
+    std::string data_type = vec->data_types->at(idx);
+
+    if (data_type=="float")
+      out_vec->append(vec->get<float>(idx), data_type);
+    if (data_type=="int")
+      out_vec->append(vec->get<int>(idx), data_type);
+    else 
+      out_vec->append(vec->get<void *>(idx), data_type);
+
+  }
+
+  return out_vec;
+}
+
+
 
 
 

@@ -10,6 +10,7 @@
 
 #include "../backprop/include.h"
 #include "../common/include.h"
+#include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
 #include "../nsk_cuda/pool/include.h"
@@ -27,7 +28,7 @@ extern "C" void *pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
 
   std::vector<int> dims;
   bool is_weight = false;
-  for (int i=0; i<notes_vector->data->size(); i++)
+  for (int i=0; i<notes_vector->Size(); i++)
   {
     if(notes_vector->data_types->at(i)=="int")
       dims.push_back(notes_vector->get<int>(i));

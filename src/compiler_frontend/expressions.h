@@ -523,10 +523,11 @@ class WhileExprAST : public ExprAST {
   
 /// AsyncExprAST - Expression class for async.
 class AsyncExprAST : public ExprAST {
+  Parser_Struct parser_struct;
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body);
+    AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct);
 
   Value* codegen(Value *scope_struct) override;
 };
@@ -548,11 +549,12 @@ class FinishExprAST : public ExprAST {
 
 
 class AsyncsExprAST : public ExprAST {
+  Parser_Struct parser_struct;
   std::vector<std::unique_ptr<ExprAST>> Body;
   int AsyncsCount;
 
   public:
-    AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount);
+    AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount, Parser_Struct parser_struct);
 
   Value* codegen(Value *scope_struct) override;
 };

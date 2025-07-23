@@ -5,8 +5,10 @@
 #include <map>
 #include <vector>
 
+#include "nsk_vector.h"
 
-class DT_list {
+
+class DT_list : public Nsk_Vector {
 public: 
     std::vector<std::any>* data;  // Pointer to vector stored in heap
     std::vector<std::string>* data_types;  // Pointer to vector stored in heap
@@ -19,11 +21,10 @@ public:
     template <typename T>
     T get(size_t index); 
 
-    size_t size() const; 
+    size_t Size() const; 
 
     void print();
 };
 
 
-extern std::map<std::string, DT_list *> NamedVectors;
 

@@ -1,1 +1,1 @@
-{"list_New", "list"}, {"list_Load", "list"}, {"list_CalculateIdx", "int"}, {"list_Create", "list"}, 
+{"list_New", "list"}, {"list_Create", "list"}, {"list_CalculateIdx", "int"}, {"list_CalculateSliceIdx", "int_vec"}, {"list_Slice", "list"}, 

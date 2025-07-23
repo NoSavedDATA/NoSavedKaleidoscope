@@ -35,9 +35,8 @@ extern std::map<std::string, std::string> functions_return_type, reverse_ops;
 
 
 extern std::map<std::string, std::vector<std::string>> data_typeVars;
-extern std::map<std::string, std::string> typeVars;
+extern std::map<std::string, std::map<std::string, std::string>> typeVars;
 
-extern std::vector<std::string> objectVars;
 extern std::vector<std::string> globalVars;
 extern std::map<std::string, std::string> floatFunctions;
 extern std::map<std::string, std::string> stringMethods;

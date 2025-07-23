@@ -98,9 +98,8 @@ inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::unique_p
 
   if (!idxs->IsSlice)
   {
-    
     std::string fn = type+"_CalculateIdx";
-    
+
     Function *F = TheModule->getFunction(fn);
     if (F)
       return callret(fn, idxs_values);
@@ -1129,8 +1128,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if (is_alloca)
     {
-
-
       std::string store_trigger = LType + "_StoreTrigger";
       std::string copy_fn = LType + "_Copy";
 
@@ -1167,6 +1164,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       if (LType!="float"&&LType!="int")
         call("MarkToSweep_Unmark_Scopeful", {scope_struct, Val, global_str(LType)});
 
+      // p2t("Store " + LType + " at " + parser_struct.function_name + "/"+ Lname);
 
       Builder->CreateStore(Val, alloca);
     } else
@@ -1553,7 +1551,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct, Parser_Struct parser_struct) {
   
 
   // find existing unique function name (_async_1, _async_2, _async_3 etc)
@@ -1595,10 +1593,8 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
       std::cout << "Type is void ptr" << ".\n";
     }
     else
-    {
-      
-      type = typeVars[pair.first];
-      // std::cout << "Type is " << typeVars[pair.first] << ".\n";
+    {   
+      type = typeVars[parser_struct.function_name][pair.first];
       continue;
     }
 
@@ -1706,7 +1702,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
 
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct);
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1754,7 +1750,7 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct);
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -2103,6 +2099,8 @@ Function *PrototypeAST::codegen() {
     Arg.setName(Args[Idx++]);
 
 
+
+
   return F;
 }
 
@@ -2145,9 +2143,11 @@ Value *SelfExprAST::codegen(Value *scope_struct) {
 
 
 
-std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
+std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct, bool to_last) {
 
   int last = expressions_string_vec.size();
+  if (!to_last)
+    last--;
 
 
   std::string _class=""; 
@@ -2161,7 +2161,11 @@ std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Par
   for(; i<last; ++i)
   {
     std::cout << "---------------------Class " << _class << " to " << Object_toClass[_class][expressions_string_vec[i]] << ".\n";
-    _class = Object_toClass[_class][expressions_string_vec[i]];
+
+    std::string next_class = Object_toClass[_class][expressions_string_vec[i]];
+    if (next_class=="")
+      return _class;
+    _class = next_class;
   }
 
   return _class;
@@ -2252,7 +2256,7 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 
     obj_ptr = callret("offset_object_ptr", {obj_ptr, const_int(offset)});
 
-    std::string _type = typeVars[Name];
+    std::string _type = typeVars[parser_struct.class_name][Name];
     if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
     {
       obj_ptr = callret("object_Load_slot", {obj_ptr});
@@ -2273,8 +2277,8 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
     obj_ptr = callret("offset_object_ptr", {obj_ptr, const_int(offset)});
 
 
-
-    std::string _type = typeVars[Name];
+    std::string fn_name = Get_Nested_Name(Expr_String, parser_struct, false);
+    std::string _type = typeVars[fn_name][Name];
     if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
       obj_ptr = callret("object_Load_slot", {obj_ptr});
     
@@ -2283,7 +2287,7 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 
   } else if (height==1)
   {
-    std::string var_type = typeVars[Name];
+    std::string var_type = typeVars[parser_struct.function_name][Name];
     std::cout << "----LOADING HEIGHT==1 ALLOCA " << Name << " OF TYPE " << var_type << " AT FUNCTION " << parser_struct.function_name << ".\n"; 
     return load_alloca(Name, var_type, parser_struct.function_name);    
   }
@@ -2305,7 +2309,11 @@ Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {
   Value *idx = Idx_Calc_Codegen(Type, obj_ptr, Idx, scope_struct);
 
 
-  return callret(Type+"_Idx", {scope_struct, obj_ptr, idx});
+  if (!Idx->IsSlice)
+    return callret(Type+"_Idx", {scope_struct, obj_ptr, idx});
+  else
+    return callret(Type+"_Slice", {scope_struct, obj_ptr, idx});
+  
 }
 
 
@@ -2344,6 +2352,7 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
   call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
 
 
+  // p2t("Calling: " + Callee);
 
 
   if(ends_with(Callee, "__init__")&&Inner_Expr->From_Self) // mallocs an object inside another

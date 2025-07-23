@@ -5,9 +5,10 @@
 #include <cstdarg>
 
 #include "../../common/include.h"
+#include "../../compiler_frontend/global_vars.h"
+#include "../../compiler_frontend/logging.h"
 #include "../../tensor/tensor_dim_functions.h"
 #include "../../tensor/tensor_struct.h"
-#include "../../compiler_frontend/logging.h"
 
 
 

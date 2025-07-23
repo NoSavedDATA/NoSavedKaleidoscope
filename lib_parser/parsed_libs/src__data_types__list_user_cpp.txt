@@ -1,1 +1,1 @@
-"list_New", "list_Store", "list_print", "list_Load", "list_CalculateIdx", "list_Create", "list_Idx", "assign_wise_list_Idx", 
+"list_New", "list_print", "list_Create", "list_CalculateIdx", "list_Idx", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", 
