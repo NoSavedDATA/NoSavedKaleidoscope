@@ -133,7 +133,7 @@ extern "C" void *Linear_Create(Scope_Struct *scope_struct, char *name, char *sco
   std::vector<std::string> notes;
   
 
-  for (int i=2; i<notes_vector->data->size(); i++)
+  for (int i=2; i<notes_vector->size; i++)
   {
     if(notes_vector->data_types->at(i)=="str")
     {

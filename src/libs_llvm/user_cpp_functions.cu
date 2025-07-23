@@ -22,7 +22,7 @@ void set_user_functions() {
 		"save_as_int", 
 		"MHSAForward", "CreateMHSAOnDemand", 
 		"print", 
-		"list_New", "list_Store", "list_print", "list_Load", "list_CalculateIdx", "list_Create", "list_Idx", "assign_wise_list_Idx", 
+		"list_New", "list_print", "list_Create", "list_CalculateIdx", "list_Idx", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", 
 		"__slee_p_", "random_sleep", "silent_sleep", "start_timer", "end_timer", 
 		"CosineLR", 
 		"relu", "gelu", "sigmoid", "_tanh", "softmax", 

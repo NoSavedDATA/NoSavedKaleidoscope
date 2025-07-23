@@ -44,7 +44,7 @@ void conv2d_backward(float *inp, int size, float *out,
 extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, Conv2dCPP *conv, DT_tensor *tensor)
 {
 
-  // std::cout << "Conv2d pointer is: " << scope_struct->object_ptr << ".\n";
+  // std::cout << "Conv2d pointer is: " << conv << ".\n";
 
   
 
@@ -106,7 +106,7 @@ extern "C" void *Conv2d_Create(Scope_Struct *scope_struct, char *name, char *sco
 
   std::vector<std::string> notes;
   
-  for (int i=2; i<notes_vector->data->size(); i++)
+  for (int i=2; i<notes_vector->size; i++)
   {
     if(notes_vector->data_types->at(i)=="str")
     {
@@ -122,9 +122,6 @@ extern "C" void *Conv2d_Create(Scope_Struct *scope_struct, char *name, char *sco
 
   Conv2dCPP *conv = new Conv2dCPP(C, OC, ks, stride, padding, init, notes, name);
 
-  // std::unique_ptr<Conv2dCPP> conv2d = std::make_unique<Conv2dCPP>(C, OC, ks, stride, padding, init, notes, name);
-
-  // NamedConv2d[name] = std::move(conv2d);
 
 
   return conv;

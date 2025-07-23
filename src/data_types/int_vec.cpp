@@ -120,13 +120,14 @@ extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int 
 
 
 extern "C" int int_vec_CalculateIdx(DT_int_vec *vec, int first_idx, ...) {
-
   if (first_idx<0)
     first_idx = vec->size+first_idx;
 
-
   return first_idx;
 }
+
+
+
 
 
 extern "C" DT_int_vec *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx, ...) {
@@ -152,6 +153,7 @@ extern "C" DT_int_vec *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx,
   slices->vec[0] = first_idx;
   slices->vec[1] = second_idx;
 
+  // std::cout << "Slice from " << first_idx << " to " << second_idx << ".\n";
  
   return slices;
 }
@@ -161,6 +163,10 @@ extern "C" DT_int_vec *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx,
 extern "C" DT_int_vec *int_vec_Slice(Scope_Struct *scope_struct, DT_int_vec *vec, DT_int_vec *slices) {
 
   int start=slices->vec[0], end=slices->vec[1];
+
+  if (end==COPY_TO_END_INST)
+    end = vec->size;
+
 
   int size = end-start;
 

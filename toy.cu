@@ -173,7 +173,6 @@ std::map<std::string, std::string> reverse_ops;
 
 
 //global
-std::vector<std::string> objectVars;
 std::vector<std::string> globalVars;
 std::map<std::string, std::string> floatFunctions;
 std::map<std::string, std::string> stringMethods;
@@ -603,8 +602,9 @@ Function *FunctionAST::codegen() {
         scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
     } else { 
         std::string type = "";
-        if (typeVars.find(arg_name) != typeVars.end())
-            type = typeVars[arg_name];
+
+        if (typeVars[function_name].find(arg_name) != typeVars[function_name].end())
+            type = typeVars[function_name][arg_name];
         // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
 
@@ -631,7 +631,7 @@ Function *FunctionAST::codegen() {
             Builder->CreateStore(&Arg, arg_alloca);
             if(type!="float"&&type!="int")
             {
-                p2t("HELLO FROM ELSE");
+                // p2t("HELLO FROM ELSE for arg_name " + arg_name + " of type " + type);
                 // call("MarkToSweep_Unmark_Scopeless", {scope_struct, &Arg});
             }
         }
@@ -2760,7 +2760,7 @@ ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
     InitializeModule();
     return TSM;
   } else
-    report_fatal_error("Não foi possível compilar a função JIT de forma lazy");
+    report_fatal_error("failed to JIT.");
 }
 
 

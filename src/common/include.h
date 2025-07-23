@@ -4,6 +4,3 @@
 #include <cuda_fp16.h>
 #include"cu_commons.h"
 #include"extension_functions.h"
-
-
-extern int TERMINATE_VARARG;

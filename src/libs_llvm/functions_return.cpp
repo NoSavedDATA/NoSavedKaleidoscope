@@ -51,7 +51,7 @@ void set_functions_return_type() {
 						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_int", "int"}, 
 						{"logE", "tensor"}, {"logE2", "tensor"}, {"clip", "tensor"}, 
 						{"CreateNotesVector", "list"}, {"Add_To_NotesVector_float", "list"}, {"Add_To_NotesVector_int", "list"}, {"Add_To_NotesVector_str", "list"}, 
-						{"list_New", "list"}, {"list_Load", "list"}, {"list_CalculateIdx", "int"}, {"list_Create", "list"}, 
+						{"list_New", "list"}, {"list_Create", "list"}, {"list_CalculateIdx", "int"}, {"list_CalculateSliceIdx", "int_vec"}, {"list_Slice", "list"}, 
 						{"mse_with_priorities", "tensor"}, 
 						{"dictionary_Create", "dict"}, 
 						{"Pool2d", "tensor"}, 

@@ -92,7 +92,7 @@ extern "C" float Pool2d_Create(Scope_Struct *scope_struct, char *name, char *sco
   
   std::cout << "\nCreate maxpool2d on demand:\n" << "   ks " << ks << " stride " << stride << " padding " << padding << "\n";
   char *type = "max";
-  if(notes_vector->data->size()==4) 
+  if(notes_vector->size==4) 
   type = notes_vector->get<char *>(3);
 
 

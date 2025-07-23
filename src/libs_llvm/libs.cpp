@@ -969,33 +969,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_New", list_NewTy);
 
-	FunctionType *list_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Store", list_StoreTy);
-
 	FunctionType *list_printTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("list_print", list_printTy);
-
-	FunctionType *list_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Load", list_LoadTy);
-
-	FunctionType *list_CalculateIdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("list_CalculateIdx", list_CalculateIdxTy);
 
 	FunctionType *list_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -1004,12 +983,33 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
 
+	FunctionType *list_CalculateIdxTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("list_CalculateIdx", list_CalculateIdxTy);
+
 	FunctionType *list_IdxTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);
+
+	FunctionType *list_CalculateSliceIdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("list_CalculateSliceIdx", list_CalculateSliceIdxTy);
+
+	FunctionType *list_SliceTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Slice", list_SliceTy);
 
 	FunctionType *assign_wise_list_IdxTy= FunctionType::get(
 		int8PtrTy,

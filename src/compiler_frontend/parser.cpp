@@ -30,7 +30,7 @@ std::map<int, std::string> op_map;
 std::vector<std::string> op_map_names;
 
 std::map<std::string, std::vector<std::string>> data_typeVars;
-std::map<std::string, std::string> typeVars;
+std::map<std::string, std::map<std::string, std::string>> typeVars;
 
 std::map<std::string, std::map<std::string, int>> ClassVariables;
 std::map<std::string, int> ClassSize;
@@ -98,8 +98,8 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   while (true) {
     Name = IdentifierStr;
-    objectVars.push_back(Name);
-    // typeVars[Name] = "object";
+    typeVars[parser_struct.function_name][Name] = _class;
+
 
     if (!is_self||parser_struct.class_name=="")
     {
@@ -137,20 +137,35 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
 
 
 std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string class_name) {
-
   
   std::vector<std::unique_ptr<ExprAST>> idx, second_idx;
-    
-  idx.push_back(ParseExpression(parser_struct, class_name, false));
+
   bool has_sliced_vec=false;
 
   if (CurTok==':')
   {
     getNextToken();
-    second_idx.push_back(ParseExpression(parser_struct, class_name, false));
     has_sliced_vec=true;
-  } else
-    second_idx.push_back(std::make_unique<IntExprAST>(0));
+
+    idx.push_back(std::make_unique<IntExprAST>(0));
+    if (CurTok==','||CurTok==']')
+      second_idx.push_back(std::make_unique<IntExprAST>(COPY_TO_END_INST));
+    else
+      second_idx.push_back(ParseExpression(parser_struct, class_name, false));
+  } else { 
+    idx.push_back(ParseExpression(parser_struct, class_name, false));
+
+    if (CurTok==':')
+    {
+      getNextToken();
+      has_sliced_vec=true;
+
+      if (CurTok==','||CurTok==']')
+        second_idx.push_back(std::make_unique<IntExprAST>(COPY_TO_END_INST));
+      else
+        second_idx.push_back(ParseExpression(parser_struct, class_name, false));
+    }
+  }
 
 
 
@@ -164,8 +179,7 @@ std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string 
       getNextToken();
       second_idx.push_back(ParseExpression(parser_struct, class_name, false));
       has_sliced_vec=true;
-    } else
-      second_idx.push_back(std::make_unique<IntExprAST>(0));
+    }
   }
   idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
   second_idx.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
@@ -190,10 +204,8 @@ std::unique_ptr<ExprAST> ParseIdentifierListExpr(Parser_Struct parser_struct, st
   
 
   
-  if (typeVars.find(IdName) != typeVars.end())
-    type = typeVars[IdName];
-  else if (in_str(IdName, objectVars))
-    type = "object";
+  if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
+    type = typeVars[parser_struct.function_name][IdName];
 
   types.push_back(type);
 
@@ -249,10 +261,8 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     {
       IdName = IdentifierStr;
 
-      if (typeVars.find(IdName) != typeVars.end())
-        type = typeVars[IdName];
-      else if (in_str(IdName, objectVars))
-        type = "object";
+      if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
+        type = typeVars[parser_struct.function_name][IdName];
       else
         type = "none";
 
@@ -294,10 +304,8 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
 
   if (CurTok != '(' && CurTok != '[') // Simple variable ref.
   {
-    if (typeVars.find(IdName) != typeVars.end())
-      type = typeVars[IdName];
-    else if (in_str(IdName, objectVars))
-      type = "object";
+    if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
+      type = typeVars[parser_struct.function_name][IdName];
     else
     {
       type = "none";
@@ -336,8 +344,8 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     
     std::unique_ptr<IndexExprAST> Idx = ParseIdx(parser_struct, class_name);
     
-    if (typeVars.find(IdName) != typeVars.end())
-      type = typeVars[IdName];
+    if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
+      type = typeVars[parser_struct.function_name][IdName];
     
 
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
@@ -404,10 +412,10 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     
     std::string callee_override = "none";
     bool name_solve_to_last = false;
-    if(typeVars.count(IdName)>0)
+    if(typeVars[parser_struct.function_name].count(IdName)>0)
     {
       name_solve_to_last = true;
-      callee_override = typeVars[IdName];
+      callee_override = typeVars[parser_struct.function_name][IdName];
     }
     
 
@@ -614,15 +622,13 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
   getNextToken();
 
   if(Start->GetType()=="float")
-    typeVars[IdName] = "float";
+    typeVars[parser_struct.function_name][IdName] = "float";
 
 
   auto End = ParseExpression(parser_struct, class_name);
   if (!End)
     return nullptr;
 
-  // if(End->GetType()=="float")
-  //   typeVars[IdName] = "float";
 
 
   std::unique_ptr<ExprAST> Step = std::make_unique<IntExprAST>(1.0);
@@ -675,7 +681,7 @@ std::unique_ptr<ExprAST> ParseForExpr(Parser_Struct parser_struct, std::string c
   std::string IdName = IdentifierStr;
   getNextToken(); // eat identifier.
 
-  typeVars[IdName] = "int";
+  typeVars[parser_struct.function_name][IdName] = "int";
 
   if (CurTok=='=')
     return ParseStandardForExpr(parser_struct, class_name, cur_level_tabs, IdName);
@@ -731,7 +737,7 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
   
   //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
 
-  return std::make_unique<AsyncExprAST>(std::move(Bodies));
+  return std::make_unique<AsyncExprAST>(std::move(Bodies), parser_struct);
 }
 
 std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::string class_name) {
@@ -764,7 +770,7 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
   
   //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
 
-  return std::make_unique<AsyncsExprAST>(std::move(Bodies), async_count);
+  return std::make_unique<AsyncsExprAST>(std::move(Bodies), async_count, parser_struct);
 }
 
 
@@ -838,19 +844,7 @@ std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string
     while (true) {
       // std::cout << "CURRENT TOKEN: " << ReverseToken(CurTok) << ".\n";
       std::string element_type;
-      // if (CurTok==tok_number)
-      //   element_type = "float";
-      // else
-      // {
-      //   std::cout << "IDENTIFIER STR IS " << IdentifierStr << ".\n";
-      //   if (typeVars.count(IdentifierStr)>0)
-      //     element_type = typeVars[IdentifierStr];
-      //   else if (Object_toClass[].count(IdentifierStr)>0)
-      //     element_type = Object_toClass[][IdentifierStr];
-      //   else
-      //     LogError(IdentifierStr + " variable was not found on the List definition scope.");
-      // } 
-      // Elements.push_back(std::make_unique<StringExprAST>(element_type));
+
 
       if (auto element = ParseExpression(parser_struct, class_name, false))
       {
@@ -1036,26 +1030,48 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
 
 
-    // x.view()
-    if(typeVars.count(Prev_IdName)>0)
-      callee = typeVars[Prev_IdName] + "_" + IdName;
 
+    std::string prev_nested_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct, false);
+    std::string nested_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct, true);
+    std::string prev_fn_name = (prev_nested_name=="") ? parser_struct.function_name : prev_nested_name;
+    std::string fn_name = (nested_name=="") ? parser_struct.function_name : nested_name;
+
+
+    // if (Prev_IdName=="a")
+    // {
+
+    //   std::cout << "\n\n\n\n\n";
+
+    //   std::cout << "prev n n" << prev_nested_name << ".\n";
+    //   std::cout << "nested name" << nested_name << ".\n";
+    //   std::cout << "prev_fn_name" << prev_fn_name << ".\n";
+    //   std::cout << "fn_name" << fn_name << ".\n";
+
+
+    //   std::cout << "\n\n\n\n\n";
+
+    //   std::exit(0);
+    // }
+
+    bool is_from_nsk=true;
     // model.linear_1(x)
-    if(typeVars.count(IdName)>0)
+    if(typeVars[prev_fn_name].count(IdName)>0)
     {
-      callee = typeVars[IdName];
+      callee = typeVars[prev_fn_name][IdName];
       inner_expr->skip=false;
+    }
+    // x.view()
+    else if(typeVars[fn_name].count(Prev_IdName)>0)
+      callee = typeVars[fn_name][Prev_IdName] + "_" + IdName;
+    else {
+      is_from_nsk=false; 
     }
 
 
-
     
-      
-
 
     if (in_str(callee, vararg_methods))
       arguments.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
-
 
     if(inner_expr->skip)
     {
@@ -1063,14 +1079,10 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
       inner_expr->IsLeaf=true;
     }
 
+    if (prev_nested_name!=""&&!is_from_nsk)
+      callee = prev_nested_name+"_"+callee; // Add variable high-level class to the name
 
-    std::string nested_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct);
-    std::cout << "-------------------GOT NESTED NAME: " << nested_name << ".\n";
-    callee = nested_name+callee; // Add variable high-level class to the name
-
-    // if(lib_function_remaps.count(tgt_function)>0)
-    //   tgt_function = lib_function_remaps[tgt_function];
-
+    // std::cout << "CALLING: " << callee << ".\n";
     std::unique_ptr<NestedCallExprAST> call_expr = std::make_unique<NestedCallExprAST>(std::move(inner_expr), callee, parser_struct, std::move(arguments));
 
 
@@ -1096,14 +1108,16 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
     IdName = inner_expr->Name;
     std::cout << "VECTOR NAME " << IdName << ".\n";
 
-    if (typeVars.find(IdName) != typeVars.end())
-      type = typeVars[IdName];
-    else if (in_str(IdName, objectVars))
-      type = "object";
+    std::string fn_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct, false);
+    // std::string fn_name = (inner_expr->From_Self) ? parser_struct.class_name : parser_struct.function_name;
+
+
+    if (typeVars[fn_name].find(IdName) != typeVars[fn_name].end())
+      type = typeVars[fn_name][IdName];
     else if (stringMethods.find(IdName) != stringMethods.end())
       type = "str";
     else {
-      std::string _error = "Self/attribute variable " + IdName + " was not found in scope.";
+      std::string _error = "Self/attribute variable " + IdName + " was not found on scope " + fn_name + ".";
       return LogError(_error);
       // type = "none";
     }
@@ -1126,19 +1140,21 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
   // Parse variable expression
 
   
+  std::string fn_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct, false);
+
   IdName = inner_expr->Name;
 
-  if (typeVars.find(IdName) != typeVars.end())
-    type = typeVars[IdName];
-  else if (in_str(IdName, objectVars))
-    type = "object";
+  if (typeVars[fn_name].find(IdName) != typeVars[fn_name].end())
+    type = typeVars[fn_name][IdName];
   else if (stringMethods.find(IdName) != stringMethods.end())
     type = "str";
   else {
-    std::string _error = "Self/attribute variable " + IdName + " was not found in scope.";
+    std::string _error = "Self/attribute variable " + IdName + " was not found on scope " + fn_name + ".";
     return LogError(_error);
     // type = "none";
   }
+
+  std::cout << "TYPE OF " << IdName << " IS " << type << ".\n";
 
 
   std::unique_ptr<NestedVariableExprAST> var_expr = std::make_unique<NestedVariableExprAST>(std::move(inner_expr), parser_struct, type);
@@ -1278,7 +1294,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
   while (true) {
     std::string Name = IdentifierStr;
 
-    typeVars[IdentifierStr] = data_type;
+    typeVars[parser_struct.function_name][IdentifierStr] = data_type;
     getNextToken(); // eat identifier.
 
     
@@ -1846,7 +1862,9 @@ std::unique_ptr<ExprAST> ParseExpression(Parser_Struct parser_struct, std::strin
 ///   ::= binary LETTER number? (id, id)
 ///   ::= unary LETTER (id)
 std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
-  std::string FnName = parser_struct.class_name;
+  std::string FnName="";
+  if (parser_struct.class_name!="")
+    FnName = parser_struct.class_name+"_";
   std::string _class, method;
   method = "";
   _class = parser_struct.class_name;
@@ -1941,7 +1959,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
       ArgNames.push_back(IdentifierStr);
 
-      typeVars[IdentifierStr] = type;
+      typeVars[FnName][IdentifierStr] = type;
       
       getNextToken(); // eat arg name
     }
@@ -1972,6 +1990,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   getNextToken();
 
   functions_return_type[FnName] = return_type;
+
 
   return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
                                          BinaryPrecedence);
@@ -2167,12 +2186,12 @@ std::unique_ptr<ExprAST> ParseClass() {
 
 
       if (is_object) {
-        objectVars.push_back(IdentifierStr);
+        typeVars[Name][IdentifierStr] = data_type;
         Object_toClass[Name][IdentifierStr] = data_type; 
         std::cout << "----PARSING OBJECT INSIDE CLASS " << IdentifierStr << "/" << data_type << ".\n";
       }
       else
-       typeVars[IdentifierStr] = data_type;
+       typeVars[Name][IdentifierStr] = data_type;
       
       ClassVariables[Name][IdentifierStr] = last_offset;
       

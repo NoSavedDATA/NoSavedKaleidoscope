@@ -84,7 +84,7 @@ void batchnorm2d_backward(float *inp, int size, float *out,
 extern "C" float BatchNorm2d_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
 
-  if (notes_vector->data->size()<1)
+  if (notes_vector->size<1)
     LogErrorS("BatchNorm2d requires input channels information.");
 
   int C = notes_vector->get<int>(0);

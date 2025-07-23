@@ -37,7 +37,7 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
     std::vector<int> dims;
     char *init = "xavu";
     bool is_weight = false;
-    for (int i=0; i<notes_vector->data->size(); i++)
+    for (int i=0; i<notes_vector->size; i++)
     {
       if(notes_vector->data_types->at(i)=="int")
         dims.push_back(notes_vector->get<int>(i));

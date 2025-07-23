@@ -435,11 +435,11 @@ IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vect
   
   
   /// AsyncExprAST - Expression class for async.
-AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body)
-  : Body(std::move(Body)) {}
+AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
+  : Body(std::move(Body)), parser_struct(parser_struct) {}
   
-AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount)
-  : Body(std::move(Body)), AsyncsCount(AsyncsCount) {}
+AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int AsyncsCount, Parser_Struct parser_struct)
+  : Body(std::move(Body)), AsyncsCount(AsyncsCount), parser_struct(parser_struct) {}
 
 IncThreadIdExprAST::IncThreadIdExprAST()
 {}

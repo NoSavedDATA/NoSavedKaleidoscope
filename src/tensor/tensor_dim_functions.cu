@@ -9,6 +9,7 @@
 
 #include "../codegen/string.h"
 #include "../common/include.h"
+#include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging.h"
 #include "../cuda_kernels/calculate_grids.h"
 #include "../cuda_kernels/dim_kernels.h"
