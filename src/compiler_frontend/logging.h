@@ -7,6 +7,7 @@ std::unique_ptr<ExprAST> LogErrorS(std::string Str);
 
 std::unique_ptr<ExprAST> LogError(std::string Str); 
 
+void LogBlue(std::string);
 
 std::unique_ptr<ExprAST> LogError_toNextToken(std::string Str); 
 

@@ -10,6 +10,7 @@
 #include "global_vars.h"
 #include "libs_parser.h"
 #include "logging.h"
+#include "logging_execution.h"
 #include "modules.h"
 #include "name_solver.h"
 #include "parser.h"

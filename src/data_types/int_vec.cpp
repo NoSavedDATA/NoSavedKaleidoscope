@@ -4,6 +4,7 @@
 
 #include "../codegen/random.h"
 #include "../compiler_frontend/global_vars.h"
+#include "../compiler_frontend/logging_execution.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
@@ -101,6 +102,10 @@ extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
   // std::cout << "int_vec_Idx on idx " << idx << " for the vector " << vec << ".\n";
 
   // std::cout << "Loaded vec" << ".\n";
+
+  if (idx>vec->size)
+    LogErrorEE(0, "Index " + std::to_string(idx) + " is out of bounds for a vector of size: " + std::to_string(vec->size) + ".");
+
   int ret = vec->vec[idx];
   // std::cout << "returning" << ".\n"; 
   // std::cout << "got: " << ret << ".\n";
@@ -130,9 +135,8 @@ extern "C" int int_vec_CalculateIdx(DT_int_vec *vec, int first_idx, ...) {
 
 
 
-extern "C" DT_int_vec *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx, ...) {
+extern "C" Vec_Slices *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx, ...) {
 
-  DT_int_vec *slices;
 
   int second_idx;
 
@@ -149,20 +153,23 @@ extern "C" DT_int_vec *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx,
   if (second_idx<0)
     second_idx = size + second_idx;
 
-  slices = new DT_int_vec(2);
-  slices->vec[0] = first_idx;
-  slices->vec[1] = second_idx;
+  Vec_Slices *vec_slices = new Vec_Slices();
 
-  // std::cout << "Slice from " << first_idx << " to " << second_idx << ".\n";
+  DT_int_vec slices = DT_int_vec(2);
+  slices.vec[0] = first_idx;
+  slices.vec[1] = second_idx;
+
+  vec_slices->push_back(slices);
+
  
-  return slices;
+  return vec_slices;
 }
 
 
 
-extern "C" DT_int_vec *int_vec_Slice(Scope_Struct *scope_struct, DT_int_vec *vec, DT_int_vec *slices) {
+extern "C" DT_int_vec *int_vec_Slice(Scope_Struct *scope_struct, DT_int_vec *vec, Vec_Slices *slices) {
 
-  int start=slices->vec[0], end=slices->vec[1];
+  int start=slices->slices[0].vec[0], end=slices->slices[0].vec[1];
 
   if (end==COPY_TO_END_INST)
     end = vec->size;

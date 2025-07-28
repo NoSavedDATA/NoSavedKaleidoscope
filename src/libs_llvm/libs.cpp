@@ -311,6 +311,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("Jitter", JitterTy);
 
+	FunctionType *Delete_PtrTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Delete_Ptr", Delete_PtrTy);
+
 	FunctionType *RandomStrOnDemandTy= FunctionType::get(
 		int8PtrTy,
 		{},
@@ -738,6 +745,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("clip", clipTy);
 
+	FunctionType *nsk_vec_sizeTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("nsk_vec_size", nsk_vec_sizeTy);
+
 	FunctionType *__idx__Ty= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -983,6 +997,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
 
+	FunctionType *list_sizeTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_size", list_sizeTy);
+
 	FunctionType *list_CalculateIdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -996,6 +1017,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);
+
+	FunctionType *to_intTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("to_int", to_intTy);
+
+	FunctionType *to_floatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("to_float", to_floatTy);
 
 	FunctionType *list_CalculateSliceIdxTy= FunctionType::get(
 		int8PtrTy,

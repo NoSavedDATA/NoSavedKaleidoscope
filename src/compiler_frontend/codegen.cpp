@@ -623,7 +623,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   // // Create an alloca for the variable in the entry block.
   
 
-  llvm::Type *alloca_type = get_type_from_str("int");  //TODO: this one could assume void* as well
+  llvm::Type *alloca_type = get_type_from_str(Type);
   AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName, alloca_type);
   AllocaInst *idx_alloca = CreateEntryBlockAlloca(TheFunction, VarName, Type::getInt32Ty(*TheContext));
   function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
@@ -636,16 +636,11 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
   Value *vec = Vec->codegen(scope_struct);
 
-  Value *VecSize = callret("int_vec_size", {scope_struct, vec}); 
+  Value *VecSize = callret("nsk_vec_size", {scope_struct, vec}); 
   Builder->CreateStore(CurIdx, idx_alloca);
 
 
-
-
-  // VecSize = Builder->CreateFAdd(VecSize, const_float(1), "addtmp");
-  
-  
-
+  // VecSize = Builder->CreateFAdd(VecSize, const_float(1), "addtmp");  
 
 
   // Make the new basic block for the loop header, inserting after current
@@ -691,7 +686,13 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
   
   CurIdx = Builder->CreateLoad(Type::getInt32Ty(*TheContext), idx_alloca, VarName.c_str());
-  Builder->CreateStore(callret("int_vec_Idx_num", {scope_struct, vec, CurIdx}), control_var_alloca);
+
+  Value *vec_value = callret(VecType+"_Idx", {scope_struct, vec, CurIdx});
+  if(VecType=="list"&&(Type=="float"||Type=="int"))
+    vec_value = callret("to_"+Type, {scope_struct, vec_value});
+
+  Builder->CreateStore(vec_value, control_var_alloca);
+
   Value *NextIdx = Builder->CreateAdd(CurIdx, StepVal, "nextvar"); // Increment  
 
   int j=0;
@@ -931,14 +932,12 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
   if (!Idx->IsSlice) {
     std::string idx_fn = Type + "_Idx";
-    
     return callret(idx_fn, {scope_struct, loaded_var, idx});
   } else {
-    std::cout << "ITS A SLICE FUNCTION" << ".\n";
-
-    std::string slice_fn = Type + "_Slice";
-    
-    return callret(slice_fn, {scope_struct, loaded_var, idx});
+    std::string slice_fn = Type + "_Slice";    
+    Value *ret =  callret(slice_fn, {scope_struct, loaded_var, idx});
+    call("Delete_Ptr", {idx});
+    return ret;
   }
 }
 
@@ -2024,7 +2023,7 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         Value *ptr = callret("malloc", {const_int64(Size)});
         Builder->CreateStore(ptr, alloca);
         // Value *ptr = callret("posix_memalign", {alloca, const_int64(8), const_int64(Size)});
-        std::cout << "ADDING OBJECT " << VarName << " TO FUNCTION " << parser_struct.function_name << ".\n";
+        // std::cout << "ADDING OBJECT " << VarName << " TO FUNCTION " << parser_struct.function_name << ".\n";
         function_allocas[parser_struct.function_name][VarName] = alloca;
 
 
@@ -2160,8 +2159,7 @@ std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Par
 
   for(; i<last; ++i)
   {
-    std::cout << "---------------------Class " << _class << " to " << Object_toClass[_class][expressions_string_vec[i]] << ".\n";
-
+    // std::cout << "---------------------Class " << _class << " to " << Object_toClass[_class][expressions_string_vec[i]] << ".\n";
     std::string next_class = Object_toClass[_class][expressions_string_vec[i]];
     if (next_class=="")
       return _class;
@@ -2288,7 +2286,7 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
   } else if (height==1)
   {
     std::string var_type = typeVars[parser_struct.function_name][Name];
-    std::cout << "----LOADING HEIGHT==1 ALLOCA " << Name << " OF TYPE " << var_type << " AT FUNCTION " << parser_struct.function_name << ".\n"; 
+    // std::cout << "----LOADING HEIGHT==1 ALLOCA " << Name << " OF TYPE " << var_type << " AT FUNCTION " << parser_struct.function_name << ".\n"; 
     return load_alloca(Name, var_type, parser_struct.function_name);    
   }
   else {
@@ -2312,8 +2310,11 @@ Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {
   if (!Idx->IsSlice)
     return callret(Type+"_Idx", {scope_struct, obj_ptr, idx});
   else
-    return callret(Type+"_Slice", {scope_struct, obj_ptr, idx});
-  
+  {
+    Value *ret = callret(Type+"_Slice", {scope_struct, obj_ptr, idx});
+    call("Delete_Ptr", {idx});
+    return ret;
+  }  
 }
 
 
@@ -2323,7 +2324,7 @@ Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {
 
 
 Value *NestedVariableExprAST::codegen(Value *scope_struct) {
-  std::cout << "Nested Variable Expr" << ".\n";
+  // std::cout << "Nested Variable Expr" << ".\n";
 
   // Print_Names_Str(Inner_Expr->Expr_String);
 
@@ -2357,7 +2358,7 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
 
   if(ends_with(Callee, "__init__")&&Inner_Expr->From_Self) // mallocs an object inside another
   {
-    p2t("RUN INIT FOR CALLEE "+ Callee);
+    // p2t("RUN INIT FOR CALLEE "+ Callee);
 
     Inner_Expr->Load_Last=false; // inhibits Load_slot
     obj_ptr = Inner_Expr->codegen(scope_struct);
@@ -2535,7 +2536,6 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
 
 
-  std::cout << "TARGET FUNCTION IS " << tgt_function << ".\n";
 
   p2t("CallExpr Finish mangle, get scope info.\n---Function Name: " + tgt_function);
   

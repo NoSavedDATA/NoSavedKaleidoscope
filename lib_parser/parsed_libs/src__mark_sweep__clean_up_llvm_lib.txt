@@ -1,0 +1,8 @@
+1821-07-25 11:17:53
+
+	FunctionType *Delete_PtrTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("Delete_Ptr", Delete_PtrTy);

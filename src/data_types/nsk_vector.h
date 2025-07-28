@@ -18,4 +18,13 @@ class DT_int_vec : public Nsk_Vector {
         int *vec;
 
     DT_int_vec(int size);
+    ~DT_int_vec();
+};
+
+class Vec_Slices : public Nsk_Vector {
+
+    public:
+        std::vector<DT_int_vec> slices;
+        Vec_Slices();
+        void push_back(DT_int_vec);
 };

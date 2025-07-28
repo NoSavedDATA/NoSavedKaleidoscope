@@ -81,14 +81,16 @@ extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
 
 extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector)
 {
-  std::cout << "list_Create"  << ".\n";
-
   if (init_val==nullptr)
-    init_val = new DT_list();  
+    init_val = new DT_list();
 
   return init_val;
 }
 
+
+extern "C" int list_size(Scope_Struct *scope_struct, DT_list *list) {
+  return list->size;
+}
 
 
 void list_Clean_Up(void *data_ptr) {
@@ -121,21 +123,28 @@ extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
   {
     float* float_ptr = new float(vec->get<float>(idx));
     return (void*)float_ptr;
-    // return (void *)vec->get<float>(idx);
   }
   if (type=="int")
   {
     int* ptr = new int(vec->get<int>(idx));
-    return (void*)ptr;
+    return static_cast<void*>(ptr);
   }
 
   return std::any_cast<void *>((*vec->data)[idx]);
 }
 
 
-extern "C" DT_int_vec *list_CalculateSliceIdx(DT_list *vec, int first_idx, ...) {
+extern "C" int to_int(Scope_Struct *scope_struct, void *ptr) {
+  return *static_cast<int*>(ptr);
+}
 
-  DT_int_vec *slices;
+extern "C" float to_float(Scope_Struct *scope_struct, void *ptr) {
+  return *static_cast<float*>(ptr);
+}
+
+
+extern "C" Vec_Slices *list_CalculateSliceIdx(DT_list *vec, int first_idx, ...) {
+
 
   int second_idx;
 
@@ -152,20 +161,23 @@ extern "C" DT_int_vec *list_CalculateSliceIdx(DT_list *vec, int first_idx, ...) 
   if (second_idx<0)
     second_idx = size + second_idx;
 
-  slices = new DT_int_vec(2);
-  slices->vec[0] = first_idx;
-  slices->vec[1] = second_idx;
+  Vec_Slices *vec_slices = new Vec_Slices();
 
-  std::cout << "Slice list from " << first_idx << " to " << second_idx << ".\n";
+  DT_int_vec slices = DT_int_vec(2);
+  slices.vec[0] = first_idx;
+  slices.vec[1] = second_idx;
+
+  vec_slices->push_back(slices);
+
  
-  return slices;
+  return vec_slices;
 }
 
 
 
-extern "C" DT_list *list_Slice(Scope_Struct *scope_struct, DT_list *vec, DT_int_vec *slices) {
+extern "C" DT_list *list_Slice(Scope_Struct *scope_struct, DT_list *vec, Vec_Slices *slices) {
 
-  int start=slices->vec[0], end=slices->vec[1];
+  int start = slices->slices[0].vec[0], end=slices->slices[0].vec[1];
 
   if (end==COPY_TO_END_INST)
     end = vec->size;
