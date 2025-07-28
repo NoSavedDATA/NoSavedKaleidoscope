@@ -497,14 +497,14 @@ class ForExprAST : public ExprAST {
 
 /// ForExprAST - Expression class for for.
 class ForEachExprAST : public ExprAST {
-  std::string VarName;
+  std::string VarName, VecType;
   std::unique_ptr<ExprAST> Vec;
   std::vector<std::unique_ptr<ExprAST>> Body;
   Parser_Struct parser_struct;
 
   public:
     ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct);
+              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct, std::string Type, std::string VecType);
 
   Value *codegen(Value *scope_struct) override;
 };

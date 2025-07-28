@@ -1,1 +1,1 @@
-{"__idx__", "int"}, {"__sliced_idx__", "int"}, 
+{"nsk_vec_size", "int"}, {"__idx__", "int"}, {"__sliced_idx__", "int"}, 

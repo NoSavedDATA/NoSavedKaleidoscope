@@ -56,6 +56,12 @@ std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
   return nullptr;
 }
 
+
+void LogBlue(std::string msg) {
+  std::cout << "\n\t\033[34m Log: \033[0m " << msg << "\n\n";
+}
+
+
 std::unique_ptr<ExprAST> LogError(std::string Str) {
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
   LogErrorS(Str);

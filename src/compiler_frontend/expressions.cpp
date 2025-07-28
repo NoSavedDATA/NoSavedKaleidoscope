@@ -187,9 +187,9 @@ NewVecExprAST::NewVecExprAST(
     std::vector<std::unique_ptr<ExprAST>> Values,
     std::string Type)
     : Values(std::move(Values)), Type(Type) 
-    {
-      this->SetType(Type);
-    }
+{
+  this->SetType(Type);
+}
   
   
 
@@ -246,7 +246,7 @@ NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, 
 
   Expr_String = this->Inner_Expr->Expr_String;
   Expr_String.push_back(name);
-  Print_Names_Str(Expr_String);
+  // Print_Names_Str(Expr_String);
 }
 
 NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
@@ -418,8 +418,12 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
 
 /// ForExprAST - Expression class for for.
 ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
-    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)), parser_struct(parser_struct) {}
+          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct, std::string Type, std::string VecType)
+    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)), parser_struct(parser_struct), VecType(VecType) {
+
+      this->SetType(Type);
+}
+
 
   
   /// WhileExprAST - Expression class for while.

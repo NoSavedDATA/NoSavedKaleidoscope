@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include "../compiler_frontend/global_vars.h"
+#include "../mangler/scope_struct.h"
 #include "nsk_vector.h"
 
 
@@ -17,11 +18,20 @@ Nsk_Vector::Nsk_Vector(int size, std::vector<int> dims) : size(size), dims(std::
 DT_int_vec::DT_int_vec(int size) : Nsk_Vector(size) {
   vec = (int*)malloc(size*sizeof(int));
 }
+DT_int_vec::~DT_int_vec() {
+    // free(vec);
+}
 
 
+
+
+extern "C" int nsk_vec_size(Scope_Struct *scope_struct, Nsk_Vector *vec) {
+  return vec->size;
+}
 
 
 extern "C" int __idx__(Nsk_Vector *vec, int first_idx, ...) {
+    std::cout << "CALLING DEFAULT __idx__ FUNCTION" << ".\n";
 
     std::vector<int> indices;
 
@@ -45,6 +55,8 @@ extern "C" int __idx__(Nsk_Vector *vec, int first_idx, ...) {
     va_end(args);
 
 
+    std::cout << "Index at: " << idx_at << ".\n";
+
     return idx_at;
 }
 
@@ -66,3 +78,12 @@ extern "C" int __sliced_idx__(Nsk_Vector *vec, int first_idx, ...) {
 }
 
 
+
+
+
+Vec_Slices::Vec_Slices() : Nsk_Vector(0) {}
+
+void Vec_Slices::push_back(DT_int_vec vec) {
+    size++;
+    slices.push_back(vec);
+}

@@ -1,1 +1,1 @@
-"__idx__", "__sliced_idx__", 
+"nsk_vec_size", "__idx__", "__sliced_idx__", 
