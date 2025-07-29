@@ -120,23 +120,9 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
 
     // }
 
-  if(NamedTensorsT.count(tensor_name)>0)
-  {
-    DT_tensor *tensor_to_clean = NamedTensorsT[tensor_name];
-
-    // if (tensor_to_clean->name=="batch_acc")
-    // if (tensor_to_clean->name=="batch_acc"||tensor_to_clean->name=="y")
-    // {
-      // std::cout << "0000000000000000000000000000000000000CLEANING " << tensor_name << ".\n";
-      move_to_pool(thread_id, tensor_to_clean->dims_prod, tensor_to_clean->tensor_ptr, "tensor_Create tensor substitution of " + tensor_to_clean->name + ".");
-    // }
-  }
     
 
   tensor->refcount++;
-
-  // NamedTensorsT[tensor_name] = tensor;
-  
 
 
   return tensor;
@@ -149,18 +135,6 @@ extern "C" DT_tensor *tensor_Create(Scope_Struct *scope_struct, char *tensor_nam
 
 
 
-extern "C" DT_tensor *tensor_Load(Scope_Struct *scope_struct, char *tensor_name) {
-
-  
-  std::cout << "\n\nLOAD TENSOR: " << tensor_name <<  "\n";
-  std::exit(0);
-  DT_tensor *ret = NamedTensorsT[tensor_name];
-
-  // if(scope_struct->is_at_return && (nn_mode==eval_mode||scope_struct->thread_id!=0))
-  //   ret->leaf = false; // Marks to clean
-
-  return ret;
-}
 
 
 extern "C" DT_tensor *tensor_Copy(Scope_Struct *scope_struct, DT_tensor *tensor) {
@@ -256,7 +230,6 @@ extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
   int has_grad = scope_struct->has_grad;
 
 
-  // DT_tensor *stored_tensor = NamedTensorsT[tensor_name];
   stored_tensor->is_last_version = false;
   stored_tensor->refcount--;
 
@@ -286,7 +259,6 @@ extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
   tensor->refcount++;
 
   
-  // NamedTensorsT[tensor_name] = stored_tensor;
   cudaCheck(cudaGetLastError());
 
   return tensor;
@@ -632,75 +604,6 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
 
 
 
-extern "C" int tensor_CalculateIdx(char *tensor_name, int first_idx, ...) {
-  
-  // std::cout << "pinned_tensor_CalculateIdx of " << tensor_name << "\n";
-
-  DT_tensor *tensor = NamedTensorsT[tensor_name];
-
-  std::vector<int> idxs, new_dims_no_minus, dims;
-  int current_dims_prod;
-  bool has_minus = false;
-  dims = tensor->dims;
-
-  int idx_at = 0;
-
-  
-  va_list args;
-  va_start(args, first_idx);
-
-  if (first_idx!=-1)
-    new_dims_no_minus.push_back(first_idx);
-  else
-    has_minus=true;
-  
-    
-  idxs.push_back(first_idx);
-
-  dims = RemoveFirstDim(dims);
-  
-  current_dims_prod = DimsProd(dims);
-
-  idx_at += (int)(current_dims_prod*first_idx);
-
-
-
-  //std::cout << "Get idx of " << tensor_name << "\nCalculateIdxOffset pushing dim: " << first_idx << "\n";
-
-  for (int i=0; i<10; i++)
-  {
-    if (i==9)
-    {
-      LogErrorC(-1, "A tensor with 10 dimensions??? (calc idx)");
-      return 0;
-    }
-
-    int idx = va_arg(args, int);
-    if (idx==TERMINATE_VARARG)
-      break;
-
-    idxs.push_back(idx);
-    
-    dims = RemoveFirstDim(dims);
-    
-    current_dims_prod = DimsProd(dims);
-
-    idx_at += current_dims_prod*idx;
-
-    //std::cout << "CalculateIdxOffset pushing dim: " << idx << "\n";
-    
-
-    if (idx!=-1)
-      new_dims_no_minus.push_back(idx);
-    else
-      has_minus=true;
-  }
-  va_end(args);
-
-
-
-  return idx_at;
-}
 
 
 

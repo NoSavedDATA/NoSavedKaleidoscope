@@ -152,7 +152,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
     };
 
     if (auto Err = JD.define(absoluteSymbols(symbols)))
-        LogError("Failed to define native function in JIT: " + toString(std::move(Err)));
+        LogError(-1, "Failed to define native function in JIT: " + toString(std::move(Err)));
 }
 
 void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is_default) {
@@ -461,7 +461,7 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
 
             void* func_ptr = dlsym(handle, fn->Name.c_str());
             if (!func_ptr) {
-                LogError("Function " + fn->Name + " not found in library");
+                LogError(-1, "Function " + fn->Name + " not found on library " + lib_name);
                 continue;
             }
 

@@ -11,7 +11,7 @@ std::vector<std::string> user_cpp_functions;
 
 void set_user_functions() {
 
-    user_cpp_functions = {"Linear", "Conv2d", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
+    user_cpp_functions = {"Linear", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
         "tensor_sum", "tensor_prod", "tensor_mean", "mean_tensor", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
         "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "list_print",
         "BatchNorm2d", "Pool2d", "LSTM", "MHSA", "Embedding", "list_test",
@@ -26,7 +26,7 @@ void set_user_functions() {
 		"__slee_p_", "random_sleep", "silent_sleep", "start_timer", "end_timer", 
 		"CosineLR", 
 		"relu", "gelu", "sigmoid", "_tanh", "softmax", 
-		"AttrTensorNoFree", "AttrTensorOnIdx", "AttrTensorOnIdxTensor", "AttrPinnedFromTensorOnIdx", "IdxTensor", "IdxTensorWithTensor", 
+		"AttrTensorNoFree", "AttrTensorOnIdx", "AttrTensorOnIdxTensor", "IdxTensor", "IdxTensorWithTensor", 
 		"RandomCrop", "RandomHorizontalFlip", "NormalizeImg", "Jitter", 
 		"tensor_tensor_mma", "tensor_tensor_add", "tensor_tensor_sub", "tensor_tensor_equal", "tensor_tensor_mult", "tensor_tensor_div", 
 		"str_vec_Create", "str_vec_Load", "str_vec_Store", "PrintStrVec", "LenStrVec", "ShuffleStrVec", "shuffle_str", "_glob_b_", "IndexStrVec", "str_vec_Idx", "str_vec_CalculateIdx", "str_vec_print", 
@@ -36,7 +36,7 @@ void set_user_functions() {
 		"tensor_onehot", "priority_sample", "priority_sample_val", "importance_sample_idx", "importance_sample_weight", "tmax", "tensor_argmax", "topk", 
 		"nullptr_get", "check_is_null", 
 		"repeat_interleave", "mean_tensor", "tensor_mean", "sum", "prod", "gather", 
-		"dive_void", "emerge_void", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", 
+		"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", 
 		"Delete_Ptr", 
 		"Embedding", "Embedding_Create", 
 		"BatchNorm2d", "BatchNorm2d_Create", 
@@ -67,9 +67,9 @@ void set_user_functions() {
 		"MarkToSweep_Mark", "MarkToSweep_Mark_Scopeful", "MarkToSweep_Mark_Scopeless", "MarkToSweep_Unmark_Scopeful", "MarkToSweep_Unmark_Scopeless", 
 		"save_as_bin", 
 		"cross_entropy", "cross_entropy_idx", 
-		"int_vec_Create", "int_vec_Load", "int_vec_Store", "int_vec_Store_Idx", "arange_int", "zeros_int", "ones_int", "int_vec_Idx", "int_vec_Idx_num", "int_vec_CalculateIdx", "int_vec_CalculateSliceIdx", "int_vec_Slice", "int_vec_first_nonzero", "int_vec_print", "int_vec_Split_Parallel", "int_vec_Split_Strided_Parallel", "int_vec_size", 
+		"int_vec_Create", "int_vec_Load", "int_vec_Store", "int_vec_Store_Idx", "earth_cable", "arange_int", "zeros_int", "ones_int", "int_vec_Idx", "int_vec_Idx_num", "int_vec_CalculateIdx", "int_vec_CalculateSliceIdx", "int_vec_Slice", "int_vec_first_nonzero", "int_vec_print", "int_vec_Split_Parallel", "int_vec_Split_Strided_Parallel", "int_vec_size", 
 		"PrintDims", "StoreDimsOnDemand", "CalculateIdxOffset", "tensor_shape", 
-		"scope_struct_Create", "scope_struct_Copy", "scope_struct_Overwrite", "scope_struct_Dive", "set_scope_first_arg", "set_scope_scope", "set_scope_thread_id", "set_scope_has_grad", "set_scope_function_name", "get_scope_first_arg", "get_scope_scope", "get_scope_thread_id", "get_scope_has_grad", "scope_struct_Reset_Threads", "scope_struct_Increment_Thread", "set_scope_object", "get_scope_object", "scope_struct_Save_for_Async", "scope_struct_Load_for_Async", "scope_struct_Store_Asyncs_Count", "scope_struct_Print", "scope_struct_Get_Async_Scope", "scope_struct_Alloc_MarkSweepMap", "scope_struct_Copy_MarkSweepMap", "scope_struct_Sweep", "scope_struct_Clean_Scope", "scope_struct_Delete", 
+		"set_scope_line", "scope_struct_Create", "scope_struct_Copy", "scope_struct_Overwrite", "scope_struct_Dive", "set_scope_first_arg", "set_scope_scope", "set_scope_thread_id", "set_scope_has_grad", "set_scope_function_name", "get_scope_first_arg", "get_scope_scope", "get_scope_thread_id", "get_scope_has_grad", "scope_struct_Reset_Threads", "scope_struct_Increment_Thread", "set_scope_object", "get_scope_object", "scope_struct_Save_for_Async", "scope_struct_Load_for_Async", "scope_struct_Store_Asyncs_Count", "scope_struct_Print", "scope_struct_Get_Async_Scope", "scope_struct_Alloc_MarkSweepMap", "scope_struct_Copy_MarkSweepMap", "scope_struct_Sweep", "scope_struct_Clean_Scope", "scope_struct_Delete", 
 		"print_codegen", "print_codegen_silent", 
 		"logE", "logE2", "clip", 
 		"PrintFloat", "UnbugFloat", "print_float", "float_Create", "float_Load", "float_Store", 
@@ -77,7 +77,6 @@ void set_user_functions() {
 		"Conv2d", "Conv2d_Create", 
 		"dir_exists", "path_exists", 
 		"SGD", 
-		"clean_forward", 
 		"_exit", 
 		"dictionary_Create", "dictionary_Dispose", 
 

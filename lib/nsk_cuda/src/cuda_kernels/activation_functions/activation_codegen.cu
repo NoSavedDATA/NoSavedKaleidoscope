@@ -11,7 +11,7 @@
 #include "../calculate_grids.h"
 #include "activation_kernels.h"
 
-#include "../../../../src/nsk_cpp.h"
+#include "../../../src/nsk_cpp.h"
 
 
 

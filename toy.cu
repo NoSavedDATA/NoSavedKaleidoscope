@@ -77,11 +77,9 @@
 #define WMMA_K 16
 
 
-cudaDeviceProp deviceProp;
-
-int WARP_SIZE;
-
-int THREADS_PER_BLOCK = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
+// cudaDeviceProp deviceProp;
+// int WARP_SIZE;
+// int THREADS_PER_BLOCK = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
 const int TILE_SIZE = (int)floorf(sqrtf((float)THREADS_PER_BLOCK)); 
 const int TILE_SIZE_SQ = TILE_SIZE*TILE_SIZE;
@@ -106,19 +104,8 @@ using namespace nvcuda;
 
 
 
-int ASYNC_LOADER_THREADS = 6;
-const int num_parallel_streams=32; //global of src/mma/tensor_struc.h
-CudaStreams *parallel_streams[num_parallel_streams];
-cudaEvent_t parallel_events[num_parallel_streams];
-std::vector<cudaEvent_t> Registered_Events;
-int open_streams[num_parallel_streams];
 
-// CudaStreams *main_stream, *backward_stream;
-cudaStream_t main_stream, backward_stream;
 
-std::map<int, cudaStream_t> ThreadsStream;
-std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops, weightless_ops;
-int nn_mode=training_mode;
 
 std::map<std::string, int> NotatorsMap = {
   {"bias", bias},
@@ -2768,9 +2755,17 @@ ThreadSafeModule irgenAndTakeOwnership(FunctionAST &FnAST,
 
   
 
-static void HandleImport() { ParseImport(); }
+static void HandleImport() {
+    Parser_Struct parser_struct;
+    parser_struct.line = LineCounter;
+    ParseImport(parser_struct);
+}
 
-static void HandleClass() { ParseClass(); }
+static void HandleClass() {
+    Parser_Struct parser_struct;
+    parser_struct.line = LineCounter;
+    ParseClass(parser_struct);
+}
 
 static void HandleDefinition() {
   

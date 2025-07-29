@@ -7,7 +7,6 @@
 #include "../compiler_frontend/logging.h"
 #include "../clean_up/clean_up.h"
 #include "../mangler/scope_struct.h"
-#include "../tensor/include.h"
 #include "mark_sweep.h"
 
 

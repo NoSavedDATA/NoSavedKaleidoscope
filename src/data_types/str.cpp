@@ -268,7 +268,7 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
   if(splits.size()<=1)
   {
     std::string _err = "\nFailed to split.";
-    LogErrorS(_err);
+    LogErrorS(scope_struct->code_line, _err);
     std::cout << "" << self << "\n";
     return nullptr;
   }

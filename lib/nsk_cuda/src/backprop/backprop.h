@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-#include "../../../src/nsk_cpp.h"
+#include "../../../../src/nsk_cpp.h"
 #include "../tensor/tensor_struct.h"
 
 extern std::vector<DT_tensor *> todo_backward_tensors;

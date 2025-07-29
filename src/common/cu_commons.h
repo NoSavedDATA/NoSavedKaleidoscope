@@ -44,7 +44,6 @@ void _cublasCheck(cublasStatus_t status, const char *file, int line);
 // ----------------------------------------------------------------------------
 // random utils
 
-unsigned int get_millisecond_time(); 
 
 extern std::random_device rd;  // obtain a random seed
 extern std::mt19937 WEIGHT_PRNG; // initialize the Mersenne Twister generator

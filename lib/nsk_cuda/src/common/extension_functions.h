@@ -9,7 +9,6 @@
 
 float FirstNonzero(int *vec, int size);
 
-void LogErrorCodegen(std::string Str, int line);
 
 
 

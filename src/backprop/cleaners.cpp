@@ -86,8 +86,6 @@ void ThreadedCleanupToPool(DT_tensor *back_node, std::string scope, int thread_i
   
 
   
-  if (!in_str(scope, scopes));
-    scopes.push_back(scope);
 
   ThreadedCleanupToPool(back_node->L_Node, scope, thread_id);
   ThreadedCleanupToPool(back_node->R_Node, scope, thread_id);
@@ -142,8 +140,6 @@ void ForwardCleanupToPool(DT_tensor *back_node, std::string scope)
   
 
   
-  if (!in_str(scope, scopes));
-    scopes.push_back(scope);
 
   ForwardCleanupToPool(back_node->L_Node, scope);
   ForwardCleanupToPool(back_node->R_Node, scope);
@@ -154,43 +150,8 @@ void ForwardCleanupToPool(DT_tensor *back_node, std::string scope)
 }
 
 
-void CleanScopeTensors(std::string scope)
-{
-  for(DT_tensor *tensor : forward_Tensors_to_free[scope])
-    delete tensor;
 
-  std::vector<float*> scope_tensors_ptrs;
 
-  //for(auto &pair : scope_tensors[scope])
-  //  scope_tensors_ptrs.push_back(pair.second);
-
-  for(std::tuple<int, float *, std::string> pair : forward_tensors_to_pool[scope])
-  {
-    //if(!in_float_ptr_vec(std::get<1>(pair), scope_tensors_ptrs))
-      move_to_pool(0, std::get<0>(pair), std::get<1>(pair), std::get<2>(pair));
-
-    //move_to_pool(pair.first, pair.second);
-    //cudaCheck(cudaFree(std::get<1>(pair)));
-  }
-
-  forward_Tensors_to_free[scope].clear();
-  forward_tensors_to_pool[scope].clear();
-  forward_tensors_sent_to_pool[scope].clear();
-
-  forward_Tensors_to_free.erase(scope);
-  forward_tensors_to_pool.erase(scope);
-  forward_tensors_sent_to_pool.erase(scope);
-}
-
-extern "C" float clean_forward(Scope_Struct *scope_struct)
-{//TODO: break? clears threaded tensors
-  for(std::string _scope : scopes)
-    CleanScopeTensors(_scope);
-  scopes.clear();
-  
-  cudaCheck(cudaGetLastError());
-  return 0;
-}
 
 
 void CleanTree_Backprop(DT_tensor *back_node) {

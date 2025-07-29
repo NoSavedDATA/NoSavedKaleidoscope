@@ -7,9 +7,9 @@
 #include<thread>
 #include<string>
 
-#include "../../../../src/cuda_kernels/calculate_grids.h"
-#include "../../../../src/cuda_kernels/dim_kernels.h"
-#include "../../../../src/data_types/include.h"
+#include "../cuda_kernels/calculate_grids.h"
+#include "../cuda_kernels/dim_kernels.h"
+#include "../data_types/include.h"
 #include "include.h"
 
 
@@ -258,97 +258,9 @@ std::vector<int> NewDimsOnMult(std::vector<int> Ldims, std::vector<int> Rdims)
 
 
 
-extern "C" float StoreDimsOnDemand(char *tensor_name, float d)
-{
-  std::vector<float> dims;
-  
-  if (NamedDims.count(tensor_name)>0)
-    dims = NamedDims[tensor_name];
-
-  dims.push_back(d);
-
-  NamedDims[tensor_name] = dims;
-  return 0;
-}
 
 
 
-extern "C" float CalculateIdxOffset(char *tensor_name, int first_idx, ...) {
-  
-  std::cout << "CalculateIdxOffset of " << tensor_name << "\n";
-
-  DT_tensor *tensor = NamedTensorsT[tensor_name];
-
-
-  // PrintDims(tensor->dims);
-
-  std::vector<int> idxs, new_dims_no_minus, dims;
-  int current_dims_prod;
-  bool has_minus = false;
-  dims = tensor->dims;
-
-  int idx_at = 0;
-
-  
-  va_list args;
-  va_start(args, first_idx);
-
-  if (first_idx!=-1)
-    new_dims_no_minus.push_back(first_idx);
-  else
-    has_minus=true;
-  
-    
-  idxs.push_back(first_idx);
-
-  dims = RemoveFirstDim(dims);
-  
-  current_dims_prod = DimsProd(dims);
-
-
-
-  // std::cout << "---idx: " << first_idx << "|cur_dims_prod: " << std::to_string(current_dims_prod) << "|adding: " << std::to_string(current_dims_prod*first_idx) << ".\n";
-
-  idx_at += (int)(current_dims_prod*first_idx);
-
-
-
-
-  for (int i=0; i<10; i++)
-  {
-    if (i==9)
-    {
-      LogErrorC(-1, "A tensor with 10 dimensions??? (calc idx)");
-      return 0;
-    }
-
-    float idx = va_arg(args, float);
-    if (idx==TERMINATE_VARARG)
-      break;
-
-    idxs.push_back(idx);
-    
-    dims = RemoveFirstDim(dims);
-    
-    current_dims_prod = DimsProd(dims);
-
-    // std::cout << "---idx: " << idx << "|cur_dims_prod: " << std::to_string(current_dims_prod) << "|adding: " << std::to_string(current_dims_prod*idx) << ".\n";
-
-    idx_at += (int)(current_dims_prod*idx);
-
-    
-
-    if (idx!=-1)
-      new_dims_no_minus.push_back(idx);
-    else
-      has_minus=true;
-  }
-  va_end(args);
-
-
-
-  return idx_at;
-}
 
 
 void broadcast_lastdim_add_backward2(float *dx, float *dy, int x_size, int y_size)

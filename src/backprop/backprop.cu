@@ -240,7 +240,7 @@ void TraversePreOrder(DT_tensor *back_node, float *device_dy, bool from_custom, 
 
       default:
         std::string _error = "The operation "+std::to_string(op)+" does not yet have a backward implementation";
-        LogErrorS(_error);
+        LogErrorS(-1, _error);
         break;
     }
   

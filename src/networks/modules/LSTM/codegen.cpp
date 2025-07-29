@@ -60,8 +60,8 @@ extern "C" DT_tensor *LSTM(Scope_Struct *scope_struct, DT_tensor *tensor, DT_ten
 
   if ((int)C!=(int)lstm->C)
   {
-    std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the LSTM are: " + std::to_string(lstm->C);
-    LogError(error);
+    std::string error = "Input tensor hidden dimension is: " + std::to_string((int)C) + ", while the expected input dimension of the LSTM is: " + std::to_string(lstm->C);
+    LogError(scope_struct->code_line, error);
     
     NamedLSTM[conv_name] = std::move(lstm);
     return nullptr;

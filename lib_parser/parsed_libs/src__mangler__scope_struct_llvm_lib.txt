@@ -1,4 +1,11 @@
-1821-07-18 12:34:26
+1821-07-29 19:01:14
+
+	FunctionType *set_scope_lineTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("set_scope_line", set_scope_lineTy);
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,

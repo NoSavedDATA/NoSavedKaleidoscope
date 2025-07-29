@@ -24,12 +24,6 @@ float FirstNonzero(int *vec, int size)
   return idx;
 }
 
-void LogErrorCodegen(std::string Str, int line) {
-  ShallCodegen = false;
-  
-  if (Str!=" ")
-    std::cout << "\nLine: " << line << "\n   \033[31m Error: \033[0m " << Str << "\n\n";
-}
 
 
 

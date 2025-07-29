@@ -288,8 +288,8 @@ DataExprAST::DataExprAST(
                 Notes(std::move(Notes)) {}
 
 
-LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
-  : LibName(LibName), IsDefault(IsDefault) {
+LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_Struct parser_struct)
+  : LibName(LibName), IsDefault(IsDefault), parser_struct(parser_struct) {
 
 
 
@@ -307,7 +307,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
 
     if(!fs::exists(so_lib_path))
     { 
-        LogError("- Failed to import library;\n\t    - " + so_lib_path + " file not found.");
+        LogError(parser_struct.line, "- Failed to import library;\n\t    - " + so_lib_path + " file not found.");
         return;
     }
     LibParser *lib_parser = new LibParser(lib_dir);
@@ -334,8 +334,8 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault)
   
   
   /// UnaryExprAST - Expression class for a unary operator.
-UnaryExprAST::UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
-    : Opcode(Opcode), Operand(std::move(Operand)) {}
+UnaryExprAST::UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct parser_struct)
+    : Opcode(Opcode), Operand(std::move(Operand)), parser_struct(parser_struct) {}
   
   
   
@@ -387,8 +387,9 @@ CallExprAST::CallExprAST(std::unique_ptr<ExprAST> NameSolver,
 
 ChainCallExprAST::ChainCallExprAST(const std::string &Call_Of,
                     std::vector<std::unique_ptr<ExprAST>> Args,
-                    std::unique_ptr<ExprAST> Inner_Call)
-    : Call_Of(Call_Of), Args(std::move(Args)), Inner_Call(std::move(Inner_Call)) {
+                    std::unique_ptr<ExprAST> Inner_Call,
+                    Parser_Struct parser_struct)
+    : Call_Of(Call_Of), Args(std::move(Args)), Inner_Call(std::move(Inner_Call)), parser_struct(parser_struct) {
   SetType("float");
 }
   

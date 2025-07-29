@@ -531,7 +531,7 @@ static int get_token() {
     while(LastChar==10 || LastChar==tok_tab || LastChar==32) {
       if(ThisChar==10)
       {
-        LineCounter += 1;
+        LineCounter++;
         LastSeenTabs = SeenTabs;
         SeenTabs = 0;
         seen_spaces = 0;
@@ -608,7 +608,11 @@ std::map<char, int> BinopPrecedence;
 /// get_tokenPrecedence - Get the precedence of the pending binary operator token.
 int get_tokenPrecedence() {
   if (CurTok==tok_space)
+  {
+    if (CurTok==10)
+      LineCounter++;
     return 1;
+  }
 
 
   if (BinopPrecedence.find(CurTok) == BinopPrecedence.end()) // if not found

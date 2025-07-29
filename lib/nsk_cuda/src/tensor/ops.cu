@@ -19,40 +19,6 @@
 
 
 
-// Copies a pinned_tensor's reserved memory into a tensor.
-extern "C" float AttrTensorNoFree(char *tensor_name, DT_tensor *tensor, int thread_id)
-{
-  //std::cout << "\nAttrTensorNoFree -- Attributing to tensor: " << tensor_name << "\n\n";
-  
-  std::vector<int> new_dims = tensor->dims;
-  float dims_prod = tensor->dims_prod;
-
-  
-
-  DT_tensor *tgt_tensor = NamedTensorsT[tensor_name];
-  move_to_pool(tgt_tensor->thread_id, tgt_tensor->dims_prod, tgt_tensor->tensor_ptr, "pinned");
-  
-
-  //float *new_tensor;
-  //cudaMalloc(&new_tensor, dims_prod*sizeof(float));
-  float *new_tensor = get_from_pool(thread_id, dims_prod, "pinned");
-
-  int grid_size, block_size, shared_mem_size; 
-  CalculateGridAndBlockSizes(dims_prod, grid_size, block_size);
-
-  tensor->Sync();
-  copy_tensor_kernel<<<grid_size, block_size>>>(new_tensor, tensor->tensor_ptr, dims_prod);
-  //cudaCheck(cudaMemcpy(new_tensor, tensor->tensor_ptr, dims_prod*sizeof(float), cudaMemcpyDeviceToDevice));
-
-
-  tgt_tensor->AttrTensor(new_tensor, new_dims, dims_prod);
-  
-  
-
-  delete tensor;
-
-  return 0;
-}
 
 
 extern "C" float AttrTensorOnIdx(char *tensor_name, DT_tensor *tensor, float idx_at, int thread_id)

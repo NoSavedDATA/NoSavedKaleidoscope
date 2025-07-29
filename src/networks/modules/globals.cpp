@@ -4,7 +4,6 @@
 
 
 #include "BatchNorm2d/class.h"
-#include "Conv2d/class.h"
 #include "Embedding/class.h"
 #include "EmbeddingLn/class.h"
 #include "Linear/class.h"
@@ -14,7 +13,6 @@
 
 
 std::map<std::string, std::unique_ptr<BatchNorm2dCPP>> NamedBatchNorm2d;
-std::map<std::string, std::unique_ptr<Conv2dCPP>> NamedConv2d;
 std::map<std::string, std::unique_ptr<DT_Embedding>> NamedEmbedding;
 std::map<std::string, std::unique_ptr<DT_EmbeddingLn>> NamedEmbeddingLn;
 std::map<std::string, std::unique_ptr<LinearCPP>> NamedLinear;

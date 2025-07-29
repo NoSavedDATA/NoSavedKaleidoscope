@@ -219,12 +219,13 @@ extern "C" float importance_sample_weight(int thread_id, DT_tensor *tensor, floa
 }
 
 
-extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ...) 
+extern "C" DT_tensor *tmax(Scope_Struct *scope_struct, DT_tensor *tensor, float first_dim, ...) 
 { //TODO: automatic type detection for max and min (float vs tensor)
   
   //std::cout << "MAX OF " << tensor.name << "\n";
   
-
+  int thread_id = scope_struct->thread_id;
+  
   float *tensor_ptr = tensor->tensor_ptr;
   std::vector<int> dims = tensor->dims;
   float *summed;
@@ -251,7 +252,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
     // std::cout << "Sum: " << tensor_sum << "\n";
 
     // return summed;
-    LogErrorS("MUST REIMPLEMENT MAX WITH NO DIMS AS INPUT");
+    LogErrorS(scope_struct->code_line, "MUST REIMPLEMENT MAX WITH NO DIMS AS INPUT");
     return nullptr;
   }
 
@@ -265,7 +266,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (max)");
+      LogErrorS(scope_struct->code_line, "A tensor with 10 dimensions??? (max)");
       return nullptr;
     }
 
@@ -276,7 +277,7 @@ extern "C" DT_tensor *tmax(int thread_id, DT_tensor *tensor, float first_dim, ..
     if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
       return nullptr;
     }
     if (dim<0)
@@ -343,7 +344,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
   if (first_dim==TERMINATE_VARARG)
   {
     va_end(args);
-    LogErrorS("Argmax is only supported at dim -1.");
+    LogErrorS(scope_struct->code_line, "Argmax is only supported at dim -1.");
     return nullptr;
   }
 
@@ -357,7 +358,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (argmax)");
+      LogErrorS(scope_struct->code_line, "A tensor with 10 dimensions??? (argmax)");
       return nullptr;
     }
 
@@ -368,7 +369,7 @@ extern "C" DT_tensor *tensor_argmax(Scope_Struct *scope_struct, DT_tensor *tenso
     if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.argmax() operation.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
       return nullptr;
     }
     if (dim<0)

@@ -6,6 +6,19 @@
 #include "../compiler_frontend/logging.h"
 #include "include.h"
 
+
+
+
+CudaStreams *parallel_streams[num_parallel_streams];
+cudaEvent_t parallel_events[num_parallel_streams];
+std::vector<cudaEvent_t> Registered_Events;
+int open_streams[num_parallel_streams];
+
+
+cudaStream_t main_stream, backward_stream;
+std::map<int, cudaStream_t> ThreadsStream;
+
+
 CudaStreams *AllocateStream(int line)
 {
   int free_stream = FirstNonzero(open_streams, num_parallel_streams);
@@ -21,7 +34,7 @@ cudaStream_t createCudaStream() {
     cudaStream_t stream;
     cudaError_t err = cudaStreamCreate(&stream);
     if (err != cudaSuccess) {
-      LogErrorS("Error allocating a cuda stream");
+      LogErrorS(-1, "Error allocating a cuda stream");
       std::exit(0);
     }
     return stream;

@@ -116,7 +116,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (mean)");
+      LogErrorS(scope_struct->code_line, "A tensor with 10 dimensions??? (mean)");
       std::cout << "Input tensor dims:" << "\n";
       PrintDims(tensor->dims);
       std::cout << "Mean dims:" << "\n";
@@ -131,7 +131,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
     if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.mean() operation.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
       return nullptr;
     }
     if (dim<0)
@@ -191,7 +191,7 @@ extern "C" DT_tensor *mean_tensor(Scope_Struct *scope_struct, DT_tensor *tensor,
   DT_tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
   */
-  LogErrorS("Mean of specific dim is not implemented yet.");
+  LogErrorS(scope_struct->code_line, "Mean of specific dim is not implemented yet.");
   return nullptr;
 }
 
@@ -254,7 +254,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (mean)");
+      LogErrorS(scope_struct->code_line, "A tensor with 10 dimensions??? (mean)");
       std::cout << "Input tensor dims:" << "\n";
       PrintDims(tensor->dims);
       std::cout << "Mean dims:" << "\n";
@@ -269,7 +269,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
     if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.mean() operation.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
       return nullptr;
     }
     if (dim<0)
@@ -328,7 +328,7 @@ extern "C" DT_tensor *tensor_mean(Scope_Struct *scope_struct, DT_tensor *tensor,
   DT_tensor *new_tensor = createTensor(summed, new_dims, DimsProd(new_dims), false, "");
   return new_tensor;
   */
-  LogErrorS("Mean of specific dim is not implemented yet.");
+  LogErrorS(scope_struct->code_line, "Mean of specific dim is not implemented yet.");
   return nullptr;
 }
 
@@ -345,10 +345,11 @@ void mean_over_semilast_dim_backward(float *inp, int size, float *out,
   mean_over_semilast_dim_backward_kernel<<<std::ceil((float)x_dims_prod/(float)THREADS_PER_BLOCK), THREADS_PER_BLOCK, 0, main_stream>>>(dinp, dout,  x_dims_prod, dims[dims.size()-2], dims[dims.size()-1]);
 }
 
-extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, int first_dim, ...)
+extern "C" DT_tensor *sum(Scope_Struct *scope_struct, DT_tensor tensor, int first_dim, ...)
 {
   //std::cout << "SUM OF " << tensor.name << "\n";
 
+  int thread_id = scope_struct->thread_id;
 
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<int> dims = tensor.dims;
@@ -399,7 +400,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, int first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (sum)");
+      LogErrorS(scope_struct->code_line, "A tensor with 10 dimensions??? (sum)");
       return nullptr;
     }
 
@@ -410,7 +411,7 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, int first_dim, ...)
     if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
       return nullptr;
     }
     if (dim<0)
@@ -461,10 +462,11 @@ extern "C" DT_tensor *sum(int thread_id, DT_tensor tensor, int first_dim, ...)
 
 
 
-extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, int first_dim, ...)
+extern "C" DT_tensor *prod(Scope_Struct *scope_struct, DT_tensor tensor, int first_dim, ...)
 {
   //std::cout << "PROD OF " << tensor.name << "\n";
 
+  int thread_id = thread_id;
 
   float *tensor_ptr = tensor.tensor_ptr;
   std::vector<int> dims = tensor.dims;
@@ -491,7 +493,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, int first_dim, ...)
     // std::cout << "prod: " << tensor_sum << "\n";
 
     // return summed;
-    LogErrorS("MUST REIMPLEMENT PROD WITH NO DIMS AS INPUT");
+    LogErrorS(scope_struct->code_line, "MUST REIMPLEMENT PROD WITH NO DIMS AS INPUT");
     return nullptr;
   }
 
@@ -505,7 +507,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, int first_dim, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (prod)");
+      LogErrorS(scope_struct->code_line, "A tensor with 10 dimensions??? (prod)");
       return nullptr;
     }
 
@@ -516,7 +518,7 @@ extern "C" DT_tensor *prod(int thread_id, DT_tensor tensor, int first_dim, ...)
     if (in_int(dim, sum_dims))  
     {
       std::string _error = "Dim "+std::to_string(dim) + " duplicated at tensor.sum() operation.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
       return nullptr;
     }
     if (dim<0)

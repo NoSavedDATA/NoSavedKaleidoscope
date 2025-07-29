@@ -46,11 +46,15 @@ using namespace llvm;
 
 
 /// LogError* - These are little helper functions for error handling.
-std::unique_ptr<ExprAST> LogErrorS(std::string Str) {
+std::unique_ptr<ExprAST> LogErrorS(int line, std::string Str) {
   ShallCodegen = false;
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
+
+  if(line!=-1)
+    std::cout << "\nLine: " << line << "\n   ";   
+
   if (Str!=" ")
-    std::cout << "\nLine: " << LineCounter << "\n   \033[31m Error: \033[0m " << Str << "\n\n";
+    std::cout << "\033[31m Error: \033[0m " << Str << "\n\n";
   
   
   return nullptr;
@@ -62,9 +66,9 @@ void LogBlue(std::string msg) {
 }
 
 
-std::unique_ptr<ExprAST> LogError(std::string Str) {
+std::unique_ptr<ExprAST> LogError(int line, std::string Str) {
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
-  LogErrorS(Str);
+  LogErrorS(line, Str);
 
   while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
     getNextToken();
@@ -73,9 +77,9 @@ std::unique_ptr<ExprAST> LogError(std::string Str) {
 }
 
 
-std::unique_ptr<ExprAST> LogError_toNextToken(std::string Str) {
+std::unique_ptr<ExprAST> LogError_toNextToken(int line, std::string Str) {
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
-  LogErrorS(Str);
+  LogErrorS(line, Str);
 
   getNextToken();
   
@@ -83,9 +87,9 @@ std::unique_ptr<ExprAST> LogError_toNextToken(std::string Str) {
 }
 
 
-std::unique_ptr<ExprAST> LogErrorBreakLine(std::string Str) {
+std::unique_ptr<ExprAST> LogErrorBreakLine(int line, std::string Str) {
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
-  LogErrorS(Str);
+  LogErrorS(line, Str);
 
   while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
     getNextToken();
@@ -101,12 +105,12 @@ void LogWarning(const char *Str) {
 }
 
 // Modified LogError function with token parameter
-std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
+std::unique_ptr<ExprAST> LogErrorT(int line, int CurTok) {
   ShallCodegen = false;
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
-  std::cout << "\nLine: " << LineCounter << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
+  std::cout << "\nLine: " << line << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
 
 
   // while (true) {
@@ -123,16 +127,16 @@ std::unique_ptr<ExprAST> LogErrorT(int CurTok) {
 }
 
 
-std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
-  LogError(Str);
+std::unique_ptr<PrototypeAST> LogErrorP(int line, const char *Str) {
+  LogError(line, Str);
   while(CurTok!=tok_space && !in_char(CurTok, terminal_tokens))
     getNextToken();
   return nullptr;
 }
 
 
-std::unique_ptr<PrototypeAST> LogErrorP_to_comma(std::string Str) {
-  LogError(Str);
+std::unique_ptr<PrototypeAST> LogErrorP_to_comma(int line, std::string Str) {
+  LogError(line, Str);
   while(CurTok!=tok_space && CurTok!=',' && CurTok!=')' && !in_char(CurTok, terminal_tokens))
   {
     std::cout << "LogErrorP: " << IdentifierStr << "\n";
@@ -142,8 +146,8 @@ std::unique_ptr<PrototypeAST> LogErrorP_to_comma(std::string Str) {
   return nullptr;
 }
 
-Value *LogErrorV(std::string Str) {
-  LogError(Str);
+Value *LogErrorV(int line, std::string Str) {
+  LogError(line, Str);
   return nullptr;
 }
 

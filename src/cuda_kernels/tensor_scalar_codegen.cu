@@ -1,5 +1,6 @@
 #include <vector>
 #include <cuda_runtime.h>
+#include <iostream>
 
 #include "../tensor/include.h"
 #include "../cuda_threads/include.h"

@@ -46,7 +46,7 @@ extern "C" DT_tensor *BatchNorm2d(Scope_Struct *scope_struct, DT_tensor *tensor)
   if ((int)C!=(int)conv->C)
   {
     std::string error = "Input tensor channels are: " + std::to_string(C) + ", while the expected input channels of the BatchNorm2d are: " + std::to_string(conv->C);
-    LogError(error);
+    LogError(scope_struct->code_line, error);
     
     NamedBatchNorm2d[bn_name] = std::move(conv);
     return nullptr;
@@ -85,7 +85,7 @@ extern "C" float BatchNorm2d_Create(Scope_Struct *scope_struct, char *name, char
 {
 
   if (notes_vector->size<1)
-    LogErrorS("BatchNorm2d requires input channels information.");
+    LogErrorS(scope_struct->code_line, "BatchNorm2d requires input channels information.");
 
   int C = notes_vector->get<int>(0);
   // std::cout << "\nCreate BatchNorm2d " << name << " on demand:\n   C: " << C  << "\n";

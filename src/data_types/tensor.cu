@@ -457,7 +457,7 @@ extern "C" float cpu(Scope_Struct *scope_struct, DT_tensor *tensor)
   cudaStreamSynchronize(stream);
 
   if (tensor_ptr==nullptr)
-    LogErrorS("Cannot load tensor to cpu from an null tensor.");
+    LogErrorS(scope_struct->code_line, "Cannot load tensor to cpu from an null tensor.");
 
   if (tensor_cpu!=nullptr)
     cudaCheck(cudaFree(tensor_cpu));
@@ -483,11 +483,11 @@ extern "C" float cpu_idx(Scope_Struct *scope_struct, DT_tensor *tensor, float id
 
 
   if (tensor_cpu==nullptr)
-    LogErrorS("Cannot idx a null cpu tensor.");
+    LogErrorS(scope_struct->code_line, "Cannot idx a null cpu tensor.");
 
   float dims_prod = tensor->dims_prod;
   if (idx>dims_prod)
-    LogErrorS("Idx higher than dims prod at cpu_idx().");
+    LogErrorS(scope_struct->code_line, "Idx higher than dims prod at cpu_idx().");
 
   
 
@@ -565,7 +565,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (view)");
+      LogErrorS(scope_struct->code_line, "A tensor with 10 dimensions??? (view)");
       return nullptr;
     }
 
@@ -595,7 +595,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
 
     if ((float)((int)hidden_dim) != hidden_dim)
     {
-      LogErrorS("Automatic view dimension calculus resulted on a non-integer dimension.");
+      LogErrorS(scope_struct->code_line, "Automatic view dimension calculus resulted on a non-integer dimension.");
       PrintDims(current_dims);
       std::cout << "Current dims product: " << current_dims_prod  << ".\n";
       PrintDims(new_dims);
@@ -610,7 +610,7 @@ extern "C" DT_tensor *tensor_view(Scope_Struct *scope_struct, DT_tensor *tensor,
   } else {
     if (current_dims_prod != new_dims_prod)
     {
-      LogErrorS("Incompatible view dimensions.");
+      LogErrorS(scope_struct->code_line, "Incompatible view dimensions.");
       PrintDims(current_dims);
       std::cout << "Current dims product: " << current_dims_prod  << ".\n";
       PrintDims(new_dims);
@@ -674,7 +674,7 @@ extern "C" int tensor_CalculateIdx(char *tensor_name, int first_idx, ...) {
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (calc idx)");
+      LogErrorS(-1, "A tensor with 10 dimensions??? (calc idx)");
       return 0;
     }
 

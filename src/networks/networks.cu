@@ -56,7 +56,7 @@ extern "C" float network_ema(int thread_id, char *scope, char *_ema_network, cha
         if (ema_tensor->dims_prod!=net_tensor->dims_prod)
         {
           std::string _error = "network_ema failed because " + ema_tensor->name + " and " + net_tensor->name + " parameter sizes do not match.";
-          LogErrorS(_error);
+          LogErrorS(-1, _error);
         } else {
 
           int grid_size, block_size;

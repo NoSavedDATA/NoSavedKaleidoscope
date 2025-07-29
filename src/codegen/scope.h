@@ -7,5 +7,3 @@
 
 
 
-extern std::vector<std::string> scopes;
-

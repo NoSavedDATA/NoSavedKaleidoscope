@@ -60,12 +60,13 @@ extern "C" int int_vec_Store_Idx(DT_int_vec *vec, int idx, int value, Scope_Stru
 
 
 
+extern "C" void earth_cable(void *ptr) {
+}
+
 
 
 
 extern "C" DT_int_vec *arange_int(Scope_Struct *scope_struct, int begin, int end) {
-  // TODO: turn into python like expression [0]*size
-
   DT_int_vec *vec = new DT_int_vec(end-begin);
   int c=0;
   for(int i=begin; i<end; ++i)
@@ -73,11 +74,13 @@ extern "C" DT_int_vec *arange_int(Scope_Struct *scope_struct, int begin, int end
     vec->vec[c] = i;
     c++;
   }
+
   return vec; 
 }
 
 
 extern "C" DT_int_vec *zeros_int(Scope_Struct *scope_struct, int size) {
+  // TODO: turn into python like expression [0]*size
 
   DT_int_vec *vec = new DT_int_vec(size);
   for(int i=0; i<size; ++i)
@@ -104,7 +107,7 @@ extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
   // std::cout << "Loaded vec" << ".\n";
 
   if (idx>vec->size)
-    LogErrorEE(0, "Index " + std::to_string(idx) + " is out of bounds for a vector of size: " + std::to_string(vec->size) + ".");
+    LogErrorEE(scope_struct->code_line, "Index " + std::to_string(idx) + " is out of bounds for a vector of size: " + std::to_string(vec->size) + ".");
 
   int ret = vec->vec[idx];
   // std::cout << "returning" << ".\n"; 
@@ -225,9 +228,9 @@ extern "C" DT_int_vec *int_vec_Split_Parallel(Scope_Struct *scope_struct, DT_int
 {
     int threads_count = scope_struct->asyncs_count;
     int thread_id = scope_struct->thread_id-1;
-    // std::cout << "SPLITTING int VEC"  << ".\n";
-    // std::cout << "Threads count: " << scope_struct->asyncs_count << ".\n";
-    // std::cout << "Threads id: " << scope_struct->thread_id << ".\n\n";
+    std::cout << "SPLITTING int VEC"  << ".\n";
+    std::cout << "Threads count: " << scope_struct->asyncs_count << ".\n";
+    std::cout << "Thread id: " << scope_struct->thread_id << ".\n\n";
 
     int vec_size = vec->size;
     int segment_size;
