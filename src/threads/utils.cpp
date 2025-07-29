@@ -8,13 +8,21 @@
 
 
 std::map<std::string, std::map<std::string, void *>> dived_voids;
-extern "C" float dive_void(char *fn_name, void *val, char *var_name) {
+std::map<std::string, std::map<std::string, int>> dived_ints;
+std::map<std::string, std::map<std::string, float>> dived_floats;
 
+extern "C" void dive_void(char *fn_name, void *val, char *var_name) {
     // std::cout << "GOT TO DIVE VOID: " << fn_name << "/" << var_name << ".\n";
     dived_voids[fn_name][var_name] = val;
     // std::cout << "Got " << val << ".\n";
-    return 0;
 }
+extern "C" void dive_int(char *fn_name, int val, char *var_name) {
+    dived_ints[fn_name][var_name] = val;
+}
+extern "C" void dive_float(char *fn_name, float val, char *var_name) {
+    dived_floats[fn_name][var_name] = val;
+}
+
 
 
 extern "C" void *emerge_void(char *fn_name, char *var_name) {
@@ -23,6 +31,12 @@ extern "C" void *emerge_void(char *fn_name, char *var_name) {
     void *val = dived_voids[fn_name][var_name];
     // std::cout << "got: " << val << ".\n";
     return val;    
+}
+extern "C" int emerge_int(char *fn_name, char *var_name) {
+    return dived_ints[fn_name][var_name];    
+}
+extern "C" float emerge_float(char *fn_name, char *var_name) {
+    return dived_floats[fn_name][var_name];    
 }
 
 

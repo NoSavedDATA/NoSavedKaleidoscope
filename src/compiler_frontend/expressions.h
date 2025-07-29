@@ -270,8 +270,9 @@ class LibImportExprAST : public ExprAST {
   public:
     std::string LibName;
     bool IsDefault;
+    Parser_Struct parser_struct;
 
-  LibImportExprAST(std::string, bool); 
+  LibImportExprAST(std::string, bool, Parser_Struct); 
 
   Value *codegen(Value *) override;
 };
@@ -289,10 +290,11 @@ class LibImportExprAST : public ExprAST {
 /// UnaryExprAST - Expression class for a unary operator.
 class UnaryExprAST : public ExprAST {
   char Opcode;
+  Parser_Struct parser_struct;
   std::unique_ptr<ExprAST> Operand;
 
 public:
-  UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand);
+  UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -442,6 +444,7 @@ class CallExprAST : public ExprAST {
 class ChainCallExprAST : public ExprAST {
 
   std::string Call_Of;
+  Parser_Struct parser_struct;
   
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::unique_ptr<ExprAST> Inner_Call;
@@ -449,7 +452,8 @@ class ChainCallExprAST : public ExprAST {
   public:
     ChainCallExprAST(const std::string &Call_Of,
                     std::vector<std::unique_ptr<ExprAST>> Args,
-                    std::unique_ptr<ExprAST> Inner_Call);
+                    std::unique_ptr<ExprAST> Inner_Call,
+                    Parser_Struct parser_struct);
 
   Value *codegen(Value *scope_struct) override;
 };

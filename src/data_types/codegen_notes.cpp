@@ -4,8 +4,6 @@
 #include <stdexcept>
 #include <vector>
 
-#include "../tensor/tensor_dim_functions.h"
-#include "../tensor/tensor_struct.h"
 #include "codegen_notes.h"
 #include "nsk_vector.h"
 
@@ -16,7 +14,6 @@
 
 template char *DT_list::get<char *>(size_t);
 template void *DT_list::get<void *>(size_t);
-template DT_tensor *DT_list::get<DT_tensor *>(size_t);
 
 
 template <typename T>
@@ -77,15 +74,14 @@ void DT_list::print() {
     {
         if (data_types->at(i)=="str")
             std::cout << "Notes["<<i<<"]: " << get<char *>(i) << ".\n";
-        if (data_types->at(i)=="float")
+        else if (data_types->at(i)=="float")
             std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
-        if (data_types->at(i)=="int")
+        else if (data_types->at(i)=="int")
             std::cout << "Notes["<<i<<"]: " << get<int>(i) << ".\n";
-        if (data_types->at(i)=="tensor")
+        else
         {
-            DT_tensor *t = get<DT_tensor *>(i);
-            std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
-            PrintDims(t->dims);
+            void *t = get<void *>(i);
+            std::cout << "Notes["<<i<<"] is a pointer" << ".\n";
         }
     }
     std::cout << "\n";

@@ -6,9 +6,10 @@
 #include <algorithm>
 #include <glob.h>
 
-#include "../common/include.h"
+// #include "../common/include.h"
 #include "../codegen/random.h"
 #include "../codegen/string.h"
+#include "../codegen/time.h"
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
@@ -120,7 +121,7 @@ extern "C" void * _glob_b_(Scope_Struct *scope_struct, char *pattern) {
 
 
   if (ret.size()<1)
-    LogErrorS("Glob failed to find files.");
+    LogErrorS(scope_struct->code_line, "Glob failed to find files.");
     
   // Aux to not lose pointers
   std::string random_str = RandomString(15);

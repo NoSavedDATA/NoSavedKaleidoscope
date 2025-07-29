@@ -1,10 +1,11 @@
+#include <atomic>
 #include <mutex>
 #include <set>
+#include <unordered_set>
 
 #include "../char_pool/include.h"
 #include "../codegen/string.h"
 #include "../codegen/time.h"
-#include "../data_types/include.h" 
 #include "../mark_sweep/include.h" 
 #include "../threads/include.h"
 
@@ -72,6 +73,10 @@ void Scope_Struct::Print() {
 
 
 
+
+extern "C" void set_scope_line(Scope_Struct *scope_struct, int line) {
+    scope_struct->code_line = line;
+}
 
 
 
@@ -145,9 +150,9 @@ extern "C" int get_scope_has_grad(Scope_Struct *scope_struct) {
 }
 
 
-std::set<int> assigned_ids;
+std::unordered_set<int> assigned_ids;
 std::mutex id_mutex;
-
+static std::atomic<int> next_thread_id(1);
 
 extern "C" float scope_struct_Reset_Threads(Scope_Struct *scope_struct) {
 
@@ -156,29 +161,20 @@ extern "C" float scope_struct_Reset_Threads(Scope_Struct *scope_struct) {
 }
 
 extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
-    // std::cout << "get_scope_has_grad" << ".\n";
-    // pthread_mutex_lock(&create_thread_mutex);
-    int thread_id = 0;
-
-    // main_mutex.lock();
-    
     std::lock_guard<std::mutex> lock(id_mutex);
-    int candidate;
-    candidate = 1;
+    // int thread_id = 0;
+
+    
+    static int candidate = 1;
     while (assigned_ids.count(candidate)) {
         candidate++;
     }
-    assigned_ids.insert(candidate);
-    
+    int thread_id = candidate++;
+    assigned_ids.insert(thread_id);
+    scope_struct->thread_id = thread_id;
 
 
-    scope_struct->thread_id = candidate;
-    // std::cout << "INCREMENT SCOPE STRUCT THREAD ID " << scope_struct->thread_id << ".\n";
-
-    // main_mutex.unlock();
-    // pthread_mutex_unlock(&create_thread_mutex);
-    // return scope_struct->has_grad;
-    // std::exit(0);
+    // scope_struct->thread_id = next_thread_id.fetch_add(1, std::memory_order_relaxed);
     return 0;
 }
 

@@ -30,7 +30,7 @@ void mhsa_backward(float *inp, int size, float *out,
 }
 
 
-extern "C" void *MHSAForward(char *self, DT_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
+extern "C" void *MHSAForward(Scope_Struct *scope_struct, char *self, DT_tensor *tensor, int thread_id, char *conv_namec, int is_obj_attr_or_self)
 {
   //TODO: remove self arg and concatenate it instead during the function call
   
@@ -65,7 +65,7 @@ extern "C" void *MHSAForward(char *self, DT_tensor *tensor, int thread_id, char 
   if (C!=mhsa->C)
   {
     std::string error = "Input tensor channels are: " + std::to_string(C) + ", while the expected input channels of the MHSA are: " + std::to_string(mhsa->C);
-    LogError(error);
+    LogError(scope_struct->code_line, error);
     
     NamedMHSA[conv_name] = std::move(mhsa);
     return nullptr;

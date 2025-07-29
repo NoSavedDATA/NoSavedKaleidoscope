@@ -75,7 +75,7 @@ extern "C" DT_tensor *Linear(Scope_Struct *scope_struct, LinearCPP *linear, DT_t
   if ((int)C!=(int)linear->C)
   {
     std::string error = "Input tensor last dim is: " + std::to_string((int)C) + ", while the expected input dim of the Linear layer is: " + std::to_string(linear->C);
-    LogError(error);
+    LogError(scope_struct->code_line, error);
     
     return nullptr;
   }

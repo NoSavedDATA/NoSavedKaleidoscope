@@ -1,13 +1,13 @@
+#include <cstddef>
 #include<string>
 #include<vector>
 #include<map>
 #include<iostream>
 
-#include"../char_pool/include.h"
-#include"include.h"
+#include "../char_pool/include.h"
+#include "random.h"
 
 
-std::vector<std::string> scopes;
 
 char *RandomString(size_t length) {
   // std::cout << "RandomString"  << ".\n";

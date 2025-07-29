@@ -1,4 +1,4 @@
-1821-07-25 11:55:06
+1821-07-29 16:20:40
 
 	FunctionType *int_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -27,6 +27,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("int_vec_Store_Idx", int_vec_Store_IdxTy);
+
+	FunctionType *earth_cableTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("earth_cable", earth_cableTy);
 
 	FunctionType *arange_intTy= FunctionType::get(
 		int8PtrTy,

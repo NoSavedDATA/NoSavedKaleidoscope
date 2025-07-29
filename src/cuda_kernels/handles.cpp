@@ -17,3 +17,8 @@ cublasComputeType_t cublas_compute = CUBLAS_COMPUTE_32F;
 
 
 float eps = 1e-8;
+
+
+cudaDeviceProp deviceProp;
+int WARP_SIZE=32;
+int THREADS_PER_BLOCK = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;

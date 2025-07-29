@@ -40,7 +40,7 @@ extern "C" float *load_img(Scope_Struct *scope_struct, char *img_name)
   } else {
     std::string img_n = img_name;
     std::string _error = "Failed to open image: " + img_n + ".";
-    LogErrorS(_error);
+    LogErrorS(scope_struct->code_line, _error);
   }
 
   return nullptr;
@@ -71,7 +71,7 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char 
     {
       std::string t_n = tensor.name;
       std::string _error = "The image dimensions are incompatible with the tensor " + t_n + " dimensions.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
 
 
       std::cout << "\nTENSOR BATCHLESS DIMS:" << "\n";
@@ -84,7 +84,7 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char 
     if (batch_idx > dims[0])
     {
       std::string _error = "Tried to load a pinned tensor on batch index " + std::to_string(batch_idx) + ", whereas this tensor batch size is " + std::to_string(dims[0]) + ".";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
     }
 
 
@@ -111,7 +111,7 @@ extern "C" float * gload_img(Scope_Struct *scope_struct, DT_tensor tensor, char 
   } else {
     std::string img_n = img_name;
     std::string _error = "Failed to open image: " + img_n + ".\n\n";
-    LogErrorS(_error);
+    LogErrorS(scope_struct->code_line, _error);
   }
 
   return nullptr;
@@ -156,7 +156,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
     {
       std::string t_n = tensor->name;
       std::string _error = "The image dimensions are incompatible with the tensor \033[95m" + t_n + "\033[0m dimensions.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
 
 
       std::cout << "\nTENSOR BATCHLESS DIMS:" << "\n";
@@ -169,7 +169,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
     if (batch_idx > dims[1])
     {
       std::string _error = "Tried to load a pinned tensor on batch index " + std::to_string(batch_idx) + ", whereas this tensor batch size is " + std::to_string(dims[1]) + ".";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
     }
 
 
@@ -196,7 +196,7 @@ extern "C" float * wload_img(Scope_Struct *scope_struct, DT_tensor *tensor, char
   } else {
     std::string img_n = img_name;
     std::string _error = "Failed to open image: " + img_n + ".\n\n";
-    LogErrorS(_error);
+    LogErrorS(scope_struct->code_line, _error);
   }
 
   return nullptr;
@@ -246,7 +246,7 @@ extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tenso
     {
       std::string t_n = tensor->name;
       std::string _error = "The image dimensions are incompatible with the tensor \033[95m" + t_n + "\033[0m dimensions.";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
 
 
       std::cout << "\nTENSOR BATCHLESS DIMS:" << "\n";
@@ -259,7 +259,7 @@ extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tenso
     if (batch_idx > dims[1])
     {
       std::string _error = "Tried to load a pinned tensor on batch index " + std::to_string(batch_idx) + ", whereas this tensor batch size is " + std::to_string(dims[1]) + ".";
-      LogErrorS(_error);
+      LogErrorS(scope_struct->code_line, _error);
     }
 
 
@@ -286,7 +286,7 @@ extern "C" float * wload_img_resize(Scope_Struct *scope_struct, DT_tensor *tenso
   } else {
     std::string img_n = img_name;
     std::string _error = "Failed to open image: " + img_n + ".\n\n";
-    LogErrorS(_error);
+    LogErrorS(scope_struct->code_line, _error);
   }
 
   return nullptr;

@@ -293,7 +293,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     std::string create_fn = Type + "_Create";    
     p2t("DataExpr Call create for " + create_fn);
-    
+
     initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
 
 
@@ -558,7 +558,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     EndCond = Builder->CreateFCmpONE(
         EndCond, _zero, "for expr loopcond");
   else
-      return LogErrorV("Unsupported type " + cond_type + " on the for expression");
+      return LogErrorV(parser_struct.line, "Unsupported type " + cond_type + " on the for expression");
 
 
 
@@ -839,24 +839,9 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
   std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
   
-  if(is_attr) {
-    std::cout << "VARIABLEEXPRAST IS ATTR" << ".\n";
-    std::exit(0);
-    // std::string attribute_name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
-    // std::string obj_name = std::get<0>(name_solver->Names[0]);
-    
-    // Value *obj = Get_Object_Value(name_solver, parser_struct);
-
-    // std::string obj_class = Object_toClass[parser_struct.class_name][obj_name];    
-    // int obj_ptr_offset = ClassVariables[obj_class][attribute_name];
-
-    // return callret("object_ptr_Load_on_Offset", {obj, const_int(obj_ptr_offset)});
-  }
 
 
-
-
-  
+ 
   std::string msg = "VariableExpr Variable " + Name + " load for type: " + type;
   p2t(msg);
 
@@ -1254,7 +1239,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       case '%':
         return Builder->CreateFRem(L, R, "remtmp");
       case tok_int_div:
-        return LogErrorV("GOTCHA");
+        return LogErrorV(parser_struct.line, "GOTCHA");
       case '<':
         L = Builder->CreateFCmpULT(L, R, "cmptmp");
         // Convert bool 0/1 to float 0.0 or 1.0
@@ -1516,7 +1501,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
   Function *F = getFunction(std::string("unary") + Opcode);
   if (!F)
-    return LogErrorV("Unknown unary operator.");
+    return LogErrorV(parser_struct.line,"Unknown unary operator.");
 
   return Builder->CreateCall(F, OperandV, "unop");
 }
@@ -1553,6 +1538,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct, Parser_Struct parser_struct) {
   
 
+
   // find existing unique function name (_async_1, _async_2, _async_3 etc)
   int fnIndex = 1;
   while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
@@ -1581,12 +1567,14 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   // std::vector<Value *> previous_scope_values;
   std::vector<std::string> previous_scope_value_types;
   std::vector<std::string> previous_scope_value_names;
+
+  std::cout << "Function is: " << parser_struct.function_name << ".\n";
   std::cout << "-----------------------" << ".\n";
   for (auto &pair : function_allocas["__anon_expr"]) {
     std::cout << "Found alloca " << pair.first << ".\n";
 
     std::string type;
-    if (Object_toClass[""].count(pair.first)>0)
+    if (Object_toClass[parser_struct.function_name].count(pair.first)>0)
     {
       type = "void";
       std::cout << "Type is void ptr" << ".\n";
@@ -1594,12 +1582,18 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
     else
     {   
       type = typeVars[parser_struct.function_name][pair.first];
-      continue;
+      if(type!="float"&&type!="int")
+        type="void";
+      // Value *v = load_alloca(pair.first, type, "__anon_expr");
+      // std::cout << "Got type " << type << ".\n";
+      // call("earth_cable", {v});
+      // continue;
     }
 
     Value *local = load_alloca(pair.first, type, "__anon_expr");
-    std::cout << "call dive_" <<type  << ".\n";
+    std::cout << "call dive_" << type  << ".\n";
     call("dive_"+type, {global_str(functionName), local, global_str(pair.first)});
+
 
     previous_scope_value_types.push_back(type);
     previous_scope_value_names.push_back(pair.first);
@@ -1656,13 +1650,11 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   std::cout << "got bodies" << ".\n";
 
   if (V)
-  {
-    
+  { 
     p2t("codegenAsyncFunction create return");
     Builder->CreateRet(Constant::getNullValue(int8PtrTy));
     
      
-
     std::string functionError;
     llvm::raw_string_ostream functionErrorStream(functionError);
 
@@ -2106,7 +2098,7 @@ Function *PrototypeAST::codegen() {
 
 
 
-inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name)
+inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name)
 {
 
   // Get Arguments
@@ -2123,7 +2115,7 @@ inline std::vector<Value *> codegen_Argument_List(std::vector<Value *> ArgsV, st
 
     if (!ArgsV.back())
     {
-      LogError("Failed to codegen argument of function " + fn_name);
+      LogError(parser_struct.line, "Failed to codegen argument of function " + fn_name);
       return {};
     }
   }
@@ -2149,7 +2141,7 @@ std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Par
     last--;
 
 
-  std::string _class=""; 
+  std::string _class=parser_struct.function_name;
 
   int i=0;
   if(expressions_string_vec[i]=="self") {
@@ -2159,7 +2151,6 @@ std::string Get_Nested_Name(std::vector<std::string> expressions_string_vec, Par
 
   for(; i<last; ++i)
   {
-    // std::cout << "---------------------Class " << _class << " to " << Object_toClass[_class][expressions_string_vec[i]] << ".\n";
     std::string next_class = Object_toClass[_class][expressions_string_vec[i]];
     if (next_class=="")
       return _class;
@@ -2176,13 +2167,14 @@ int Get_Nested_Class_Size(std::vector<std::string> expressions_string_vec, Parse
   int last = expressions_string_vec.size();
 
 
-  std::string _class=""; 
+  std::string _class=parser_struct.function_name; 
 
   int i=0;
   if(expressions_string_vec[i]=="self") {
     _class = parser_struct.class_name; 
     i++;
   }
+
   for(; i<last; ++i)
   {
     _class = Object_toClass[_class][expressions_string_vec[i]];
@@ -2192,42 +2184,20 @@ int Get_Nested_Class_Size(std::vector<std::string> expressions_string_vec, Parse
 }
 
 
-// int Get_Attribute_Type(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
-
-//   int last = expressions_string_vec.size()-1;
-
-
-//   std::string _class=""; 
-
-//   int i=0;
-//   if(expressions_string_vec[i]=="self") {
-//     _class = parser_struct.class_name; 
-//     i++;
-//   }
-
-//   for(; i<last; ++i)
-//   {
-//     _class = Object_toClass[_class][expressions_string_vec[i]];
-//   }
-//   // std::cout << "Offset of " << expressions_string_vec[last] << " is " << ClassVariables[_class][expressions_string_vec[last]] << ".\n";
-
-//   ClassVariables[_class][expressions_string_vec[last]]
-
-//   return ;
-// }
 
 int Get_Object_Offset(std::vector<std::string> expressions_string_vec, Parser_Struct parser_struct) {
 
   int last = expressions_string_vec.size()-1;
 
 
-  std::string _class=""; 
+  std::string _class=parser_struct.function_name; 
 
   int i=0;
   if(expressions_string_vec[i]=="self") {
     _class = parser_struct.class_name; 
     i++;
   }
+
 
   for(; i<last; ++i)
   {
@@ -2277,6 +2247,7 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 
     std::string fn_name = Get_Nested_Name(Expr_String, parser_struct, false);
     std::string _type = typeVars[fn_name][Name];
+    
     if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
       obj_ptr = callret("object_Load_slot", {obj_ptr});
     
@@ -2290,7 +2261,7 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
     return load_alloca(Name, var_type, parser_struct.function_name);    
   }
   else {
-    LogError("uncaught");
+    LogError(parser_struct.line, "uncaught");
   }
 }
 
@@ -2394,7 +2365,7 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
     target_args_size++;
     ArgsV.push_back(obj_ptr);
   }
-  ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, Callee);
+  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee);
 
 
 
@@ -2403,7 +2374,7 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
   if (!CalleeF)
   {
     std::string _error = "The referenced function "+ Callee +" was not yet declared.";
-    return LogErrorV(_error);
+    return LogErrorV(parser_struct.line, _error);
   }
   std::string tgt_function_name = CalleeF->getName().str();
   // If argument mismatch error.
@@ -2411,7 +2382,7 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
   {
     // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
     std::string _error = "Incorrect parameters used on function " + Callee + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
-    return LogErrorV(_error);
+    return LogErrorV(parser_struct.line, _error);
   }
 
 
@@ -2572,7 +2543,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   if (!CalleeF)
   {
     std::string _error = "The referenced function "+ tgt_function +" was not yet declared.";
-    return LogErrorV(_error);
+    return LogErrorV(parser_struct.line, _error);
   }
 
   tgt_function_name = CalleeF->getName().str();
@@ -2582,7 +2553,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   {
     // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
     std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
-    return LogErrorV(_error);
+    return LogErrorV(parser_struct.line, _error);
   }
   // std::cout << "\n\n\nCalling function: " << tgt_function <<"\n";
   msg = "CallExpr Calling function: " + tgt_function;
@@ -2599,7 +2570,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
   // Sends the non-changed scope_struct to load/codegen the arguments from the argument list
-  ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, tgt_function);
+  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, tgt_function);
 
   // Always include scope on the beggining
   ArgsV.insert(ArgsV.begin(), scope_struct_copy);
@@ -2634,7 +2605,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
       if (CalleeF->arg_size() != ArgsV.size())
       {
         std::string _error = "Incorrect parameters used on function " + tgt_function + " call.";
-        return LogErrorV(_error);
+        return LogErrorV(parser_struct.line, _error);
       }
       ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
     }
@@ -2668,7 +2639,7 @@ Value *ChainCallExprAST::codegen(Value *scope_struct) {
   ArgsV.push_back(inner_return);
   
 
-  ArgsV = codegen_Argument_List(std::move(ArgsV), std::move(Args), scope_struct, Call_Of);
+  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Call_Of);
 
 
   ArgsV.insert(ArgsV.begin(), scope_struct);

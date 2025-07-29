@@ -17,14 +17,15 @@
 
 
 
-extern "C" DT_tensor *rl_discounted_return(int thread_id, DT_tensor *reward, DT_tensor *terminated, float gamma)
+extern "C" DT_tensor *rl_discounted_return(Scope_Struct *scope_struct, DT_tensor *reward, DT_tensor *terminated, float gamma)
 {
   //std::cout << "rl_discounted_return THREAD IS: " << thread_id << "\n";
 
+  int thread_id = scope_struct->thread_id;
   std::vector<int> dims = reward->dims;
 
   if (reward->dims.size()!=2||terminated->dims.size()!=2)
-    LogErrorS("rl_discounted_return requires dims [B, T]");
+    LogErrorS(scope_struct->code_line, "rl_discounted_return requires dims [B, T]");
 
   int B = dims[0];
   int T = dims[1];

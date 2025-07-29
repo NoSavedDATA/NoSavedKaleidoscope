@@ -20,7 +20,7 @@ extern "C" float load_bin(DT_tensor *tensor, char *bin_name)
   if (!file.is_open()) {
     std::string _error = bin_name;
     _error = "Failed to open file: " + _error;
-    LogErrorS(_error);
+    LogErrorS(-1, _error);
     return 0;
   }
 
@@ -41,7 +41,7 @@ extern "C" float load_bin(DT_tensor *tensor, char *bin_name)
   if (num_elements>tensor->dims_prod)
   {
     std::string _error = "Tried to load binary data of size " + std::to_string(num_elements) + " into tensor " + tensor->name + " of size " + std::to_string(tensor->dims_prod);
-    LogErrorS(_error);
+    LogErrorS(-1, _error);
     return 0;
   }
 
@@ -114,7 +114,7 @@ extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, int first_idx, 
   if (!file.is_open()) {
     std::string _error = bin_name;
     _error = "Failed to open file: " + _error;
-    LogErrorS(_error);
+    LogErrorS(-1, _error);
     return 0;
   }
 
@@ -135,7 +135,7 @@ extern "C" float load_bin_idx(DT_tensor *tensor, char *bin_name, int first_idx, 
   if (num_elements>tensor->dims_prod)
   {
     std::string _error = "Tried to load binary data of size " + std::to_string(num_elements) + " into tensor " + tensor->name + " of size " + std::to_string(tensor->dims_prod);
-    LogErrorS(_error);
+    LogErrorS(-1, _error);
     return 0;
   }
 
@@ -165,7 +165,7 @@ extern "C" float wload_bin(DT_tensor *tensor, char *bin_name, int worker_idx, in
   if (!file.is_open()) {
     std::string _error = bin_name;
     _error = "Failed to open file: " + _error;
-    LogErrorS(_error);
+    LogErrorS(-1, _error);
     return 0;
   }
 

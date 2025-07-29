@@ -32,7 +32,7 @@ inline Function *getFunctionCheck(std::string Name) {
   if (auto *F = TheModule->getFunction(Name))
     return F;
 
-  LogError("The function " + Name + " was not found.");
+  LogError(-1, "The function " + Name + " was not found.");
   // If no existing prototype exists, return null.
   return nullptr;
 }

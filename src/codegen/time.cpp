@@ -5,9 +5,13 @@
 #include <map>
 
 #include "../mangler/scope_struct.h"
-#include"include.h"
 
 
+unsigned int get_millisecond_time() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return static_cast<unsigned int>(ts.tv_sec + (ts.tv_nsec / 1000));
+}
 
 
 

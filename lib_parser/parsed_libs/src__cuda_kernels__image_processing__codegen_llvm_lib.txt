@@ -1,29 +1,29 @@
-1821-06-06 14:45:55
+1821-07-29 16:31:42
 
 	FunctionType *RandomCropTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("RandomCrop", RandomCropTy);
 
 	FunctionType *RandomHorizontalFlipTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("RandomHorizontalFlip", RandomHorizontalFlipTy);
 
 	FunctionType *NormalizeImgTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("NormalizeImg", NormalizeImgTy);
 
 	FunctionType *JitterTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext), int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("Jitter", JitterTy);

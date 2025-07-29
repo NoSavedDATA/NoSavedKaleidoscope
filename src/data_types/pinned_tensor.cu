@@ -98,7 +98,7 @@ extern "C" void pinned_tensor_Store_Idx(DT_tensor *tensor, int idx_at, float val
     _error = _error + "\033[0m on pinned_tensor \033[95m"+std::string(tensor->name);
     _error = _error + "\033[0m;\n\t- Max idx allowed:  \033[32m"+std::to_string(dims_prod)+"\033[0m.";
 
-    LogErrorS(_error);
+    LogErrorS(scope_struct->code_line, _error);
     std::cout << "Dimensions:" << "\n";
     PrintDims(dims);
     std::cout << "\n";
@@ -156,7 +156,7 @@ extern "C" int pinned_tensor_CalculateIdx(DT_tensor *tensor, int first_idx, ...)
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (calc idx)");
+      LogErrorS(-1, "A tensor with 10 dimensions??? (calc idx)");
       return 0;
     }
 

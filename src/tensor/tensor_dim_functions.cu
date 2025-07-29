@@ -60,7 +60,7 @@ std::vector<float> BatchLessDims(std::vector<float> dims)
 {
   // Removes first dim (batch dim).
   if (dims.size()<=1)
-    LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+    LogError(-1, "Cannot remove the batch dimension of a unidimensional tensor.");
 
   std::vector<float> new_dims;
 
@@ -74,7 +74,7 @@ std::vector<int> BatchLessDims(std::vector<int> dims)
 {
   // Removes first dim (batch dim).
   if (dims.size()<=1)
-    LogError("Cannot remove the batch dimension of a unidimensional tensor.");
+    LogError(-1, "Cannot remove the batch dimension of a unidimensional tensor.");
 
   std::vector<int> new_dims;
 
@@ -224,7 +224,7 @@ std::vector<float> NewDimsOnMult(std::vector<float> Ldims, std::vector<float> Rd
   std::vector<float> new_dims;
   if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
   {
-    LogError("The last dimension of multiplied tensors must be the same.");
+    LogError(-1, "The last dimension of multiplied tensors must be the same.");
     return {}; 
   }
   for (int i = 0; i < Ldims.size()-1; i++)
@@ -243,7 +243,7 @@ std::vector<int> NewDimsOnMult(std::vector<int> Ldims, std::vector<int> Rdims)
   std::vector<int> new_dims;
   if (Ldims[Ldims.size()-1]!=Rdims[Rdims.size()-1])
   {
-    LogError("The last dimension of multiplied tensors must be the same.");
+    LogError(-1, "The last dimension of multiplied tensors must be the same.");
     std::cout << "Dim LHS: ";
     PrintDims(Ldims);
     std::cout << "Dim RHS: ";
@@ -323,7 +323,7 @@ extern "C" float CalculateIdxOffset(char *tensor_name, int first_idx, ...) {
   {
     if (i==9)
     {
-      LogErrorS("A tensor with 10 dimensions??? (calc idx)");
+      LogErrorS(-1, "A tensor with 10 dimensions??? (calc idx)");
       return 0;
     }
 

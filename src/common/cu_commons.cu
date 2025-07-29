@@ -10,8 +10,10 @@
 #include <iostream>
 #include <random>
 
-
 #include <Eigen/Dense>
+
+
+#include "../codegen/time.h"
 #include "cu_commons.h"
 
 // ----------------------------------------------------------------------------
@@ -38,11 +40,6 @@ void _cublasCheck(cublasStatus_t status, const char *file, int line)
 // ----------------------------------------------------------------------------
 // random utils
 
-unsigned int get_millisecond_time() {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return static_cast<unsigned int>(ts.tv_sec + (ts.tv_nsec / 1000));
-}
 
 std::random_device rd;  // obtain a random seed
 // std::mt19937 WEIGHT_PRNG(get_millisecond_time()); // initialize the Mersenne Twister generator

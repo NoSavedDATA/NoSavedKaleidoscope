@@ -1,4 +1,4 @@
-1821-06-06 14:45:18
+1821-07-29 16:14:31
 
 	FunctionType *AttrTensorNoFreeTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -20,13 +20,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("AttrTensorOnIdxTensor", AttrTensorOnIdxTensorTy);
-
-	FunctionType *AttrPinnedFromTensorOnIdxTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("AttrPinnedFromTensorOnIdx", AttrPinnedFromTensorOnIdxTy);
 
 	FunctionType *IdxTensorTy= FunctionType::get(
 		int8PtrTy,

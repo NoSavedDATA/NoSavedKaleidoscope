@@ -11,8 +11,11 @@
 #include "kernels.h"
 
 
-extern "C" DT_tensor *RandomCrop(int thread_id, DT_tensor *tensor, float padding)
+extern "C" DT_tensor *RandomCrop(Scope_Struct *scope_struct, DT_tensor *tensor, float padding)
 {
+
+  int thread_id = scope_struct->thread_id;
+
   float *tensor_ptr, *cropped;
   tensor_ptr = tensor->tensor_ptr;
   std::vector<int> dims = tensor->dims;
@@ -60,8 +63,9 @@ extern "C" DT_tensor *RandomCrop(int thread_id, DT_tensor *tensor, float padding
 
 
 
-extern "C" DT_tensor *RandomHorizontalFlip(int thread_id, DT_tensor *tensor)
+extern "C" DT_tensor *RandomHorizontalFlip(Scope_Struct *scope_struct, DT_tensor *tensor)
 {
+  int thread_id = scope_struct->thread_id;
   float *tensor_ptr, *flipped;
   tensor_ptr = tensor->tensor_ptr;
   std::vector<int> dims = tensor->dims;
@@ -106,8 +110,9 @@ extern "C" DT_tensor *RandomHorizontalFlip(int thread_id, DT_tensor *tensor)
 
 
 
-extern "C" DT_tensor *NormalizeImg(int thread_id, DT_tensor *tensor, DT_tensor *mean, DT_tensor *std)
+extern "C" DT_tensor *NormalizeImg(Scope_Struct *scope_struct, DT_tensor *tensor, DT_tensor *mean, DT_tensor *std)
 {
+  int thread_id = scope_struct->thread_id;
   float *tensor_ptr, *normalized;
   tensor_ptr = tensor->tensor_ptr;
   std::vector<int> dims = tensor->dims;
@@ -122,7 +127,7 @@ extern "C" DT_tensor *NormalizeImg(int thread_id, DT_tensor *tensor, DT_tensor *
 
   if(mean->dims_prod!=C||std->dims_prod!=C)
   { 
-    LogErrorS("NormalizeImg mean and std tensors must have the same dimensionality as the image channels.");
+    LogErrorS(scope_struct->code_line, "NormalizeImg mean and std tensors must have the same dimensionality as the image channels.");
     return nullptr;
   }
 
@@ -155,10 +160,10 @@ extern "C" DT_tensor *NormalizeImg(int thread_id, DT_tensor *tensor, DT_tensor *
 }
 
 
-extern "C" DT_tensor *Jitter(int thread_id, DT_tensor *tensor, float factor)
+extern "C" DT_tensor *Jitter(Scope_Struct *scope_struct, DT_tensor *tensor, float factor)
 {
 
-
+  int thread_id = scope_struct->thread_id;
   int grid_size, block_size;
   float dims_prod = tensor->dims_prod;
   std::vector<int> grid_block_mem_sizes = CalculateGridAndBlockSizes(dims_prod);

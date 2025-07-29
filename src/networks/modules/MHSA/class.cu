@@ -119,15 +119,15 @@ void MHSA::SetDescriptors(int B, int T, int thread_id)
 
   if (!_fp32 && (Bc<16 || Br<16))
   {
-    std::string _err = "fp16 is not supported for head dimension " + std::to_string(d) + ", got Br = " + std::to_string(Br) + " and Bc = " + std::to_string(Bc) + ".\n     Falling back into floating point precision 32 (fp32).";
-    LogErrorS(_err);
+    std::string _err = "fp16 is not supported for MHSA head dimension " + std::to_string(d) + ", got Br = " + std::to_string(Br) + " and Bc = " + std::to_string(Bc) + ".\n     Falling back into floating point precision 32 (fp32).";
+    LogErrorS(-1, _err);
     _fp32 = true;
   }
 
     if (!_fp32 && (d%16!=0))
   {
-    std::string _err = "fp16 is not supported for head dimension " + std::to_string(d) + ". It must be a multiple of 16.\n     Falling back into floating point precision 32 (fp32).";
-    LogErrorS(_err);
+    std::string _err = "fp16 is not supported for MHSA head dimension " + std::to_string(d) + ". It must be a multiple of 16.\n     Falling back into floating point precision 32 (fp32).";
+    LogErrorS(-1, _err);
     _fp32 = true;
   }
   
@@ -376,8 +376,8 @@ void MHSA::SetBackwardDescriptors()
 
   if (!_fp32_back && (Bc_back<16 || Br_back<16))
   {
-    std::string _err = "fp16 is not supported for head dimension " + std::to_string(d) + ", got Br = " + std::to_string(Br_back) + " and Bc = " + std::to_string(Bc_back) + ".\n     Falling back into floating point precision 32 (fp32) at the backward mode.";
-    LogErrorS(_err);
+    std::string _err = "fp16 is not supported for MHSA head dimension " + std::to_string(d) + ", got Br = " + std::to_string(Br_back) + " and Bc = " + std::to_string(Bc_back) + ".\n     Falling back into floating point precision 32 (fp32) at the backward mode.";
+    LogErrorS(-1, _err);
     _fp32_back = true;
   }
 

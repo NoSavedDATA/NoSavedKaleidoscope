@@ -153,37 +153,37 @@ extern "C" float append(char *self, char *obj_name)
 
 extern "C" char *LoadObjectScopeName(char *self)
 {
-  if (objectVecs.count(self)==0)
-  {
-    std::string _self = self;
-    std::string _error = "Object "+_self+" does not exist";
-    LogErrorS(_error);
-    return "";
-  }
+  // if (objectVecs.count(self)==0)
+  // {
+  //   std::string _self = self;
+  //   std::string _error = "Object "+_self+" does not exist";
+  //   LogErrorS(_error);
+  //   return "";
+  // }
 
-  /*
-  for (auto &pair : objectVecs)
-  {
-    std::cout <<  pair.first << ": " << pair.second << "\n";
-  }
-  */
-  std::string ret = objectVecs[self];
-  if(ret.length()==0)
-  {
-    for (auto &pair : objectVecs)
-      std::cout <<  pair.first << ": " << pair.second << "\n";
+  // /*
+  // for (auto &pair : objectVecs)
+  // {
+  //   std::cout <<  pair.first << ": " << pair.second << "\n";
+  // }
+  // */
+  // std::string ret = objectVecs[self];
+  // if(ret.length()==0)
+  // {
+  //   for (auto &pair : objectVecs)
+  //     std::cout <<  pair.first << ": " << pair.second << "\n";
 
-    std::string _self = self;
-    std::string _error = "Loaded object "+_self+" has zero length.";
-    LogErrorS(_error);
-  }
+  //   std::string _self = self;
+  //   std::string _error = "Loaded object "+_self+" has zero length.";
+  //   LogErrorS(_error);
+  // }
 
 
-  //std::cout << "LoadObjectScopeName is: " << ret << ", from self: " << self << "\n";
+  // //std::cout << "LoadObjectScopeName is: " << ret << ", from self: " << self << "\n";
 
-  delete[] self;
+  // delete[] self;
 
-  return str_to_char(ret);
+  // return str_to_char(ret);
 }
 
 

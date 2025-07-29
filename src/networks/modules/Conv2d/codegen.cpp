@@ -69,7 +69,7 @@ extern "C" DT_tensor *Conv2d(Scope_Struct *scope_struct, Conv2dCPP *conv, DT_ten
   if ((int)C!=(int)conv->C)
   {
     std::string error = "Input tensor channels are: " + std::to_string((int)C) + ", while the expected input channels of the convolution are: " + std::to_string(conv->C);
-    LogError(error);
+    LogError(scope_struct->code_line, error);
     
     return nullptr;
   }

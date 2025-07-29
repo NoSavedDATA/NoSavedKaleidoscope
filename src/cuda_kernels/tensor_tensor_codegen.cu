@@ -33,7 +33,7 @@ extern "C" DT_tensor *tensor_tensor_mma(Scope_Struct *scope_struct, DT_tensor *t
     
 
   if (Ldims.size()<2)
-    LogErrorS("Tensors multiplication requires at least 2 dimensions.");
+    LogErrorS(scope_struct->code_line, "Tensors matrix multiplication requires tensors of at least 2 dimensions.");
 
 
 
@@ -115,7 +115,7 @@ extern "C" DT_tensor *tensor_tensor_add(Scope_Struct *scope_struct, DT_tensor *t
 
   if (Ldims!=Rdims)
   {
-    LogErrorS("Tried to add tensors of different dimenstions.");
+    LogErrorS(scope_struct->code_line, "Tried to add tensors of different dimenstions.");
     std::cout << "   Left tensor dims " << "\n   ";
     PrintDims(Ldims);
     std::cout << "\n   Right tensor dims " << "\n   ";
@@ -361,7 +361,7 @@ extern "C" DT_tensor *tensor_tensor_div(Scope_Struct *scope_struct, DT_tensor *t
 
 
   //if (dims_prod!=R_dims_prod)
-  //  LogErrorS("Tensors division has tensors of different dimensions.");
+  //  LogErrorS(scope_struct->code_line, "Tensors division has tensors of different dimensions.");
 
 
   float* device_y = get_from_pool(thread_id, dims_prod,"div");

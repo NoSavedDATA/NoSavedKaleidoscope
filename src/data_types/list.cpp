@@ -14,6 +14,7 @@
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
 
+#include "codegen_notes.h"
 
 
 

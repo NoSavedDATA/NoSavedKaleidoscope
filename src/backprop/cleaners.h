@@ -51,14 +51,12 @@ void to_pool_threaded(int dims_prod, float *tensor_ptr, std::string scope, int t
 
 void ForwardCleanupToPool(DT_tensor *back_node, std::string scope);
 int DoesTreeContainWeight(DT_tensor *back_node);
-void CleanScopeTensors(std::string scope);
 
 
 void ThreadedCleanupToPool(DT_tensor *back_node, std::string scope, int thread_id);
 void CleanThreadTensors(std::string scope, int thread_id);
 
 
-void CleanScopeTensors(std::string scope);
 
 
 

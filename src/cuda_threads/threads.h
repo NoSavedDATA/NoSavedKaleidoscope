@@ -26,7 +26,10 @@ struct Loader {
     void Sync(); 
 };
 
-extern int ASYNC_LOADER_THREADS;
+
+constexpr int num_parallel_streams=32; //global of src/mma/tensor_struc.h
+constexpr int ASYNC_LOADER_THREADS = 6;
+
 extern CudaStreams *parallel_streams[];
 extern const int num_parallel_streams;
 extern cudaEvent_t parallel_events[];

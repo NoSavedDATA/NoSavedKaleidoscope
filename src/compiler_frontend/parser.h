@@ -171,7 +171,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct);
   
 
 
-std::unique_ptr<ExprAST> ParseImport();
+std::unique_ptr<ExprAST> ParseImport(Parser_Struct);
   
   /// definition ::= 'def' prototype expression
 std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::string class_name=""); 
@@ -188,7 +188,7 @@ std::unique_ptr<PrototypeAST> ParseExtern(Parser_Struct parser_struct);
   
   
   
-std::unique_ptr<ExprAST> ParseClass(); 
+std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct); 
  
 
 
