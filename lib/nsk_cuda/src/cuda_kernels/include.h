@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "../../../src/nsk_cpp.h"
+#include "../../../../src/nsk_cpp.h"
 
 #include "activation_functions/include.h"
 #include "dropout/include.h"

@@ -165,15 +165,15 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
     // Check if it is a data-type
     if(ReturnType!="float"||IsPointer)
     {
-        functions_return_type[Name] = ReturnType;
+        std::string nsk_data_type = ReturnType;        
         if(begins_with(ReturnType, "DT_"))
-        {
-            std::string nsk_data_type = ReturnType;
+        { 
             nsk_data_type.erase(0, 3);
 
             if(!in_str(nsk_data_type, data_tokens))
                 data_tokens.push_back(nsk_data_type);
         }
+        functions_return_type[Name] = nsk_data_type;
     }
 
 
@@ -206,7 +206,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
     // Check if it is a _Clean_Up or _backward function    
     if(ends_with(Name, "_Clean_Up"))
     {
-        // std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
+        std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
 
         std::string nsk_type = Name;
         size_t pos = nsk_type.rfind("_Clean_Up");
@@ -217,6 +217,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
         using CleanupFunc = void(*)(void*);
         CleanupFunc casted_func_ptr = reinterpret_cast<CleanupFunc>(func_ptr);
         clean_up_functions[nsk_type] = casted_func_ptr;
+        std::cout << "Add cleanup: " << nsk_type << ".\n";
 
     } else if (ends_with(Name, "_backward")) {
         // std::cout << "FOUND BACKWARD FN" << ".\n";
@@ -420,12 +421,9 @@ void LibParser::ParseExtern() {
 
 
 void LibParser::ParseLibs() {
-    token=0;
-
-    // std::cout << "Begin parsing" << ".\n";
-
-    token = _getToken();
     
+    token = _getToken();    
+
     while(file_idx<files.size())
     {  
       if (token==tok_extern)
@@ -433,7 +431,6 @@ void LibParser::ParseLibs() {
 
       token = _getToken();
     }
-    // std::cout << "\n\n";
 }
 
 void LibParser::PrintFunctions() {
@@ -448,15 +445,18 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
 
 
 
-    void *handle = dlopen(so_lib_path.c_str(), RTLD_LAZY);
+    void *handle = dlopen(so_lib_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
 
     if (!handle) {
-        std::cerr << "Failed to load library: " << dlerror() << std::endl;
+        std::string err = dlerror();
+        LogError(-1, "Failed to load library: " + err);
         std::exit(0);
     }
 
+    bool has_error=false;
 
 
+    using InitFuncType = void (*)();
     for (auto pair : Functions) {  // std::map<std::string, std::vector<LibFunction*>>
         for (auto fn : pair.second) // std::vector<LibFunction*>>
         {
@@ -467,16 +467,26 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
             void* func_ptr = dlsym(handle, fn->Name.c_str());
             const char *dlsym_error = dlerror();
             if (dlsym_error) {
-                std::cerr << "Cannot load symbol " << fn->Name << ": " << dlsym_error << std::endl;
+                LogError(-1, "Cannot load symbol " + fn->Name + ": " + dlsym_error);
+                has_error=true;
                 continue;
             }
             if (!func_ptr) {
                 LogError(-1, "Function " + fn->Name + " not found on library " + lib_name);
+                has_error=true;
                 continue;
+            }
+            if (begins_with(fn->Name,"initialize__"))
+            {
+                InitFuncType initialize_fn = reinterpret_cast<InitFuncType>(func_ptr);
+                initialize_fn();
             }
 
             fn->Link_to_LLVM(func_ptr);
             fn->Add_to_Nsk_Dicts(func_ptr, lib_name, is_default);
         }
     }
+
+    if (has_error)
+        std::exit(0);
 }

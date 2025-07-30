@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 
-#include "../../lib/nsk_cuda/src/backprop/backprop.h"
 #include "../include.h"
 #include "../clean_up/clean_up.h"
 #include "../compiler_frontend/include.h"
@@ -16,6 +15,7 @@ void set_user_functions() {
     user_cpp_functions = {"Linear", "tensor_view", "tensor_clip", "tensor_argmax", "tensor_tmax", "tensor_onehot", "tensor_shape", "tensor_permute", "tensor_cpu", "printtt",
         "tensor_sum", "tensor_prod", "tensor_mean", "mean_tensor", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
         "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "list_print",
+		"int_Create", "int_Load", "int_Store", 
 		"int_Create", "int_Load", "int_Store", 
 		"print", 
 		"list_New", "list_print", "list_Create", "list_size", "list_CalculateIdx", "list_Idx", "to_int", "to_float", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", 

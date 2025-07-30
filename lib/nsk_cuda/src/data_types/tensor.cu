@@ -266,7 +266,7 @@ extern "C" void *tensor_StoreTrigger(char *tensor_name, DT_tensor *stored_tensor
 
 
 
-void tensor_Clean_Up(void *data_ptr) {
+extern "C" void tensor_Clean_Up(void *data_ptr) {
   // std::cout << "tensor_Clean_Up" << ".\n";
   DT_tensor *tensor = (DT_tensor*) data_ptr;
   // PrintDims(tensor->dims);

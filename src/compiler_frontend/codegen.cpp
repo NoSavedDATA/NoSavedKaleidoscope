@@ -1179,6 +1179,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
       if (LType!="float"&&LType!="int")
         call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val, global_str(LType)});
+      
     }
     
 

@@ -6,7 +6,7 @@
 #include "../tensor/tensor_struct.h"
 
 
-void initiatilize__nsk_cuda() {
+extern "C" void initialize__nsk_cuda() {
   for (int i=0;i<10;++i)
   {
     cudaStream_t thread_stream = createCudaStream();
@@ -17,6 +17,7 @@ void initiatilize__nsk_cuda() {
   cudaCheck(cudaSetDevice(deviceIdx));
   cudaGetDeviceProperties(&deviceProp, deviceIdx);
 
+  std::cout << "\n\n";
   std::cout << "CuDNN Version: " << CUDNN_MAJOR << "." << CUDNN_MINOR << "." << CUDNN_PATCHLEVEL << std::endl;
   printf("Device %d: %s\n", deviceIdx, deviceProp.name);
   std::cout << "Device Max Compute Capability (SM): " << deviceProp.major << "." << deviceProp.minor << std::endl;
@@ -47,6 +48,9 @@ void initiatilize__nsk_cuda() {
   main_stream = createCudaStream();
 
 
+  tensor_inits = {"binary", "arange", "ints", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal", "fixed8i", "fixed42i"};
+
+  
   leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
   activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
   loss_ops = {cross_entropy_op, cross_entropy_idx_op, mse_op, mse_is_w_op};

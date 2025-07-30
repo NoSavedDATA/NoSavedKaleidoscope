@@ -5,7 +5,6 @@
 #include <cuda_fp16.h>
 #include <mma.h>
 
-#include "../../../src/nsk_cpp.h"
 #include "../../tensor/tensor_struct.h"
 
 

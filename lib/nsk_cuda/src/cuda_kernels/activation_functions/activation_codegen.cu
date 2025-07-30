@@ -5,13 +5,14 @@
 #include <vector>
 #include <iostream>
 
+#include "../../../src/nsk_cpp.h"
+
 #include "../../nsk_cuda/pool/include.h"
 #include "../../tensor/include.h"
 #include "../elementwise_kernels_inline.cu"
 #include "../calculate_grids.h"
 #include "activation_kernels.h"
 
-#include "../../../src/nsk_cpp.h"
 
 
 

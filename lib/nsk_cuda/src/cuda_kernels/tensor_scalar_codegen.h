@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "../../../src/nsk_cpp.h"
 #include "../tensor/tensor_struct.h"
 #include "calculate_grids.h"
 

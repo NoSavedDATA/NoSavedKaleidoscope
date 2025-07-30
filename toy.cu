@@ -136,7 +136,7 @@ pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_s
 
 // Tensor related
 std::vector<std::string> return_tensor_functions, return_tensor_methods, return_tensor_fn, native_modules,
-return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn, tensor_inits,
+return_pinned_methods, vararg_methods, string_methods, native_methods, native_functions, native_fn,
 return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str;
 
 
@@ -2891,7 +2891,7 @@ int main() {
 
 
 
-  tensor_inits = {"binary", "arange", "ints", "randu", "zeros", "ones", "xavu", "xavu_relu", "xavu_tanh", "he_normal_relu", "init_gpt", "xavn", "normal", "fixed8i", "fixed42i"};
+  
   notators_str = {"bias", "fp32", "fp16", "causal"};
 
 

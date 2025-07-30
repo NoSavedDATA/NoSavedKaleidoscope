@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 
 
-#include "../../../src/nsk_cpp.h"
+#include "../../../../src/nsk_cpp.h"
 #include "../cuda_threads/include.h"
 #include "../nsk_cuda/pool/include.h"
 #include "../tensor/include.h"

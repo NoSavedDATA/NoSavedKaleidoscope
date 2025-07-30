@@ -1,11 +1,11 @@
 #pragma once
 
 
-#include "threads.h"
 #include <cuda_runtime.h>
 #include <map>
 #include <vector>
 
+#include "threads.h"
 
 
 extern std::map<int, cudaStream_t> ThreadsStream;

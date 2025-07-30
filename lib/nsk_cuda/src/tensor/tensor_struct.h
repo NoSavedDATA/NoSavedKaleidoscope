@@ -98,7 +98,7 @@ enum BackwardTypes {
 
 extern std::vector<int> leaf_ops, loss_ops, gradless_ops, activation_ops, preprocessing_ops, tensor_scalar_ops, custom_ops, weightless_ops;
 extern int nn_mode;
-
+extern std::vector<std::string> tensor_inits;
 
 
 
