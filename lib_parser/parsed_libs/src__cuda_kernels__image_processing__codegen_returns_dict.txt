@@ -1,1 +1,0 @@
-{"RandomCrop", "tensor"}, {"RandomHorizontalFlip", "tensor"}, {"NormalizeImg", "tensor"}, {"Jitter", "tensor"}, 

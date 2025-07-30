@@ -9,7 +9,6 @@
 
 #include "../data_types/include.h"
 #include "../notators/include.h"
-#include "../tensor/include.h"
 #include "../KaleidoscopeJIT.h"
 #include "parser_struct.h"
 #include "tokenizer.h"

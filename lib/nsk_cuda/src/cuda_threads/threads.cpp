@@ -17,6 +17,8 @@ cudaStream_t main_stream, backward_stream;
 std::map<int, cudaStream_t> ThreadsStream;
 
 
+
+
 CudaStreams *AllocateStream(int line)
 {
   int free_stream = FirstNonzero(open_streams, num_parallel_streams);

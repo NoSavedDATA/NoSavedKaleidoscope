@@ -7,8 +7,6 @@
 
 #include "../char_pool/char_pool.h"
 #include "../clean_up/clean_up.h"
-#include "../tensor/tensor_dim_functions.h"
-#include "../tensor/tensor_struct.h"
 #include "any_map.h"
 
 
@@ -17,7 +15,6 @@ std::map<std::string, DT_dict *> NamedDicts;
 
 
 // template char *DT_dict::get<char *>(std::string);
-// template DT_tensor *DT_dict::get<DT_tensor *>(std::string);
 
 
 template <typename T>

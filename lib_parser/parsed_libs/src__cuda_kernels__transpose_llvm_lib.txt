@@ -1,8 +1,0 @@
-1821-06-04 22:14:45
-
-	FunctionType *tensor_transposeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("tensor_transpose", tensor_transposeTy);

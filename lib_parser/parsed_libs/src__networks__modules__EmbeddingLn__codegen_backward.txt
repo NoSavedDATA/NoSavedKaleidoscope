@@ -1,1 +1,0 @@
-	backward_functions["embeddingln_backward"] = embeddingln_backward;

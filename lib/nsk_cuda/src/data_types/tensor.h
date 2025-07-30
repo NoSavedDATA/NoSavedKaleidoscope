@@ -2,13 +2,8 @@
 
 #include <cuda_runtime.h>
 
-#include "../char_pool/include.h"
-#include "../mangler/scope_struct.h"
-#include "../tensor/include.h"
 
-
-
-
+#include "../../../src/nsk_cpp.h"
 
 
 

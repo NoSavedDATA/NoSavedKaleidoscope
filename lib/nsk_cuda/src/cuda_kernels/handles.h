@@ -1,5 +1,6 @@
 #pragma once
 
+
 #include <cublasLt.h>
 #include <cublas_v2.h>
 #include <cudnn.h>
@@ -36,4 +37,3 @@ extern int THREADS_PER_BLOCK;
 
 extern const int TILE_SIZE; 
 extern const int TILE_SIZE_SQ;
-
