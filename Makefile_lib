@@ -4,7 +4,7 @@
 
 CXX := clang++-19
 NXX := nvcc
-CXXFLAGS := -g -O3 -rdynamic
+CXXFLAGS := -g -O3 -rdynamic -fPIC
 LLVM_CONFIG := llvm-config-19
 CUDA_PATH := /usr/local/cuda-12.1
 CUDA_ARCH := sm_89
@@ -101,7 +101,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 
 $(SO_FILE): $(CU_OBJ) $(CXX_OBJ)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -MMD -MP -o $(SO_FILE) -lcudart
+	$(CXX) -shared $(CXXFLAGS) $(LDFLAGS) $(CU_OBJ) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -MMD -MP -o $(SO_FILE) -lcudart
 	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
 	@touch $(BUILD_FLAG)
 

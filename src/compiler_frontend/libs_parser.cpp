@@ -271,57 +271,57 @@ int LibParser::_getTok() {
 
     if(LastChar=='/')
     {
-    LastChar = _getCh();
-    if(LastChar=='/')
-    {
         LastChar = _getCh();
-        while(LastChar!=10 && LastChar!=tok_eof && LastChar!=tok_finish)
+        if(LastChar=='/')
+        {
             LastChar = _getCh();
+            while(LastChar!=10 && LastChar!=tok_eof && LastChar!=tok_finish)
+                LastChar = _getCh();
 
-        return tok_commentary;
-    } else
-        return LastChar;
+            return tok_commentary;
+        } else
+            return LastChar;
     }
 
 
     if(LastChar=='('||LastChar==')'||LastChar=='*'||LastChar==',')
     {
-    char ret_char = LastChar;
-    LastChar = _getCh();
-    return ret_char;
+        char ret_char = LastChar;
+        LastChar = _getCh();
+        return ret_char;
     }
 
 
     if (LastChar=='"') {
     
-    LastChar = _getCh();
-    running_string = "";
-
-    while(LastChar!='"')
-    {
-        running_string += LastChar;
         LastChar = _getCh();
-    }
-    LastChar = _getCh();
+        running_string = "";
 
-    return tok_str;
+        while(LastChar!='"')
+        {
+            running_string += LastChar;
+            LastChar = _getCh();
+        }
+        LastChar = _getCh();
+
+        return tok_str;
     }
 
     
     if (isalpha(LastChar)||LastChar=='_') {
-    running_string = "";
+        running_string = "";
 
-    while(isalpha(LastChar)||LastChar=='_')
-    {
-        running_string += LastChar;
-        LastChar = _getCh();
-    }
+        while(isalnum(LastChar)||LastChar=='_')
+        {
+            running_string += LastChar;
+            LastChar = _getCh();
+        }
 
-    if(running_string=="extern")
-        return tok_extern;
+        if(running_string=="extern")
+            return tok_extern;
 
 
-    return tok_identifier;
+        return tok_identifier;
     }
 
 
@@ -448,18 +448,28 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
 
 
 
-    void* handle = dlopen(so_lib_path.c_str(), RTLD_LAZY);
+    void *handle = dlopen(so_lib_path.c_str(), RTLD_LAZY);
+
+    if (!handle) {
+        std::cerr << "Failed to load library: " << dlerror() << std::endl;
+        std::exit(0);
+    }
 
 
 
-    for (auto pair : Functions) { 
-        for (auto fn : pair.second)
+    for (auto pair : Functions) {  // std::map<std::string, std::vector<LibFunction*>>
+        for (auto fn : pair.second) // std::vector<LibFunction*>>
         {
             // std::cout << "Importing function:" << "\n";
             // fn->Print();
             
-
+            dlerror(); // Clear any existing error
             void* func_ptr = dlsym(handle, fn->Name.c_str());
+            const char *dlsym_error = dlerror();
+            if (dlsym_error) {
+                std::cerr << "Cannot load symbol " << fn->Name << ": " << dlsym_error << std::endl;
+                continue;
+            }
             if (!func_ptr) {
                 LogError(-1, "Function " + fn->Name + " not found on library " + lib_name);
                 continue;
