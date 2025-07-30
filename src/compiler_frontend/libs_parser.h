@@ -37,7 +37,8 @@ struct LibParser {
   std::ifstream file;
   std::vector<fs::path> files;
   std::vector<std::string> function_names;
-
+  std::vector<std::string> Initialize_Functions;
+  
   std::map<std::string, std::vector<LibFunction*>> Functions;
 
   LibParser(std::string lib_dir); 
