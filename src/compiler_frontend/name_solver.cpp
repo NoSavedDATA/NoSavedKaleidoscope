@@ -11,7 +11,6 @@
 #include "modules.h"
 
 Value *NameSolverAST::codegen(Value *scope_struct) {
-  // std::cout << "\n\n\nName solver type: " << Type << "\n\n\n\n";
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -26,7 +25,6 @@ Value *NameSolverAST::codegen(Value *scope_struct) {
   Value *var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
 
   
-  // std::cout << "NAME SOLVER HAS SIZE: " << Names.size() << ".\n";
 
 
   if(Names.size()>1)
@@ -36,7 +34,6 @@ Value *NameSolverAST::codegen(Value *scope_struct) {
       type = std::get<1>(Names[i]);
       idx = std::move(std::get<2>(Names[i]));
 
-    //  std::cout << "NameSolver[" << i<< "]:  " << std::get<0>(Names[i]) << ", type: " << type << "\n";
 
       if (i==0)
       {
@@ -44,15 +41,10 @@ Value *NameSolverAST::codegen(Value *scope_struct) {
           var_name = callret("ConcatStrFreeLeft", {var_name, callret("get_scope_first_arg", {scope_struct})});
         else
         {
-          // p2t("concat scope, scope is: ");
-          // call("scope_struct_Print", {scope_struct});
-
-          // std::cout << "888888888888888 INCLUDE SCOPE " << include_scope << " TYPE: " << Type << ".\n";
-          // if((Type=="object"||Type=="tensor"||Type=="float"||type==type_object_name||Type=="str")&&include_scope)
-          if (include_scope)
-            var_name = callret("ConcatScopeStr", {var_name, callret("get_scope_scope", {scope_struct})});
-          else
-            p2t("DO NOT CONCATENATE SCOPE");
+          // if (include_scope)
+          //   var_name = callret("ConcatScopeStr", {var_name, callret("get_scope_scope", {scope_struct})});
+          // else
+          //   p2t("DO NOT CONCATENATE SCOPE");
         }
       }
 
@@ -81,9 +73,9 @@ Value *NameSolverAST::codegen(Value *scope_struct) {
     }
 
 
-  if(Names.size()==1)// Concat scope only
-    if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str"||Type=="float_vec"||Type=="int_vec")&&include_scope)
-      var_name = callret("ConcatScopeStr", {var_name, callret("get_scope_scope", {scope_struct})});
+  // if(Names.size()==1)// Concat scope only
+  //   if((Type=="object"||Type=="tensor"||Type=="float"||Type=="str"||Type=="float_vec"||Type=="int_vec")&&include_scope)
+  //     var_name = callret("ConcatScopeStr", {var_name, callret("get_scope_scope", {scope_struct})});
 
 
   if(NameSolveToLast)
@@ -91,9 +83,6 @@ Value *NameSolverAST::codegen(Value *scope_struct) {
     name = Builder->CreateGlobalString(std::get<0>(Names[Names.size()-1]));
     idx = std::move(std::get<2>(Names[Names.size()-1]));
 
-    //std::cout << "\n\n\nNAMESOLVER TYPE OF LAST: " << type << "\n";
-    //std::cout << "For: " << std::get<0>(Names[Names.size()-1]) << "\n";
-    //std::cout << "Type: " << Type << "\n";
     var_name = callret("ConcatStrFreeLeft", {var_name, name});
     if (Type=="object_vec")
     {

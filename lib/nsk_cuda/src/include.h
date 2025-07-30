@@ -8,4 +8,6 @@
 #include "data_types/include.h"
 #include "mma/include.h"
 #include "nsk_cuda/include.h"
+#include "optimizers/include.h"
+#include "processing/include.h"
 #include "tensor/include.h"
