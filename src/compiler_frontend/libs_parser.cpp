@@ -206,7 +206,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
     // Check if it is a _Clean_Up or _backward function    
     if(ends_with(Name, "_Clean_Up"))
     {
-        std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
+        // std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
 
         std::string nsk_type = Name;
         size_t pos = nsk_type.rfind("_Clean_Up");
@@ -217,7 +217,6 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
         using CleanupFunc = void(*)(void*);
         CleanupFunc casted_func_ptr = reinterpret_cast<CleanupFunc>(func_ptr);
         clean_up_functions[nsk_type] = casted_func_ptr;
-        std::cout << "Add cleanup: " << nsk_type << ".\n";
 
     } else if (ends_with(Name, "_backward")) {
         // std::cout << "FOUND BACKWARD FN" << ".\n";
