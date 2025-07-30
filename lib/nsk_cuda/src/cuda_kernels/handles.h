@@ -15,8 +15,6 @@ extern cublasComputeType_t cublas_compute_type;
 
 extern cublasComputeType_t cublas_compute;
 
-extern const int TILE_SIZE; 
-extern const int TILE_SIZE_SQ;
 
 #define CUBLAS_LOWP CUDA_R_32F
 #define PRECISION_MODE PRECISION_FP32
@@ -35,5 +33,7 @@ extern int WARP_SIZE;
 
 extern int THREADS_PER_BLOCK;
 
-extern const int TILE_SIZE; 
-extern const int TILE_SIZE_SQ;
+// extern const int TILE_SIZE; 
+// extern const int TILE_SIZE_SQ;
+constexpr int TILE_SIZE = 32;
+constexpr int TILE_SIZE_SQ = 32;

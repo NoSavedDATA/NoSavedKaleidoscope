@@ -50,7 +50,6 @@ extern "C" void *pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
 
   cudaMalloc(&tensor_ptr, round_to_nearest_pow2(product)*sizeof(float));  
   tensor = createPinned(tensor_ptr, tensor_cpu, dims, product, tensor_name);
-  // NamedTensorsT[tensor_name] = tensor;
   
 
   
@@ -68,15 +67,6 @@ extern "C" void *pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_n
 
 
 
-extern "C" DT_tensor *pinned_tensor_Load(Scope_Struct *scope_struct, char *tensor_name) {
-  // std::cout << "\n\nPINNED LOAD TENSOR: " << tensor_name <<  "\n";
-
-  DT_tensor *ret = NamedTensorsT[tensor_name];
-  if(scope_struct->is_at_return && (nn_mode==eval_mode||scope_struct->thread_id!=0))
-    ret->leaf = false; // Marks to clean
-
-  return ret;
-}
 
 
 

@@ -1,3 +1,3 @@
 
 
-void initialize_nsk_cuda();
+void initialize__nsk_cuda();

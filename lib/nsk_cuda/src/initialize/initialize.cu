@@ -6,7 +6,7 @@
 #include "../tensor/tensor_struct.h"
 
 
-void initiatilize_nsk_cuda() {
+void initiatilize__nsk_cuda() {
   for (int i=0;i<10;++i)
   {
     cudaStream_t thread_stream = createCudaStream();

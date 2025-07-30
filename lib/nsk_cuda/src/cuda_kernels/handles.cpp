@@ -26,6 +26,5 @@ cudaDeviceProp deviceProp;
 int WARP_SIZE;
 int THREADS_PER_BLOCK = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
-
-const int TILE_SIZE = (int)floorf(sqrtf((float)THREADS_PER_BLOCK)); 
-const int TILE_SIZE_SQ = TILE_SIZE*TILE_SIZE;
+// const int TILE_SIZE = (int)floorf(sqrtf((float)THREADS_PER_BLOCK)); 
+// const int TILE_SIZE_SQ = TILE_SIZE*TILE_SIZE;
