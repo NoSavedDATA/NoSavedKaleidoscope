@@ -77,12 +77,7 @@
 #define WMMA_K 16
 
 
-// cudaDeviceProp deviceProp;
-// int WARP_SIZE;
-// int THREADS_PER_BLOCK = deviceProp.maxThreadsPerMultiProcessor == 1536 ? 768 : 1024;
 
-const int TILE_SIZE = (int)floorf(sqrtf((float)THREADS_PER_BLOCK)); 
-const int TILE_SIZE_SQ = TILE_SIZE*TILE_SIZE;
 
 
 
@@ -117,12 +112,6 @@ std::map<std::string, int> NotatorsMap = {
 bool ShallCodegen = true;
 
 
-// Tensors
-std::unordered_map<std::string, DT_tensor *> NamedTensorsT;
-std::map<std::string, float *> NamedPinnedTensors;
-std::map<std::string, std::vector<float>> NamedDims;
-std::vector<DT_tensor> TensorsToDelete;
-
 
 LCG rng(generate_custom_seed());
 
@@ -137,6 +126,7 @@ pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_s
 // \033[0m default
 // \033[31m red
 // \033[33m yellow
+// \033[34m blue
 // \033[95m purple
 
 
@@ -230,10 +220,6 @@ std::vector<char *> glob_str_files;
 
 
 
-extern "C" float Add(float value, float v2)
-{
-  return value + v2; 
-}
 
 
 
@@ -244,91 +230,29 @@ extern "C" float Add(float value, float v2)
 
 
 
-// template<int WMMA_T, int X_WARPS, int Y_WARPS>
-// __global__ void wmma_cutlass(const float *x, const float *w,
-//                       float *out, const int B, const int C, const int OC) {
 
-//   int tid = threadIdx.y * blockDim.x + threadIdx.x;
-//   int laneId = tid % warpSize;
-//   int mw = laneId / WMMA_T;
-//   int ml = laneId % WMMA_T;
 
-//   int warp_y = threadIdx.y;
-//   int warp_x = (threadIdx.x / 32);
 
 
-//   const uint32_t warpX{(blockIdx.x * blockDim.x + threadIdx.x) / warpSize};  // OC
-//   const uint32_t warpY{blockIdx.y * blockDim.y + threadIdx.y};               // B
 
-//   // warpX = (oc*X_WARPS + warp_x)
 
 
-//   using ColumnMajor = cutlass::layout::ColumnMajor;
-//   using RowMajor = cutlass::layout::RowMajor;
 
-//   using Mma = cutlass::gemm::warp::DefaultMmaTensorOp<
-//     cutlass::gemm::GemmShape<16,16,16>,
-//     cutlass::gemm::GemmShape<16,16,16>,
-//     cute::half_t, RowMajor,
-//     cute::half_t, ColumnMajor,
-//     float, RowMajor
-//   >;
 
 
-//   extern __shared__ float smem[];
-//   float *out_smem = smem;
-//   __half *hsmem = reinterpret_cast<__half*>(smem + Y_WARPS*WMMA_T*(X_WARPS*WMMA_T));
 
-//   __half *x_smem     = hsmem;
-//   __half *w_smem     = hsmem + Y_WARPS*WMMA_T*(WMMA_T);
 
-//   typename Mma::IteratorA iter_A({x_smem, C}, tid);
-//   typename Mma::IteratorB iter_B({w_smem, C}, tid);
-//   typename Mma::IteratorC iter_C({out_smem, OC}, tid);
 
-//   typename Mma::FragmentA x_frag;
-//   typename Mma::FragmentB w_frag;
-//   typename Mma::FragmentC y_frag;
-  
-//   Mma mma;
-  
-//   y_frag.clear();
 
-// #pragma unroll
-//   for (int tile=0; tile<C; tile+=WMMA_T)
-//   {
-//     iter_A.load(x_frag);
-//     iter_B.load(w_frag);
 
-//     ++iter_A, ++iter_B;
-    
-//     mma(y_frag, x_frag, w_frag, y_frag);
-//   }
 
 
-//   if ((warpY*WMMA_T)<B && (warpX*WMMA_T)<OC && (warp_y*WMMA_T)<B && (warp_x*WMMA_T)<OC)
-//   { 
 
-//     // float *_out = out_smem + warp_y*WMMA_T*(X_WARPS*WMMA_T) + warp_x*WMMA_T;
-//     // wmma::store_matrix_sync(_out, y_frag, X_WARPS*WMMA_T, wmma::mem_row_major);
-//     iter_C.store(y_frag);
 
-    
-// #pragma unroll
-//     for (int tile=0; tile<std::ceil((WMMA_T*WMMA_T)/(float)warpSize); ++tile)
-//     {
-//       int tile_idx = tile*warpSize + laneId;
 
-//       int row = tile_idx / WMMA_T;
-//       int col = tile_idx % WMMA_T;
 
 
-//       if((warpY*WMMA_T+row)<B  &&  (warpX*WMMA_T+col)<OC && row<WMMA_T)
-//         out[(warpY*WMMA_T+row)*OC + warpX*WMMA_T+col] = _out[row*(X_WARPS*WMMA_T)+col];
 
-//     }
-//   }
-// }
 
 
 
@@ -337,149 +261,11 @@ extern "C" float Add(float value, float v2)
 
 
 
-extern "C" float printtt(int thread_id, DT_tensor tensor)
-{
-  char* tensorName = new char[tensor.name.size() + 1]; // Allocate memory for the C-style string
-  std::strcpy(tensorName, tensor.name.c_str()); // Copy the string
 
-  std::cout << "a" << ".\n";
 
-//   PrintTensor(thread_id, tensorName);
 
-  delete[] tensorName;
-  return 0;
-}
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-extern "C" float eval(Scope_Struct *scope_struct)
-{
-  std::cout << "\n\n\nSETTING NN MODE TO EVAL" << "\n\n";
-  
-  /*
-  for(int i=0; i<TensorPool.size(); i++)
-  {
-    for(int j=0; j<TensorPool[i].size();j++)
-      cudaCheck(cudaFree(TensorPool[i][j]));
-    
-    TensorPool[i].clear();
-  }
-  TensorPool.clear();
-  */
-   
-  for (auto& pair : NamedParamGrads)
-  {
-    std::cout << "Erasing gradient memory of: " << pair.first << "\n";
-    cudaCheck(cudaFree(pair.second));
-  }
-
-  NamedParamGrads.clear();
-
-
-  //std::cout << "\n\nALL TENSORS ARE" << "\n\n";
-  //for (auto& pair : NamedTensorsT)
-  //  std::cout << pair.first << "\n"; 
-
-
-  for (auto &pair: optimizer->NamedV)
-    cudaCheck(cudaFree(pair.second));
-    
-  for (auto &pair: optimizer->NamedM)
-    cudaCheck(cudaFree(pair.second));
-
-
-  /*
-  for (auto& pair : NamedTensorsT)
-  {
-    Tensor *tensor = pair.second;
-
-    if (tensor->is_pinned)
-    {
-      std::cout << "Erasing tensor: " << pair.first << ", is pinned: " << tensor->is_pinned << "\n";
-      tensor->Sync();
-      cudaCheck(cudaFree(tensor->tensor_ptr));
-
-      //delete[] tensor->cpu_tensor_ptr;
-    }
-  }
-  */
-  
-  
-
-  nn_mode = eval_mode;
-
-  std::cout << "\n\n\n";
-  return 0;
-}
-
-extern "C" float train(Scope_Struct *scope_struct)
-{
-  std::cout << "SETTING NN MODE TO TRAIN" << "\n\n";
-  nn_mode = training_mode;
-  return 0;
-}
 
 
 
@@ -2928,59 +2714,44 @@ void early_init() {
 }
 
 int main() {
-  int deviceIdx = 0;
-  cudaCheck(cudaSetDevice(deviceIdx));
-  cudaGetDeviceProperties(&deviceProp, deviceIdx);
 
-  std::cout << "CuDNN Version: " << CUDNN_MAJOR << "." << CUDNN_MINOR << "." << CUDNN_PATCHLEVEL << std::endl;
-  printf("Device %d: %s\n", deviceIdx, deviceProp.name);
-  std::cout << "Device Max Compute Capability (SM): " << deviceProp.major << "." << deviceProp.minor << std::endl;
+//   int deviceIdx = 0;
+//   cudaCheck(cudaSetDevice(deviceIdx));
+//   cudaGetDeviceProperties(&deviceProp, deviceIdx);
 
-  std::cout << "Shared-Memory per thread-block size: " << deviceProp.sharedMemPerBlock << ".\n";
+//   std::cout << "CuDNN Version: " << CUDNN_MAJOR << "." << CUDNN_MINOR << "." << CUDNN_PATCHLEVEL << std::endl;
+//   printf("Device %d: %s\n", deviceIdx, deviceProp.name);
+//   std::cout << "Device Max Compute Capability (SM): " << deviceProp.major << "." << deviceProp.minor << std::endl;
+
+//   std::cout << "Shared-Memory per thread-block size: " << deviceProp.sharedMemPerBlock << ".\n";
   
 
     
-  cudaDeviceGetAttribute(&WARP_SIZE, cudaDevAttrWarpSize, 0); 
-  cublasCheck(cublasCreate(&cublas_handle));
-  cublasCheck(cublasLtCreate(&cublaslt_handle));
+//   cudaDeviceGetAttribute(&WARP_SIZE, cudaDevAttrWarpSize, 0); 
+//   cublasCheck(cublasCreate(&cublas_handle));
+//   cublasCheck(cublasLtCreate(&cublaslt_handle));
 
 
-  int enable_tf32 = deviceProp.major >= 8 ? 1 : 0;
+//   int enable_tf32 = deviceProp.major >= 8 ? 1 : 0;
 
 
-  printf("enable_tf32: %d\n", enable_tf32);
+//   printf("enable_tf32: %d\n", enable_tf32);
   
-  cublas_compute_type = enable_tf32 ? CUBLAS_COMPUTE_32F_FAST_TF32 : CUBLAS_COMPUTE_32F;
-  cublasMath_t cublas_math_mode = enable_tf32 ? CUBLAS_TF32_TENSOR_OP_MATH : CUBLAS_DEFAULT_MATH;
-  cublasCheck(cublasSetMathMode(cublas_handle, cublas_math_mode));
-  // setup the (global) cuBLASLt workspace
-  cudaCheck(cudaMalloc(&cublaslt_workspace, cublaslt_workspace_size));
+//   cublas_compute_type = enable_tf32 ? CUBLAS_COMPUTE_32F_FAST_TF32 : CUBLAS_COMPUTE_32F;
+//   cublasMath_t cublas_math_mode = enable_tf32 ? CUBLAS_TF32_TENSOR_OP_MATH : CUBLAS_DEFAULT_MATH;
+//   cublasCheck(cublasSetMathMode(cublas_handle, cublas_math_mode));
+//   // setup the (global) cuBLASLt workspace
+//   cudaCheck(cudaMalloc(&cublaslt_workspace, cublaslt_workspace_size));
   
-  cudnnCreate(&cudnn);
+//   cudnnCreate(&cudnn);
 
-  std::cout << "Tile size is: " << TILE_SIZE << ".\n\n";
+//   std::cout << "Tile size is: " << TILE_SIZE << ".\n\n";
+//   main_stream = createCudaStream();
 
 
-  // Create Global CUDA Streams
-//   for(int i=0; i<num_parallel_streams; i++)
-//   {
-//     CudaStreams *cuda_stream = new CudaStreams();
 
-//     cudaStreamCreate(&cuda_stream);
-//     cuda_stream->idx = i;
-//     parallel_streams[i] = cuda_stream;
 
-//     open_streams[i]=1;
-//   }
 
-  
-//   // Set the Main Stream
-//   main_stream = AllocateStream(0);
-//   cublasSetStream(cublas_handle, main_stream);
-//   cudnnSetStream(cudnn, main_stream);
-//   ThreadsStream[0] = main_stream;
-
-  main_stream = createCudaStream();
 
 
 
@@ -3004,30 +2775,9 @@ int main() {
   pthread_mutex_init(&random_seed_mutex, NULL);
   pthread_mutex_init(&aux_mutex, NULL);
   
-  
-
-
   lockVars["mutex"] = &mutex;
   
 
-
-
-
-  leaf_ops = {leaf, tensor_leaf, weight_leaf, bias_leaf};
-  activation_ops = {relu_op, gelu_op, softmax_op, tanh_op, sigmoid_op, cudnn_relu_op};
-  loss_ops = {cross_entropy_op, cross_entropy_idx_op, mse_op, mse_is_w_op};
-
-  custom_ops = {sigmoid_add2weights_op, embedding_op};
-
-  tensor_scalar_ops = {scalar_add_op, scalar_sub_op, scalar_mult_op, scalar_div_op};
-
-  weightless_ops = {add_op, lgrad_op, dropout_op};
-  weightless_ops = concat_int_vec(weightless_ops, tensor_scalar_ops);
-
-  preprocessing_ops = {gpu_op, crop_op, random_horizontal_flip_op, normalize_img_op, jitter_op};
-  gradless_ops = {randu_like_op, onehot_op, max_op, argmax_op, equal_op,
-                  create_tensor_from_brackets_op, detach_op};
-  gradless_ops = concat_int_vec(gradless_ops, preprocessing_ops);
 
 
   // Install standard binary operators.

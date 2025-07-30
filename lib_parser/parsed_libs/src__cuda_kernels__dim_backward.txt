@@ -1,2 +1,0 @@
-	backward_functions["mean_over_semilast_dim_backward"] = mean_over_semilast_dim_backward;
-	backward_functions["gather_last_dim_backward"] = gather_last_dim_backward;

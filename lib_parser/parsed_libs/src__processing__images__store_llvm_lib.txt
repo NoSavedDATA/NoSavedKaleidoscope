@@ -1,8 +1,0 @@
-1821-05-10 22:56:56
-
-	FunctionType *save_imgTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("save_img", save_imgTy);

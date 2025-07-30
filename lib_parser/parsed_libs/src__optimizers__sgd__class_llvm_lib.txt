@@ -1,8 +1,0 @@
-1821-06-06 14:52:27
-
-	FunctionType *SGDTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("SGD", SGDTy);

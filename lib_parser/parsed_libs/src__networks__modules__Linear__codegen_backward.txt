@@ -1,1 +1,0 @@
-	backward_functions["linear_backward"] = linear_backward;

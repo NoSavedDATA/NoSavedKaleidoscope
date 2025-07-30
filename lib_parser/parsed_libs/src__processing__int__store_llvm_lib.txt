@@ -1,8 +1,0 @@
-1821-06-06 14:55:34
-
-	FunctionType *save_as_intTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("save_as_int", save_as_intTy);

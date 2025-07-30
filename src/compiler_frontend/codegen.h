@@ -9,7 +9,6 @@
 
 #include "../data_types/include.h"
 #include "../notators/include.h"
-#include "../tensor/include.h"
 #include "../KaleidoscopeJIT.h"
 #include "include.h"
 #include "modules.h"

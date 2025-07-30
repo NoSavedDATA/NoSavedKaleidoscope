@@ -11,7 +11,6 @@
 
 #include "../data_types/include.h"
 #include "../notators/include.h"
-#include "../tensor/include.h"
 #include "../KaleidoscopeJIT.h"
 #include "include.h"
 
@@ -801,18 +800,16 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   bool is_attr = GetIsAttribute();
     
 
-  if (type=="str")
-  {
-    for (const auto &entry : NamedTensorsT)
-    {
-      std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
-      if (ends_with(entry.first, Name))
-        return ConstantFP::get(*TheContext, APFloat(0.0f));
-    } 
-  }
+  // if (type=="str") // todo: NamedTensorsT break
+  // {
+  //   for (const auto &entry : NamedTensorsT)
+  //   {
+  //     std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
+  //     if (ends_with(entry.first, Name))
+  //       return ConstantFP::get(*TheContext, APFloat(0.0f));
+  //   } 
+  // }
 
-  // p2t("Variable " + Name + "  type is " + type);
-  // p2t("is self: " + (int)is_self);
 
 
 
@@ -1544,8 +1541,9 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
     fnIndex++;
   
-  cudaStream_t thread_stream = createCudaStream();
-  ThreadsStream[fnIndex] = thread_stream;
+  // todo: solve thread stream
+  // cudaStream_t thread_stream = createCudaStream();
+  // ThreadsStream[fnIndex] = thread_stream;
 
   // Create function for this async function
   llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();

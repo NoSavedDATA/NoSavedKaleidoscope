@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iomanip>
 
+#include "../char_pool/include.h"
 #include "../common/extension_functions.h"
 #include "../codegen/random.h"
 #include "../codegen/string.h"

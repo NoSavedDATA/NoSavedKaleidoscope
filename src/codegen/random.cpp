@@ -1,3 +1,4 @@
+#include <climits>
 #include <cstdint>
 #include <stdint.h>
 #include <thread>

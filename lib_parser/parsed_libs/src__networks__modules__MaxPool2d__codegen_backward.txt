@@ -1,1 +1,0 @@
-	backward_functions["pool2d_backward"] = pool2d_backward;

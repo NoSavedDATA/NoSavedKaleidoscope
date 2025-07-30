@@ -1,8 +1,0 @@
-1821-05-12 17:44:14
-
-	FunctionType *ConcatScopeStrTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("ConcatScopeStr", ConcatScopeStrTy);
