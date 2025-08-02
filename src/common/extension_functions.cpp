@@ -62,6 +62,14 @@ bool contains_str(const std::string& str_input, const std::string& str_sub) {
     return str_input.find(str_sub) != std::string::npos;
 }
 
+std::string remove_suffix(const std::string& input_string, std::string suffix) {
+    if (input_string.length() >= suffix.length() && 
+        input_string.substr(input_string.length() - suffix.length()) == suffix) {
+        return input_string.substr(0, input_string.length() - suffix.length());
+    }
+    return input_string;
+}
+
 std::string erase_before_pattern(std::string s, std::string pattern) {
     size_t pos = s.find(pattern);
     if (pos != std::string::npos) {

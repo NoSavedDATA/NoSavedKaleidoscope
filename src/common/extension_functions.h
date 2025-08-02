@@ -21,6 +21,9 @@ bool begins_with(const std::string& str_input, const std::string& str_start);
 
 bool contains_str(const std::string& str_input, const std::string& str_sub);
 
+
+std::string remove_suffix(const std::string& input_string, std::string suffix);
+
 std::string remove_substring(const std::string& str, const std::string& substr);
 
 bool starts_with(const char* str, const char* sub);

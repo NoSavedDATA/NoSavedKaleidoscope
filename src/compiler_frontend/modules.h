@@ -11,6 +11,7 @@
 
 
 #include "../KaleidoscopeJIT.h"
+#include "global_vars.h"
 #include "logging.h"
 
 
@@ -27,6 +28,18 @@ extern std::unique_ptr<Module> TheModule;
 extern std::unique_ptr<Module> GlobalModule;
 
 
+inline Value *const_int(int val) {
+    return ConstantInt::get(Type::getInt32Ty(*TheContext), val);
+}
+inline Value *const_int64(int val) {
+    return ConstantInt::get(Type::getInt64Ty(*TheContext), val);
+}
+inline Value *const_float(float val) {
+    return ConstantFP::get(*TheContext, APFloat(val));
+}
+
+
+
 inline Function *getFunctionCheck(std::string Name) {
   // First, see if the function has already been added to the current module.
   if (auto *F = TheModule->getFunction(Name))
@@ -38,10 +51,13 @@ inline Function *getFunctionCheck(std::string Name) {
 }
 
 inline void call(std::string fn, std::vector<Value *> args) {
-    Builder->CreateCall(getFunctionCheck(fn), args);
+    if(!Shall_Exit)
+        Builder->CreateCall(getFunctionCheck(fn), args);
 }
-inline Value *callret(std::string fn, std::vector<Value *> args) {
-    return Builder->CreateCall(getFunctionCheck(fn), args);
+inline Value *callret(std::string fn, std::vector<Value *> args) { 
+    if(!Shall_Exit)
+        return Builder->CreateCall(getFunctionCheck(fn), args);
+    return const_float(0);
 }
 
 
@@ -73,15 +89,6 @@ inline Value *global_str(std::string _string) {
 }
 
 
-inline Value *const_int(int val) {
-    return ConstantInt::get(Type::getInt32Ty(*TheContext), val);
-}
-inline Value *const_int64(int val) {
-    return ConstantInt::get(Type::getInt64Ty(*TheContext), val);
-}
-inline Value *const_float(float val) {
-    return ConstantFP::get(*TheContext, APFloat(val));
-}
 
 
 inline AllocaInst *int_alloca() {
