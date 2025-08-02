@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <fstream>
 
+
+#include "../common/extension_functions.h"
 #include "../data_types/include.h"
 #include "../notators/include.h"
 #include "../KaleidoscopeJIT.h"
@@ -204,6 +206,40 @@ llvm::Type *get_type_from_str(std::string type)
 
 
 
+
+bool Check_Is_Compatible_Type(std::string LType, const std::unique_ptr<ExprAST> &RHS, Parser_Struct parser_struct) {
+  std::string RType = RHS->GetType();
+
+
+  // LogBlue("Attributing " + RType + " to " + LType);
+  
+  // RType==null -> !primary data
+  // if(RType=="nullptr")
+  if((RType=="nullptr")&&!in_str(LType, {"float", "int", "str", "bool"}))
+    return true;
+  
+  if(begins_with(LType, "unknown_")||begins_with(RType,"unknown_"))
+    return true;
+  
+  if (LType!=RType)
+  { 
+    if (dynamic_cast<NestedVectorIdxExprAST *>(RHS.get()) || dynamic_cast<VecIdxExprAST *>(RHS.get()))
+    {
+      RType = remove_suffix(RType, "_list");
+      RType = remove_suffix(RType, "_vec");
+    }
+
+    if (LType!=RType)
+    {
+
+      LogError(parser_struct.line, "Tried to attribute " + RType + " to " + LType);
+      return false;
+    }
+  }
+  return true;
+}
+
+
 Value *DataExprAST::codegen(Value *scope_struct) {
   p2t("DataExpr");
   if (not ShallCodegen)
@@ -224,6 +260,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     bool is_attr = GetIsAttribute();
 
     Value *initial_value = Init->codegen(scope_struct);
+
+
+    if(!Check_Is_Compatible_Type(Type, VarNames[i].second, parser_struct))
+      return const_float(0);
 
     if((Type=="float"||Type=="int")&&!(is_self||is_attr))
     { 
@@ -284,14 +324,16 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       else {
         std::cout << "Could not find the data type of a note in DataExpr of " << VarName << " \n";
       }
-
     }
     
 
  
 
-    std::string create_fn = Type + "_Create";    
+
+
+    std::string create_fn = ((ends_with(Type,"_list")) ? "list" : Type) + "_Create";
     p2t("DataExpr Call create for " + create_fn);
+
 
     initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
 
@@ -928,52 +970,9 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
 
 Value *ObjectVecIdxExprAST::codegen(Value *scope_struct) {
-  // if (not ShallCodegen)
-  //   return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // // Look this variable up in the function.
-  // std::cout << "ObjectVecIdxExprAST codegen" << "\n";
-  
-  // VecIdxExprAST *vec = static_cast<VecIdxExprAST *>(Vec.get());
-  // // std::cout << "vec name " << vec->GetName() << "\n";
-  // // std::cout << "ObjectVecIdxExprAST is vec: " << GetIsVec() << "\n";
-
-  // Value *idx = vec->Idx[0]->codegen(scope_struct);
-
-
-  // Value *var_name, *object_name, *object_var_name, *post_dot_str;
-  // var_name = Builder->CreateGlobalString(vec->GetName());
-  // post_dot_str = Builder->CreateGlobalString(_post_dot);
-  
-  // std::string pre_dot = GetPreDot();
-  // bool is_self = GetSelf();
-  // bool is_attr = GetIsAttribute();
-  
-  
-  // if (is_self||is_attr)
-  // {
-  //   // Gets from pre_dot if it is a class attribute
-  //   if (is_attr) {
-  //     object_name = Builder->CreateGlobalString(pre_dot);
-  //     var_name = Builder->CreateGlobalString(Name);
-
-  //     var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-  //                                                     {object_name, var_name});
-  //   }
-  //   if (is_self)
-  //     var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-  //                                                     {Builder->CreateLoad(int8PtrTy, Builder->CreateCall(TheModule->getFunction("get_scope_first_arg"), {scope_struct})), var_name});
-  // }
-
-  // if (Type=="tensor")
-  //   return Builder->CreateCall(TheModule->getFunction("object_vec_idxTensor"),
-  //                                                     {var_name, idx, post_dot_str});
-  // if (Type=="object")
-  //   return Builder->CreateCall(TheModule->getFunction("object_vec_idxObject"),
-  //                                                     {var_name, idx, post_dot_str});
-
-
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
+
 
 
 
@@ -1102,15 +1101,19 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     
     
 
-     
+    
+
     
 
     std::string Lname = LHS->GetName();
 
     if (is_alloca)
     {
+      Check_Is_Compatible_Type(LType, RHS, parser_struct);
+
       std::string store_trigger = LType + "_StoreTrigger";
       std::string copy_fn = LType + "_Copy";
+
 
       AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
 
@@ -1164,6 +1167,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       }
 
       if(auto *LHSV = dynamic_cast<NestedVariableExprAST *>(LHS.get())) {
+        Check_Is_Compatible_Type(LType, RHS, parser_struct);
+
         LHSV->Load_Val = false;
         LHSV->Inner_Expr->Load_Last=false;
 
@@ -2023,16 +2028,12 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
     }
     else if (Init) // init of vec[size]
     {
-      //var_name = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
       var_name = global_str(VarName);
 
       if (is_self||is_attr) 
         var_name = callret("ConcatStr", {callret("get_scope_first_arg", {scope_struct}), var_name});
       if (!(is_self||is_attr))
         var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
-
-      //var_name = Builder->CreateCall(TheModule->getFunction("ConcatStr"),
-      //                                        {object_hash, var_name});
 
 
       call("InitObjectVecWithNull", {var_name, init});
@@ -2107,8 +2108,13 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
     arg = Args[i]->codegen(scope_struct);
     std::string type = Args[i]->GetType();
       
-    // p2t("CallExpr Argument type is " + type);
-      
+
+    if (Function_Arg_Types.count(fn_name)>0)
+    {
+      std::string expected_type = Function_Arg_Types[fn_name][Function_Arg_Names[fn_name][i]];
+      if (type!=expected_type)
+        LogError(parser_struct.line, "Passed type " + type + " for the argument " + Function_Arg_Names[fn_name][i] + " of function " + fn_name + ", but expected " + expected_type + ".");
+    }
 
     ArgsV.push_back(arg);
 

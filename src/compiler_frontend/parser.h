@@ -26,6 +26,9 @@ extern std::vector<std::string> op_map_names;
 
 extern std::map<std::string, std::map<std::string, std::string>> Object_toClass;
 
+extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
+extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
+
 
 extern std::map<std::string, std::map<std::string, int>> ClassVariables;
 extern std::map<std::string, int> ClassSize;
@@ -114,7 +117,7 @@ std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::un
 
    
 
-std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string class_name=""); 
+std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string suffix="", std::string class_name=""); 
 
 
     

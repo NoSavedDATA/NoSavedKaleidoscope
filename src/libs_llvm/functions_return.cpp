@@ -21,7 +21,7 @@ void set_functions_return_type() {
                            {"to_string", "str"}, {"cat_str_float", "str"}, {"Linear", "tensor"}, {"str_split_idx", "str"}, {"str_to_float", "float"},
                            {"mean_tensor", "tensor"},
                            {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"},
-						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, 
+						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"ShuffleStrVec", "str_vec"}, {"_glob_b_", "str_vec"},
 						{"nsk_vec_size", "int"}, {"__idx__", "int"}, {"__sliced_idx__", "int"}, 
 						{"emerge_int", "int"}, {"tid", "int"}, 
 						{"str_Create", "str"}, {"str_Load", "str"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"cat_str_float", "str"}, {"SplitString", "str_vec"}, {"str_split_idx", "str"}, 

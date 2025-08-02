@@ -529,9 +529,10 @@ static int get_token() {
     int seen_spaces=0;
 
     while(LastChar==10 || LastChar==tok_tab || LastChar==32) {
+      if(LastChar==10)
+        LineCounter++;
       if(ThisChar==10)
       {
-        LineCounter++;
         LastSeenTabs = SeenTabs;
         SeenTabs = 0;
         seen_spaces = 0;

@@ -6,11 +6,17 @@
 #include "../char_pool/include.h"
 #include "../codegen/string.h"
 #include "../codegen/time.h"
+#include "../compiler_frontend/global_vars.h"
 #include "../mark_sweep/include.h" 
 #include "../threads/include.h"
 
 #include "scope_struct.h"
 
+
+void check_exit() {
+    if (Shall_Exit)
+        std::exit(0);
+}
 
 Scope_Struct::Scope_Struct() {
     first_arg = get_from_char_pool(1,"Scope mangler first_arg");
@@ -81,12 +87,14 @@ extern "C" void set_scope_line(Scope_Struct *scope_struct, int line) {
 
 
 extern "C" Scope_Struct *scope_struct_Create() {
+    // check_exit();
     Scope_Struct *scope_struct = new Scope_Struct();
     return scope_struct;
 }
 
 extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy) {
-    
+    // check_exit();
+
     // std::cout << "Copying scope struct" << ".\n";
 
     Scope_Struct *scope_struct = new Scope_Struct();

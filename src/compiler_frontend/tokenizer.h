@@ -102,6 +102,8 @@ struct Tokenizer {
 std::string ReverseToken(int _char);
 static int get_token();
 
+
+
 extern Tokenizer tokenizer;
 
 extern std::map<int, std::string> token_to_string;

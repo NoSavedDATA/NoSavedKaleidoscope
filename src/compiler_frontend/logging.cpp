@@ -47,7 +47,8 @@ using namespace llvm;
 
 /// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogErrorS(int line, std::string Str) {
-  ShallCodegen = false;
+  // ShallCodegen = false;
+  Shall_Exit = true;
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
 
   if(line!=-1)
@@ -106,7 +107,8 @@ void LogWarning(const char *Str) {
 
 // Modified LogError function with token parameter
 std::unique_ptr<ExprAST> LogErrorT(int line, int CurTok) {
-  ShallCodegen = false;
+  // ShallCodegen = false;
+  Shall_Exit = true;
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
