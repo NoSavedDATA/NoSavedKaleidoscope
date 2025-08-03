@@ -1,9 +1,22 @@
+#include <algorithm>
+#include <cassert>
+#include <cctype>
+#include <complex>
 #include <iostream>
+#include <iomanip>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "include.h"
+
+
+void removeSpacesAndAsterisks(std::string& s) {
+    s.erase(std::remove_if(s.begin(), s.end(),
+                           [](char c) { return c == ' ' || c == '*'; }),
+            s.end());
+}
 
 
 
@@ -39,9 +52,6 @@ Lib_Info *CppFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) 
 
     }
 
-
-
-
     return lib_info;
 }
 
@@ -74,10 +84,71 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
 
     if (in_return_type!="float"&&in_return_type!="void"&&in_return_type!="void*") 
         lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, "; // {"tensor_tensor_add", "tensor"}
-    lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", "; // uuser_cpp_functions
+    lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", "; // user_cpp_functions
 
     return lib_info;
 }
+
+
+Lib_Info *PlaceholderExpr::Generate_Args_Dict(Lib_Info *lib_info) {}
+Lib_Info *CppFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {}
+
+Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
+
+    // Handle Arg Types
+
+    if (ends_with(FunctionName, "_Create")||ends_with(FunctionName, "_Load")||ends_with(FunctionName, "_Copy")\
+        ||ends_with(FunctionName, "_New")||ends_with(FunctionName, "_CopyArg")||ends_with(FunctionName, "_Idx")\
+        ||ends_with(FunctionName, "_Idx_num")||ends_with(FunctionName, "_Slice")||ends_with(FunctionName, "_Split_Parallel")\
+        ||ends_with(FunctionName, "_Split_Strided_Parallel")||ends_with(FunctionName, "_CalculateSliceIdx")\
+        ||ends_with(FunctionName, "_CalculateIdx")||ends_with(FunctionName, "_Store_Idx")||begins_with(FunctionName, "scope_struct")\
+        ||contains_str(FunctionName, "Attr_on_Offset")||contains_str(FunctionName, "Load_on_Offset")||begins_with(FunctionName, "set_scope")\
+        ||begins_with(FunctionName, "get_scope")||FunctionName=="FirstArgOnDemand"||begins_with(FunctionName, "MarkToSweep"))
+        return lib_info;
+
+
+    std::string arg_names_line = "\n\t";
+    std::string arg_types_line = "\n\t";
+
+
+    if (ArgTypes.size()>0)
+    {
+        for(int i=0; i<ArgTypes.size(); ++i)
+        {
+            
+            std::string arg_type = ArgTypes[i];
+            removeSpacesAndAsterisks(arg_type);
+
+            if(i==0&&arg_type!="Scope_Struct")
+                return lib_info;
+
+            std::string arg_name = std::to_string(i);
+
+            
+            if (arg_type=="DT_list")
+                arg_type = "unknown_list";
+            if(arg_type=="std::vector<char>")
+                arg_type = "str_vec";
+            if (arg_type=="char")
+                arg_type = "str";
+            if (begins_with(arg_type, "DT_"))
+                arg_type = remove_substring(arg_type, "DT_");
+            
+            arg_names_line = arg_names_line + "\n\tFunction_Arg_Names[\"" + FunctionName + "\"].push_back(\"" + arg_name + "\");";
+
+            arg_types_line = arg_types_line + "\n\tFunction_Arg_Types[\"" + FunctionName + "\"][\"" + arg_name + "\"] = \"" + arg_type + "\";";
+        }
+    }
+
+
+    lib_info->arg_types_string = lib_info->arg_types_string + arg_types_line + arg_names_line;
+
+    // std::cout << "Got lib_info " << arg_types_line << "\n\n" << arg_names_line << ".\n";
+
+    return lib_info;
+}
+
+
 
 Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) {
     // std::cout << "ExternFunctionExpr for file " << fname << ".\n";
@@ -95,6 +166,8 @@ Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_inf
     
 
     lib_info = Generate_Function_Dict(lib_info, ReturnType, FunctionName); 
+
+        
 
 
     std::string fTy = FunctionName+"Ty";
@@ -142,8 +215,14 @@ Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_inf
     std::string line6="\tTheModule->getOrInsertFunction(\"" + FunctionName + "\", " + fTy + ");\n";
 
 
-
+    
     lib_info->llvm_string = lib_info->llvm_string + "\n" + line1 + line2 + line3 + line4 + line5 + line6;
 
+
+
+
+    lib_info = Generate_Args_Dict(lib_info);
+
+    
     return lib_info;
 }

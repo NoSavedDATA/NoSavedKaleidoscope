@@ -1,0 +1,7 @@
+
+	
+	Function_Arg_Types["nsk_vec_size"]["0"] = "Scope_Struct";
+	Function_Arg_Types["nsk_vec_size"]["1"] = "Nsk_Vector";
+	
+	Function_Arg_Names["nsk_vec_size"].push_back("0");
+	Function_Arg_Names["nsk_vec_size"].push_back("1");

@@ -26,8 +26,6 @@ extern std::vector<std::string> op_map_names;
 
 extern std::map<std::string, std::map<std::string, std::string>> Object_toClass;
 
-extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
-extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 
 
 extern std::map<std::string, std::map<std::string, int>> ClassVariables;

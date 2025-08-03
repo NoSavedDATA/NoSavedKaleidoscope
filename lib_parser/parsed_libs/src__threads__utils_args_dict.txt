@@ -1,0 +1,9 @@
+
+	
+	Function_Arg_Types["_tid"]["0"] = "Scope_Struct";
+	
+	Function_Arg_Names["_tid"].push_back("0");
+	
+	Function_Arg_Types["tid"]["0"] = "Scope_Struct";
+	
+	Function_Arg_Names["tid"].push_back("0");

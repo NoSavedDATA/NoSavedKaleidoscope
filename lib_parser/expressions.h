@@ -10,6 +10,7 @@ class Expr {
      bool Vararg=false;
 
      virtual Lib_Info *Generate_LLVM(std::string, Lib_Info *) = 0;
+     virtual Lib_Info *Generate_Args_Dict(Lib_Info *) = 0;
 };
 
 
@@ -22,6 +23,7 @@ class ExternFunctionExpr : public Expr {
     ExternFunctionExpr(const std::string &ReturnType, const std::string &FunctionName, std::vector<std::string> ArgTypes, bool Vararg);
 
     Lib_Info *Generate_LLVM(std::string, Lib_Info *) override;
+    Lib_Info *Generate_Args_Dict(Lib_Info *) override;
 };
 
 
@@ -30,6 +32,7 @@ class PlaceholderExpr : public Expr {
     public:
     PlaceholderExpr();
     Lib_Info *Generate_LLVM(std::string, Lib_Info *) override;
+    Lib_Info *Generate_Args_Dict(Lib_Info *) override;
 };
 
 
@@ -38,4 +41,5 @@ class CppFunctionExpr : public Expr {
         std::string FunctionName;
     CppFunctionExpr(const std::string &);
     Lib_Info *Generate_LLVM(std::string, Lib_Info *) override;
+    Lib_Info *Generate_Args_Dict(Lib_Info *) override;
 };

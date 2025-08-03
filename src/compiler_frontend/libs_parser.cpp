@@ -26,6 +26,7 @@
 std::map<std::string, std::string> lib_function_remaps;
 
 
+
 using namespace llvm;
 namespace fs = std::filesystem;
 
@@ -56,8 +57,8 @@ inline std::vector<fs::path> get_lib_files(std::string lib_dir)
 
 
 
-LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer)
-    : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer) {}
+LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgTypes, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer)
+    : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgTypes(ArgTypes), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer) {}
 
 void LibFunction::Print() {
     std::cout << "extern \"C\" " << ReturnType << " ";
@@ -65,13 +66,13 @@ void LibFunction::Print() {
       std::cout << "*";
     std::cout << Name << "(";
 
-    for(int i=0;i<ArgNames.size(); ++i)
+    for(int i=0;i<ArgTypes.size(); ++i)
     {
-      std::cout << ArgNames[i];
+      std::cout << ArgTypes[i];
       if (ArgIsPointer[i])
         std::cout << " *"; 
 
-      if(i<ArgNames.size()-1)
+      if(i<ArgTypes.size()-1)
       std::cout << ", ";
     }
 
@@ -108,13 +109,50 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         fn_return_type_str = "void_ptr";
     }
 
-    for(int i=0; i<ArgNames.size(); ++i) {
-        if(ArgNames[i]=="int"&&!ArgIsPointer[i])
+
+    
+    if (ends_with(Name, "_Create"))
+    {
+        std::string create_type = Name;
+        create_type = remove_suffix(create_type, "_Create");
+
+        std::string return_type = ReturnType;
+        if (begins_with(return_type, "DT_"))
+            return_type = remove_substring(return_type, "DT_");
+
+        if (create_type!=return_type)
+            Equivalent_Types[create_type].push_back(return_type);
+    }
+
+
+
+    std::cout << "\n\nFn name: " << Name << ".\n";
+
+    for(int i=0; i<ArgTypes.size(); ++i) {
+        if (!begins_with(Name, "initialize__"))
+        {
+            std::string type = ArgTypes[i];
+            // std::cout << "Got type " << ArgTypes[i] << ".\n";
+            // std::cout << "Got name " << ArgNames[i] << ".\n\n";
+
+            if(begins_with(type, "DT_"))
+                type = remove_substring(type, "DT_");
+            if(type=="char"&&ArgIsPointer[i])
+                type = "str";
+            if(type=="std::vector<char*>"||type=="std::vector<char>")
+                type = "str_vec";
+
+            Function_Arg_Names[Name].push_back(ArgNames[i]);
+            Function_Arg_Types[Name][ArgNames[i]] = type;
+        }
+        
+
+        if(ArgTypes[i]=="int"&&!ArgIsPointer[i])
         {
             arg_types.push_back(intTy);
             arg_types_str.push_back("int");
         }
-        else if(ArgNames[i]=="float"&&!ArgIsPointer[i])
+        else if(ArgTypes[i]=="float"&&!ArgIsPointer[i])
         {
             arg_types.push_back(floatTy);
             arg_types_str.push_back("float");
@@ -311,7 +349,7 @@ int LibParser::_getTok() {
     if (isalpha(LastChar)||LastChar=='_') {
         running_string = "";
 
-        while(isalnum(LastChar)||LastChar=='_')
+        while(isalnum(LastChar)||LastChar=='_'||LastChar==':'||LastChar=='<'||LastChar=='>')
         {
             running_string += LastChar;
             LastChar = _getCh();
@@ -382,8 +420,9 @@ void LibParser::ParseExtern() {
 
 
 
-    std::vector<std::string> arg_types;
+    std::vector<std::string> arg_types, arg_names;
     std::vector<int> arg_is_pointer;
+    std::string last_type, last_name;
 
     if(token!='(')
       return;
@@ -391,28 +430,53 @@ void LibParser::ParseExtern() {
 
 
     _getToken(); 
+    bool is_var_arg=false;
 
     while(token!=')')
     {
-      arg_types.push_back(running_string);      
-      _getToken(); // eat arg type
+        if(running_string=="..."||token=='.')
+        {
+            // LogBlue("Got dot at argument type on function: " + fn_name);
+            
+            is_var_arg=true;
+            while(token!=')')
+                _getToken();
+            break;
+        }
 
-      if (token=='*')
-      {
-        _getToken();
-        arg_is_pointer.push_back(1);
-      } else
-        arg_is_pointer.push_back(0);
+        
+        arg_types.push_back(running_string);      
+        last_type = running_string;
+        _getToken(); // eat arg type
 
-      _getToken(); // eat arg name
+        if (token=='*')
+        {
+            _getToken();
+            arg_is_pointer.push_back(1);
+        } else
+            arg_is_pointer.push_back(0);
 
+        
+        arg_names.push_back(running_string);
+        last_name = running_string;
 
-      if(token==',')
-        _getToken();
+        _getToken(); // eat arg name
+
+        if(token==',')
+            _getToken();
+    }
+
+    if (is_var_arg)
+    {
+        for (int i=0; i<10; ++i)
+        {
+            arg_types.push_back(last_type);
+            arg_names.push_back(last_name);
+        }
     }
 
     
-    LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_is_pointer);
+    LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_names, arg_is_pointer);
     Functions[file_name].push_back(lib_fn);
 
     // std::cout << "\n\n";

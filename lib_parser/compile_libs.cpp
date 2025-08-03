@@ -84,8 +84,9 @@ int main() {
     CleanDeletedLibs();
 
     std::string all_libs = Get_Base_Lib("src/libs_llvm/libs.cpp", 17);
-    std::string all_cpp = Get_Base_Lib("src/libs_llvm/user_cpp_functions.cu", 17);
+    std::string all_cpp = Get_Base_Lib("src/libs_llvm/user_cpp_functions.cpp", 17);
     std::string all_return_dicts = Get_Base_Lib("src/libs_llvm/functions_return.cpp", 23);
+    std::string all_args_dicts = Get_Base_Lib("src/libs_llvm/functions_args.cpp", 13);
     std::string all_function_dicts = "";
 
 
@@ -95,6 +96,7 @@ int main() {
     std::vector<fs::path> files = glob_cpp(root, "llvm_lib.txt");
     std::vector<fs::path> cpp_files = glob_cpp(root, "user_cpp.txt");
     std::vector<fs::path> dict_files = glob_cpp(root, "returns_dict.txt");
+    std::vector<fs::path> args_dict_files = glob_cpp(root, "args_dict.txt");
     std::vector<fs::path> clean_up_files = glob_cpp(root, "clean_up.txt");
     std::vector<fs::path> backward_files = glob_cpp(root, "backward.txt");
 
@@ -131,6 +133,15 @@ int main() {
         file.close();
     }
 
+    for (auto &parsed_file : args_dict_files)
+    {
+        file.open(parsed_file);
+
+        while(std::getline(file, line))
+            all_args_dicts = all_args_dicts + "\t" + line + "\n";
+        file.close();
+    }
+
     for (auto &parsed_file : clean_up_files)
     {
         file.open(parsed_file);
@@ -149,6 +160,7 @@ int main() {
 
     all_libs = all_libs + "\n}";
     all_return_dicts = all_return_dicts + "\n\t};\n}";
+    all_args_dicts = all_args_dicts + "\n}";
 
     
     all_cpp = all_cpp + "\n\t};\n\n\n";
@@ -163,9 +175,10 @@ int main() {
 
 
 
-    Write_Txt("src/libs_llvm/libs.cpp", all_libs);
-    Write_Txt("src/libs_llvm/user_cpp_functions.cu", all_cpp);
+    Write_Txt("src/libs_llvm/functions_args.cpp", all_args_dicts);
     Write_Txt("src/libs_llvm/functions_return.cpp", all_return_dicts);
+    Write_Txt("src/libs_llvm/libs.cpp", all_libs);
+    Write_Txt("src/libs_llvm/user_cpp_functions.cpp", all_cpp);
 
 
     return 0;

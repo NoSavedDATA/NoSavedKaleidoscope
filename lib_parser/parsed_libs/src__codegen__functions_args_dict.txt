@@ -1,0 +1,5 @@
+
+	
+	Function_Arg_Types["_exit"]["0"] = "Scope_Struct";
+	
+	Function_Arg_Names["_exit"].push_back("0");

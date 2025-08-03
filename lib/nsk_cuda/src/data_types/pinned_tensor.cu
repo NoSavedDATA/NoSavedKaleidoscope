@@ -17,7 +17,7 @@
 
 
 
-extern "C" void *pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector)
+extern "C" DT_tensor *pinned_tensor_Create(Scope_Struct *scope_struct, char *tensor_name, char *scopeless_name, DT_tensor *init_val, DT_list *notes_vector)
 {
 
   std::cout << "PINNED TENSOR CREATE"  << ".\n";

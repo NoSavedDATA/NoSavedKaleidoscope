@@ -1,0 +1,25 @@
+
+	
+	Function_Arg_Types["LenStrVec"]["0"] = "Scope_Struct";
+	Function_Arg_Types["LenStrVec"]["1"] = "str_vec";
+	
+	Function_Arg_Names["LenStrVec"].push_back("0");
+	Function_Arg_Names["LenStrVec"].push_back("1");
+	
+	Function_Arg_Types["ShuffleStrVec"]["0"] = "Scope_Struct";
+	Function_Arg_Types["ShuffleStrVec"]["1"] = "str_vec";
+	
+	Function_Arg_Names["ShuffleStrVec"].push_back("0");
+	Function_Arg_Names["ShuffleStrVec"].push_back("1");
+	
+	Function_Arg_Types["_glob_b_"]["0"] = "Scope_Struct";
+	Function_Arg_Types["_glob_b_"]["1"] = "str";
+	
+	Function_Arg_Names["_glob_b_"].push_back("0");
+	Function_Arg_Names["_glob_b_"].push_back("1");
+	
+	Function_Arg_Types["str_vec_print"]["0"] = "Scope_Struct";
+	Function_Arg_Types["str_vec_print"]["1"] = "str_vec";
+	
+	Function_Arg_Names["str_vec_print"].push_back("0");
+	Function_Arg_Names["str_vec_print"].push_back("1");

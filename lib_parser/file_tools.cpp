@@ -113,6 +113,7 @@ void Lib_Files::Mangle_Lib_File_Name(std::string fname) {
     
     file_name = root + path + "_llvm_lib.txt";
     returns_dict = root + path + "_returns_dict.txt";
+    args_dict = root + path + "_args_dict.txt";
     user_cpp = root + path + "_user_cpp.txt";
     clean_up = root + path + "_clean_up.txt";
     backward = root + path + "_backward.txt";

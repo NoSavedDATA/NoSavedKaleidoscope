@@ -19,6 +19,7 @@
 
 
 std::map<std::string, std::map<std::string, std::string>> Object_toClass;
+std::map<std::string, std::vector<std::string>> Equivalent_Types;
 
 std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 std::map<std::string, std::vector<std::string>> Function_Arg_Names;
@@ -2019,6 +2020,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   Types.push_back("s");
   ArgNames.push_back("scope_struct");
 
+  Function_Arg_Names[FnName].push_back("0");
+  Function_Arg_Types[FnName]["0"] = "Scope_Struct";
+
 
   while (CurTok != ')')
   {
@@ -2082,7 +2086,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
   // Verify right number of names for operator.
   if (Kind && ArgNames.size() != Kind)
-    return LogErrorP(parser_struct.line, "Número inválido de operandos para o operador");
+    return LogErrorP(parser_struct.line, "Prototype got an invalid amount of operators.");
 
   if (CurTok!=tok_space)
     LogError(parser_struct.line, "Post prototype parsing requires a line break.");
