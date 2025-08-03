@@ -2818,6 +2818,7 @@ int main() {
 
 
   set_functions_return_type();
+  set_functions_args_type();
   set_user_functions();
   vararg_methods = {"tensor_view", "tensor_sum", "tensor_mean", "mean_tensor" ,"tensor_prod", "tensor_tmax", "tensor_argmax", "tensor_load_bin_idx"};
 

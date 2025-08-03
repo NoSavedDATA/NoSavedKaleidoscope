@@ -73,7 +73,7 @@ std::string remove_suffix(const std::string& input_string, std::string suffix) {
 std::string erase_before_pattern(std::string s, std::string pattern) {
     size_t pos = s.find(pattern);
     if (pos != std::string::npos) {
-        s.erase(0, pos + 2);
+        s.erase(0, pos + pattern.length());
     }
     return s;
 }

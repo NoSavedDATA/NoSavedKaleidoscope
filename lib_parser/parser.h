@@ -10,6 +10,7 @@
 
 struct Lib_Info{
     std::string llvm_string="";
+    std::string arg_types_string="";
     std::string dict_string="";
     std::string functions_string = "";
     std::string clean_up_functions = "";

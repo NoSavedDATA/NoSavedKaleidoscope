@@ -1,0 +1,25 @@
+
+	
+	Function_Arg_Types["list_print"]["0"] = "Scope_Struct";
+	Function_Arg_Types["list_print"]["1"] = "unknown_list";
+	
+	Function_Arg_Names["list_print"].push_back("0");
+	Function_Arg_Names["list_print"].push_back("1");
+	
+	Function_Arg_Types["list_size"]["0"] = "Scope_Struct";
+	Function_Arg_Types["list_size"]["1"] = "unknown_list";
+	
+	Function_Arg_Names["list_size"].push_back("0");
+	Function_Arg_Names["list_size"].push_back("1");
+	
+	Function_Arg_Types["to_int"]["0"] = "Scope_Struct";
+	Function_Arg_Types["to_int"]["1"] = "void";
+	
+	Function_Arg_Names["to_int"].push_back("0");
+	Function_Arg_Names["to_int"].push_back("1");
+	
+	Function_Arg_Types["to_float"]["0"] = "Scope_Struct";
+	Function_Arg_Types["to_float"]["1"] = "void";
+	
+	Function_Arg_Names["to_float"].push_back("0");
+	Function_Arg_Names["to_float"].push_back("1");

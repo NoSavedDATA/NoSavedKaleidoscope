@@ -2098,7 +2098,7 @@ Function *PrototypeAST::codegen() {
 
 
 
-inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name)
+inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name, int arg_offset=1)
 {
 
   // Get Arguments
@@ -2111,9 +2111,20 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
 
     if (Function_Arg_Types.count(fn_name)>0)
     {
-      std::string expected_type = Function_Arg_Types[fn_name][Function_Arg_Names[fn_name][i]];
+      int tgt_arg = i + arg_offset;
+
+      std::string expected_type = Function_Arg_Types[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
       if (type!=expected_type)
-        LogError(parser_struct.line, "Passed type " + type + " for the argument " + Function_Arg_Names[fn_name][i] + " of function " + fn_name + ", but expected " + expected_type + ".");
+      {
+        bool is_equivalent = false;
+        if (Equivalent_Types.count(type)>0)
+          for(std::string equivalent : Equivalent_Types[type])
+            if (equivalent==expected_type)
+              is_equivalent=true;
+
+        if(!is_equivalent)
+          LogError(parser_struct.line, "Passed type " + type + " for the argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ", but expected " + expected_type + ".");
+      }
     }
 
     ArgsV.push_back(arg);
@@ -2365,12 +2376,14 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
 
 
   std::vector<Value *> ArgsV = {scope_struct_copy};
+  int arg_type_check_offset = 1; // 1 for scope_struct
   if (is_nsk_fn) // load of x at x.shape()
   {
     target_args_size++;
     ArgsV.push_back(obj_ptr);
+    arg_type_check_offset++;
   }
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee);
+  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, arg_type_check_offset);
 
 
 
