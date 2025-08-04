@@ -1538,7 +1538,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
 
 
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct, Parser_Struct parser_struct) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct, Parser_Struct parser_struct, Value *barrier) {
   
 
 
@@ -1607,7 +1607,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   std::cout << "-----------------------" << ".\n";
   
   //Dive scope_struct
-  Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName)}); 
+  Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName), barrier}); 
 
 
 
@@ -1644,10 +1644,10 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   
   for (auto &body : asyncBody)
   {
-    std::string pre = std::string("codegenAsyncFunction Body codegen pre of: ") + typeid(*body).name();
-    p2t(pre);
+    // std::string pre = std::string("codegenAsyncFunction Body codegen pre of: ") + typeid(*body).name();
+    // p2t(pre);
     V = body->codegen(scope_struct_copy);
-    p2t("codegenAsyncFunction body post");
+    // p2t("codegenAsyncFunction body post");
   }
 
 
@@ -1692,12 +1692,13 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
 
+  Value *barrier = callret("get_barrier", {const_int(1)});
   
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
 
 
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct);
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1740,12 +1741,13 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
   // p2t("NOW STORE ASYNCS COUNT");
   call("scope_struct_Store_Asyncs_Count", {scope_struct, const_int(AsyncsCount)});
+  Value *barrier = callret("get_barrier", {const_int(AsyncsCount)});
   // p2t("STORED");
   
   //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct);
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier);
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1788,6 +1790,7 @@ Value *SplitParallelExprAST::codegen(Value *scope_struct) {
   // call("scope_struct_Increment_Thread", {scope_struct});
   
   Value *inner_vec = Inner_Vec->codegen(scope_struct);
+  SetType(Inner_Vec->GetType());
   std::cout << "SPLIT PARALLEL CODEGEN" << ".\n";
   // return ConstantFP::get(*TheContext, APFloat(0.0f));
   // return callret("nullptr_get", {});
@@ -1801,6 +1804,7 @@ Value *SplitStridedParallelExprAST::codegen(Value *scope_struct) {
   // call("scope_struct_Increment_Thread", {scope_struct});
   
   Value *inner_vec = Inner_Vec->codegen(scope_struct);
+  SetType(Inner_Vec->GetType());
   std::cout << "SPLIT STRIDED PARALLEL CODEGEN" << ".\n";
   // return ConstantFP::get(*TheContext, APFloat(0.0f));
   // return callret("nullptr_get", {});
@@ -2098,7 +2102,7 @@ Function *PrototypeAST::codegen() {
 
 
 
-inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name, int arg_offset=1)
+inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name, bool is_nsk_fn, int arg_offset=1)
 {
 
   // Get Arguments
@@ -2127,7 +2131,24 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
       }
     }
 
-    ArgsV.push_back(arg);
+
+    std::string copy_fn = type+"_CopyArg";
+    Function *F = TheModule->getFunction(copy_fn);
+    if (F&&!is_nsk_fn)
+    {
+        Value *copied_value = callret(copy_fn,
+                        {scope_struct,
+                        arg,
+                        global_str("-")});
+                        
+        
+        // call("MarkToSweep_Mark", {scope_struct, copied_value, global_str(type)}); // Mark at FunctionAST
+        // call("MarkToSweep_Unmark_Scopeful", {scope_struct, copied_value});
+      ArgsV.push_back(copied_value);
+    } else
+      ArgsV.push_back(arg);
+
+
 
     if (!ArgsV.back())
     {
@@ -2383,7 +2404,7 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
     ArgsV.push_back(obj_ptr);
     arg_type_check_offset++;
   }
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, arg_type_check_offset);
+  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
 
 
 
@@ -2498,28 +2519,9 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
   bool is_self_of_nested_function = (nested_function==1 && isSelf);
   bool is_user_cpp_function = in_str(tgt_function, user_cpp_functions);
-  // Handle self or object attribute expressions
-  if(isSelf || isAttribute)
-  {
-    bool is_nsk_fn = in_str(tgt_function, native_methods);
+  bool is_nsk_fn = in_str(tgt_function, native_methods);
+  
 
-    if (!is_nsk_fn) {
-      tgt_function = Class+tgt_function;
-
-
-
-    }
-
-
-    
-    first_arg = NameSolver->codegen(scope_struct_copy);
-    call("set_scope_first_arg", {scope_struct_copy, first_arg});
-
-    changed_first_arg = true;  
-  }
-
-  // if(lib_function_remaps.count(tgt_function)>0)
-  //   tgt_function = lib_function_remaps[tgt_function];
   
   
   call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
@@ -2588,7 +2590,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
   // Sends the non-changed scope_struct to load/codegen the arguments from the argument list
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, tgt_function);
+  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, tgt_function, is_nsk_fn);
 
   // Always include scope on the beggining
   ArgsV.insert(ArgsV.begin(), scope_struct_copy);
@@ -2657,7 +2659,7 @@ Value *ChainCallExprAST::codegen(Value *scope_struct) {
   ArgsV.push_back(inner_return);
   
 
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Call_Of);
+  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Call_Of, true);
 
 
   ArgsV.insert(ArgsV.begin(), scope_struct);

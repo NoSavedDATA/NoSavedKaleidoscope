@@ -999,7 +999,6 @@ std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struc
         getNextToken(); // eat >
         auto inner_vec = ParseExpression(parser_struct, class_name, false);
 
-        
         auto Arg = std::make_unique<SplitParallelExprAST>(std::move(inner_vec));
         Args.push_back(std::move(Arg));
       }

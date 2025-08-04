@@ -228,9 +228,6 @@ extern "C" DT_int_vec *int_vec_Split_Parallel(Scope_Struct *scope_struct, DT_int
 {
     int threads_count = scope_struct->asyncs_count;
     int thread_id = scope_struct->thread_id-1;
-    std::cout << "SPLITTING int VEC"  << ".\n";
-    std::cout << "Threads count: " << scope_struct->asyncs_count << ".\n";
-    std::cout << "Thread id: " << scope_struct->thread_id << ".\n\n";
 
     int vec_size = vec->size;
     int segment_size;
@@ -246,6 +243,8 @@ extern "C" DT_int_vec *int_vec_Split_Parallel(Scope_Struct *scope_struct, DT_int
 
     DT_int_vec *out_vector = new DT_int_vec(size);
 
+
+    // std::cout << "Splitting from " << std::to_string(segment_size*thread_id) << " to " << std::to_string(segment_size*(thread_id+1)) << ".\n";
 
     int c=0;
     for (int i = segment_size*thread_id; i<segment_size*(thread_id+1) && i<vec->size; ++i)

@@ -1228,6 +1228,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("print_codegen_silent", print_codegen_silentTy);
 
+	FunctionType *get_barrierTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("get_barrier", get_barrierTy);
+
 	FunctionType *LockMutexTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},

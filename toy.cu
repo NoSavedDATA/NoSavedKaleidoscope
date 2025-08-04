@@ -332,7 +332,6 @@ Function *FunctionAST::codegen() {
 
  
   
-  call("set_scope_thread_id", {scope_struct, thread_id});
   call("set_scope_has_grad", {scope_struct, has_grad});
   
 
@@ -391,14 +390,13 @@ Function *FunctionAST::codegen() {
         Function *F = TheModule->getFunction(copy_fn);
         if (F)
         {
-            Value *copied_value = callret(copy_fn,
-                            {scope_struct,
-                            &Arg,
-                            global_str(arg_name)});
-                            
-            Builder->CreateStore(copied_value, arg_alloca);
-            call("MarkToSweep_Mark", {scope_struct, copied_value, global_str(type)});
-            call("MarkToSweep_Unmark_Scopeful", {scope_struct, copied_value});
+            // Value *copied_value = callret(copy_fn, // Moved to CallExpr
+            //                 {scope_struct,
+            //                 &Arg,
+            //                 global_str(arg_name)}); 
+            Builder->CreateStore(&Arg, arg_alloca);
+            call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
+            call("MarkToSweep_Unmark_Scopeful", {scope_struct, &Arg});
         } else
         {
             Builder->CreateStore(&Arg, arg_alloca);
@@ -2241,12 +2239,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("set_scope_previous_scope", set_scope_previous_scopeTy);
 
 
-  FunctionType *set_scope_thread_idTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("set_scope_thread_id", set_scope_thread_idTy);
 
   FunctionType *set_scope_has_gradTy = FunctionType::get(
       int8PtrTy,
