@@ -640,19 +640,18 @@ extern "C" void *tensor_CopyArg(Scope_Struct *scope_struct, DT_tensor *tensor, c
 {
   // std::cout << "CopyArgTensor " << new_tensor_name << ".\n";
 
+  
   char *scope = scope_struct->scope;
   int thread_id = scope_struct->thread_id;
   std::string tensor_name = tensor->name;
 
-  
-  
-  
+  // std::cout << "copy " << tensor->scopeless_name << " at fn: " << scope_struct->function_name << ".\n";
+    
 
   std::vector<int> dims = tensor->dims;
   int dims_prod = tensor->dims_prod;
 
   float *tensor_ptr = tensor->tensor_ptr;
-
   
 
   DT_tensor *new_tensor = createTensor(tensor_ptr, dims, dims_prod, true, tensor->name, tensor->cuda_stream, tensor->loader);

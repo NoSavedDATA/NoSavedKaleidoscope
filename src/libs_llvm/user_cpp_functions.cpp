@@ -17,6 +17,7 @@ void set_user_functions() {
         "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "list_print",
 		"int_Create", "int_Load", "int_Store", 
 		"int_Create", "int_Load", "int_Store", 
+		"get_barrier", 
 		"print", 
 		"list_New", "list_print", "list_Create", "list_size", "list_CalculateIdx", "list_Idx", "to_int", "to_float", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", 
 		"__slee_p_", "random_sleep", "silent_sleep", "start_timer", "end_timer", 

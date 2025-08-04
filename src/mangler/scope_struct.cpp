@@ -1,6 +1,7 @@
 #include <atomic>
 #include <mutex>
 #include <set>
+#include <thread>
 #include <unordered_set>
 
 #include "../char_pool/include.h"
@@ -161,28 +162,30 @@ extern "C" int get_scope_has_grad(Scope_Struct *scope_struct) {
 std::unordered_set<int> assigned_ids;
 std::mutex id_mutex;
 static std::atomic<int> next_thread_id(1);
+std::atomic<int> next_id(1);
 
 extern "C" float scope_struct_Reset_Threads(Scope_Struct *scope_struct) {
-
     assigned_ids.clear();    
     return 0;
 }
 
 extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
-    std::lock_guard<std::mutex> lock(id_mutex);
-    // int thread_id = 0;
-
+    static thread_local bool has_id = false;
+    static thread_local int thread_id = 0;
     
-    static int candidate = 1;
-    while (assigned_ids.count(candidate)) {
-        candidate++;
+    if (!has_id) {
+        std::lock_guard<std::mutex> lock(id_mutex);
+        thread_id = next_id++;
+        // Handle wrap-around
+        if (thread_id < 1) {
+            next_id = 1;
+            thread_id = 1;
+        }
+        assigned_ids.insert(thread_id);
+        has_id = true;
     }
-    int thread_id = candidate++;
-    assigned_ids.insert(thread_id);
+    
     scope_struct->thread_id = thread_id;
-
-
-    // scope_struct->thread_id = next_thread_id.fetch_add(1, std::memory_order_relaxed);
     return 0;
 }
 
@@ -200,16 +203,17 @@ extern "C" void *get_scope_object(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn_name) {
-    // std::cout << "save for async: " << fn_name << ".\n";
-    Scope_Struct *scope_struct_copy = new Scope_Struct();
-    scope_struct_copy->Copy(scope_struct);
-    
-    NamedScopeStructs[fn_name] = scope_struct_copy;
+    NamedScopeStructs[fn_name] = scope_struct;
 }
 
 extern "C" Scope_Struct *scope_struct_Load_for_Async(char *fn_name)
 {
-    return NamedScopeStructs[fn_name];
+    Scope_Struct *scope_struct = NamedScopeStructs[fn_name];
+
+    Scope_Struct *scope_struct_copy = new Scope_Struct();
+    scope_struct_copy->Copy(scope_struct);
+
+    return scope_struct_copy;
 }
 
 extern "C" void scope_struct_Store_Asyncs_Count(Scope_Struct *scope_struct, int asyncs_count) {

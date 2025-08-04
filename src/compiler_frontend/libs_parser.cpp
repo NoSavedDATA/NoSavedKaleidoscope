@@ -126,7 +126,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
 
 
 
-    std::cout << "\n\nFn name: " << Name << ".\n";
+    // std::cout << "\n\nFn name: " << Name << ".\n";
 
     for(int i=0; i<ArgTypes.size(); ++i) {
         if (!begins_with(Name, "initialize__"))
