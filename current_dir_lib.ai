@@ -1,0 +1,11 @@
+
+
+import .other_lib
+
+0
+
+def float opa_tche()
+    print("Isso, opa tchê")
+    ret 0.0
+
+ 

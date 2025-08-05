@@ -1954,8 +1954,12 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
   std::string return_type;
 
-  if (CurTok==tok_data)
-    return_type = IdentifierStr;
+  if (CurTok!=tok_data) {
+    LogErrorBreakLine(parser_struct.line, "Expected prototype function return type.");
+    return nullptr;
+  }
+
+  return_type = IdentifierStr;
   
 
   
@@ -1968,7 +1972,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
   switch (CurTok) {
   default:
-    return LogErrorP(parser_struct.line, "Expected prototype function name");
+    return LogErrorP(parser_struct.line, "Expected prototype function name.");
   case tok_identifier:
     FnName += IdentifierStr;
     method = IdentifierStr;
@@ -2126,33 +2130,35 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     getNextToken();
     dots++;
     IdentifierStr="";
+    std::cout << "get .lib" << ".\n";
+    LogBlue("Token is " + ReverseToken(CurTok));
   }
 
   while(CurTok==tok_class_attr)
   {
     lib_name += IdentifierStr + "/";
     getNextToken();
+    std::cout << "get tok_class_attr" << ".\n";
   }
 
   lib_name += IdentifierStr;
 
+  std::string full_path_lib = tokenizer.current_dir+"/"+lib_name+".ai";
 
 
 
   // Import logic
-  if(fs::exists(lib_name+".ai")||dots>0)
+  if(fs::exists(full_path_lib)||dots>0)
   {
+    // std::string ai_lib = lib_name+".ai";
+    std::cout << "READING AI LIB " << full_path_lib << ".\n";
 
-    std::string ai_lib = lib_name+".ai";
-    std::cout << "READING AI LIB " << ai_lib << ".\n";
-
-    char c=' ';
-    while(c!=10)
-      c = tokenizer.get();
-    CurTok = tok_space;
+    std::cout << "Reverse: " << ReverseToken(CurTok) << ".\n";
+    std::cout << "cur_line: " << cur_line << ".\n";
 
 
-    tokenizer.importFile(ai_lib, dots);
+    get_tok_util_space();
+    tokenizer.importFile(full_path_lib, dots);
 
 
     return nullptr;
@@ -2160,11 +2166,9 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
   else
   {
     
-    getNextToken(); // eat lib name
+    // getNextToken(); // moved to the LibImportExprAST constructor
     return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);
   }
-  // return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
-  //                                        BinaryPrecedence);
 }
 
 

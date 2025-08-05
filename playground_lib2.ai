@@ -1,0 +1,31 @@
+import samples.auxy.current_dir_lib
+import example_lib
+
+
+
+
+
+
+def placeholder imported_foo(placeholder x, placeholder y)
+    y = y + y
+    ret y
+
+def float oe()
+    print("oi")
+    ret 0.0
+
+
+
+
+example_foo(2.0)
+
+oe()
+opa()
+
+opa_tche()
+
+neee()
+
+oh_yeah()
+
+0;

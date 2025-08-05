@@ -292,31 +292,39 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
   : LibName(LibName), IsDefault(IsDefault), parser_struct(parser_struct) {
 
 
-
   std::string ai_path = LibName+".ai";
 
-  if (fs::exists(ai_path)||in_str(LibName, imported_libs)) {
-
-  } else {
-
+  if (!(in_str(LibName, imported_libs))) {
     
+    bool has_nsk_ai=false, has_so_lib=false;
     std::string lib_path = std::getenv("NSK_LIBS");
 
     std::string lib_dir = lib_path + "/" + LibName;
     std::string so_lib_path = lib_dir + "/lib.so";
 
-    if(!fs::exists(so_lib_path))
-    { 
-        LogError(parser_struct.line, "- Failed to import library;\n\t    - " + so_lib_path + " file not found.");
-        return;
+    if(fs::exists(so_lib_path))
+    {   
+      has_so_lib=true;
+      LibParser *lib_parser = new LibParser(lib_dir);
+      
+      lib_parser->ParseLibs();
+      lib_parser->ImportLibs(so_lib_path, LibName, IsDefault);
     }
-    LibParser *lib_parser = new LibParser(lib_dir);
-    
-    lib_parser->ParseLibs();
-    lib_parser->ImportLibs(so_lib_path, LibName, IsDefault);
 
 
-    imported_libs.push_back(LibName);
+
+    std::string include_path = lib_dir + "/include.ai";
+    if(fs::exists(include_path)) {
+      has_nsk_ai=true;
+      get_tok_util_space();
+      tokenizer.importFile(include_path, 0);
+    } else
+      getNextToken(); // eat lib name
+
+    if(!(has_nsk_ai||has_so_lib))
+      LogError(parser_struct.line, "Failed to import library: " + LibName + ".\n\t    Could not find .ai or lib.so file.");
+    else
+      imported_libs.push_back(LibName);
   }
 }
 
