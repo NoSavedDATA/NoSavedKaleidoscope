@@ -1,0 +1,12 @@
+
+
+import src_ai.one
+
+import src_ai_two.two
+
+
+
+def float example_foo(f x)
+    print("x is " + x)
+    ret 0.0
+

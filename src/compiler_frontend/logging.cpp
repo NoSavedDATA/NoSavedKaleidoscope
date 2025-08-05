@@ -51,8 +51,10 @@ std::unique_ptr<ExprAST> LogErrorS(int line, std::string Str) {
   Shall_Exit = true;
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
 
+  std::cout << "\n\n" << tokenizer.current_file << "\n";
   if(line!=-1)
-    std::cout << "\nLine: " << line << "\n   ";   
+    std::cout << "Line: " << line << "\n   ";   
+
 
   if (Str!=" ")
     std::cout << "\033[31m Error: \033[0m " << Str << "\n\n";

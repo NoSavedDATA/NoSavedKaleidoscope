@@ -34,7 +34,11 @@ namespace fs = std::filesystem;
 
 
 
-Tokenizer::Tokenizer() : current(&std::cin) {}
+Tokenizer::Tokenizer() : current(&std::cin) {
+  files.push("main file");
+  dirs.push(current_dir);
+  line_counters.push(1);
+}
 
 
 
@@ -201,7 +205,6 @@ int LastSeenTabs = 0;
 
 
 
-
 std::istream& Tokenizer::get_word() {
     while ((current == nullptr || current->eof()) && !inputStack.empty()) {
         inputStack.pop();
@@ -211,23 +214,34 @@ std::istream& Tokenizer::get_word() {
 }
 
 
+
+std::string cur_line = "";
+
 char Tokenizer::get() {
     while (true) {
         if (!current) return tok_eof;
 
-
         
         char c = current->get();
         // std::cout << "get: " << c << ".\n";
-
         if (c != EOF) {
-            return c;
+          cur_line += c;
+          cur_c = c;
+          return c;
         }
 
         // Handle EOF
         if (!inputStack.empty()) {
             inputStack.pop();
+            dirs.pop(); 
+            files.pop();
+            line_counters.pop();
             current = inputStack.empty() ? &std::cin : inputStack.top().get();
+            current_dir = dirs.top();
+            current_file = files.top();
+            LineCounter = line_counters.top();
+            
+            
             // Don't return EOF here - immediately try reading from the new source
         } else if (current != &std::cin) {
             current = &std::cin;
@@ -244,15 +258,21 @@ bool Tokenizer::importFile(std::string filename, int dots) {
     std::cout << "Tokenizer::importFile " << filename << ".\n";
     std::cout << "importing with " << dots << " dots.\n";
     
-    if (dots>0)
-      filename = current_dir + "/" + filename;
+    // if (dots>0)
+    //   filename = current_dir + "/" + filename;
   
     std::cout << "importFile " << filename << ".\n";
     
     auto file = std::make_unique<std::ifstream>(filename);
-    if (!file->is_open()) return false;
+    if (!file->is_open())
+    {
+      LogError(-1, "Failed to open library: " + filename);
+      return false;
+    }
     
+    current_file = filename;
     current_dir = fs::path(filename).parent_path().string();
+
 
     std::cout << "importing" << ".\n";
 
@@ -260,7 +280,12 @@ bool Tokenizer::importFile(std::string filename, int dots) {
 
     // Then push the new file
     inputStack.push(std::move(file));
-    current = inputStack.top().get();
+    dirs.push(current_dir);
+    files.push(current_file);
+    current = inputStack.top().get(); // this get() turns std::unique_ptr<> as *
+
+    line_counters.top() = LineCounter;
+    line_counters.push(1);
 
     return true;
 }
@@ -271,6 +296,8 @@ bool Tokenizer::importFile(std::string filename, int dots) {
 
 
 Tokenizer tokenizer = Tokenizer();
+
+
 
 
 /// get_token - Return the next token from standard input.
@@ -310,20 +337,21 @@ static int get_token() {
     std::cout << "Pre last char: " << ReverseToken(LastChar) << "\n";
   */
 
-  // Skip any whitespace and backspace.
-  
-  
+
+  // Skip any whitespace and backspace.  
   while (LastChar==32 || LastChar==tok_tab || LastChar==13)
     LastChar = tokenizer.get();
+  
     
+
   if (LastChar=='[')
   {
     LastChar = tokenizer.get();
     return '[';
   }
 
-  //std::cout << "Last char: " << LastChar << "\n";
-    
+  
+
   if (LastChar=='"')
   {
 
@@ -343,33 +371,28 @@ static int get_token() {
   }
 
 
-
-
-  // std::cout << "\nGet token. " << " last char: " << LastChar << ".\n";
-
   
   
   if (LastChar=='.')
   {
     LastChar = tokenizer.get(); // eat .
     IdentifierStr = LastChar;
-    bool name_ok=true;
-    while (name_ok)
+    while (true)
     {
       LastChar = tokenizer.get();
-      
-      
+            
       if(isalnum(LastChar) || LastChar=='_')
+      {
         IdentifierStr += LastChar;
-      else
-        name_ok = false;
+        continue;
+      }
 
-      
       if (LastChar=='.')
       {
         LastChar = tokenizer.get();
         return tok_post_class_attr_attr;
       }
+      break;
     }
     
     return tok_post_class_attr_identifier;
@@ -378,7 +401,7 @@ static int get_token() {
   if (isalpha(LastChar) || LastChar=='_') { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
     bool name_ok=true;
-    while (name_ok)
+    while(true)
     {
       LastChar = tokenizer.get();
 
@@ -386,10 +409,10 @@ static int get_token() {
         break;
       
       if(isalnum(LastChar) || LastChar=='_')
+      {
         IdentifierStr += LastChar;
-      else
-        name_ok = false;
-
+        continue;
+      }
         
       if (LastChar=='.')
       {
@@ -408,10 +431,10 @@ static int get_token() {
         } else
           return tok_class_attr;
       }
+      break;
     }
 
-
-    
+ 
     if (in_str(IdentifierStr, data_tokens))
       return tok_data;
     if (IdentifierStr == "def")
@@ -508,7 +531,11 @@ static int get_token() {
   if (LastChar == '#') {
     // Comment until end of line.
     do
+    {
       LastChar = tokenizer.get();
+      if (LastChar==10)
+        LineCounter++;
+    }
     while (LastChar != EOF && LastChar != '\n' && LastChar != 10 && LastChar != '\r');
 
     if (LastChar != EOF)
@@ -533,6 +560,7 @@ static int get_token() {
         LineCounter++;
       if(ThisChar==10)
       {
+        cur_line = "";
         LastSeenTabs = SeenTabs;
         SeenTabs = 0;
         seen_spaces = 0;
@@ -600,7 +628,31 @@ static int get_token() {
 /// token the parser is looking at.  getNextToken reads another token from the
 /// lexer and updates CurTok with its results.
 int CurTok;
-int getNextToken() { return CurTok = get_token(); }
+int getNextToken() {
+  CurTok = get_token(); 
+  // std::cout << "\nLine: " << cur_line << "\n";
+  return CurTok;
+}
+
+
+void get_tok_util_space() {
+  if(CurTok!=tok_space&&tokenizer.cur_c!=10) // gets until the \n before switching files
+  {
+    std::cout << "CurTok: " << ReverseToken(CurTok) << " / " << CurTok  << " / " << std::to_string(int(tokenizer.cur_c)) << ".\n";
+    // std::cout << "CurTok: " << ReverseToken(CurTok) << " / " << CurTok  << " / " << ".\n";
+    char c=' ';
+    while(c!=10)
+    {
+      int _c = c;
+      c = tokenizer.get();
+      std::cout << "Get " << c << ".\n";
+    }
+  }
+  CurTok = tok_space;
+  LogBlue("Line: " + cur_line);
+  cur_line = "";
+  LineCounter++;
+}
 
 
 /// BinopPrecedence - This holds the precedence for each binary operator that is

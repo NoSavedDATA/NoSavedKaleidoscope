@@ -2,10 +2,13 @@
 
 
 #include <iostream>
+#include <filesystem>
 #include <fstream>
 #include <stack>
 #include <string>
 #include <memory>
+
+
 
 
 
@@ -85,10 +88,15 @@ enum Token {
 
 struct Tokenizer {
     std::stack<std::unique_ptr<std::istream>> inputStack;
+    std::stack<std::string> dirs, files;
+    std::stack<int> line_counters;
     std::istream* current;
-    std::string current_dir="";
+    std::string current_dir = std::filesystem::current_path();
+    char cur_c=' ';
 
     std::string token;
+
+    std::string current_file = "main";
     
     public:
         Tokenizer();
@@ -105,6 +113,7 @@ static int get_token();
 
 
 extern Tokenizer tokenizer;
+extern std::string cur_line;
 
 extern std::map<int, std::string> token_to_string;
 
@@ -136,3 +145,6 @@ extern std::map<char, int> BinopPrecedence;
 
 /// get_tokenPrecedence - Get the precedence of the pending binary operator token.
 int get_tokenPrecedence();
+
+
+void get_tok_util_space();
