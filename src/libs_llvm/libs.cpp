@@ -626,6 +626,55 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("print", printTy);
 
+	FunctionType *dict_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dict_Create", dict_CreateTy);
+
+	FunctionType *dict_NewTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("dict_New", dict_NewTy);
+
+	FunctionType *dict_Store_KeyTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dict_Store_Key", dict_Store_KeyTy);
+
+	FunctionType *dict_Store_Key_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("dict_Store_Key_int", dict_Store_Key_intTy);
+
+	FunctionType *dict_Store_Key_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("dict_Store_Key_float", dict_Store_Key_floatTy);
+
+	FunctionType *dict_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dict_print", dict_printTy);
+
+	FunctionType *dict_QueryTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("dict_Query", dict_QueryTy);
+
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -787,19 +836,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("str_vec_print", str_vec_printTy);
 
-	FunctionType *dictionary_CreateTy= FunctionType::get(
-		int8PtrTy,
-		{},
-		false
-	);
-	TheModule->getOrInsertFunction("dictionary_Create", dictionary_CreateTy);
-
-	FunctionType *dictionary_DisposeTy= FunctionType::get(
+	FunctionType *dict_DisposeTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("dictionary_Dispose", dictionary_DisposeTy);
+	TheModule->getOrInsertFunction("dict_Dispose", dict_DisposeTy);
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,

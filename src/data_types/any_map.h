@@ -9,8 +9,8 @@
 
 class DT_dict {
 public: 
-    std::map<std::string, std::any>* data;  // Pointer to vector stored in heap
-    std::map<std::string, std::string>* data_types;  // Pointer to vector stored in heap
+    std::map<std::string, std::any>* data; 
+    std::map<std::string, std::string>* data_types; 
     DT_dict(); 
 
     ~DT_dict(); 

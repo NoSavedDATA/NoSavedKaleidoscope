@@ -190,6 +190,16 @@ NewVecExprAST::NewVecExprAST(
 {
   this->SetType(Type);
 }
+
+
+NewDictExprAST::NewDictExprAST(
+    std::vector<std::unique_ptr<ExprAST>> Keys,
+    std::vector<std::unique_ptr<ExprAST>> Values,
+    std::string Type, Parser_Struct parser_struct)
+    : Keys(std::move(Keys)), Values(std::move(Values)), Type(Type), parser_struct(parser_struct)
+{
+  this->SetType(Type);
+}
   
   
 

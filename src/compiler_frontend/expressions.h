@@ -228,6 +228,21 @@ class NewVecExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
 };
 
+class NewDictExprAST : public ExprAST {
+
+  public:
+    Parser_Struct parser_struct;
+    std::vector<std::unique_ptr<ExprAST>> Keys, Values;
+    std::string Type;
+    
+    NewDictExprAST(
+        std::vector<std::unique_ptr<ExprAST>> Keys,
+        std::vector<std::unique_ptr<ExprAST>> Values,
+        std::string Type, Parser_Struct);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
 
 class ObjectExprAST : public VarExprAST {
 
