@@ -94,7 +94,14 @@ inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::unique_p
   idxs_values.push_back(vec); // e.g, tensor uses its dims as a support to calculcate the index
 
   for (int i=0; i<idxs->size(); i++)
+  {
+    Value *idx = idxs->Idxs[i]->codegen(scope_struct);
+
+    if (i==0 && (idxs->Idxs[i]->GetType()=="str")) // dict query
+      return idx;
+    
     idxs_values.push_back(idxs->Idxs[i]->codegen(scope_struct));
+  }
 
 
   if (!idxs->IsSlice)
@@ -330,8 +337,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
  
 
 
+    std::string create_fn = ((ends_with(Type,"_list")) ? "list" : Type);
+    create_fn = ((ends_with(create_fn,"_dict")) ? "dict" : create_fn);
+    create_fn = create_fn + "_Create";
 
-    std::string create_fn = ((ends_with(Type,"_list")) ? "list" : Type) + "_Create";
     p2t("DataExpr Call create for " + create_fn);
 
 
@@ -341,7 +350,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     if(Type!="float"&&Type!="int")
     {
-      call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Type)});
+      call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Extract_List_Suffix(Type))});
       if(is_self||is_attr)
         call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
       else
@@ -728,8 +737,10 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   
   CurIdx = Builder->CreateLoad(Type::getInt32Ty(*TheContext), idx_alloca, VarName.c_str());
 
-  Value *vec_value = callret(VecType+"_Idx", {scope_struct, vec, CurIdx});
-  if(VecType=="list"&&(Type=="float"||Type=="int"))
+
+  std::string vec_type = Extract_List_Suffix(VecType);
+  Value *vec_value = callret(vec_type+"_Idx", {scope_struct, vec, CurIdx});
+  if(vec_type=="list"&&(Type=="float"||Type=="int"))
     vec_value = callret("to_"+Type, {scope_struct, vec_value});
 
   Builder->CreateStore(vec_value, control_var_alloca);
@@ -930,6 +941,7 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   Value *loaded_var = Loaded_Var->codegen(scope_struct);
 
   Value *idx = Idx_Calc_Codegen(Type, loaded_var, Idx, scope_struct);
+  
 
 
   if (Type=="tensor")
@@ -954,11 +966,20 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
     } 
   }
 
+
+  std::string type = Extract_List_Suffix(Type);
+  
+
+  if (type == "dict") {
+    std::string query_fn = type+"_Query";
+    return callret("dict_Query", {scope_struct, loaded_var, idx});
+  }
+  
   if (!Idx->IsSlice) {
-    std::string idx_fn = Type + "_Idx";
+    std::string idx_fn = type + "_Idx";
     return callret(idx_fn, {scope_struct, loaded_var, idx});
   } else {
-    std::string slice_fn = Type + "_Slice";    
+    std::string slice_fn = type + "_Slice";    
     Value *ret =  callret(slice_fn, {scope_struct, loaded_var, idx});
     call("Delete_Ptr", {idx});
     return ret;
@@ -1055,7 +1076,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
         if (LType!="float"&&LType!="int")
         {
-          call("MarkToSweep_Mark", {scope_struct, Val_indexed, global_str(LType)});
+          call("MarkToSweep_Mark", {scope_struct, Val_indexed, global_str(Extract_List_Suffix(LType))});
         }
         
       }
@@ -1075,8 +1096,29 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
       Value *vec = LHSV->Loaded_Var->codegen(scope_struct);
 
-
       Value *idx = Idx_Calc_Codegen(LHS->GetType(), vec, LHSV->Idx, scope_struct);
+
+      store_op = Extract_List_Suffix(store_op);
+
+      if(ends_with(LHSV->GetType(), "dict"))
+      {
+        
+        store_op = store_op + "_Key";
+        
+
+        std::string RType = RHS->GetType();
+        if (RType=="int" || RType=="float")
+        {
+          store_op = store_op + "_" + RType;
+          call(store_op, {scope_struct, vec, idx, Val}); 
+
+          return const_float(0);
+        }
+        
+        call(store_op, {scope_struct, vec, idx, Val, global_str(RType)});
+
+        return const_float(0);
+      }
 
       store_op = store_op + "_Idx";
       
@@ -1123,7 +1165,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         if (F)
         {
           Val = callret(copy_fn, {scope_struct, Val});
-          call("MarkToSweep_Mark", {scope_struct, Val, global_str(LType)});
+          call("MarkToSweep_Mark", {scope_struct, Val, global_str(Extract_List_Suffix(LType))});
         }
       }
 
@@ -1132,7 +1174,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       if (LType!="float"&&LType!="int")
       {
         Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
-        call("MarkToSweep_Mark_Scopeful", {scope_struct, old_val, global_str(LType)});
+        call("MarkToSweep_Mark_Scopeful", {scope_struct, old_val, global_str(Extract_List_Suffix(LType))});
       }
 
 
@@ -1314,7 +1356,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       // std::cout << "Operation of " << Elements << " has a return of " << return_type << ".\n";
 
       if (return_type!="float"&&return_type!="int")
-        call("MarkToSweep_Mark", {scope_struct, ret, global_str(return_type)});
+        call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(return_type))});
     }
 
 
@@ -1970,7 +2012,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
         if (F)
         {
           value = callret(copy_fn, {scope_struct, value});
-          call("MarkToSweep_Mark", {scope_struct, value, global_str(type)});
+          call("MarkToSweep_Mark", {scope_struct, value, global_str(Extract_List_Suffix(type))});
         }
       }
       is_type=true;
@@ -1984,6 +2026,65 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
   // std::cout << "Call list_New" << ".\n";
   return callret("list_New", values);
 }
+
+
+Value *NewDictExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+  std::vector<Value *> values;
+
+  values.push_back(scope_struct);
+
+  seen_var_attr = true;
+  
+  for (int i=0; i<Values.size()-1; i++)
+  {
+    std::string key_type = Keys[i]->GetType();
+    std::string type = Values[i]->GetType();
+     
+    if (key_type!="str")
+    {
+      LogError(parser_struct.line, "Dictionary key must be of type string");
+      return const_float(0);
+    }
+    
+    Value *key = Keys[i]->codegen(scope_struct);
+    values.push_back(key);
+
+    auto element_type = std::make_unique<StringExprAST>(type);
+    values.push_back(element_type->codegen(scope_struct));
+
+    Value *value = Values[i]->codegen(scope_struct);
+
+
+    if (type!="float"&&type!="int")
+    {
+
+      std::string copy_fn = type + "_Copy";
+      
+      Function *F = TheModule->getFunction(copy_fn);
+      if (F)
+      {
+        value = callret(copy_fn, {scope_struct, value});
+        call("MarkToSweep_Mark", {scope_struct, value, global_str(Extract_List_Suffix(type))});
+      }
+    }
+
+    values.push_back(value);
+  }
+
+
+  Value *value = Values[Values.size()-1]->codegen(scope_struct);
+  values.push_back(value);
+
+  seen_var_attr = false;
+
+
+  return callret("dict_New", values);
+}
+
+
 
 
 Value* callMalloc(Value *size) {
@@ -2113,22 +2214,25 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
     std::string type = Args[i]->GetType();
       
 
-    if (Function_Arg_Types.count(fn_name)>0)
-    {
-      int tgt_arg = i + arg_offset;
-
-      std::string expected_type = Function_Arg_Types[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
-      if (type!=expected_type)
+    if (!in_str(fn_name, {"to_int", "to_float"}))
+    { 
+      if (Function_Arg_Types.count(fn_name)>0)
       {
-        bool is_equivalent = false;
-        if (Equivalent_Types.count(type)>0)
-          for(std::string equivalent : Equivalent_Types[type])
-            if (equivalent==expected_type)
-              is_equivalent=true;
+        int tgt_arg = i + arg_offset;
 
-        if(!is_equivalent)
-          LogError(parser_struct.line, "Passed type " + type + " for the argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ", but expected " + expected_type + ".");
-      }
+        std::string expected_type = Function_Arg_Types[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
+        if (type!=expected_type)
+        {
+          bool is_equivalent = false;
+          if (Equivalent_Types.count(type)>0)
+            for(std::string equivalent : Equivalent_Types[type])
+              if (equivalent==expected_type)
+                is_equivalent=true;
+
+          if(!is_equivalent)
+            LogError(parser_struct.line, "Passed type " + type + " for the argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ", but expected " + expected_type + ".");
+        }
+      }  
     }
 
 
@@ -2432,7 +2536,7 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
   call("scope_struct_Delete", {scope_struct_copy});
   
   if(!in_str(Type, {"float", "int", "", "None"}))
-    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
   
   return ret;
 }
@@ -2609,7 +2713,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     if (Type!="float"&&Type!="int"&&Type!="")
     {
-      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
     }
 
     // std::cout << "Returning" << ".\n";
@@ -2641,7 +2745,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     if (Type!="float"&&Type!=""&&Type!="int")
     {
-      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
     }
     
     return ret;
@@ -2670,7 +2774,7 @@ Value *ChainCallExprAST::codegen(Value *scope_struct) {
   {
 
     p2t("RETURN OF CHAIN CALL " + call_fn + " is " + Type);
-    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Type)});
+    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
   }
 
   return ret;

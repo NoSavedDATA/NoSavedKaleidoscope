@@ -10,8 +10,8 @@
 
 class DT_list : public Nsk_Vector {
 public: 
-    std::vector<std::any>* data;  // Pointer to vector stored in heap
-    std::vector<std::string>* data_types;  // Pointer to vector stored in heap
+    std::vector<std::any>* data; 
+    std::vector<std::string>* data_types;
     DT_list(); 
 
     ~DT_list(); 

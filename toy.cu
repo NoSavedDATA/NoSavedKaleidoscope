@@ -395,7 +395,7 @@ Function *FunctionAST::codegen() {
             //                 &Arg,
             //                 global_str(arg_name)}); 
             Builder->CreateStore(&Arg, arg_alloca);
-            call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(type)});
+            call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(Extract_List_Suffix(type))});
             call("MarkToSweep_Unmark_Scopeful", {scope_struct, &Arg});
         } else
         {

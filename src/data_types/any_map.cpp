@@ -49,6 +49,19 @@ float DT_dict::get<float>(std::string key) {
 }
 
 
+template <>
+int DT_dict::get<int>(std::string key) {
+    auto it = data->find(key);
+    if (it!=data->end())
+    {
+        return std::any_cast<int>(it->second);
+    } else {
+        std::cout << "Key " << key << " was not found on dictionary.";
+        return -1;
+    }
+}
+
+
 
 
 void DT_dict::delete_type(std::string key) {
@@ -103,34 +116,33 @@ size_t DT_dict::size() const {
 
 
 void DT_dict::print() {
+    std::cout << "dict print" << ".\n";
     std::cout << "\n";
-    // for(int i=0; i<data->size(); i++)
-    // {
-    //     if (data_types->at(i)=="str")
-    //         std::cout << "Notes["<<i<<"]: " << get<char *>(i) << ".\n";
-    //     if (data_types->at(i)=="float")
-    //         std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
-    //     if (data_types->at(i)=="tensor")
-    //     {
-    //         DT_tensor *t = get<DT_tensor *>(i);
-    //         std::cout << "Notes["<<i<<"] is a tensor named: " << t->name << ".\n";
-    //         PrintDims(t->dims);
-    //     }
-    // }
+    for (const auto &pair : *data)
+    {
+        const std::string &key = pair.first;
+        const std::string &type = data_types->at(key);
+
+        if (type == "int")
+        {
+            std::cout << "dict[\"" << key << "\"]: " << std::any_cast<int>(pair.second) << ".\n";
+        }
+        else if (type == "float")
+            std::cout << "dict[\"" << key << "\"]: " << std::any_cast<float>(pair.second) << ".\n";
+
+        else
+        {
+            void *t = std::any_cast<void *>(pair.second);
+            std::cout << "dict[\"" << key << "\"] is a void pointer: " << t << " of type " << type << ".\n";
+        }
+    }
     std::cout << "\n";
 }
 
 
 
-extern "C" DT_dict *dictionary_Create() {
-    // std::cout << "Creating vector\n";
-    DT_dict *notes_vector = new DT_dict();
-    // std::cout << "Notes Vector created.\n";
 
-    return notes_vector;
-}
-
-extern "C" float dictionary_Dispose(DT_dict *notes_vector) {
+extern "C" float dict_Dispose(DT_dict *notes_vector) {
 
     // for (int i=0; i<notes_vector->size(); i++)
     // {
