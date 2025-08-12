@@ -1,5 +1,5 @@
 
 	
-	Function_Arg_Types["_exit"]["0"] = "Scope_Struct";
+	Function_Arg_Types["_quit_"]["0"] = "Scope_Struct";
 	
-	Function_Arg_Names["_exit"].push_back("0");
+	Function_Arg_Names["_quit_"].push_back("0");

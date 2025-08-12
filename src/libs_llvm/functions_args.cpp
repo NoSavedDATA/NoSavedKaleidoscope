@@ -26,12 +26,6 @@ void set_functions_args_type() {
 		Function_Arg_Names["ShuffleStrVec"].push_back("0");
 		Function_Arg_Names["ShuffleStrVec"].push_back("1");
 		
-		Function_Arg_Types["_glob_b_"]["0"] = "Scope_Struct";
-		Function_Arg_Types["_glob_b_"]["1"] = "str";
-		
-		Function_Arg_Names["_glob_b_"].push_back("0");
-		Function_Arg_Names["_glob_b_"].push_back("1");
-		
 		Function_Arg_Types["str_vec_print"]["0"] = "Scope_Struct";
 		Function_Arg_Types["str_vec_print"]["1"] = "str_vec";
 		
@@ -166,9 +160,9 @@ void set_functions_args_type() {
 		Function_Arg_Names["nsk_vec_size"].push_back("1");
 	
 		
-		Function_Arg_Types["_exit"]["0"] = "Scope_Struct";
+		Function_Arg_Types["_quit_"]["0"] = "Scope_Struct";
 		
-		Function_Arg_Names["_exit"].push_back("0");
+		Function_Arg_Names["_quit_"].push_back("0");
 	
 		
 		Function_Arg_Types["arange_int"]["0"] = "Scope_Struct";

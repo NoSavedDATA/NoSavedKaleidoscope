@@ -91,7 +91,7 @@ struct Tokenizer {
     std::stack<std::string> dirs, files;
     std::stack<int> line_counters;
     std::istream* current;
-    std::string current_dir = std::filesystem::current_path();
+    std::string current_dir = std::filesystem::current_path().string();
     char cur_c=' ';
 
     std::string token;

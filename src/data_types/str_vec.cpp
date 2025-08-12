@@ -1,10 +1,10 @@
+#include <algorithm>
 #include <iostream>
-#include <vector>
+#include <map>
 #include <random>
 #include <string>
 #include <sstream>
-#include <algorithm>
-#include <glob.h>
+#include <vector>
 
 // #include "../common/include.h"
 #include "../codegen/random.h"
@@ -13,6 +13,9 @@
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
+
+
+std::map<std::string, std::vector<char *>> StrVecAuxHash;
 
 
 
@@ -77,30 +80,6 @@ extern "C" char * shuffle_str(char *string_list)
 }
 
 
-extern "C" void * _glob_b_(Scope_Struct *scope_struct, char *pattern) {
-  glob_t glob_result;
-
-  std::vector<char *> ret;
-
-  if (glob(pattern, GLOB_TILDE, NULL, &glob_result) == 0) {
-      for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
-
-        ret.push_back(strdup(glob_result.gl_pathv[i]));
-      }
-      globfree(&glob_result);
-  }
-
-
-  if (ret.size()<1)
-    LogErrorS(scope_struct->code_line, "Glob failed to find files.");
-    
-  // Aux to not lose pointers
-  std::string random_str = RandomString(15);
-  StrVecAuxHash[random_str] = ret;
-  AuxRandomStrs[random_str] = "str_vec";
- 
-  return &StrVecAuxHash[random_str];
-}
 
 
 extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)

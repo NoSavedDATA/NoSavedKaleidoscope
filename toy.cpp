@@ -158,8 +158,6 @@ std::map<std::string, char *> ScopeNamesToClean;
 std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;
 
 
-// Aux to not lose pointers
-std::map<std::string, std::vector<char *>> StrVecAuxHash;
 
 
 

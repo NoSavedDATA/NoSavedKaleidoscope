@@ -166,6 +166,8 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
 
 
 
+    if (Name=="_glob_b_")
+        fn_return_type_str = "str_vec";
     Lib_Functions_Return[Name] = fn_return_type_str;
     Lib_Functions_Args[Name] = std::move(arg_types_str);
 
@@ -211,6 +213,9 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
             if(!in_str(nsk_data_type, data_tokens))
                 data_tokens.push_back(nsk_data_type);
         }
+        if (Name=="_glob_b_")
+            nsk_data_type = "str_vec";
+        
         functions_return_type[Name] = nsk_data_type;
     }
 

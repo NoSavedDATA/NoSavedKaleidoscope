@@ -32,8 +32,6 @@ extern std::map<std::string, char *> ScopeNamesToClean;
 extern std::map<int, std::map<std::string, std::vector<std::string>>> ThreadedScopeTensorsToClean;
 
 
-extern std::map<std::string, std::string> AuxRandomStrs;
-extern std::map<std::string, std::vector<char *>> StrVecAuxHash;
 extern std::map<std::string, std::vector<float>>  FloatVecAuxHash;
 
 extern std::map<std::string, std::string> objectVecs;

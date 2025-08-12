@@ -13,7 +13,6 @@
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
-std::map<std::string, std::string> AuxRandomStrs;
 
 
 
@@ -237,7 +236,6 @@ extern "C" std::vector<char *> *SplitString(Scope_Struct *scope_struct,char *sel
 
   std::string random_str = RandomString(15);
   StrVecAuxHash[random_str] = result;
-  AuxRandomStrs[random_str] = "str_vec";
     
   return &StrVecAuxHash[random_str];
     

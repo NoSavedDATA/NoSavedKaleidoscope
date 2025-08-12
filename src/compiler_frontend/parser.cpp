@@ -496,6 +496,8 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     // name_solver_expr->SetType;
     std::string scope_random_string = RandomString(14);
 
+    
+
     aux = std::make_unique<CallExprAST>(std::move(name_solver_expr), IdName, IdName, std::move(Args),
                                                   "None", "None", "none", is_var_forward, callee_override, scope_random_string, "none", parser_struct);
 
@@ -511,6 +513,10 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     }
     if (return_tensor)
       aux->SetType("tensor");
+
+    
+    if(aux->GetType()=="void")
+      LogBlue(IdName + ", " + fname + ": ");
 
     
     if (CurTok == tok_post_class_attr_identifier)

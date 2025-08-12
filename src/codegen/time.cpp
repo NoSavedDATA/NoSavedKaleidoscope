@@ -7,12 +7,22 @@
 #include "../mangler/scope_struct.h"
 
 
+#ifdef _WIN32
+#include <windows.h>
+
+unsigned int get_millisecond_time() {
+    // Returns milliseconds since system start (wraps around after ~49 days)
+    return static_cast<unsigned int>(GetTickCount64() & 0xFFFFFFFF);
+}
+#else
+#include <ctime>
+
 unsigned int get_millisecond_time() {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-    return static_cast<unsigned int>(ts.tv_sec + (ts.tv_nsec / 1000));
+    return static_cast<unsigned int>(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
-
+#endif
 
 
 extern "C" void __slee_p_(Scope_Struct *scope_struct, int duration)
