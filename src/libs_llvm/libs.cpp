@@ -1256,19 +1256,9 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("tid", tidTy);
 
-	FunctionType *pthread_create_auxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("pthread_create_aux", pthread_create_auxTy);
 
-	FunctionType *pthread_join_auxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("pthread_join_aux", pthread_join_auxTy);
+
+
 
 	FunctionType *minTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

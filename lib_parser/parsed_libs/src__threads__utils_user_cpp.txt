@@ -1,1 +1,1 @@
-"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", 
+"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", "pthread_create_aux", "pthread_join_aux", 

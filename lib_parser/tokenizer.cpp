@@ -155,6 +155,13 @@ int tokenize() {
     } else
       return LastChar;
   }
+  if (LastChar=='#')
+  {
+    begin_with_space=false;
+    while(LastChar!=tok_space&&LastChar!=tok_eof&&LastChar!=tok_finish&&LastChar!=',')
+      LastChar = get_file_char();
+    return tok_commentary;
+  }
  
 
   if (isalpha(LastChar) || LastChar=='_' || LastChar=='\"') { // identifier: [a-zA-Z][a-zA-Z0-9]*
