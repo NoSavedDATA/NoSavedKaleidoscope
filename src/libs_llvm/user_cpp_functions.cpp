@@ -20,7 +20,7 @@ void set_user_functions() {
 		"print", 
 		"list_New", "list_print", "list_Create", "list_size", "list_CalculateIdx", "list_Idx", "to_int", "to_float", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", 
 		"__slee_p_", "random_sleep", "silent_sleep", "start_timer", "end_timer", 
-		"str_vec_Create", "LenStrVec", "ShuffleStrVec", "shuffle_str", "_glob_b_", "IndexStrVec", "str_vec_Idx", "str_vec_CalculateIdx", "str_vec_print", 
+		"str_vec_Create", "LenStrVec", "ShuffleStrVec", "shuffle_str", "IndexStrVec", "str_vec_Idx", "str_vec_CalculateIdx", "str_vec_print", 
 		"nullptr_get", "check_is_null", 
 		"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", "pthread_create_aux", "pthread_join_aux", 
 		"Delete_Ptr", 
@@ -41,7 +41,7 @@ void set_user_functions() {
 		"print_float", 
 		"dict_Create", "dict_New", "dict_Store_Key", "dict_Store_Key_int", "dict_Store_Key_float", "dict_print", "dict_Query", 
 		"dir_exists", "path_exists", 
-		"_exit", 
+		"_quit_", 
 		"dict_Dispose", 
 
 	};

@@ -1,0 +1,65 @@
+#
+CXX := clang++-19
+CXXFLAGS := -g -O3 -rdynamic -fPIC -mavx -w
+SYSTEM_LIBS := -ldl -lrt -pthread
+OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -w
+
+# Combine all flags
+LIBS := $(SYSTEM_LIBS)
+
+
+# Directories
+OBJ_DIR = obj
+SRC_DIR = src
+
+
+# C++ Source and Object Files
+CXX_SRC = $(shell find $(SRC_DIR) -name "*.cpp")
+CXX_OBJ = $(CXX_SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
+CXX_DIR = $(sort $(dir $(CXX_OBJ)))
+
+OBJ_DIRS := $(sort $(CXX_DIR))
+
+
+
+# Executable name
+SO_FILE := lib.so
+
+.PHONY: prebuild
+
+BUILD_FLAG := .build_flag
+
+
+$(info var is: ${OBJ_DIRS})
+$(foreach dir, $(OBJ_DIRS), \
+  $(info var is: $(dir)) \
+  $(shell mkdir -p $(dir)); \
+)
+
+
+
+
+all: $(CXX_OBJ) $(SO_FILE) check_done
+
+	
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
+
+
+$(SO_FILE): $(CXX_OBJ)
+	$(CXX) -shared $(CXXFLAGS) $(CXX_OBJ) $(LIBS) $(OTHER_FLAGS) -MMD -MP -o $(SO_FILE)
+	@echo "\033[1;32m\nBuild completed [✓]\n\033[0m"
+	@touch $(BUILD_FLAG)
+
+
+check_done:
+	@if [ ! -f $(BUILD_FLAG) ]; then \
+		echo "\n\n\033[1;33mNo changes found [ ]\n\033[0m"; \
+	fi
+	@rm -f $(BUILD_FLAG)
+
+clean:
+	rm -rf $(BIN_DIR) $(OBJ_DIR) $(SO_FILE)
+
+# Track dependencies
+-include $(CXX_OBJ:.o=.d)

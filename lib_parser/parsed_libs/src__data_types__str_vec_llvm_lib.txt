@@ -1,4 +1,4 @@
-1821-08-11 18:33:38
+1821-08-12 19:45:34
 
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -27,13 +27,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
-
-	FunctionType *_glob_b_Ty= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("_glob_b_", _glob_b_Ty);
 
 	FunctionType *IndexStrVecTy= FunctionType::get(
 		int8PtrTy,

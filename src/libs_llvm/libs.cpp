@@ -535,12 +535,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("__sliced_idx__", __sliced_idx__Ty);
 
-	FunctionType *_exitTy= FunctionType::get(
+	FunctionType *_quit_Ty= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("_exit", _exitTy);
+	TheModule->getOrInsertFunction("_quit_", _quit_Ty);
 
 	FunctionType *print_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -723,13 +723,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("shuffle_str", shuffle_strTy);
-
-	FunctionType *_glob_b_Ty= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("_glob_b_", _glob_b_Ty);
 
 	FunctionType *IndexStrVecTy= FunctionType::get(
 		int8PtrTy,

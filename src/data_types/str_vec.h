@@ -1,6 +1,10 @@
 #pragma once
 
+#include <map>
 #include <vector>
+
+
+extern std::map<std::string, std::vector<char *>> StrVecAuxHash;
 
 
 
