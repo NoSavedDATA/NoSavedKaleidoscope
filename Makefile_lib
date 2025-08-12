@@ -1,11 +1,6 @@
-#clang++-19 -g -O3 -rdynamic toy.cu `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit native` --cuda-path="/usr/local/cuda-12.1" --cuda-gpu-arch=sm_89
-#-L"/usr/local/cuda-12.1/lib64" -I"/usr/local/cuda-12.1/include" -I/usr/include/eigen3 -lcudart_static -lcublas -lcublasLt -ldl -lrt -pthread
-#-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -lcudnn -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -w -o bin/nsk
-
 CXX := clang++-19
 NXX := nvcc
 CXXFLAGS := -g -O3 -rdynamic -fPIC
-LLVM_CONFIG := llvm-config-19
 CUDA_PATH := /usr/local/cuda-12.1
 CUDA_ARCH := sm_89
 CUDA_ARCH_NVCC := -arch=sm_89
@@ -15,21 +10,15 @@ CUDA_LIBS := -lcudart_static -lcublas -lcublasLt -lcudnn
 SYSTEM_LIBS := -ldl -lrt -pthread
 OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -w
 
-# Get LLVM flags
-LLVM_CXXFLAGS := $(shell $(LLVM_CONFIG) --cxxflags)
-LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
-LLVM_SYSTEM_LIBS := $(shell $(LLVM_CONFIG) --system-libs)
-LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native)
-
 
 # CUDA flags
 CUDA_CXXFLAGS := -I$(CUDA_PATH)/include --cuda-path=$(CUDA_PATH) --cuda-gpu-arch=$(CUDA_ARCH)
 CUDA_LDFLAGS := -L$(CUDA_PATH)/lib64
 
 # Combine all flags
-CXXFLAGS += $(LLVM_CXXFLAGS) $(CUDA_CXXFLAGS) -I$(EIGEN_INCLUDE) -mavx -w
-LDFLAGS := $(LLVM_LDFLAGS) $(CUDA_LDFLAGS)
-LIBS := $(LLVM_LIBS) $(LLVM_SYSTEM_LIBS) $(CUDA_LIBS) $(SYSTEM_LIBS) $(OPENCV_LIBS)
+CXXFLAGS += $(CUDA_CXXFLAGS) -I$(EIGEN_INCLUDE) -mavx -w
+LDFLAGS := $(CUDA_LDFLAGS)
+LIBS := $(CUDA_LIBS) $(SYSTEM_LIBS)
 
 NXXFLAGS := $(CUDA_ARCH_NVCC) -I$(EIGEN_INCLUDE) -Xptxas=-v
 
@@ -114,7 +103,7 @@ check_done:
 	@rm -f $(BUILD_FLAG)
 
 clean:
-	rm -rf $(BIN_DIR) $(OBJ_DIR)
+	rm -rf $(BIN_DIR) $(OBJ_DIR) $(SO_FILE)
 
 # Track dependencies
 -include $(CU_OBJ:.o=.d) $(CXX_OBJ:.o=.d)

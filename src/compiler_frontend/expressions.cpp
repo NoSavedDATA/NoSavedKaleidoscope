@@ -238,7 +238,6 @@ SelfExprAST::SelfExprAST() {
   Name="self";
   height=1;
   From_Self=true;
-  // Print_Names_Str(Expr_String);
 }
 EmptyStrExprAST::EmptyStrExprAST() {
   Expr_String = {};
@@ -256,7 +255,6 @@ NestedStrExprAST::NestedStrExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, 
 
   Expr_String = this->Inner_Expr->Expr_String;
   Expr_String.push_back(name);
-  // Print_Names_Str(Expr_String);
 }
 
 NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string name, Parser_Struct parser_struct, std::unique_ptr<IndexExprAST> Idx, std::string type)
@@ -270,7 +268,7 @@ NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> 
 
   Expr_String = this->Inner_Expr->Expr_String;
   Expr_String.push_back(name);
-  Print_Names_Str(Expr_String);
+  // Print_Names_Str(Expr_String);
 }
 
 

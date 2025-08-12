@@ -759,27 +759,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("str_vec_Create", str_vec_CreateTy);
 
-	FunctionType *str_vec_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
-
-	FunctionType *str_vec_StoreTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
-
-	FunctionType *PrintStrVecTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("PrintStrVec", PrintStrVecTy);
-
 	FunctionType *LenStrVecTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy},
@@ -850,20 +829,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_Create", float_vec_CreateTy);
 
-	FunctionType *float_vec_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Load", float_vec_LoadTy);
-
-	FunctionType *float_vec_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Store", float_vec_StoreTy);
-
 	FunctionType *float_vec_Store_IdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
@@ -878,19 +843,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
 
-	FunctionType *zeros_vecTy= FunctionType::get(
+	FunctionType *zeros_floatTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("zeros_vec", zeros_vecTy);
+	TheModule->getOrInsertFunction("zeros_float", zeros_floatTy);
 
-	FunctionType *ones_vecTy= FunctionType::get(
+	FunctionType *ones_floatTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("ones_vec", ones_vecTy);
+	TheModule->getOrInsertFunction("ones_float", ones_floatTy);
 
 	FunctionType *float_vec_IdxTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

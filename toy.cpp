@@ -46,24 +46,12 @@
 #include <filesystem>
 #include <stdio.h>
 #include <stdlib.h>
-#include <omp.h>
 #include <iostream>
 
 
 
-// Cuda
-#include <cuda_runtime.h>
-#include <cublasLt.h>
-#include <cublas_v2.h>
-#include <curand_kernel.h>
-#include <cuda_fp16.h>
-#include <cudnn.h>
-#include <mma.h>
-// #include <cute/tensor.hpp>
 
 
-// #include "include/cutlass/gemm/device/gemm.h"
-// #include "include/cutlass/cutlass.h"
 
 #include "src/include.h"
 
@@ -72,29 +60,9 @@
 
 
 
-#define WMMA_M 16
-#define WMMA_N 16
-#define WMMA_K 16
-
-
-
-
-
-
-
-
-
-
-
 using namespace llvm;
 using namespace llvm::orc;
-using namespace nvcuda;
 
-#if __CUDA_ARCH__ == 800 || __CUDA_ARCH__ >= 900
-#define MAX_1024_THREADS_BLOCKS 2
-#else
-#define MAX_1024_THREADS_BLOCKS 1
-#endif
 
 
 
@@ -117,7 +85,6 @@ LCG rng(generate_custom_seed());
 
 
 
-std::vector<std::string> rds;
 
 
 pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex, aux_mutex, create_thread_mutex;
@@ -150,17 +117,13 @@ std::map<std::string, std::string> reverse_ops;
 
 
 //global
-std::vector<std::string> globalVars;
 std::map<std::string, std::string> floatFunctions;
-std::map<std::string, std::string> stringMethods;
 std::map<std::string, pthread_mutex_t *> lockVars;
 
 
 
 //global
 std::vector<std::string> Classes;
-
-
 
 std::map<size_t, std::vector<char *>> CharPool;
 
@@ -211,46 +174,6 @@ std::vector<char *> glob_str_files;
 
 
 // Handle Class self with phantom argument
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -340,7 +263,7 @@ Function *FunctionAST::codegen() {
 
 
 
-  std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
+//   std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
 
   NamedValues.clear();
 
@@ -349,7 +272,6 @@ Function *FunctionAST::codegen() {
   call("scope_struct_Alloc_MarkSweepMap", {scope_struct}); 
 
 
-  p2t("FunctionAST start function args.");
 
 
   float val;
@@ -361,16 +283,11 @@ Function *FunctionAST::codegen() {
     std::string arg_name = Arg.getName().str();
     //std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
 
-    std::string __print = "FunctionAST FUNCTION ALLOCA OF " + std::string(Arg.getName()) + " ";
-
-    p2t(__print);
 
 
-    p2t("FunctionAST Got arg "+arg_name+" for function "+function_name);
     // Default args
     if (arg_name == "scope_struct")
     {
-        p2t("-------------------------------------------=============-----------------===========--------FunctionAST COPY SCOPE STRUCT");
         scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
     } else { 
         std::string type = "";
@@ -412,7 +329,6 @@ Function *FunctionAST::codegen() {
   }
   
 
-  p2t("FunctionAST");
 
 
 
@@ -420,8 +336,6 @@ Function *FunctionAST::codegen() {
   Value *RetVal;
   for (auto &body : Body)
   {
-    std::string pre = "\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n" + std::string("FunctionAST Body codegen pre of: ") + typeid(*body).name();
-    p2t(pre);
 
     expr_is_return = ends_with(typeid(*body).name(), "RetExprAST");
 
@@ -447,7 +361,6 @@ Function *FunctionAST::codegen() {
     verifyFunction(*TheFunction);
 
 
-    p2t("FunctionAST verified");
 
     // TheModule->print(llvm::errs(), nullptr);
     // Validate the generated code, checking for consistency.
@@ -455,7 +368,6 @@ Function *FunctionAST::codegen() {
     return TheFunction;
   }
 
-  p2t("FunctionAST returned");
 
   // Error reading body, remove function.
   TheFunction->eraseFromParent();
@@ -2611,7 +2523,7 @@ static void CodegenTopLevelExpression(std::unique_ptr<FunctionAST> &FnAST) {
     auto *FP = Sym.getAddress().toPtr<float (*)()>();
     auto fp = FP();
     
-    fprintf(stderr, "%.2f\n", fp);
+    // fprintf(stderr, "%.2f\n", fp);
 
     // Delete the anonymous expression module from the JIT.
     ExitOnErr(RT->remove());    
@@ -2707,44 +2619,6 @@ void early_init() {
 
 int main() {
 
-//   int deviceIdx = 0;
-//   cudaCheck(cudaSetDevice(deviceIdx));
-//   cudaGetDeviceProperties(&deviceProp, deviceIdx);
-
-//   std::cout << "CuDNN Version: " << CUDNN_MAJOR << "." << CUDNN_MINOR << "." << CUDNN_PATCHLEVEL << std::endl;
-//   printf("Device %d: %s\n", deviceIdx, deviceProp.name);
-//   std::cout << "Device Max Compute Capability (SM): " << deviceProp.major << "." << deviceProp.minor << std::endl;
-
-//   std::cout << "Shared-Memory per thread-block size: " << deviceProp.sharedMemPerBlock << ".\n";
-  
-
-    
-//   cudaDeviceGetAttribute(&WARP_SIZE, cudaDevAttrWarpSize, 0); 
-//   cublasCheck(cublasCreate(&cublas_handle));
-//   cublasCheck(cublasLtCreate(&cublaslt_handle));
-
-
-//   int enable_tf32 = deviceProp.major >= 8 ? 1 : 0;
-
-
-//   printf("enable_tf32: %d\n", enable_tf32);
-  
-//   cublas_compute_type = enable_tf32 ? CUBLAS_COMPUTE_32F_FAST_TF32 : CUBLAS_COMPUTE_32F;
-//   cublasMath_t cublas_math_mode = enable_tf32 ? CUBLAS_TF32_TENSOR_OP_MATH : CUBLAS_DEFAULT_MATH;
-//   cublasCheck(cublasSetMathMode(cublas_handle, cublas_math_mode));
-//   // setup the (global) cuBLASLt workspace
-//   cudaCheck(cudaMalloc(&cublaslt_workspace, cublaslt_workspace_size));
-  
-//   cudnnCreate(&cudnn);
-
-//   std::cout << "Tile size is: " << TILE_SIZE << ".\n\n";
-//   main_stream = createCudaStream();
-
-
-
-
-
-
 
 
   if (pthread_mutex_init(&mutex, NULL) != 0) {
@@ -2799,22 +2673,14 @@ int main() {
   floatFunctions["round"] = "roundE";
   floatFunctions["floor"] = "floorE";
 
-  stringMethods["split"] = "SplitString";
 
 
-
-
-
-
-                        
 
 
   set_functions_return_type();
   set_functions_args_type();
   set_user_functions();
   vararg_methods = {"tensor_view", "tensor_sum", "tensor_mean", "mean_tensor" ,"tensor_prod", "tensor_tmax", "tensor_argmax", "tensor_load_bin_idx"};
-
-
 
 
   return_tensor_functions = {"gelu", "sigmoid", "_tanh", "relu", "softmax", "log", "randu_like",
@@ -2879,23 +2745,16 @@ int main() {
     op_map_names.push_back(pair.second);
 
 
-
-
-
-
-
   
   notators_str = {"bias", "fp32", "fp16", "causal"};
 
 
   // Prime the first token.
-  //fprintf(stderr, "ready> ");
+  
   getNextToken();
 
   TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
   InitializeModule();
-
-  // Run the main "interpreter loop" now.
 
 
   MainLoop();

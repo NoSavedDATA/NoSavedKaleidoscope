@@ -1,8 +1,9 @@
 #include <cstddef>
-#include<string>
-#include<vector>
-#include<map>
-#include<iostream>
+#include <cstring>
+#include <iostream>
+#include <string>
+#include <map>
+#include <vector>
 
 #include "../char_pool/include.h"
 #include "random.h"

@@ -1,4 +1,5 @@
 #include <atomic>
+#include <cstring>
 #include <mutex>
 #include <set>
 #include <thread>

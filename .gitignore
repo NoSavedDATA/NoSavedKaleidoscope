@@ -7,15 +7,12 @@ include/stb/
 a.out
 src_backup
 src_reference
-mma.cu
 toy.o
-toy_backup.cu
 print_colors.png
 compiler.code-workspace
-aux.cu
 llvm.sh
 mouse.o
-mouse.cu
+*.cu
 playground.cpp
 *backup
 trace.log

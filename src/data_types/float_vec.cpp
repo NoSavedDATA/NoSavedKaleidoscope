@@ -18,29 +18,10 @@ extern "C" void *float_vec_Create(Scope_Struct *scope_struct, char *name, char *
   // std::cout << "float_vec_Create" << ".\n";
 
   if (init_val!=nullptr)
-  {
     DT_float_vec *vec = static_cast<DT_float_vec *>(init_val);
-    ClassFloatVecs[name] = vec;
-  }
 
 
   return init_val;
-}
-
-extern "C" DT_float_vec *float_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
-  // std::cout << "Load float_vec On Demand var to load: " << object_var_name << "\n";
-  // std::cout << "scope: " << scope_struct->scope << ".\n";
-  
-  DT_float_vec *vec = ClassFloatVecs[object_var_name];
-
-  return vec;
-}
-
-extern "C" float float_vec_Store(char *name, DT_float_vec *value, Scope_Struct *scope_struct){
-  // std::cout << "STORING " << name << " on demand as float vec type" << ".\n";
-
-  ClassFloatVecs[name] = value;
-  return 0;
 }
 
  
@@ -79,7 +60,7 @@ extern "C" DT_float_vec *arange_float(Scope_Struct *scope_struct, int begin, int
 }
 
 
-extern "C" DT_float_vec *zeros_vec(Scope_Struct *scope_struct, int size) {
+extern "C" DT_float_vec *zeros_float(Scope_Struct *scope_struct, int size) {
   DT_float_vec *vec = new DT_float_vec(size);
   for(int i=0; i<size; ++i)
     vec->vec[i] = 0;
@@ -89,7 +70,7 @@ extern "C" DT_float_vec *zeros_vec(Scope_Struct *scope_struct, int size) {
 }
 
 
-extern "C" DT_float_vec *ones_vec(Scope_Struct *scope_struct, int size) {
+extern "C" DT_float_vec *ones_float(Scope_Struct *scope_struct, int size) {
   DT_float_vec *vec = new DT_float_vec(size);
   for(int i=0; i<size; ++i)
     vec->vec[i] = 1;
