@@ -1,1 +1,0 @@
-	clean_up_functions["float"] = float_Clean_Up;

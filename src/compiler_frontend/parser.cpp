@@ -1570,13 +1570,8 @@ std::unique_ptr<ExprAST> ParseLockExpr(Parser_Struct parser_struct, std::string 
   
   if (lockVars.count(Name) == 0)
   {
-    pthread_mutex_t* _mutex = new pthread_mutex_t;
-    if (pthread_mutex_init(_mutex, NULL) != 0) {
-      printf("Mutex initialization failed\n");
-      return nullptr;
-    }
     
-    lockVars[IdentifierStr] = _mutex;  
+    lockVars[IdentifierStr] = new SpinLock();
   }
   
   

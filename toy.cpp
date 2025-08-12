@@ -87,7 +87,6 @@ LCG rng(generate_custom_seed());
 
 
 
-pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex, aux_mutex, create_thread_mutex;
 
   // Error Colors
 // \033[0m default
@@ -118,7 +117,6 @@ std::map<std::string, std::string> reverse_ops;
 
 //global
 std::map<std::string, std::string> floatFunctions;
-std::map<std::string, pthread_mutex_t *> lockVars;
 
 
 
@@ -2621,27 +2619,8 @@ int main() {
 
 
 
-  if (pthread_mutex_init(&mutex, NULL) != 0) {
-    printf("Mutex initialization failed\n");
-    return 1;
-  }
-  if (pthread_mutex_init(&clean_scope_mutex, NULL) != 0) {
-    printf("Mutex initialization failed\n");
-    return 1;
-  }
-  pthread_mutex_init(&create_thread_mutex, nullptr);
-  if (pthread_mutex_init(&char_pool_mutex, NULL) != 0) {
-    printf("Mutex initialization failed\n");
-    return 1;
-  }
-  if (pthread_mutex_init(&vocab_mutex, NULL) != 0) {
-    printf("Mutex initialization failed\n");
-    return 1;
-  }
-  pthread_mutex_init(&random_seed_mutex, NULL);
-  pthread_mutex_init(&aux_mutex, NULL);
   
-  lockVars["mutex"] = &mutex;
+  
   
 
 

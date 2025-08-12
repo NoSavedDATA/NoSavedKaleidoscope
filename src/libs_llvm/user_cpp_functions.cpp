@@ -16,7 +16,6 @@ void set_user_functions() {
         "tensor_sum", "tensor_prod", "tensor_mean", "mean_tensor", "tensor_tmin", "tensor_argmin", "tensor_topk", "tensor_repeat_interleave",
         "tensor_save_img", "tensor_gpu", "tensor_gpuw", "tensor_save_as_int", "tensor_save_as_bin", "tensor_gather", "str_split_idx", "str_to_float", "list_print",
 		"int_Create", "int_Load", "int_Store", 
-		"int_Create", "int_Load", "int_Store", 
 		"get_barrier", 
 		"print", 
 		"list_New", "list_print", "list_Create", "list_size", "list_CalculateIdx", "list_Idx", "to_int", "to_float", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", 
@@ -39,7 +38,7 @@ void set_user_functions() {
 		"int_vec_Create", "int_vec_Load", "int_vec_Store", "int_vec_Store_Idx", "earth_cable", "arange_int", "zeros_int", "ones_int", "int_vec_Idx", "int_vec_Idx_num", "int_vec_CalculateIdx", "int_vec_CalculateSliceIdx", "int_vec_Slice", "int_vec_first_nonzero", "int_vec_print", "int_vec_Split_Parallel", "int_vec_Split_Strided_Parallel", "int_vec_size", 
 		"set_scope_line", "scope_struct_Create", "scope_struct_Copy", "scope_struct_Overwrite", "scope_struct_Dive", "set_scope_first_arg", "set_scope_scope", "set_scope_thread_id", "set_scope_has_grad", "set_scope_function_name", "get_scope_first_arg", "get_scope_scope", "get_scope_thread_id", "get_scope_has_grad", "scope_struct_Reset_Threads", "scope_struct_Increment_Thread", "set_scope_object", "get_scope_object", "scope_struct_Save_for_Async", "scope_struct_Load_for_Async", "scope_struct_Store_Asyncs_Count", "scope_struct_Print", "scope_struct_Get_Async_Scope", "scope_struct_Alloc_MarkSweepMap", "scope_struct_Copy_MarkSweepMap", "scope_struct_Sweep", "scope_struct_Clean_Scope", "scope_struct_Delete", 
 		"print_codegen", "print_codegen_silent", 
-		"PrintFloat", "UnbugFloat", "print_float", "float_Create", "float_Load", "float_Store", 
+		"print_float", 
 		"dict_Create", "dict_New", "dict_Store_Key", "dict_Store_Key_int", "dict_Store_Key_float", "dict_print", "dict_Query", 
 		"dir_exists", "path_exists", 
 		"_exit", 
@@ -55,10 +54,6 @@ void set_user_functions() {
 	clean_up_functions["float_vec"] = float_vec_Clean_Up;
 
 	clean_up_functions["str"] = str_Clean_Up;
-
-	clean_up_functions["int"] = int_Clean_Up;
-
-	clean_up_functions["float"] = float_Clean_Up;
 
 	clean_up_functions["str_vec"] = str_vec_Clean_Up;
 

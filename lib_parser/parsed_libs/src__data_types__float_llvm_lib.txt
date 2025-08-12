@@ -1,18 +1,4 @@
-1821-05-13 14:30:02
-
-	FunctionType *PrintFloatTy= FunctionType::get(
-		int8PtrTy,
-		{Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("PrintFloat", PrintFloatTy);
-
-	FunctionType *UnbugFloatTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("UnbugFloat", UnbugFloatTy);
+1821-08-12 18:39:24
 
 	FunctionType *print_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -20,24 +6,3 @@
 		false
 	);
 	TheModule->getOrInsertFunction("print_float", print_floatTy);
-
-	FunctionType *float_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_Create", float_CreateTy);
-
-	FunctionType *float_LoadTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_Load", float_LoadTy);
-
-	FunctionType *float_StoreTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_Store", float_StoreTy);

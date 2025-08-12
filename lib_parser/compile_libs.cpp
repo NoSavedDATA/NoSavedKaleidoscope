@@ -49,12 +49,12 @@ void CleanDeletedLibs() {
     std::vector<fs::path> files = glob_cpp(root, "llvm_lib.txt");
 
     for (auto &file : files) {
-        std::string src_file = Demangle_File_Name(file);
+        std::string src_file = Demangle_File_Name(file.string());
 
         if (!fexists(src_file+".cpp") && !fexists(src_file+".cu"))
         {
 
-            std::string base_lib = file;
+            std::string base_lib = file.string();
             const std::string suffix = "_llvm_lib.txt";
             if (base_lib.size() >= suffix.size() &&
                 base_lib.compare(base_lib.size() - suffix.size(), suffix.size(), suffix) == 0) {
