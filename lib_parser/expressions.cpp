@@ -167,56 +167,60 @@ Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_inf
 
     lib_info = Generate_Function_Dict(lib_info, ReturnType, FunctionName); 
 
-        
-
-
-    std::string fTy = FunctionName+"Ty";
-
-    std::string line1 = "\tFunctionType *" + fTy + "= FunctionType::get(\n";
-
-    std::string line2;
-
-    if (ReturnType=="float")
-        line2="\t\tType::getFloatTy(*TheContext),\n";
-    else if (ReturnType=="int")
-        line2="\t\tType::getInt32Ty(*TheContext),\n";
-    else
-        line2="\t\tint8PtrTy,\n";
-
-
-    std::string line3 = "\t\t{";
-
-    if (ArgTypes.size()>0)
+    if (!(FunctionName=="pthread_create_aux"||FunctionName=="pthread_join_aux"))
     {
-        for(int i=0; i<ArgTypes.size(); ++i)
+
+
+
+        std::string fTy = FunctionName+"Ty";
+
+        std::string line1 = "\tFunctionType *" + fTy + "= FunctionType::get(\n";
+
+        std::string line2;
+
+        if (ReturnType=="float")
+            line2="\t\tType::getFloatTy(*TheContext),\n";
+        else if (ReturnType=="int")
+            line2="\t\tType::getInt32Ty(*TheContext),\n";
+        else
+            line2="\t\tint8PtrTy,\n";
+
+
+        std::string line3 = "\t\t{";
+
+        if (ArgTypes.size()>0)
         {
-            if (ArgTypes[i]=="float")
-                line3 = line3 + "Type::getFloatTy(*TheContext)";
-            else if (ArgTypes[i]=="int")
-                line3 = line3 + "Type::getInt32Ty(*TheContext)";
-            else
-                line3 = line3 + "int8PtrTy";
+            for(int i=0; i<ArgTypes.size(); ++i)
+            {
+                if (ArgTypes[i]=="float")
+                    line3 = line3 + "Type::getFloatTy(*TheContext)";
+                else if (ArgTypes[i]=="int")
+                    line3 = line3 + "Type::getInt32Ty(*TheContext)";
+                else
+                    line3 = line3 + "int8PtrTy";
 
-            if (i!=ArgTypes.size()-1)
-                line3 = line3 + ", ";
+                if (i!=ArgTypes.size()-1)
+                    line3 = line3 + ", ";
+            }
         }
-    }
-    
-    line3 = line3 + "},\n";
+        
+        line3 = line3 + "},\n";
 
-    std::string line4;
-    if(Vararg)
-        line4 = "\t\ttrue //vararg\n";
-    else
-        line4 = "\t\tfalse\n";
-    
-    std::string line5="\t);\n";
+        std::string line4;
+        if(Vararg)
+            line4 = "\t\ttrue //vararg\n";
+        else
+            line4 = "\t\tfalse\n";
+        
+        std::string line5="\t);\n";
 
-    std::string line6="\tTheModule->getOrInsertFunction(\"" + FunctionName + "\", " + fTy + ");\n";
+        std::string line6="\tTheModule->getOrInsertFunction(\"" + FunctionName + "\", " + fTy + ");\n";
 
 
-    
-    lib_info->llvm_string = lib_info->llvm_string + "\n" + line1 + line2 + line3 + line4 + line5 + line6;
+        
+        lib_info->llvm_string = lib_info->llvm_string + "\n" + line1 + line2 + line3 + line4 + line5 + line6;
+    } else 
+        lib_info->llvm_string = lib_info->llvm_string + "\n";
 
 
 

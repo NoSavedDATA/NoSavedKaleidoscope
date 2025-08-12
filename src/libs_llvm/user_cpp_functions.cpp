@@ -22,7 +22,7 @@ void set_user_functions() {
 		"__slee_p_", "random_sleep", "silent_sleep", "start_timer", "end_timer", 
 		"str_vec_Create", "LenStrVec", "ShuffleStrVec", "shuffle_str", "_glob_b_", "IndexStrVec", "str_vec_Idx", "str_vec_CalculateIdx", "str_vec_print", 
 		"nullptr_get", "check_is_null", 
-		"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", 
+		"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", "pthread_create_aux", "pthread_join_aux", 
 		"Delete_Ptr", 
 		"print_randoms", "randint", 
 		"LockMutex", "UnlockMutex", 

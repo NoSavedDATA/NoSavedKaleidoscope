@@ -1499,33 +1499,27 @@ static void InitializeModule() {
   
 
 
-  auto pthreadPtr = Type::getInt8Ty(*GlobalContext)->getPointerTo();
-  auto pthreadPtrTy = pthreadPtr->getPointerTo();
+	FunctionType *pthread_create_auxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pthread_create_aux", pthread_create_auxTy);
 
-  // (void *) fn (void * arg)
-  FunctionType *funVoidPtrint8PtrTy = FunctionType::get(
-    int8PtrTy, {int8PtrTy},
-    false);
-  // int pthread_create(pthread_t * thread, const pthread_attr_t * attr,
-  //                  void * (*start_routine)(void *), void * arg)
-  // using void * in place of pthread_attr_t *
-  FunctionType *pthreadCreateTy = FunctionType::get(
-                                      Type::getVoidTy(*TheContext),
-                                      {pthreadPtrTy,
-                                       int8PtrTy,
-                                       (funVoidPtrint8PtrTy)->getPointerTo(),
-                                       int8PtrTy},
-                                      false
-                                    );
-  TheModule->getOrInsertFunction("pthread_create_aux", pthreadCreateTy);
+	FunctionType *pthread_join_auxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("pthread_join_aux", pthread_join_auxTy);
 
 
-  // int pthread_join(pthread_t thread, void **value_ptr)
-  FunctionType *pthreadJoinTy = FunctionType::get(
-    Type::getVoidTy(*TheContext),
-    {pthreadPtr},
-    false);
-  TheModule->getOrInsertFunction("pthread_join_aux", pthreadJoinTy);
+
+
+
+
+
+
 
   
 

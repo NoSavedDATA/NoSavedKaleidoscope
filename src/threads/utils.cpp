@@ -56,8 +56,46 @@ extern "C" int tid(Scope_Struct *scope_struct) {
 
 
 
-//int pthread_create(pthread_t *thread, pthread_attr_t *attr,
-//                   void *(*start_routine) (void *arg), void *arg);
+
+#ifdef _WIN32
+  #include <windows.h>
+  using pthread_t = HANDLE;
+  using pthread_attr_t = void*; // dummy, Windows doesn't use this
+
+extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
+                   void *(*function_ptr) (void *arg), void *arg)
+{
+    // CreateThread expects LPTHREAD_START_ROUTINE which returns DWORD and takes LPVOID
+    // Need to adapt the function pointer signature
+    auto wrapper = [](LPVOID arg) -> DWORD {
+        auto func_and_arg = static_cast<std::pair<void* (*)(void*), void*>*>(arg);
+        void* result = func_and_arg->first(func_and_arg->second);
+        delete func_and_arg;
+        return 0; // ignore return value
+    };
+
+    auto func_and_arg = new std::pair<void* (*)(void*), void*>(function_ptr, arg);
+
+    *thread = CreateThread(
+        NULL,
+        0,
+        wrapper,
+        func_and_arg,
+        0,
+        NULL
+    );
+}
+
+extern "C" void pthread_join_aux(pthread_t thread)
+{
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+}
+
+
+
+#else
+
 
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
                    void *(*function_ptr) (void *arg), void *arg)
@@ -77,3 +115,5 @@ extern "C" void pthread_join_aux(pthread_t thread)
   pthread_join(thread, value_ptr);
   // std::cout << "Joined: " << thread << "\n";
 }
+
+#endif
