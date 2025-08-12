@@ -1,27 +1,25 @@
 #pragma once
 
-#include <thread>
-#include <map>
-#include "string"
-
-
 #include <atomic>
+#include <chrono>
+#include <string>
+#include <thread>
+#include <unordered_map>
 
-class SimpleMutex {
-    std::atomic_flag lock_flag = ATOMIC_FLAG_INIT;
 
-public:
-    void lock(); 
 
-    void unlock(); 
+
+struct SpinLock {
+    std::atomic_flag flag = ATOMIC_FLAG_INIT;
+
+    void lock();
+    void unlock();
+
 };
 
 
-extern SimpleMutex main_mutex;
 
-
-extern pthread_mutex_t mutex, clean_scope_mutex, char_pool_mutex, vocab_mutex, random_seed_mutex, aux_mutex, create_thread_mutex;
-extern std::map<std::string, pthread_mutex_t *> lockVars;
+extern std::unordered_map<std::string, SpinLock *> lockVars;
 
 
 extern "C" void LockMutex(char *mutex_name);

@@ -104,7 +104,6 @@ extern "C" float build_vocab(Scope_Struct *scope_struct, char *filename, int _ma
 
 // extern "C" float tokenize(Scope_Struct *scope_struct, DT_tensor *tensor, char *filename)
 // {
-//   pthread_mutex_lock(&vocab_mutex); // Files are not thread safe
 //   std::ifstream file(filename);
 
 //   if (!file) {
@@ -133,7 +132,6 @@ extern "C" float build_vocab(Scope_Struct *scope_struct, char *filename, int _ma
 //   }
 
 //   file.close();
-//   pthread_mutex_unlock(&vocab_mutex);
 
 //   return 0;
 // }
@@ -143,7 +141,6 @@ extern "C" float build_vocab(Scope_Struct *scope_struct, char *filename, int _ma
 // {
 //   //tensor e [workers, seq_len, batch_size, vocab_size]
 
-//   //pthread_mutex_lock(&vocab_mutex); // Files are not trhead safe
 //   std::ifstream file(filename);
 
 //   //std::cout << "Loading" <<  filename << "\n";
@@ -217,7 +214,6 @@ extern "C" float build_vocab(Scope_Struct *scope_struct, char *filename, int _ma
 //   }
 
 //   file.close();
-//   //pthread_mutex_unlock(&vocab_mutex);
 
 //   return 0;
 // }

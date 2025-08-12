@@ -4,33 +4,45 @@
 
 #include <atomic>
 
-void SimpleMutex::lock() {
-    // while (lock_flag.test_and_set(std::memory_order_acquire)) {
-    // }
-    int spins = 0;
-    while (lock_flag.test_and_set(std::memory_order_acquire)) {
-        spins++;
-    }
-    if (spins > 0) {
-      std::cout << "Spin count: " << spins << "\n";
-      // std::exit(0);
+
+
+void SpinLock::lock() {
+    while (flag.test_and_set(std::memory_order_acquire)) {
+        // Optional: yield or sleep a bit to reduce CPU usage
+        std::this_thread::yield();
     }
 }
-void SimpleMutex::unlock() {
-    lock_flag.clear(std::memory_order_release);
+void SpinLock::unlock() {
+    flag.clear(std::memory_order_release);
 }
 
 
-SimpleMutex main_mutex;
+std::mutex map_mutex;
+std::unordered_map<std::string, SpinLock *> lockVars;
 
-extern "C" void LockMutex(char *mutex_name)
+extern "C" void LockMutex(char* mutex_name)
 {
-  pthread_mutex_t *_mutex = lockVars[mutex_name];
-  pthread_mutex_lock(_mutex);
+    std::string key(mutex_name);
+    {
+        std::lock_guard<std::mutex> guard(map_mutex);
+        auto it = lockVars.find(key);
+        if (it == lockVars.end())
+        {
+            // allocate SpinLock dynamically
+            SpinLock* new_lock = new SpinLock();
+            lockVars.emplace(std::move(key), new_lock);
+            it = lockVars.find(key);
+        }
+        // else it already exists
+        it->second->lock();
+    }
 }
 
-extern "C" void UnlockMutex(char *mutex_name)
+extern "C" void UnlockMutex(char* mutex_name)
 {
-  pthread_mutex_t *_mutex = lockVars[mutex_name];
-  pthread_mutex_unlock(_mutex);
+    std::string key(mutex_name);
+    std::lock_guard<std::mutex> guard(map_mutex);
+    auto it = lockVars.find(key);
+    if (it != lockVars.end())
+        it->second->unlock();
 }

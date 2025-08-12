@@ -16,3 +16,5 @@ mouse.o
 playground.cpp
 *backup
 trace.log
+.prebuild_done
+.build_flag

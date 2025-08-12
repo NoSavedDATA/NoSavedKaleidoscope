@@ -199,27 +199,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("object_ptr_Attribute_object", object_ptr_Attribute_objectTy);
 
-	FunctionType *int_CreateTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_Create", int_CreateTy);
-
-	FunctionType *int_LoadTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_Load", int_LoadTy);
-
-	FunctionType *int_StoreTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_Store", int_StoreTy);
-
 	FunctionType *Delete_PtrTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
@@ -563,47 +542,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("_exit", _exitTy);
 
-	FunctionType *PrintFloatTy= FunctionType::get(
-		int8PtrTy,
-		{Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("PrintFloat", PrintFloatTy);
-
-	FunctionType *UnbugFloatTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("UnbugFloat", UnbugFloatTy);
-
 	FunctionType *print_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("print_float", print_floatTy);
-
-	FunctionType *float_CreateTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_Create", float_CreateTy);
-
-	FunctionType *float_LoadTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_Load", float_LoadTy);
-
-	FunctionType *float_StoreTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_Store", float_StoreTy);
 
 	FunctionType *nullptr_getTy= FunctionType::get(
 		int8PtrTy,

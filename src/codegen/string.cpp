@@ -15,7 +15,6 @@ char *RandomString(size_t length) {
   //unsigned int seed = generate_custom_seed();
 
   const std::string charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  pthread_mutex_lock(&random_seed_mutex);
 
   //MT19937 mt(generate_custom_seed());
   //LCG rng(generate_custom_seed());
@@ -33,7 +32,6 @@ char *RandomString(size_t length) {
 
   //std::cout << "" << random_string << "\n";
 
-  pthread_mutex_unlock(&random_seed_mutex);
 
   
   //std::string aux = random_string;
