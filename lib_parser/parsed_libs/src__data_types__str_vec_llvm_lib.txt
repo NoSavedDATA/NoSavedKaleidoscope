@@ -1,4 +1,4 @@
-1821-07-29 19:40:05
+1821-08-11 18:33:38
 
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -6,27 +6,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("str_vec_Create", str_vec_CreateTy);
-
-	FunctionType *str_vec_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_vec_Load", str_vec_LoadTy);
-
-	FunctionType *str_vec_StoreTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_vec_Store", str_vec_StoreTy);
-
-	FunctionType *PrintStrVecTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("PrintStrVec", PrintStrVecTy);
 
 	FunctionType *LenStrVecTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

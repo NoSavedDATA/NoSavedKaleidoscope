@@ -172,9 +172,6 @@ bool in_char_ptr_vec(const char *value, const std::vector<char *>& list) {
 bool in_floatptr_vec(const float *value, const std::vector<float *>& list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }
-bool in_halfptr_vec(const half *value, const std::vector<half *>& list) {
-    return std::find(list.begin(), list.end(), value) != list.end();
-}
 bool in_int8ptr_vec(const int8_t* value, const std::vector<int8_t*>& list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }

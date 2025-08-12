@@ -255,13 +255,9 @@ char Tokenizer::get() {
 
 
 bool Tokenizer::importFile(std::string filename, int dots) {
-    std::cout << "Tokenizer::importFile " << filename << ".\n";
-    std::cout << "importing with " << dots << " dots.\n";
-    
-    // if (dots>0)
-    //   filename = current_dir + "/" + filename;
-  
-    std::cout << "importFile " << filename << ".\n";
+    // std::cout << "Tokenizer::importFile " << filename << ".\n";
+    // std::cout << "importing with " << dots << " dots.\n";   
+    // std::cout << "importFile " << filename << ".\n";
     
     auto file = std::make_unique<std::ifstream>(filename);
     if (!file->is_open())
@@ -274,7 +270,7 @@ bool Tokenizer::importFile(std::string filename, int dots) {
     current_dir = fs::path(filename).parent_path().string();
 
 
-    std::cout << "importing" << ".\n";
+    // std::cout << "importing" << ".\n";
 
 
 
@@ -481,10 +477,8 @@ static int get_token() {
       IdentifierStr = "__slee_p_";
     if (IdentifierStr == "tanh")
       IdentifierStr = "_tanh";
-    if (IdentifierStr == "ret")
-      return tok_ret;
     if (IdentifierStr == "return")
-      return tok_return;
+      return tok_ret;
     if (IdentifierStr == "as")
       return tok_as;
     return tok_identifier;
@@ -638,18 +632,17 @@ int getNextToken() {
 void get_tok_util_space() {
   if(CurTok!=tok_space&&tokenizer.cur_c!=10) // gets until the \n before switching files
   {
-    std::cout << "CurTok: " << ReverseToken(CurTok) << " / " << CurTok  << " / " << std::to_string(int(tokenizer.cur_c)) << ".\n";
-    // std::cout << "CurTok: " << ReverseToken(CurTok) << " / " << CurTok  << " / " << ".\n";
+    // std::cout << "CurTok: " << ReverseToken(CurTok) << " / " << CurTok  << " / " << std::to_string(int(tokenizer.cur_c)) << ".\n";
     char c=' ';
     while(c!=10)
     {
       int _c = c;
       c = tokenizer.get();
-      std::cout << "Get " << c << ".\n";
+      // std::cout << "Get " << c << ".\n";
     }
   }
   CurTok = tok_space;
-  LogBlue("Line: " + cur_line);
+  // LogBlue("Line: " + cur_line);
   cur_line = "";
   LineCounter++;
 }

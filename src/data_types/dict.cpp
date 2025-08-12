@@ -1,4 +1,5 @@
 #include <any>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -116,7 +117,6 @@ extern "C" void *dict_Query(Scope_Struct *scope_struct, DT_dict *dict, char *que
   // std::cout << "INDEX AT " << query << ".\n";
     
   std::string type = (*dict->data_types)[query];
-  std::cout << "dict query " << query << " for data type " << type << ".\n";
 
   if (type=="float")
   {

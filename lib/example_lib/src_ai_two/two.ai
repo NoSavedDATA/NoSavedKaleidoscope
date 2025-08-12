@@ -1,5 +1,5 @@
 
 
-def oh_yeah()
+def float oh_yeah()
     print("HO YEAH BABE")
 

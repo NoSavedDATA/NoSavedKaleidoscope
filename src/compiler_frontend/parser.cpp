@@ -70,6 +70,26 @@ std::string Extract_List_Suffix(const std::string& input) {
 }
 
 
+std::string Extract_List_Prefix(const std::string& input) {
+    static std::mutex mtx;
+    std::lock_guard<std::mutex> lock(mtx);
+
+    std::string target = "_list";
+    size_t pos = input.find(target);
+    if (pos != std::string::npos)
+        return input.substr(0, pos);
+
+
+    target = "_dict";
+    pos = input.find(target);
+    if (pos != std::string::npos)
+        return input.substr(0, pos);
+    
+
+    return input; // Return original string if "_list" not found
+}
+
+
 
 /// numberexpr ::= number
 std::unique_ptr<ExprAST> ParseNumberExpr(Parser_Struct parser_struct) {
@@ -312,7 +332,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
       
       if (type!="none")
       {
-        std::cout << "add variable of type " << type << ".\n";
         auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
         aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
       } else {
@@ -322,13 +341,11 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
           return LogError(parser_struct.line, _error);
         }  
 
-        std::cout << "Returning ParseIdentifierExpr as a String Expression: " << IdName << "\n";
         aux = std::make_unique<StringExprAST>(IdName);
       }
 
       IdentifierList.push_back(std::move(aux));
 
-      std::cout << "ADD " << IdName << " OF TYPE " << type << " TO LIST.\n";
 
       if (CurTok!=',')
         break;
@@ -338,7 +355,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     }
 
 
-    std::cout << "RETURNTING VARIABLE LIST" << ".\n";
     aux = std::make_unique<VariableListExprAST>(std::move(IdentifierList));
     return std::move(aux);
   } 
@@ -369,7 +385,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
         return LogError(parser_struct.line, _error);
       }  
 
-      std::cout << "Returning ParseIdentifierExpr as a String Expression: " << IdName << "\n";
       aux = std::make_unique<StringExprAST>(IdName);
     }
     
@@ -817,7 +832,6 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
 
   int async_count = NumVal;
   getNextToken();
-  std::cout << "Cur tok is " << ReverseToken(CurTok) << ".\n";
   
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   
@@ -1250,7 +1264,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
 
     IdName = inner_expr->Name;
-    std::cout << "VECTOR NAME " << IdName << ".\n";
 
     std::string fn_name = Get_Nested_Name(inner_expr->Expr_String, parser_struct, false);
     // std::string fn_name = (inner_expr->From_Self) ? parser_struct.class_name : parser_struct.function_name;
@@ -1258,8 +1271,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
 
     if (typeVars[fn_name].find(IdName) != typeVars[fn_name].end())
       type = typeVars[fn_name][IdName];
-    else if (stringMethods.find(IdName) != stringMethods.end())
-      type = "str";
     else {
       std::string _error = "Idexing self/attribute variable " + IdName + " was not found on scope " + fn_name + ".";
       return LogError(parser_struct.line, _error);
@@ -1311,7 +1322,6 @@ std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<NameableExprAST> inner_ex
     // type = "none";
   }
 
-  std::cout << "TYPE OF " << IdName << " IS " << type << ".\n";
 
 
   std::unique_ptr<NestedVariableExprAST> var_expr = std::make_unique<NestedVariableExprAST>(std::move(inner_expr), parser_struct, type);
@@ -1624,7 +1634,6 @@ std::unique_ptr<ExprAST> ParseGlobalExpr(Parser_Struct parser_struct, std::strin
       return LogError(parser_struct.line, "Global expression must contain identifiers only.");
 
     ParseIdentifierExpr(parser_struct, class_name);
-    globalVars.push_back(IdentifierStr);
 
     // End of var list, exit loop.
     if (CurTok != ',')
@@ -2198,7 +2207,7 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
   bool is_default = false;
   if(IdentifierStr=="default")
   {
-    std::cout << "Got a default import" << ".\n";
+    // std::cout << "Got a default import" << ".\n";
     is_default=true;
     getNextToken();
   }
@@ -2215,15 +2224,15 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     getNextToken();
     dots++;
     IdentifierStr="";
-    std::cout << "get .lib" << ".\n";
-    LogBlue("Token is " + ReverseToken(CurTok));
+    // std::cout << "get .lib" << ".\n";
+    // LogBlue("Token is " + ReverseToken(CurTok));
   }
 
   while(CurTok==tok_class_attr)
   {
     lib_name += IdentifierStr + "/";
     getNextToken();
-    std::cout << "get tok_class_attr" << ".\n";
+    // std::cout << "get tok_class_attr" << ".\n";
   }
 
   lib_name += IdentifierStr;
@@ -2235,16 +2244,13 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
   // Import logic
   if(fs::exists(full_path_lib)||dots>0)
   {
-    // std::string ai_lib = lib_name+".ai";
-    std::cout << "READING AI LIB " << full_path_lib << ".\n";
+    // std::cout << "READING AI LIB " << full_path_lib << ".\n";
 
-    std::cout << "Reverse: " << ReverseToken(CurTok) << ".\n";
-    std::cout << "cur_line: " << cur_line << ".\n";
-
+    // std::cout << "Reverse: " << ReverseToken(CurTok) << ".\n";
+    // std::cout << "cur_line: " << cur_line << ".\n";
 
     get_tok_util_space();
     tokenizer.importFile(full_path_lib, dots);
-
 
     return nullptr;
   }
@@ -2377,7 +2383,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
       if (is_object) {
         typeVars[Name][IdentifierStr] = data_type;
         Object_toClass[Name][IdentifierStr] = data_type; 
-        std::cout << "----PARSING OBJECT INSIDE CLASS " << IdentifierStr << "/" << data_type << ".\n";
       }
       else
        typeVars[Name][IdentifierStr] = data_type;

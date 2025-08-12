@@ -18,30 +18,9 @@
 
 extern "C" void *str_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
-  if (init_val!=nullptr)
-  { 
-    std::vector<char *> vec = *static_cast<std::vector<char *>*>(init_val);
-    ClassStrVecs[name] = vec;
-  }
-
-
-  return nullptr;
+  return init_val;
 }
 
-extern "C" void *str_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
-  // std::cout << "Load StrVec On Demand var to load: " << object_var_name << "\n";
-  
-  void *ret = &ClassStrVecs[object_var_name];
-  return ret;
-}
-
-
-extern "C" void str_vec_Store(char *name, std::vector<char *> value, Scope_Struct *scope_struct){
-  // std::cout << "STORING " << name << " on demand as StrVec type.\n";
-  ClassStrVecs[name] = value;
-  // move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
-}
 
 
 void str_vec_Clean_Up(void *data_ptr) {
@@ -49,14 +28,6 @@ void str_vec_Clean_Up(void *data_ptr) {
 }
 
 
-
-
-extern "C" float PrintStrVec(std::vector<char*> vec)
-{
-  for (int i=0; i<vec.size(); i++)
-    std::cout << vec[i] << "\n";
-  return 0;
-}
 
 
 extern "C" int LenStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
@@ -127,7 +98,7 @@ extern "C" void * _glob_b_(Scope_Struct *scope_struct, char *pattern) {
   std::string random_str = RandomString(15);
   StrVecAuxHash[random_str] = ret;
   AuxRandomStrs[random_str] = "str_vec";
-    
+ 
   return &StrVecAuxHash[random_str];
 }
 
@@ -167,7 +138,9 @@ extern "C" int str_vec_CalculateIdx(std::vector<char *> vec, int first_idx, ...)
 
 
 extern "C" float str_vec_print(Scope_Struct *scope_struct, std::vector<char *> vec) {
+
   std::cout << "[";
+
   for (int i=0; i<vec.size()-1; i++)
     std::cout << vec[i] << ", ";
 

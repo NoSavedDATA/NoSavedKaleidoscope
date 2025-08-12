@@ -232,7 +232,7 @@ bool Check_Is_Compatible_Type(std::string LType, const std::unique_ptr<ExprAST> 
   { 
     if (dynamic_cast<NestedVectorIdxExprAST *>(RHS.get()) || dynamic_cast<VecIdxExprAST *>(RHS.get()))
     {
-      RType = remove_suffix(RType, "_list");
+      RType = Extract_List_Prefix(RType);
       RType = remove_suffix(RType, "_vec");
     }
 
@@ -248,7 +248,6 @@ bool Check_Is_Compatible_Type(std::string LType, const std::unique_ptr<ExprAST> 
 
 
 Value *DataExprAST::codegen(Value *scope_struct) {
-  p2t("DataExpr");
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
@@ -274,7 +273,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     if((Type=="float"||Type=="int")&&!(is_self||is_attr))
     { 
-      std::cout << "DataExpr STORE OF " << parser_struct.function_name << "/" << VarName << " type " << Type << ".\n";
+      // std::cout << "DataExpr STORE OF " << parser_struct.function_name << "/" << VarName << " type " << Type << ".\n";
 
       llvm::Type *alloca_type = get_type_from_str(Type);
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
@@ -287,10 +286,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     Value *var_name, *scopeless_name;
 
     // --- Name Solving --- //
-    p2t("DataExpr get var name");
     var_name = callret("CopyString", {global_str(VarName)});
-
-    p2t("DataExpr name mangle");
 
 
     // if (is_self||is_attr)
@@ -303,7 +299,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
 
-    p2t("DataExpr Create nodes vector");
 
     Value *notes_vector = callret("CreateNotesVector", {});
 
@@ -341,7 +336,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     create_fn = ((ends_with(create_fn,"_dict")) ? "dict" : create_fn);
     create_fn = create_fn + "_Create";
 
-    p2t("DataExpr Call create for " + create_fn);
 
 
     initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
@@ -545,7 +539,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     StartVal = Builder->CreateSIToFP(StartVal, Type::getFloatTy(*TheContext), "lfp");
 
   // std::cout << "CURRENT FUNCTION ON CODEGEN " << parser_struct.function_name << ".\n";
-  std::cout << "-------------------------- FOR EXPR COND TYPE: " << End->GetType() << ".\n";
 
 
 
@@ -967,19 +960,26 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   }
 
 
-  std::string type = Extract_List_Suffix(Type);
-  
+  std::string homogeneous_type = Extract_List_Suffix(Type);
+  std::string type = Extract_List_Prefix(Type);
 
-  if (type == "dict") {
-    std::string query_fn = type+"_Query";
-    return callret("dict_Query", {scope_struct, loaded_var, idx});
+
+  if (homogeneous_type == "dict") {
+    std::string query_fn = homogeneous_type+"_Query";
+    Value *ret_val = callret("dict_Query", {scope_struct, loaded_var, idx});
+    if(type=="float"||type=="int")
+      ret_val = callret("to_"+type, {scope_struct, ret_val});
+    return ret_val;
   }
   
   if (!Idx->IsSlice) {
-    std::string idx_fn = type + "_Idx";
-    return callret(idx_fn, {scope_struct, loaded_var, idx});
+    std::string idx_fn = homogeneous_type + "_Idx";
+    Value *ret_val = callret(idx_fn, {scope_struct, loaded_var, idx});
+    if(type=="float"||type=="int")
+      ret_val = callret("to_"+type, {scope_struct, ret_val});
+    return ret_val;
   } else {
-    std::string slice_fn = type + "_Slice";    
+    std::string slice_fn = homogeneous_type + "_Slice";    
     Value *ret =  callret(slice_fn, {scope_struct, loaded_var, idx});
     call("Delete_Ptr", {idx});
     return ret;
@@ -1301,6 +1301,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         L = Builder->CreateFCmpUNE(L, R, "cmptmp");
         // Convert bool 0/1 to float 0.0 or 1.0
         return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+      case tok_minor_eq:
+          L = Builder->CreateFCmpULE(L, R, "cmptmp");  // less or equal
+          return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+      case tok_higher_eq:
+          L = Builder->CreateFCmpUGE(L, R, "cmptmp");  // greater or equal
+          return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
       default:
         break;
       }
@@ -1339,6 +1345,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
       case tok_diff:
         L = Builder->CreateICmpNE(L, R, "cmptmp");
+        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+      case tok_minor_eq:
+        L = Builder->CreateICmpSLE(L, R, "cmptmp");
+        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+      case tok_higher_eq:
+        L = Builder->CreateICmpSGE(L, R, "cmptmp");
         return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
       default:
         break;
@@ -1614,17 +1626,12 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   std::vector<std::string> previous_scope_value_types;
   std::vector<std::string> previous_scope_value_names;
 
-  std::cout << "Function is: " << parser_struct.function_name << ".\n";
-  std::cout << "-----------------------" << ".\n";
+
   for (auto &pair : function_allocas["__anon_expr"]) {
-    std::cout << "Found alloca " << pair.first << ".\n";
 
     std::string type;
     if (Object_toClass[parser_struct.function_name].count(pair.first)>0)
-    {
       type = "void";
-      std::cout << "Type is void ptr" << ".\n";
-    }
     else
     {   
       type = typeVars[parser_struct.function_name][pair.first];
@@ -1637,16 +1644,13 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
     }
 
     Value *local = load_alloca(pair.first, type, "__anon_expr");
-    std::cout << "call dive_" << type  << ".\n";
     call("dive_"+type, {global_str(functionName), local, global_str(pair.first)});
 
 
     previous_scope_value_types.push_back(type);
     previous_scope_value_names.push_back(pair.first);
 
-    std::cout << "\n";
   }
-  std::cout << "-----------------------" << ".\n";
   
   //Dive scope_struct
   Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName), barrier}); 
@@ -1654,12 +1658,10 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 
 
   // emit EntryBB value
-  std::cout << "\n\nfunction * get basic block for function: " << functionName << "\n";
   BasicBlock *BB = BasicBlock::Create(*TheContext, "async_bb", asyncFun);
   Builder->SetInsertPoint(BB);
   
 
-  std::cout << "setted insert point" << ".\n";
 
 
   
@@ -1667,7 +1669,6 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   // Recover scope_struct Value * on the new function
   Value *scope_struct_copy = Builder->CreateCall(TheModule->getFunction("scope_struct_Load_for_Async"), {Builder->CreateGlobalString(functionName)}); 
 
-  std::cout << "loaded scope for async" << ".\n";
   // define body of function
   Value *V;
 
@@ -1685,15 +1686,9 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 
   
   for (auto &body : asyncBody)
-  {
-    // std::string pre = std::string("codegenAsyncFunction Body codegen pre of: ") + typeid(*body).name();
-    // p2t(pre);
     V = body->codegen(scope_struct_copy);
-    // p2t("codegenAsyncFunction body post");
-  }
 
 
-  std::cout << "got bodies" << ".\n";
 
   if (V)
   { 
@@ -1833,9 +1828,7 @@ Value *SplitParallelExprAST::codegen(Value *scope_struct) {
   
   Value *inner_vec = Inner_Vec->codegen(scope_struct);
   SetType(Inner_Vec->GetType());
-  std::cout << "SPLIT PARALLEL CODEGEN" << ".\n";
-  // return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // return callret("nullptr_get", {});
+
 
   std::string split_fn = Inner_Vec->GetType() + "_Split_Parallel";
 
@@ -1843,13 +1836,9 @@ Value *SplitParallelExprAST::codegen(Value *scope_struct) {
 }
 
 Value *SplitStridedParallelExprAST::codegen(Value *scope_struct) {
-  // call("scope_struct_Increment_Thread", {scope_struct});
   
   Value *inner_vec = Inner_Vec->codegen(scope_struct);
   SetType(Inner_Vec->GetType());
-  std::cout << "SPLIT STRIDED PARALLEL CODEGEN" << ".\n";
-  // return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // return callret("nullptr_get", {});
 
   std::string split_fn = Inner_Vec->GetType() + "_Split_Strided_Parallel";
 

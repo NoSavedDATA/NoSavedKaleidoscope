@@ -290,17 +290,17 @@ void set_functions_args_type() {
 		Function_Arg_Names["arange_float"].push_back("1");
 		Function_Arg_Names["arange_float"].push_back("2");
 		
-		Function_Arg_Types["zeros_vec"]["0"] = "Scope_Struct";
-		Function_Arg_Types["zeros_vec"]["1"] = "int";
+		Function_Arg_Types["zeros_float"]["0"] = "Scope_Struct";
+		Function_Arg_Types["zeros_float"]["1"] = "int";
 		
-		Function_Arg_Names["zeros_vec"].push_back("0");
-		Function_Arg_Names["zeros_vec"].push_back("1");
+		Function_Arg_Names["zeros_float"].push_back("0");
+		Function_Arg_Names["zeros_float"].push_back("1");
 		
-		Function_Arg_Types["ones_vec"]["0"] = "Scope_Struct";
-		Function_Arg_Types["ones_vec"]["1"] = "int";
+		Function_Arg_Types["ones_float"]["0"] = "Scope_Struct";
+		Function_Arg_Types["ones_float"]["1"] = "int";
 		
-		Function_Arg_Names["ones_vec"].push_back("0");
-		Function_Arg_Names["ones_vec"].push_back("1");
+		Function_Arg_Names["ones_float"].push_back("0");
+		Function_Arg_Names["ones_float"].push_back("1");
 		
 		Function_Arg_Types["float_vec_first_nonzero"]["0"] = "Scope_Struct";
 		Function_Arg_Types["float_vec_first_nonzero"]["1"] = "float_vec";

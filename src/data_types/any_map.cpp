@@ -1,4 +1,5 @@
 #include <any>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <stdexcept>

@@ -36,6 +36,7 @@ extern std::map<std::string, llvm::Type *> ClassStructs;
 
 
 std::string Extract_List_Suffix(const std::string&);
+std::string Extract_List_Prefix(const std::string& input);
 
 
 std::unique_ptr<ExprAST> ParseExpression(Parser_Struct parser_struct, std::string class_name="", bool can_be_list=true);

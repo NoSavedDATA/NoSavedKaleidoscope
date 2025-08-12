@@ -2,8 +2,8 @@
 #include <string>
 
 
-#include "include.h"
 #include "testing_struct.h"
+#include "include.h"
 
 
 extern "C" DT_placeholder *placeholder_Create(Scope_Struct *scope_struct, char *name,
