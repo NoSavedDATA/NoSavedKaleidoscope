@@ -14,6 +14,11 @@
 #include "include.h"
 
 
+#ifdef _WIN32
+#define strtok_r strtok_s
+#endif
+
+
 
 
   

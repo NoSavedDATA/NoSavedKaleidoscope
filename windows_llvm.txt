@@ -5,6 +5,9 @@ md build
 cd build
 
 cmake -DLLVM_ENABLE_PROJECTS=clang -G "Visual Studio 17 2022" -A x64 -Thost=x64 ..\llvm
+
+cmake -DLLVM_ENABLE_PROJECTS=clang -G "Visual Studio 17 2022" -A x64 -Thost=x64 -DCMAKE_C_FLAGS_RELEASE="/MT" -DCMAKE_CXX_FLAGS_RELEASE="/MT" ..\llvm
+
 cmake --build . --config Release
 cmake --install . --config Release --prefix "C:\llvm"
 

@@ -159,20 +159,7 @@ class VariableExprAST : public ExprAST {
 };
 
 
-class VecIdxExprAST : public ExprAST {
-  
-  public:
-    std::unique_ptr<ExprAST> Loaded_Var;
-    std::unique_ptr<IndexExprAST> Idx;
-
-    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::unique_ptr<IndexExprAST> Idx, std::string Type);
-
-    Value *codegen(Value *scope_struct) override;
-    const std::string &getName() const;
-    std::string GetName() override;
-};
-  
-  
+ 
   
 class ObjectVecIdxExprAST : public ExprAST {
 
@@ -394,6 +381,22 @@ class NestedVectorIdxExprAST : public NameableExprAST {
     NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct, std::unique_ptr<IndexExprAST> Idx, std::string);
     Value *codegen(Value *scope_struct) override;
 };
+
+
+
+class VecIdxExprAST : public NameableExprAST {
+  
+  public:
+    std::unique_ptr<ExprAST> Loaded_Var;
+    std::unique_ptr<IndexExprAST> Idx;
+
+    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::unique_ptr<IndexExprAST> Idx, std::string Type);
+
+    Value *codegen(Value *scope_struct) override;
+    const std::string &getName() const;
+    std::string GetName() override;
+};
+
 
 
 void Print_Names_Str(std::vector<std::string>);
