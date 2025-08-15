@@ -2258,9 +2258,6 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
 Value *NameableExprAST::codegen(Value *scope_struct) {}
 Value *EmptyStrExprAST::codegen(Value *scope_struct) {}
 
-Value *SelfExprAST::codegen(Value *scope_struct) {
-  return callret("get_scope_object", {scope_struct});
-}
 
 
 
@@ -2338,9 +2335,12 @@ int Get_Object_Offset(std::vector<std::string> expressions_string_vec, Parser_St
   return ClassVariables[_class][expressions_string_vec[last]];
 }
 
-
+Value *SelfExprAST::codegen(Value *scope_struct) {
+  return callret("get_scope_object", {scope_struct});
+}
 
 Value *NestedStrExprAST::codegen(Value *scope_struct) {  
+
   if(skip)
     return Inner_Expr->codegen(scope_struct);
  
@@ -2363,13 +2363,10 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
     return obj_ptr;
 
   } else if (height>1) { 
-
     
     Value *obj_ptr = Inner_Expr->codegen(scope_struct);
 
-
-
-    
+ 
     offset = Get_Object_Offset(Expr_String, parser_struct);
   
     obj_ptr = callret("offset_object_ptr", {obj_ptr, const_int(offset)});
@@ -2377,6 +2374,7 @@ Value *NestedStrExprAST::codegen(Value *scope_struct) {
 
     std::string fn_name = Get_Nested_Name(Expr_String, parser_struct, false);
     std::string _type = typeVars[fn_name][Name];
+
     
     if(_type!="int"&&_type!="float" && (!IsLeaf||Load_Last))
       obj_ptr = callret("object_Load_slot", {obj_ptr});
@@ -2426,16 +2424,13 @@ Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {
 
 Value *NestedVariableExprAST::codegen(Value *scope_struct) {
   // std::cout << "Nested Variable Expr" << ".\n";
-
   // Print_Names_Str(Inner_Expr->Expr_String);
 
   Value *ptr = Inner_Expr->codegen(scope_struct);
 
-  if (Load_Val&&(Type=="float"||Type=="int")) { 
+  if (Load_Val&&(Type=="float"||Type=="int"))
     return callret("object_Load_"+Type, {ptr});
-  }
-
-
+  
   return ptr;
 }
 

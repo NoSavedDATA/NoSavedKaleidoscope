@@ -1,5 +1,6 @@
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 
 #include <cstdlib>
 #include <dlfcn.h>
@@ -191,7 +192,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         JITSymbolFlags::Exported | JITSymbolFlags::Callable
     };
 
-    if (auto Err = JD.define(absoluteSymbols(symbols)))
+    if (auto Err = JD.define(llvm::orc::absoluteSymbols(symbols)))
         LogError(-1, "Failed to define native function in JIT: " + toString(std::move(Err)));
 }
 
@@ -215,7 +216,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
         }
         if (Name=="_glob_b_")
             nsk_data_type = "str_vec";
-        
+
         functions_return_type[Name] = nsk_data_type;
     }
 
@@ -388,7 +389,7 @@ int LibParser::_getToken() {
 
 void LibParser::ParseExtern() {
 
-    std::string file_name = files[file_idx];
+    std::string file_name = files[file_idx].string();
 
     _getToken(); // eat extern
 

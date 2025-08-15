@@ -62,7 +62,7 @@ extern "C" char * shuffle_str(char *string_list)
   std::vector<std::string> splitted = split(string_list, "|||");
 
 
-  std::random_shuffle(splitted.begin(), splitted.end());
+  std::shuffle(splitted.begin(), splitted.end(), MAIN_PRNG);
 
   for (int i=0; i<splitted.size(); i++)
   {

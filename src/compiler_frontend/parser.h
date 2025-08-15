@@ -107,7 +107,7 @@ std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string
 std::unique_ptr<ExprAST> ParseStrVecExpr(Parser_Struct parser_struct); 
 
 
-std::unique_ptr<ExprAST> ParseSelfExpr(Parser_Struct parser_struct, std::string class_name=""); 
+std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<ExprAST>, Parser_Struct parser_struct, std::string class_name=""); 
 
 
 std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::unique_ptr<ExprAST>, std::string class_name); 

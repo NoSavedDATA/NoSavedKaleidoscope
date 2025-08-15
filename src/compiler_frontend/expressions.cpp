@@ -159,6 +159,8 @@ VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::unique_pt
               : Loaded_Var(std::move(Loaded_Var)), Idx(std::move(Idx)) {
   this->isVarLoad = true; //todo: remove this?
   this->SetType(Type);
+
+  
 }
   
 const std::string &VecIdxExprAST::getName() const { return Name; }

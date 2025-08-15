@@ -3,7 +3,7 @@
 #-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -lcudnn -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -w -o bin/nsk
 
 CXX := clang++-19
-CXXFLAGS := -g -O3 -rdynamic
+CXXFLAGS := -O3 -rdynamic
 LLVM_CONFIG := llvm-config-19 --link-static --libs core orcjit native
 SYSTEM_LIBS := -ldl -lrt -pthread
 OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -w
