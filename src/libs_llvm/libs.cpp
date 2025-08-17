@@ -752,13 +752,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("str_vec_print", str_vec_printTy);
 
-	FunctionType *dict_DisposeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("dict_Dispose", dict_DisposeTy);
-
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -1045,13 +1038,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_Create", str_CreateTy);
-
-	FunctionType *str_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Load", str_LoadTy);
 
 	FunctionType *str_StoreTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

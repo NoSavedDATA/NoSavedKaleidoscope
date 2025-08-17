@@ -28,7 +28,6 @@ T DT_dict::get(std::string key) {
         std::cout << "Key " << key << " was not found on dictionary.";
         return nullptr;
     }
-    // return static_cast<T>(std::any_cast<void *>((*data)[key]));
 }
 
 template <>
@@ -41,12 +40,6 @@ float DT_dict::get<float>(std::string key) {
         std::cout << "Key " << key << " was not found on dictionary.";
         return -1;
     }
-    // if (data->count(key)<=0) {
-    //     // throw std::out_of_range("key out of range");
-    //     std::cout << "key out of range.";
-    // }
-
-    // return std::any_cast<float>((*data)[key]);
 }
 
 
@@ -107,7 +100,7 @@ void DT_dict::append(char *key, std::any value, std::string data_type) {
     (*data)[_key] = value;
     (*data_types)[_key] = data_type;
 
-    move_to_char_pool(strlen(key)+1, key, "Append to DT_dict");
+    // move_to_char_pool(strlen(key)+1, key, "Append to DT_dict");
 }
 
 
@@ -142,39 +135,3 @@ void DT_dict::print() {
 
 
 
-
-extern "C" float dict_Dispose(DT_dict *notes_vector) {
-
-    // for (int i=0; i<notes_vector->size(); i++)
-    // {
-    //     if (notes_vector->data_types->at(i)=="str")
-    //     {
-    //         char *val = notes_vector->get<char *>(i);
-    //         delete[] val;
-    //     }
-
-    // }
-    
-    delete notes_vector;
-
-
-    return 0;
-}
-
-
-// extern "C" DT_dict *Add_Float_To_NotesVector(DT_dict *notes_vector, float value) {
-
-//     notes_vector->append(value, "float");
-
-//     return notes_vector;
-// }
-
-
-
-// extern "C" DT_dict *Add_String_To_NotesVector(DT_dict *notes_vector, char *value) {
-
-//     // std::cout << "Add_String " << value << " to notes_vector" << ".\n";
-//     notes_vector->append((void *)value, "str");
-
-//     return notes_vector;
-// }

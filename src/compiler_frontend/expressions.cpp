@@ -155,13 +155,6 @@ std::string VariableExprAST::GetName()  {
 }
 
 
-VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::unique_ptr<IndexExprAST> Idx, std::string Type)
-              : Loaded_Var(std::move(Loaded_Var)), Idx(std::move(Idx)) {
-  this->isVarLoad = true; //todo: remove this?
-  this->SetType(Type);
-
-  
-}
   
 const std::string &VecIdxExprAST::getName() const { return Name; }
 std::string VecIdxExprAST::GetName()  { return Name; }
@@ -273,6 +266,13 @@ NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> 
   // Print_Names_Str(Expr_String);
 }
 
+VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, std::string Type)
+              : Loaded_Var(std::move(Loaded_Var)), Name(Name), Idx(std::move(Idx)) {
+  this->isVarLoad = true; //todo: remove this?
+  this->SetType(Type); 
+
+  Expr_String = {Name};
+}
 
 
 NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,

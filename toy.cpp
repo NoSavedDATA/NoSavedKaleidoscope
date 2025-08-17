@@ -111,6 +111,7 @@ std::map<std::string, std::string> reverse_ops;
 
 
 
+std::vector<std::string> Sys_Arguments;
 
 
 
@@ -2535,46 +2536,64 @@ static void HandleTopLevelExpression() {
   }
 }
 
+
+void InitializeTokenizer() {
+
+    if (Sys_Arguments.size()>0)
+    {
+        tokenizer.openFile(Sys_Arguments[0]);
+        getNextToken();
+
+    } else
+        getNextToken();
+
+}
+
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
-  while (true) {
-    //if (CurTok!=tok_space)
-    //  std::cout << "MAIN LOOP, reading token: " << ReverseToken(CurTok) << "\n";
-    
 
-    switch (CurTok) {
-      case 13:
-        std::cout << "FOUND CARRIAGE RETURN" << ".\n";
-        break;
-      case tok_eof:
-        return;
-      case ';': // ignore top-level semicolons.
-        getNextToken();
-        break;
-      case tok_space:
-        getNextToken();
-        break;
-      case tok_tab:
-        getNextToken();
-        break;
-      case tok_def:
-        HandleDefinition();
-        break;
-      case tok_class:
-        HandleClass();
-        break;
-      case tok_import:
-        HandleImport();
-        break;
-      case tok_extern:
-        HandleExtern();
-        break;
-      default:
-        // std::cout << "TOP LEVEL WITH " << CurTok << "/" << ReverseToken(CurTok) << "/" << NumVal << ".\n";
-        HandleTopLevelExpression();
-        break;
+
+    while (true) {
+        //  std::cout << "MAIN LOOP, reading token: " << ReverseToken(CurTok) << "\n";
+        
+
+        switch (CurTok) {
+        case 13:
+            std::cout << "FOUND CARRIAGE RETURN" << ".\n";
+            break;
+        case tok_eof:
+            return;
+        case ';': // ignore top-level semicolons.
+            getNextToken();
+            break;
+        case tok_space:
+            getNextToken();
+            break;
+        case tok_tab:
+            getNextToken();
+            break;
+        case tok_def:
+            HandleDefinition();
+            break;
+        case tok_class:
+            HandleClass();
+            break;
+        case tok_import:
+            HandleImport();
+            break;
+        case tok_extern:
+            HandleExtern();
+            break;
+        default:
+            
+            // std::cout << "Wait top level" <<  ".\n";
+            // std::cout << "reading token: " << CurTok << "/" << ReverseToken(CurTok) << "\n";
+
+            HandleTopLevelExpression(); 
+            // std::cout << "Finished top level" <<  ".\n";
+            break;
+        }
     }
-  }
 }
 
 
@@ -2606,11 +2625,14 @@ void early_init() {
   InitializeNativeTargetAsmParser();
 }
 
-int main() {
+int main(int argc, char* argv[]) {
 
 
 
-  
+    for (int i = 1; i < argc; i++) {
+        // std::cout << "Argument " << i << ": " << argv[i] << "\n";
+        Sys_Arguments.push_back(argv[i]);
+    }
   
   
 
@@ -2720,8 +2742,9 @@ int main() {
 
 
   // Prime the first token.
-  
-  getNextToken();
+
+
+  InitializeTokenizer();
 
   TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
   InitializeModule();

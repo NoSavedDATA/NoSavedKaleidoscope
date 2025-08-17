@@ -28,6 +28,8 @@ return_string_fn, threaded_tensor_functions, require_scope_functions, notators_s
 extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 
+
+extern std::vector<std::string> Sys_Arguments;
  
 extern std::map<std::string, std::vector<std::string>> Equivalent_Types;
 

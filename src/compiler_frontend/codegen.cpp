@@ -363,28 +363,18 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
 
     } else if (is_attr) {
+      LogError(parser_struct.line, "Creating attribute in a data expression is not supported.");
     }
     else {
-      
-
-
       llvm::Type *alloca_type = get_type_from_str(Type);
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
       Builder->CreateStore(initial_value, alloca);
 
-
       function_allocas[parser_struct.function_name][VarName] = alloca;
-
-
     }
-
       
-    // p2t("DataExpr Dispose notes vector");
-    // p2t("Dispose notes vector of " + Type + "/" + Name + "/" + std::to_string(is_self) + "/" + std::to_string(is_attr));
 
     call("Dispose_NotesVector", {notes_vector, scopeless_name});
-
-    
     call("str_Delete", {var_name});
   }
 
@@ -965,7 +955,6 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
 
   if (homogeneous_type == "dict") {
-    std::string query_fn = homogeneous_type+"_Query";
     Value *ret_val = callret("dict_Query", {scope_struct, loaded_var, idx});
     if(type=="float"||type=="int")
       ret_val = callret("to_"+type, {scope_struct, ret_val});
@@ -2036,8 +2025,7 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
     {
       LogError(parser_struct.line, "Dictionary key must be of type string");
       return const_float(0);
-    }
-    
+    } 
     Value *key = Keys[i]->codegen(scope_struct);
     values.push_back(key);
 
@@ -2068,7 +2056,6 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
   values.push_back(value);
 
   seen_var_attr = false;
-
 
   return callret("dict_New", values);
 }
@@ -2406,11 +2393,18 @@ Value *NestedVectorIdxExprAST::codegen(Value *scope_struct) {
   Value *idx = Idx_Calc_Codegen(Type, obj_ptr, Idx, scope_struct);
 
 
+  std::string homogeneous_type = Extract_List_Suffix(Type);
+  std::string type = Extract_List_Prefix(Type);
+
+  if (homogeneous_type=="dict") {
+    return callret("dict_Query", {scope_struct, obj_ptr, idx});
+  }
+
   if (!Idx->IsSlice)
-    return callret(Type+"_Idx", {scope_struct, obj_ptr, idx});
+    return callret(homogeneous_type+"_Idx", {scope_struct, obj_ptr, idx});
   else
   {
-    Value *ret = callret(Type+"_Slice", {scope_struct, obj_ptr, idx});
+    Value *ret = callret(homogeneous_type+"_Slice", {scope_struct, obj_ptr, idx});
     call("Delete_Ptr", {idx});
     return ret;
   }  

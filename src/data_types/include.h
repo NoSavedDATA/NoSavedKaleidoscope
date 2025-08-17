@@ -7,6 +7,7 @@
 
 #include "any_map.h"
 #include "codegen_notes.h"
+#include "dict.h"
 #include "float.h"
 #include "float_vec.h"
 #include "int.h"

@@ -24,25 +24,10 @@
   
 extern "C" char *str_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, char *init_val, DT_list *notes_vector) {
 
-  // std::cout << "Creating string"  << ".\n";
-  // std::cout << "Val: " << init_val << ".\n";
-  
-  NamedStrs[name] = init_val;
-  //std::cout << "Store " << value << " at " << name << "\n";
 
   return init_val;
 }
 
-extern "C" char *str_Load(Scope_Struct *scope_struct, char *name){
-  // std::cout << "Load str " << name << ".\n";
-  //char *ret = CopyString(NamedStrs[name]);
-  
-  char *ret = NamedStrs[name];
-  // move_to_char_pool(strlen(name)+1, name, "free");
-  //delete[] name;
-
-  return ret;
-}
 
 
 

@@ -1,8 +1,1 @@
-1821-08-12 10:24:53
-
-	FunctionType *dict_DisposeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("dict_Dispose", dict_DisposeTy);
+1821-08-15 18:23:12
