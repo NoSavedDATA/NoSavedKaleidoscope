@@ -112,7 +112,7 @@ std::unique_ptr<ExprAST> ParseStringExpr(Parser_Struct parser_struct) {
 
 
 inline void handle_tok_space() {
-  if(CurTok==tok_space)
+  while(CurTok==tok_space)
     getNextToken();
 }
 
@@ -380,7 +380,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
 
     aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
-    aux = std::make_unique<VecIdxExprAST>(std::move(aux), std::move(Idx), type);
+    aux = std::make_unique<VecIdxExprAST>(std::move(aux), IdName, std::move(Idx), type);
     aux->SetIsVec(true);
     
     getNextToken(); // eat ]
@@ -497,6 +497,7 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     
     if (CurTok == tok_post_class_attr_identifier)
       return ParseChainCallExpr(parser_struct, std::move(aux), class_name);
+
     
     return aux;
   }
@@ -875,7 +876,8 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
   
 
   if (CurTok!=tok_space)
-    LogError(parser_struct.line, "Finish requires line break.");
+    LogError(parser_struct.line, "Finish requires a line break.");
+
   getNextToken(); 
 
 
@@ -922,7 +924,6 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
 
 
 std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string class_name) {
-  std::cout << "Parsing new vector" << ReverseToken(CurTok)  << "\n";
 
 
   bool is_unknown_type=false;
@@ -935,7 +936,6 @@ std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string
   std::vector<std::unique_ptr<ExprAST>> Elements;
   if (CurTok != ']') {
     while (true) {
-      // std::cout << "CURRENT TOKEN: " << ReverseToken(CurTok) << ".\n";
       std::string element_type;
 
 
@@ -962,7 +962,8 @@ std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string
         break;
       if (CurTok != ',')
       {
-        LogError(parser_struct.line, "Expected ']' or ',' on the List elements list.");
+        LogErrorBreakLine(parser_struct.line, "Expected \",\" or \"]\" at the list expression.");
+        return nullptr;
       }
       getNextToken();
     }
@@ -999,14 +1000,14 @@ std::unique_ptr<ExprAST> ParseNewDict(Parser_Struct parser_struct, std::string c
       if (auto key = ParseExpression(parser_struct, class_name, false))
         Keys.push_back(std::move(key));
       else {
-        LogError(parser_struct.line, "Expected an expression at dict key.");
+        LogError(parser_struct.line, "Expected an expression at the dict key.");
         return nullptr;
       }
 
 
       if (CurTok!=':')
       {
-        LogError(parser_struct.line, "Expected \":\" at dictionary.");
+        LogError(parser_struct.line, "Expected \":\" at the dict expression.");
         return nullptr;
       }
       getNextToken(); //:
@@ -1033,7 +1034,7 @@ std::unique_ptr<ExprAST> ParseNewDict(Parser_Struct parser_struct, std::string c
         break;
       if (CurTok != ',')
       {
-        LogError(parser_struct.line, "Expected '}' or ',' at the new dict expression.");
+        LogError(parser_struct.line, "Expected \",\" or \"}\" at the dict expression.");
       }
       getNextToken();
     }
@@ -1419,6 +1420,9 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   std::vector<std::unique_ptr<ExprAST>> notes;
 
+
+
+  // Get the Notes vector
   if (CurTok == '[')
   {
     getNextToken();
@@ -1479,6 +1483,10 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
   while (true) {
     std::string Name = IdentifierStr;
 
+
+    std::string prefix_datatype = Extract_List_Prefix(data_type);
+    if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_str(prefix_datatype, data_tokens) )
+      Object_toClass[parser_struct.function_name][IdentifierStr] = prefix_datatype;
     typeVars[parser_struct.function_name][IdentifierStr] = data_type;
     getNextToken(); // eat identifier.
 
@@ -1511,7 +1519,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
     getNextToken(); // eat the ','.
 
     if (CurTok != tok_identifier)
-      return LogError(parser_struct.line, "Expected " + data_type + " identifier names.");
+      return LogError(parser_struct.line, "Expected " + data_type + " identifier name(s).");
   }
 
 
@@ -1706,11 +1714,13 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
 ///   ::= ifexpr
 ///   ::= forexpr
 std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string class_name, bool can_be_list) {
-  // std::cout << "ParsePrimary: " << ReverseToken(CurTok) << "can be list: " << can_be_list << ".\n";
+  // std::cout << "ParsePrimary: " << CurTok << "/" << ReverseToken(CurTok) << ".\n";
   switch (CurTok) {
   default:
     //return std::move(std::make_unique<NumberExprAST>(0.0f));
     return LogErrorT(parser_struct.line, CurTok);
+  case tok_eof:
+    return std::make_unique<EmptyStrExprAST>();
   case tok_identifier:
     return ParseIdentifierExpr(parser_struct, class_name, false, can_be_list);
   case tok_class_attr:
@@ -1764,7 +1774,7 @@ std::unique_ptr<ExprAST> ParseUnary(Parser_Struct parser_struct, std::string cla
   // std::cout <<"Parse unary got can_be_list: " << can_be_list <<  "\n";
   // If the current token is not an operator, it must be a primary expr.
   
-  //std::cout << "Unary current token " << ReverseToken(CurTok) << "\n";
+  
   if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok == '{' || CurTok=='>' || CurTok==':')
   {
     //std::cout << "Returning, non-ascii found.\n";
@@ -1774,12 +1784,11 @@ std::unique_ptr<ExprAST> ParseUnary(Parser_Struct parser_struct, std::string cla
     // }
     return ParsePrimary(parser_struct, class_name, can_be_list);
   }
-  
+
   
   // If this is a unary operator, read it.
   int Opc = CurTok;
   
-  //std::cout << "Unary expr\n";
   
   getNextToken();
   if (auto Operand = ParseUnary(parser_struct, class_name, can_be_list))
@@ -2032,7 +2041,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
 std::unique_ptr<ExprAST> ParseExpression(Parser_Struct parser_struct, std::string class_name, bool can_be_list) {
   parser_struct.line = LineCounter;
   
-  //std::cout << "Parse Expression\n";
   
   auto LHS = ParseUnary(parser_struct, class_name, can_be_list);
   if (!LHS)
@@ -2297,11 +2305,14 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
   
   std::vector<std::unique_ptr<ExprAST>> Body;
 
+
+
   while(!in_char(CurTok, terminal_tokens))
   {
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
       break;
        
+    
     handle_tok_space();
 
     if (SeenTabs <= cur_level_tabs)
@@ -2314,7 +2325,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
 
   if (Body.size()==0)
   {
-    std::string _error = "Function " + class_name + "'s body was not declared.";  
+    std::string _error = "Function " + parser_struct.function_name + "'s body was not declared.";  
     LogError(parser_struct.line, _error);
     return nullptr;
   } 
@@ -2326,15 +2337,16 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
 
 /// toplevelexpr ::= expression
 std::unique_ptr<FunctionAST> ParseTopLevelExpr(Parser_Struct parser_struct) {
-  //std::cout << "Top Level Expression\n";
-
+  
   
   std::vector<std::unique_ptr<ExprAST>> Body;
   while(!in_char(CurTok, terminal_tokens))
   {
     Body.push_back(std::move(ParseExpression(parser_struct)));
-    //std::cout << "\n\nTop level expr cur tok: " << ReverseToken(CurTok) <<  ".\n";
-    //std::cout << "Top level expr number of expressions: " << Body.size() <<  ".\n\n\n";
+    // std::cout << "curtok post " << CurTok << ".\n";
+
+    while(CurTok==tok_space)
+      getNextToken();
   }
   
 
@@ -2367,7 +2379,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
 
   Classes.push_back(Name);
 
-  getNextToken();
+  getNextToken(); // eat name
 
   if(CurTok==tok_space)
     getNextToken();
@@ -2378,10 +2390,15 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
   while(CurTok==tok_data||CurTok==tok_identifier)
   { 
     std::string data_type = IdentifierStr;
-
     bool is_object = in_str(data_type, Classes);
+    getNextToken(); // eat data type
 
-    getNextToken();
+    if (CurTok==tok_data&&(IdentifierStr=="list"||IdentifierStr=="dict"))
+    {
+      data_type = data_type + "_" + IdentifierStr;
+      getNextToken();
+    }
+
     while(true)
     {
       if (CurTok!=tok_identifier)
@@ -2390,37 +2407,31 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
 
 
       if (is_object) {
-        typeVars[Name][IdentifierStr] = data_type;
-        Object_toClass[Name][IdentifierStr] = data_type; 
+        // if(ends_with(data_type, "dict"))
+        //   LogBlue("Scope " + Name+"/"+IdentifierStr + ": " + data_type);
+        Object_toClass[Name][IdentifierStr] = Extract_List_Prefix(data_type); 
       }
-      else
-       typeVars[Name][IdentifierStr] = data_type;
+      typeVars[Name][IdentifierStr] = data_type;
       
       ClassVariables[Name][IdentifierStr] = last_offset;
       
-      if (data_type=="float")
-      {
-        llvm_types.push_back(Type::getFloatTy(*TheContext));
-        last_offset+=4;
-      }
-      else if (data_type=="int")
-      {
+      if (data_type=="float"||data_type=="int") {
         llvm_types.push_back(Type::getInt32Ty(*TheContext));
         last_offset+=4;
-      }
-      else
-      {
+      } else {
         llvm_types.push_back(int8PtrTy);
         last_offset+=8;
       }
+
+
 
       getNextToken();
 
       if (CurTok!=',')
         break;
-      getNextToken();
+      getNextToken(); // eat ','
     }
-    if (CurTok==tok_space)
+    while (CurTok==tok_space)
       getNextToken();
   }
   ClassSize[Name] = last_offset;
@@ -2469,7 +2480,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     ExitOnErr(TheJIT->addAST(std::move(Func)));
 
     if(CurTok==';')
-    getNextToken();
+      getNextToken();
     
 
 

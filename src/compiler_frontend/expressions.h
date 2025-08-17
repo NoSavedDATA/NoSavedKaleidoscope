@@ -389,8 +389,9 @@ class VecIdxExprAST : public NameableExprAST {
   public:
     std::unique_ptr<ExprAST> Loaded_Var;
     std::unique_ptr<IndexExprAST> Idx;
+    std::string Name;
 
-    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::unique_ptr<IndexExprAST> Idx, std::string Type);
+    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, std::string Type);
 
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const;

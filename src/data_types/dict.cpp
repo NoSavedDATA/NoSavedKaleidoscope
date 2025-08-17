@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../char_pool/char_pool.h"
+#include "../compiler_frontend/logging.h"
 #include "../clean_up/clean_up.h"
 #include "../mangler/scope_struct.h"
 
@@ -102,10 +103,7 @@ extern "C" void dict_Store_Key_float(Scope_Struct *scope_struct, DT_dict *dict, 
 
 
 extern "C" float dict_print(Scope_Struct *scope_struct, DT_dict *dict) {
-
-
     dict->print();
-
     return 0;
 }
 
@@ -114,20 +112,42 @@ extern "C" float dict_print(Scope_Struct *scope_struct, DT_dict *dict) {
 
 extern "C" void *dict_Query(Scope_Struct *scope_struct, DT_dict *dict, char *query)
 {
-  // std::cout << "INDEX AT " << query << ".\n";
+// std::cout << "INDEX AT " << query << ".\n";
+
+
+
+    auto it = dict->data_types->find(query);
+    if (it != dict->data_types->end()) {
+        std::string type = it->second;
+        
+
+        if (type=="float")
+        {
+            float* float_ptr = new float(dict->get<float>(query));
+            return (void*)float_ptr;
+        }
+        if (type=="int")
+        {
+            int* ptr = new int(dict->get<int>(query));
+            return static_cast<void*>(ptr);
+        }
+
+        return std::any_cast<void *>((*dict->data)[query]);
+    }
     
-  std::string type = (*dict->data_types)[query];
+    std::string q = query;
+    LogErrorEE(scope_struct->code_line, "The query " + q + " was not found at the dictionary.");
 
-  if (type=="float")
-  {
-    float* float_ptr = new float(dict->get<float>(query));
-    return (void*)float_ptr;
-  }
-  if (type=="int")
-  {
-    int* ptr = new int(dict->get<int>(query));
-    return static_cast<void*>(ptr);
-  }
+    return nullptr;
+}
 
-  return std::any_cast<void *>((*dict->data)[query]);
+void dict_Clean_Up(void *data_ptr) {
+
+    if (data_ptr==nullptr)
+        return;
+
+    // DT_dict *dict = static_cast<DT_dict *>(data_ptr);
+
+    // delete dict;
+
 }

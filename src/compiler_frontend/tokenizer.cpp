@@ -177,7 +177,7 @@ std::map<int, std::string> token_to_string = {
 
 };
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
-std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class};
+std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class, tok_eof};
 
 std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "str", "str_vec", "float_vec", "list", "dict", "MHSA", "LSTM", "Linear", 
                                         "Embedding", "EmbeddingLn", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
@@ -223,6 +223,7 @@ char Tokenizer::get() {
 
         
         char c = current->get();
+        // std::cout << "get: " << std::to_string((int)c) << "/" << c << ".\n";
         // std::cout << "get: " << c << ".\n";
         if (c != EOF) {
           cur_line += c;
@@ -232,14 +233,21 @@ char Tokenizer::get() {
 
         // Handle EOF
         if (!inputStack.empty()) {
+            bool must_return = false;
+
             inputStack.pop();
             dirs.pop(); 
             files.pop();
             line_counters.pop();
+            if (inputStack.empty()&&has_main)
+              must_return=true;
             current = inputStack.empty() ? &std::cin : inputStack.top().get();
             current_dir = dirs.top();
             current_file = files.top();
             LineCounter = line_counters.top();
+
+            if(must_return)
+              return tok_eof;
             
             
             // Don't return EOF here - immediately try reading from the new source
@@ -254,14 +262,41 @@ char Tokenizer::get() {
 }
 
 
+bool Tokenizer::openFile(std::string filename) {
+    has_main=true;
+    auto file = std::make_unique<std::ifstream>(filename);
+    if (!file->is_open())
+    {
+      LogError(-1, "Failed to open file: " + filename);
+      return false;
+    }
+    
+    current_file = filename;
+    std::string base = fs::path(filename).parent_path().string();
+    if(filename[0]=='/')
+      current_dir = base;
+    else
+      current_dir = current_dir + "/" + base;
+
+
+    // Then push the new file
+    inputStack.push(std::move(file));
+    dirs.push(current_dir);
+    files.push(current_file);
+    current = inputStack.top().get(); // this get() turns std::unique_ptr<> as *
+
+    line_counters.top() = LineCounter;
+    line_counters.push(1);
+
+    return true;
+}
+
 bool Tokenizer::importFile(std::string filename, int dots) {
-    // std::cout << "Tokenizer::importFile " << filename << ".\n";
-    // std::cout << "importing with " << dots << " dots.\n";   
-    // std::cout << "importFile " << filename << ".\n";
     
     auto file = std::make_unique<std::ifstream>(filename);
     if (!file->is_open())
     {
+      std::cout << "" << current_dir << ".\n";
       LogError(-1, "Failed to open library: " + filename);
       return false;
     }
@@ -285,6 +320,7 @@ bool Tokenizer::importFile(std::string filename, int dots) {
 
     return true;
 }
+
 
 
 
@@ -550,6 +586,7 @@ static int get_token() {
     int seen_spaces=0;
 
     while(LastChar==10 || LastChar==tok_tab || LastChar==32) {
+      // std::cout << "Process Line Feed"  << ".\n";
       if(LastChar==10)
         LineCounter++;
       if(ThisChar==10)
@@ -571,10 +608,10 @@ static int get_token() {
 
       ThisChar = (int)LastChar;
       LastChar = tokenizer.get(); 
+      // std::cout << "Line Feed post: " << LastChar  << ".\n";
     }
     //std::cout << "\nThisChar: " << ThisChar << " LastChar " << LastChar << "\n";
 
-    //std::cout << "New seen tabs: " << SeenTabs << "\n";
     return tok_space;
   }
 

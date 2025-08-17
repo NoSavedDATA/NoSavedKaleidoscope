@@ -93,6 +93,7 @@ struct Tokenizer {
     std::istream* current;
     std::string current_dir = std::filesystem::current_path().string();
     char cur_c=' ';
+    bool has_main = false;
 
     std::string token;
 
@@ -104,6 +105,7 @@ struct Tokenizer {
 
         char get();
         std::istream& get_word();
+        bool openFile(std::string);
         bool importFile(std::string, int);
 };
   
