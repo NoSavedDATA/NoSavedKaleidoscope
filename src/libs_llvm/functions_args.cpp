@@ -113,12 +113,6 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["str_to_float"].push_back("0");
 		Function_Arg_Names["str_to_float"].push_back("1");
-		
-		Function_Arg_Types["StrToFloat"]["0"] = "Scope_Struct";
-		Function_Arg_Types["StrToFloat"]["1"] = "str";
-		
-		Function_Arg_Names["StrToFloat"].push_back("0");
-		Function_Arg_Names["StrToFloat"].push_back("1");
 	
 		
 		Function_Arg_Types["__slee_p_"]["0"] = "Scope_Struct";
@@ -158,6 +152,15 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["nsk_vec_size"].push_back("0");
 		Function_Arg_Names["nsk_vec_size"].push_back("1");
+	
+		
+		Function_Arg_Types["randint"]["0"] = "Scope_Struct";
+		Function_Arg_Types["randint"]["1"] = "int";
+		Function_Arg_Types["randint"]["2"] = "int";
+		
+		Function_Arg_Names["randint"].push_back("0");
+		Function_Arg_Names["randint"].push_back("1");
+		Function_Arg_Names["randint"].push_back("2");
 	
 		
 		Function_Arg_Types["_quit_"]["0"] = "Scope_Struct";

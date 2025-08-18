@@ -1616,16 +1616,8 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("str_split_idx", SplitStringIndexateTy);
 
-
+  
   //
-  FunctionType *StrToFloatTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
-
-
   FunctionType *str_to_floatTy = FunctionType::get(
       Type::getFloatTy(*TheContext),
       {int8PtrTy, int8PtrTy},

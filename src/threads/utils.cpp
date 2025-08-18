@@ -33,7 +33,7 @@ extern "C" void *emerge_void(char *fn_name, char *var_name) {
     return val;    
 }
 extern "C" int emerge_int(char *fn_name, char *var_name) {
-    return dived_ints[fn_name][var_name];    
+    return dived_ints[fn_name][var_name];
 }
 extern "C" float emerge_float(char *fn_name, char *var_name) {
     return dived_floats[fn_name][var_name];    

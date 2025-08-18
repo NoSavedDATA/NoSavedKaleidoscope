@@ -222,6 +222,10 @@ bool Check_Is_Compatible_Type(std::string LType, const std::unique_ptr<ExprAST> 
   
   // RType==null -> !primary data
   // if(RType=="nullptr")
+
+  if (LType=="float"&&RType=="int")
+    return true;
+
   if((RType=="nullptr")&&!in_str(LType, {"float", "int", "str", "bool"}))
     return true;
   
@@ -273,8 +277,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     if((Type=="float"||Type=="int")&&!(is_self||is_attr))
     { 
-      // std::cout << "DataExpr STORE OF " << parser_struct.function_name << "/" << VarName << " type " << Type << ".\n";
-
+      if (Type=="float"&&Init->GetType()=="int")
+        initial_value = Builder->CreateUIToFP(initial_value, Type::getFloatTy(*TheContext), "floattmp");
       llvm::Type *alloca_type = get_type_from_str(Type);
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
       Builder->CreateStore(initial_value, alloca);
@@ -287,17 +291,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     // --- Name Solving --- //
     var_name = callret("CopyString", {global_str(VarName)});
-
-
-    // if (is_self||is_attr)
-    //   var_name = callret("ConcatStrFreeRight", {callret("get_scope_first_arg", {scope_struct}), var_name});
-
     scopeless_name = callret("CopyString", {var_name});
-
-    // if (!(is_self||is_attr))
-    //   var_name = callret("ConcatStrFreeRight", {callret("get_scope_scope", {scope_struct}), var_name});
-
-
 
 
     Value *notes_vector = callret("CreateNotesVector", {});
@@ -1048,10 +1042,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         // std::cout << "ATTRIBUTION: " << LType << " for " << i << ".\n";
         
         std::string store_trigger = LType + "_StoreTrigger";
-        Value *Val_indexed = callret("assign_wise_list_Idx", {Val, ConstantInt::get(Type::getInt32Ty(*TheContext), i)});
-
+        Value *Val_indexed = callret("assign_wise_list_Idx", {Val, const_int(i)});
 
         AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
+        
+
+
 
         Function *F = TheModule->getFunction(store_trigger);
         if (F)
@@ -1060,6 +1056,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
           Lvar_name = LHSE->NameSolver->codegen(scope_struct);
           call(store_trigger, {Lvar_name, old_val, Val_indexed, scope_struct});
         }
+
+        if (LType=="int")
+          Val_indexed = callret("to_int", {scope_struct, Val_indexed});
+        if (LType=="float")
+          Val_indexed = callret("to_float", {scope_struct, Val_indexed});
+        //   Val_indexed = Builder->CreatePtrToInt(Val_indexed, Type::getInt32Ty(*TheContext));
 
         Builder->CreateStore(Val_indexed, alloca);
 
@@ -1178,8 +1180,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
       if (LType!="float"&&LType!="int")
         call("MarkToSweep_Unmark_Scopeful", {scope_struct, Val, global_str(LType)});
+      if (LType=="float"&&RHS->GetType()=="int")
+        Val = Builder->CreateUIToFP(Val, Type::getFloatTy(*TheContext), "floattmp");
 
       // p2t("Store " + LType + " at " + parser_struct.function_name + "/"+ Lname);
+
+
 
       Builder->CreateStore(Val, alloca);
     } else
@@ -1715,13 +1721,9 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
 
   
 
-  BasicBlock *CurrentBB = Builder->GetInsertBlock();
-
-
   Value *barrier = callret("get_barrier", {const_int(1)});
-  
-  
-  //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
+
+  BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
 
   Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier);
@@ -1765,12 +1767,9 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
   // Create/Spawn Threads
 
 
-  // p2t("NOW STORE ASYNCS COUNT");
   call("scope_struct_Store_Asyncs_Count", {scope_struct, const_int(AsyncsCount)});
   Value *barrier = callret("get_barrier", {const_int(AsyncsCount)});
-  // p2t("STORED");
-  
-  //std::cout << "\nAsync get insert block for function: " << functionName << "\n\n";
+
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
   Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier);

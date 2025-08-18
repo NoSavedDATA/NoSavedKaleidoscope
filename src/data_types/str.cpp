@@ -295,19 +295,6 @@ extern "C" float str_to_float(Scope_Struct *scope_struct, char *in_str)
 }
 
 
-extern "C" float StrToFloat(Scope_Struct *scope_struct,char *in_str)
-{
-  // std::cout << "Execution: StrToFloat" << ".\n";
-  // std::cout << "\n\nstr to float of " << in_str << "\n\n\n";
-
-  char *copied = (char*)malloc(strlen(in_str) + 1);
-  strcpy(copied, in_str);
-  char *end;
-
-  float ret = std::strtof(copied, &end);
-  delete[] copied;
-  return ret;
-}
 
 
 

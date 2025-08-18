@@ -851,8 +851,8 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
 
 	FunctionType *randintTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("randint", randintTy);
@@ -1129,13 +1129,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_to_float", str_to_floatTy);
-
-	FunctionType *StrToFloatTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
 
 	FunctionType *str_DeleteTy= FunctionType::get(
 		int8PtrTy,

@@ -455,15 +455,12 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
 
     bool is_var_forward = false;
     bool return_tensor = false;
+    if (lib_function_remaps.find(IdName) != lib_function_remaps.end())
+      callee_override = lib_function_remaps[IdName];
     if (floatFunctions.find(IdName) != floatFunctions.end()) // if found
     {
       is_var_forward = true;
       callee_override = floatFunctions[IdName];
-    }
-    if (IdName=="to_float")
-    {
-      callee_override = "StrToFloat";
-      is_var_forward = true;
     }
     
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
@@ -638,7 +635,8 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(Parser_Struct parser_st
   if (CurTok==tok_space)
     getNextToken();
 
-  while(true)
+  handle_tok_space();
+  while(!in_char(CurTok, terminal_tokens))
   {
     //std::cout << "\n\nParsing new expression with tabs: " << SeenTabs << " tok: " << ReverseToken(CurTok) << "\n";
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
@@ -648,11 +646,6 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(Parser_Struct parser_st
     } 
     //std::cout << "\nSeen tabs on for body: " << SeenTabs << "\nCur tok: " << ReverseToken(CurTok) << "\n\n";
 
-    while (CurTok == tok_space)
-    {
-      //std::cout << "\nJumping tok space\n\n";
-      getNextToken();
-    }
 
     //std::cout << "Post space has " << SeenTabs << " tabs.\n";
     if (SeenTabs <= cur_level_tabs)
@@ -663,12 +656,13 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(Parser_Struct parser_st
     if (!body)
       return std::move(NullBody);
     Body.push_back(std::move(body));
-    //getNextToken();
+    
+    handle_tok_space();
   }
 
-  if (CurTok==tok_space)
+  while (CurTok==tok_space)
     getNextToken();
-
+    
   return std::move(Body);
 }
 
@@ -811,9 +805,10 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
   
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   
-  //std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
+  for (auto pair : typeVars[parser_struct.function_name])
+    typeVars["asyncs"][pair.first] = pair.second;
 
-
+  parser_struct.function_name = "asyncs";
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
@@ -835,17 +830,16 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
 
 
   if (CurTok!=tok_int)
-    LogError(parser_struct.line, "asyncs expression expect the number of asynchrnonous functions.");
+    LogError(parser_struct.line, "asyncs expression expects the number of asynchrnonous functions.");
 
   int async_count = NumVal;
   getNextToken();
   
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   
-  //std::cout << "Pre expression token: " << ReverseToken(CurTok) << "\n";
-
   for (auto pair : typeVars[parser_struct.function_name])
     typeVars["asyncs"][pair.first] = pair.second;
+
 
   parser_struct.function_name = "asyncs";
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
@@ -866,10 +860,8 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
 std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::string class_name) {
 
   int cur_level_tabs = SeenTabs;
-  //std::cout << "Finish tabs level: " << cur_level_tabs <<  "\n";
-
-  getNextToken(); // eat the finish.
-
+  
+  getNextToken(); // eat finish.
 
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   std::vector<bool> IsAsync;
@@ -880,39 +872,15 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
 
   getNextToken(); 
 
+  handle_tok_space();
 
   while(!in_char(CurTok, terminal_tokens))
   {
-
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
-    {
-      //std::cout << "Breaking finish with cur tok: " << ReverseToken(CurTok) << "\n";
-      //std::cout << "Current tabs: " << SeenTabs << "\n";
       break;
-    }
-    //std::cout << "\nSeen tabs on finish body: " << SeenTabs << "\nCur tok: " << CurTok << "\n\n";
-
-
-
-
-    if (CurTok==tok_space)
-      getNextToken();
-    
-
-    /*
-    if (CurTok == tok_async)
-    {
-      Bodies.push_back(std::move(ParseAsyncExpr(Parser_Struct parser_struct, class_name)));
-      IsAsync.push_back(true);
-    }
-    else
-    {
-      Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
-      IsAsync.push_back(false);
-    }
-    */
     Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
     IsAsync.push_back(false);
+    handle_tok_space();
   }
 
 
@@ -1691,7 +1659,8 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
       getNextToken();
     }
     else
-      expr = ParseMustBeVar(parser_struct, class_name, "return");
+      expr = ParseExpression(parser_struct, class_name, false);
+      // expr = ParseMustBeVar(parser_struct, class_name, "return");
     
     Vars.push_back(std::move(expr));
     if(CurTok!=',')

@@ -1,0 +1,9 @@
+
+	
+	Function_Arg_Types["randint"]["0"] = "Scope_Struct";
+	Function_Arg_Types["randint"]["1"] = "int";
+	Function_Arg_Types["randint"]["2"] = "int";
+	
+	Function_Arg_Names["randint"].push_back("0");
+	Function_Arg_Names["randint"].push_back("1");
+	Function_Arg_Names["randint"].push_back("2");
