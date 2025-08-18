@@ -213,19 +213,17 @@ extern "C" void *assign_wise_list_Idx(DT_list *vec, int idx)
 {
  
   std::string type = vec->data_types->at(idx);
-  // std::cout << "DT_list_Idx on index " << idx << " for data type " << type << ".\n";
+  // std::cout << "DT_list_Idx at index " << idx << " for data type " << type << ".\n";
 
   if (type=="float")
   {
     float* float_ptr = new float(vec->get<float>(idx));
     return (void*)float_ptr;
-    // return (void *)vec->get<float>(idx);
   }
   if (type=="int")
   {
     int* ptr = new int(vec->get<int>(idx));
     return (void*)ptr;
-    // return (void *)vec->get<float>(idx);
   }
 
   return std::any_cast<void *>((*vec->data)[idx]);

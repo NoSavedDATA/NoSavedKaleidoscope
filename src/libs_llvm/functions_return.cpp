@@ -33,6 +33,7 @@ void set_functions_return_type() {
 						{"FirstArgOnDemand", "str"}, 
 						{"LenStrVec", "int"}, {"shuffle_str", "str"}, {"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"str_vec_CalculateIdx", "int"}, 
 						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_int", "int"}, 
+						{"randint", "int"}, 
 						{"CreateNotesVector", "list"}, {"Add_To_NotesVector_float", "list"}, {"Add_To_NotesVector_int", "list"}, {"Add_To_NotesVector_str", "list"}, 
 						{"list_New", "list"}, {"list_Create", "list"}, {"list_size", "int"}, {"list_CalculateIdx", "int"}, {"to_int", "int"}, {"list_CalculateSliceIdx", ""}, {"list_Slice", "list"}, 
 

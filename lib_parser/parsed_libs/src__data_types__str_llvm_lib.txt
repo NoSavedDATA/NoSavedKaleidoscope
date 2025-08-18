@@ -1,4 +1,4 @@
-1821-08-15 18:13:52
+1821-08-18 09:14:59
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -97,13 +97,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("str_to_float", str_to_floatTy);
-
-	FunctionType *StrToFloatTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("StrToFloat", StrToFloatTy);
 
 	FunctionType *str_DeleteTy= FunctionType::get(
 		int8PtrTy,

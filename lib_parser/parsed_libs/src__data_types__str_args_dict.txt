@@ -63,9 +63,3 @@
 	
 	Function_Arg_Names["str_to_float"].push_back("0");
 	Function_Arg_Names["str_to_float"].push_back("1");
-	
-	Function_Arg_Types["StrToFloat"]["0"] = "Scope_Struct";
-	Function_Arg_Types["StrToFloat"]["1"] = "str";
-	
-	Function_Arg_Names["StrToFloat"].push_back("0");
-	Function_Arg_Names["StrToFloat"].push_back("1");
