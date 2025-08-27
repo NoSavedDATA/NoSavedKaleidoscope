@@ -2,6 +2,7 @@ samples/
 obj/
 lib/ogre_game/
 lib/sfml/
+lib/
 bin/
 include/_mma/
 include/cutlass/
