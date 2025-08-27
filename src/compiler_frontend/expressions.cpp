@@ -140,13 +140,10 @@ VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<ExprAST>> E
 
   
   /// VariableExprAST - Expression class for referencing a variable, like "a".
-VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name, Parser_Struct parser_struct)
-                                : Name(Name), parser_struct(parser_struct) {
+VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, bool CanBeString, const std::string &Name, Parser_Struct parser_struct)
+                                : CanBeString(CanBeString), Name(Name), parser_struct(parser_struct) {
   this->isVarLoad = true;
   this->NameSolver = std::move(NameSolver);
-  this->SetType(Type);
-  this->NameSolver->SetType(Type);
-
 }
   
 const std::string &VariableExprAST::getName() const { return Name; }
@@ -266,10 +263,9 @@ NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> 
   // Print_Names_Str(Expr_String);
 }
 
-VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, std::string Type)
-              : Loaded_Var(std::move(Loaded_Var)), Name(Name), Idx(std::move(Idx)) {
+VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, Parser_Struct parser_struct)
+              : Loaded_Var(std::move(Loaded_Var)), Name(Name), Idx(std::move(Idx)), parser_struct(parser_struct) {
   this->isVarLoad = true; //todo: remove this?
-  this->SetType(Type); 
 
   Expr_String = {Name};
 }
@@ -288,6 +284,22 @@ NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> In
   this->Name = this->Inner_Expr->Name;
 }
  
+UnkVarExprAST::UnkVarExprAST(
+  Parser_Struct parser_struct,
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+  std::string Type,
+  std::vector<std::unique_ptr<ExprAST>> Notes)
+  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)),
+                Notes(std::move(Notes)) {
+
+  for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+    const std::string &VarName = this->VarNames[i].first; 
+    ExprAST *Init = this->VarNames[i].second.get();
+
+    std::string init_type = Init->GetType();
+    typeVars[parser_struct.function_name][VarName] = init_type;
+  }
+}
   
 DataExprAST::DataExprAST(
   Parser_Struct parser_struct,
@@ -358,9 +370,9 @@ UnaryExprAST::UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand, Parser
   
   
   /// BinaryExprAST - Expression class for a binary operator.
-BinaryExprAST::BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
+BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
               std::unique_ptr<ExprAST> RHS, Parser_Struct parser_struct)
-    : Op(Op), Elements(Elements), Operation(Operation), LHS(std::move(LHS)), RHS(std::move(RHS)), parser_struct(parser_struct) {}
+    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)), parser_struct(parser_struct) {}
   
   
   

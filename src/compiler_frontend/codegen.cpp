@@ -189,11 +189,13 @@ Value *NullPtrExprAST::codegen(Value *scope_struct) {
 
 // Create Float Var
 Value *VarExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
 
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
+
+
 
 
 
@@ -250,6 +252,108 @@ bool Check_Is_Compatible_Type(std::string LType, const std::unique_ptr<ExprAST> 
   return true;
 }
 
+
+
+
+Value *UnkVarExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return ConstantFP::get(*TheContext, APFloat(0.0f));
+
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  // Register all variables and emit their initializer.
+  for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
+    const std::string &VarName = VarNames[i].first; 
+    ExprAST *Init = VarNames[i].second.get();
+    
+    
+    Value *init;
+
+    bool is_self = GetSelf();
+    bool is_attr = GetIsAttribute();
+
+    
+
+    Value *initial_value = Init->codegen(scope_struct);
+
+    if (dynamic_cast<NullPtrExprAST*>(Init))
+      continue;
+
+      
+    Type = typeVars[parser_struct.function_name][VarName];
+
+
+    // LogBlue("unk var with type " + Type);
+
+
+    if((Type=="float"||Type=="int")&&!(is_self||is_attr))
+    { 
+      if (Type=="float"&&Init->GetType()=="int")
+        initial_value = Builder->CreateUIToFP(initial_value, Type::getFloatTy(*TheContext), "floattmp");
+      llvm::Type *alloca_type = get_type_from_str(Type);
+      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
+      Builder->CreateStore(initial_value, alloca);
+      function_allocas[parser_struct.function_name][VarName] = alloca;
+      continue;
+    }
+
+
+    Value *var_name, *scopeless_name;
+
+    // --- Name Solving --- //
+    var_name = callret("CopyString", {global_str(VarName)});
+    scopeless_name = callret("CopyString", {var_name});
+ 
+
+
+
+
+
+
+
+
+
+
+    if(Type!="float"&&Type!="int")
+    {
+      call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Extract_List_Suffix(Type))});
+      if(is_self||is_attr)
+        call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
+      else
+        call("MarkToSweep_Unmark_Scopeful", {scope_struct, initial_value});
+    }
+
+
+      
+
+    if(is_self)
+    {
+      int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
+      // p2t(VarName+" offset is "+std::to_string(object_ptr_offset));
+  
+      Value *obj = callret("get_scope_object", {scope_struct});
+      call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
+
+    } else if (is_attr) {
+      LogError(parser_struct.line, "Creating attribute in a data expression is not supported.");
+    }
+    else {
+      llvm::Type *alloca_type = get_type_from_str(Type);
+      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
+      Builder->CreateStore(initial_value, alloca);
+
+      function_allocas[parser_struct.function_name][VarName] = alloca;
+    }
+      
+
+    call("str_Delete", {var_name});
+    call("str_Delete", {scopeless_name});
+  }
+
+
+  return ConstantFP::get(*TheContext, APFloat(0.0));
+}
 
 Value *DataExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
@@ -315,7 +419,13 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       }
       else if (VariableExprAST* expr = dynamic_cast<VariableExprAST*>(note)) {
         std::string type = expr->GetType();
-        notes_vector = callret("Add_To_NotesVector_"+type, {notes_vector, note->codegen(scope_struct)});
+        if(type=="None"&&expr->CanBeString)
+        {
+          Value *str_val = callret("CopyString", {note->codegen(scope_struct)});
+          notes_vector = callret("Add_To_NotesVector_str", {notes_vector, str_val});
+        } else
+          notes_vector = callret("Add_To_NotesVector_"+type, {notes_vector, note->codegen(scope_struct)});
+        
       }
       else {
         std::cout << "Could not find the data type of a note in DataExpr of " << VarName << " \n";
@@ -809,36 +919,57 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 
+std::string VariableExprAST::GetType() {
+  std::string type = Type;
+
+  if (type=="None") {
+    if (typeVars[parser_struct.function_name].find(Name) != typeVars[parser_struct.function_name].end())
+      type = typeVars[parser_struct.function_name][Name];
+    SetType(type);
+    // LogBlue("variable " + parser_struct.function_name + "/" + Name +  " has type " + type);
+  } else {
+    if(CanBeString)
+      SetType("str");
+  }
+
+
+
+  return type;
+}
+
 bool seen_var_attr = false;
 Value *VariableExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   // Look this variable up in the function.
 
+
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
-  //std::string functionName = TheFunction->getName().str();
   
 
-  // p2t("Codegen for variableexprast");
-
-  //std::cout << "Create value V" << "\n";
   Value *V;
 
+
   std::string type = GetType();
+  
+  if (type=="None") {
+    if(!CanBeString)
+    {
+      LogError(parser_struct.line, "Variable " + Name + " was not found on scope " + parser_struct.function_name + ".");
+      return ConstantFP::get(*TheContext, APFloat(0.0f));
+    }
+    Value *_str = callret("CopyString", {global_str(Name)});
+    call("MarkToSweep_Mark", {scope_struct, _str, global_str("str")});
+    return _str;
+  }
+
+
+
+  
   std::string pre_dot = GetPreDot();
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
     
-
-  // if (type=="str") // todo: NamedTensorsT break
-  // {
-  //   for (const auto &entry : NamedTensorsT)
-  //   {
-  //     std::cout << "Returning None because a tensor with name " << Name << " was found on strings map " << "\n";
-  //     if (ends_with(entry.first, Name))
-  //       return ConstantFP::get(*TheContext, APFloat(0.0f));
-  //   } 
-  // }
 
 
 
@@ -911,6 +1042,16 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
 
+  std::string type;
+  if (typeVars[parser_struct.function_name].find(Name) != typeVars[parser_struct.function_name].end())
+    type = typeVars[parser_struct.function_name][Name];
+  else {
+    LogError(parser_struct.line, "Could not infer type of indexed variable " +  Name);
+    return const_float(0);
+  }
+
+  SetType(type);
+
 
   Value *V, *var_name;
 
@@ -945,7 +1086,7 @@ Value *VecIdxExprAST::codegen(Value *scope_struct) {
 
 
   std::string homogeneous_type = Extract_List_Suffix(Type);
-  std::string type = Extract_List_Prefix(Type);
+  type = Extract_List_Prefix(Type);
 
 
   if (homogeneous_type == "dict") {
@@ -1000,6 +1141,28 @@ Value *ObjectVecIdxExprAST::codegen(Value *scope_struct) {
 
 
 
+std::string BinaryExprAST::GetType() {
+  std::string type = Type;
+  if (type=="None")
+  {
+    std::string LType = LHS->GetType(), RType = RHS->GetType();
+    if ((LType=="list"||RType=="list") && Op!='=')
+      LogError(parser_struct.line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
+    
+    Elements = LType + "_" + RType;    
+    
+    std::string operation = op_map[Op];
+    Operation = Elements + "_" + operation;
+    
+    std::string type = (Operation=="int_int_div") ? "float" : ops_type_return[Elements];
+    SetType(type);
+
+    // LogBlue("operation: " + Operation + " with elements: " + Elements + " and return type " + type);
+  }
+  return type;
+}
+
+
 Value *BinaryExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -1039,7 +1202,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         std::string Lname = std::get<0>(name_solver->Names[0]);
         std::string LType = LHSE->GetType();
 
-        // std::cout << "ATTRIBUTION: " << LType << " for " << i << ".\n";
         
         std::string store_trigger = LType + "_StoreTrigger";
         Value *Val_indexed = callret("assign_wise_list_Idx", {Val, const_int(i)});
@@ -1234,13 +1396,21 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   }
 
 
-  
+
+
   
   Value *L = LHS->codegen(scope_struct);
   Value *R = RHS->codegen(scope_struct);
+
+
+  GetType(); // gets the correct Elements and Operation.
+
+
+
+
   
   if (!L || !R)
-  return nullptr;
+    return nullptr;
 
   if (Elements=="int_float") {
     Elements = "float_float"; 
@@ -1257,7 +1427,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   }
 
   
-
   
 
   if (Elements=="float_float")
@@ -1351,21 +1520,16 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         break;
     }
   } else {
-    // std::string msg = "Codegen for operation: " + Operation;
-    // p2t(msg);
-
 
     Value *ret = callret(Operation, {scope_struct, L, R});
 
     if(ops_type_return.count(Elements)>0)
     {
       std::string return_type = ops_type_return[Elements];
-      // std::cout << "Operation of " << Elements << " has a return of " << return_type << ".\n";
 
       if (return_type!="float"&&return_type!="int")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(return_type))});
     }
-
 
     return ret; 
   }
@@ -1901,6 +2065,7 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 
   return ConstantFP::get(*TheContext, APFloat(0.0f));
 }
+
 
 
 Value *RetExprAST::codegen(Value *scope_struct) {

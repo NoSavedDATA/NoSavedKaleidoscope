@@ -63,6 +63,7 @@ std::map<int, std::string> token_to_string = {
   { tok_identifier, "tok identifier" },
   { tok_number, "tok number" },
   { tok_str, "tok str `` ''" },
+  { tok_var, "var" },
 
   
 
@@ -469,6 +470,8 @@ static int get_token() {
  
     if (in_str(IdentifierStr, data_tokens))
       return tok_data;
+    if (IdentifierStr == "var")
+      return tok_var;
     if (IdentifierStr == "def")
       return tok_def;
     if (IdentifierStr == "class")

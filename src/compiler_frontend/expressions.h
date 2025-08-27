@@ -65,7 +65,6 @@ class ExprAST {
     virtual void SetIsList(bool); 
     virtual bool GetIsList(); 
 
-    
   };
   
 class IndexExprAST : public ExprAST {
@@ -150,12 +149,15 @@ class VariableExprAST : public ExprAST {
   public:
     std::unique_ptr<ExprAST> NameSolver;
     std::string Name;
+    bool CanBeString;
     Parser_Struct parser_struct;
-    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, std::string Type, const std::string &Name, Parser_Struct parser_struct);
+    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, bool CanBeString, const std::string &Name, Parser_Struct parser_struct);
 
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const; 
     std::string GetName() override; 
+
+    std::string GetType() override; 
 };
 
 
@@ -182,6 +184,21 @@ class VarExprAST : public ExprAST {
     VarExprAST(
         std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
         std::string Type);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+class UnkVarExprAST : public VarExprAST {
+  public:
+    std::vector<std::unique_ptr<ExprAST>> Notes;
+    Parser_Struct parser_struct;
+
+    UnkVarExprAST(
+      Parser_Struct,
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type,
+      std::vector<std::unique_ptr<ExprAST>> Notes);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -250,6 +267,8 @@ public:
   
    
   
+
+
   
   
 class DataExprAST : public VarExprAST {
@@ -310,10 +329,11 @@ class BinaryExprAST : public ExprAST {
   Parser_Struct parser_struct;
 
 public:
-  BinaryExprAST(char Op, std::string Elements, std::string Operation, std::unique_ptr<ExprAST> LHS,
+  BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
+  std::string GetType() override;
 };
 
 
@@ -390,8 +410,9 @@ class VecIdxExprAST : public NameableExprAST {
     std::unique_ptr<ExprAST> Loaded_Var;
     std::unique_ptr<IndexExprAST> Idx;
     std::string Name;
+    Parser_Struct parser_struct;
 
-    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, std::string Type);
+    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, Parser_Struct);
 
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const;

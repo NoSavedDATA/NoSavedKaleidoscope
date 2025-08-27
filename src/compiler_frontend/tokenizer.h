@@ -83,6 +83,7 @@ enum Token {
     tok_no_grad = -50,
 
     tok_data = -44,
+    tok_var = -45,
 };
 
 

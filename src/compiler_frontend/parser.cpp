@@ -327,25 +327,25 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
     {
       IdName = IdentifierStr;
 
-      if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
-        type = typeVars[parser_struct.function_name][IdName];
-      else
-        type = "none";
+      // if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
+      //   type = typeVars[parser_struct.function_name][IdName];
+      // else
+      //   type = "none";
 
       
-      if (type!="none")
-      {
+      // if (type!="none")
+      // {
         auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-        aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
-      } else {
-        if(!can_be_string)
-        {
-          std::string _error = "Variable " + IdName + " was not found on scope "+parser_struct.function_name+".";
-          return LogError(parser_struct.line, _error);
-        }  
+        aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), can_be_string, IdName, parser_struct);
+      // } else {
+      //   if(!can_be_string)
+      //   {
+      //     std::string _error = "Variable " + IdName + " was not found on scope "+parser_struct.function_name+".";
+      //     return LogError(parser_struct.line, _error);
+      //   }  
 
-        aux = std::make_unique<StringExprAST>(IdName);
-      }
+      //   aux = std::make_unique<StringExprAST>(IdName);
+      // }
 
       IdentifierList.push_back(std::move(aux));
 
@@ -379,8 +379,8 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
 
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
 
-    aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
-    aux = std::make_unique<VecIdxExprAST>(std::move(aux), IdName, std::move(Idx), type);
+    aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), false, IdName, parser_struct);
+    aux = std::make_unique<VecIdxExprAST>(std::move(aux), IdName, std::move(Idx), parser_struct);
     aux->SetIsVec(true);
     
     getNextToken(); // eat ]
@@ -488,8 +488,6 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
       aux->SetType("tensor");
 
     
-    if(aux->GetType()=="void")
-      LogBlue(IdName + ", " + fname + ": ");
 
     
     if (CurTok == tok_post_class_attr_identifier)
@@ -502,30 +500,30 @@ std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::s
 
 
 
-  // Simple variable ref.
-  if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
-    type = typeVars[parser_struct.function_name][IdName];
-  else
-  {
-    type = "none";
-    // std::string _error = "Variable " + IdName + " not found.";
-    // return LogError(parser_struct.line, _error);
-  } 
+  // // Simple variable ref.
+  // if (typeVars[parser_struct.function_name].find(IdName) != typeVars[parser_struct.function_name].end())
+  //   type = typeVars[parser_struct.function_name][IdName];
+  // else
+  // {
+  //   type = "none";
+  //   // std::string _error = "Variable " + IdName + " not found.";
+  //   // return LogError(parser_struct.line, _error);
+  // } 
 
 
-  if (type!="none")
-  {
+  // if (type!="none")
+  // {
     auto name_solver_expr = std::make_unique<NameSolverAST>(std::move(Names));
-    aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), type, IdName, parser_struct);
-  } else {
-    if(!can_be_string)
-    {
-      std::string _error = "Variable " + IdName + " was not found on scope " + parser_struct.function_name + ".";
-      return LogError(parser_struct.line, _error);
-    }  
+    aux = std::make_unique<VariableExprAST>(std::move(name_solver_expr), can_be_string, IdName, parser_struct);
+  // } else {
+  //   if(!can_be_string)
+  //   {
+  //     std::string _error = "Variable " + IdName + " was not found on scope " + parser_struct.function_name + ".";
+  //     return LogError(parser_struct.line, _error);
+  //   }  
 
-    aux = std::make_unique<StringExprAST>(IdName);
-  }
+  //   aux = std::make_unique<StringExprAST>(IdName);
+  // }
   
   return std::move(aux);
 }
@@ -1365,6 +1363,111 @@ std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::un
 
 
 
+std::unique_ptr<ExprAST> ParseVarExpr(Parser_Struct parser_struct, std::string suffix, std::string class_name) {
+
+  // std::cout << "Parsing data with data type: " << IdentifierStr << ".\n";
+
+  std::string data_type = suffix + "var";
+
+  getNextToken(); // eat var token.
+
+  if (CurTok==tok_data && (IdentifierStr=="list"||IdentifierStr=="dict"))
+    return ParseVarExpr(parser_struct, data_type+"_", class_name);
+
+
+  if(ends_with(data_type, "list"))
+    data_type="unknown_list";
+  if(ends_with(data_type, "dict"))
+    data_type="unknown_dict";
+    
+
+  
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
+  std::vector<std::unique_ptr<ExprAST>> notes;
+
+
+
+  // Get the Notes vector
+  if (CurTok == '[')
+  {
+    return LogErrorBreakLine(parser_struct.line, "Cannot use notes inside a var data type.");
+  }
+
+
+
+
+  std::string pre_dot="";
+  bool is_self = false;
+  bool is_attr = false;
+  if (CurTok == tok_self)
+  {
+    is_self=true; //TODO: set self per VarName instead.
+    getNextToken();
+  }
+  if (CurTok == tok_class_attr)
+  {
+    is_attr=true;
+    pre_dot = IdentifierStr;
+    getNextToken();
+  }
+
+  if (CurTok != tok_identifier)
+    return LogError(parser_struct.line, "Expected " + data_type + " identifier name.");
+
+
+
+  while (true) {
+    std::string Name = IdentifierStr;
+
+
+    // std::string prefix_datatype = Extract_List_Prefix(data_type);
+    // if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_str(prefix_datatype, data_tokens) )
+    //   Object_toClass[parser_struct.function_name][IdentifierStr] = prefix_datatype;
+    // typeVars[parser_struct.function_name][IdentifierStr] = data_type;
+    getNextToken(); // eat identifier.
+
+    
+
+
+    std::unique_ptr<ExprAST> Init;
+    if (CurTok == '=')
+    {
+      getNextToken(); // eat the '='.
+      Init = ParseExpression(parser_struct, class_name);
+      if (!Init)
+        return nullptr;
+    } else
+      Init = std::make_unique<NullPtrExprAST>();
+
+    VarNames.push_back(std::make_pair(Name, std::move(Init)));
+
+    // End of var list, exit loop.
+    if (CurTok != ',')
+      break;
+    getNextToken(); // eat the ','.
+
+    if (CurTok != tok_identifier)
+      return LogError(parser_struct.line, "Expected " + data_type + " identifier name(s).");
+  }
+
+
+
+  auto aux = std::make_unique<UnkVarExprAST>(parser_struct, std::move(VarNames), data_type,
+                                             std::move(notes));
+  aux->SetSelf(is_self);
+  aux->SetIsAttribute(is_attr);
+  aux->SetPreDot(pre_dot);
+  
+  
+
+  return aux;
+}
+
+
+
+
+
+
 
 std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string suffix, std::string class_name) {
 
@@ -1724,6 +1827,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseRetExpr(parser_struct, class_name);
   case tok_data:
     return ParseDataExpr(parser_struct, "", class_name);
+  case tok_var:
+    return ParseVarExpr(parser_struct, "", class_name);
   case tok_global:
     return ParseGlobalExpr(parser_struct);
   case '[':
@@ -1790,12 +1895,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
   int R_cuda = type_float;
 
   std::string LName, RName;
-  if (LHS->GetType()=="tensor")
-    L_cuda = type_tensor;
-  if (LHS->GetType()=="pinned_tensor")
-    L_cuda = type_pinned_tensor;
-  if (LHS->GetType()=="str")
-    L_cuda = type_string;
+  
 
   std::string L_type;
   std::string R_type;
@@ -1863,14 +1963,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
       return std::make_tuple(nullptr,0,"None");
 
 
-    if (RHS->GetType()=="tensor")
-      R_cuda=type_tensor;
-    if (RHS->GetType()=="pinned_tensor")
-      R_cuda=type_pinned_tensor;
-    if (RHS->GetType()=="object"||RHS->GetType()=="object_vec")
-      R_cuda=type_object;
-    if (RHS->GetType()=="str")
-      R_cuda = type_string;
     
     R_type = RHS->GetType();
     // std::cout << "--Rtype is: " << R_type << ".\n";
@@ -1901,103 +1993,11 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
     }
 
 
-    //std::cout << "\nBinary expression of BinOp and Rhs:" << "\n";
-    //std::cout << ReverseToken(BinOp) << " " << ReverseToken(RhsTok) << "\n";
     
-    std::string op_elements = L_type + "_";
-    op_elements = op_elements + R_type;
-
-    // std::cout << "\n\n===============" << ".\n";
-    // std::cout << "L type: " << L_type << " R type: " << R_type << "\n\n";
-    // std::cout << "op type: " << op_elements << ".\n";
-
-    if ((L_type=="list"||R_type=="list") && BinOp!='=')
-    {
-      LogError(parser_struct.line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
-      return std::make_tuple(nullptr,0,"None");
-    }
-
-    bool shall_reverse_operands = false;
-    if (reverse_ops.count(op_elements)>0)
-    {
-      op_elements = reverse_ops[op_elements];
-      shall_reverse_operands = true;
-    }
-
-    std::string return_type = ops_type_return[op_elements];
-    // std::cout << "return type: " << return_type << "...\n";
-
-
-    // if (RHS->GetType()=="None")
-    // {
-    //   std::string pre = std::string("Binary Expr type is: ") + typeid(*RHS).name();
-    //   std::cout << pre << ".\n";
-    //   return std::make_tuple(nullptr,0,"float");
-    // }
-
-
-
-
-
-
-    if(shall_reverse_operands)
-    {
-      if (BinOp=='-') // inversion of 1 - tensor
-      {
-        // std::cout << "---REVERSING" << ".\n";
-
-        std::string op_type = op_elements + "_mult";
-
-        RHS = std::make_unique<BinaryExprAST>('*', op_elements, op_type,
-                                std::move(RHS), std::move(std::make_unique<NumberExprAST>(-1.0f)), parser_struct);
-
-
-        op_type = op_elements + "_add";
-        LHS = std::make_unique<BinaryExprAST>('+', op_elements, op_type, std::move(RHS), std::move(LHS), parser_struct);
-
-        // std::cout << "---Setting type as " << return_type << ".\n";
-        LHS->SetType(return_type);
-
-      } else {
-
-        // std::cout << "Reverse 2" << ".\n";
-                                                  
-        std::string operation = op_map[BinOp];
-        std::string op_type = op_elements + "_" + operation;
-
-        LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(RHS), std::move(LHS), parser_struct);
-        LHS->SetType(return_type);
-        
-
-      }
-    } else {
-      // std::cout << "No reverse" << ".\n";
-
-
-      if (R_cuda==type_object)
-      {
-        LHS = std::make_unique<BinaryObjExprAST>(BinOp, std::move(LHS), std::move(RHS));
-        LHS->SetType("object");
-      }
-      else
-      {
-
-        // std::cout << "Elements type: " << op_elements << ".\n";
-        std::string operation = op_map[BinOp];
-        std::string op_type = op_elements + "_" + operation;
-        // std::cout << "op: " << BinOp << ".\n"; 
-        
-        
-        LHS = std::make_unique<BinaryExprAST>(BinOp, op_elements, op_type, std::move(LHS), std::move(RHS), parser_struct);
-        if (op_type=="int_int_div")
-          return_type = "float";
-        LHS->SetType(return_type);
-      }
-    }
-
-    // std::string msg = "LHS type: " + LHS->GetType();
-    // std::cout << msg << "\n";
-    // std::cout << "====================================================================="  << ".\n";
+    
+    
+    LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS), parser_struct);
+    
 
     LhsTok = RhsTok;
   }
