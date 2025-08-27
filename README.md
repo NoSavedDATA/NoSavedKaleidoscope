@@ -8,7 +8,7 @@ All the code is open sourced.
 
 
 <div align="center">
-  <img src="assets/kaleidoscope.png" alt="Logo" width="260" height="260">
+  <img src="assets/nsk_logo.png" alt="Logo" width="260" height="260">
 </div>
 
 Features: 
