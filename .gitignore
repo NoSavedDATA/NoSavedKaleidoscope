@@ -4,7 +4,6 @@ lib/
 bin/
 include/_mma/
 include/cutlass/
-include/stb/
 a.out
 src_backup/
 src_reference/
