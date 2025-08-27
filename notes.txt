@@ -1,1 +1,0 @@
-strace -e read,write bin/nsk
