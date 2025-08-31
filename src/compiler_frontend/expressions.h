@@ -2,8 +2,9 @@
 
 #include <string>
 #include <vector>
-
 #include "llvm/IR/Value.h"
+
+#include "../data_types/data_tree.h"
 #include "parser_struct.h"
 
 using namespace llvm;
@@ -28,12 +29,15 @@ class ExprAST {
     bool SolverIncludeScope = true;
     bool NameSolveToLast = true;
   
+    Data_Tree data_type;
 
   
   
     virtual Value *codegen(Value *scope_struct) = 0;
+    virtual Data_Tree GetDataTree(bool from_assignment=false);
+
     virtual void SetType(std::string Type);
-    virtual std::string GetType();
+    virtual std::string GetType(bool from_assignment=false);
     virtual void SetReturnType(std::string ReturnType);
   
     virtual void SetIsVarLoad(bool isVarLoad);
@@ -134,45 +138,12 @@ class NullPtrExprAST : public ExprAST {
  
 
 
-class VariableListExprAST : public ExprAST {
-  public:
-    std::vector<std::unique_ptr<ExprAST>> ExprList;
-    VariableListExprAST(std::vector<std::unique_ptr<ExprAST>> ExprList); 
-
-  Value *codegen(Value *scope_struct) override;
-};
 
   
-/// VariableExprAST - Expression class for referencing a variable, like "a".
-class VariableExprAST : public ExprAST {
-
-  public:
-    std::unique_ptr<ExprAST> NameSolver;
-    std::string Name;
-    bool CanBeString;
-    Parser_Struct parser_struct;
-    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, bool CanBeString, const std::string &Name, Parser_Struct parser_struct);
-
-    Value *codegen(Value *scope_struct) override;
-    const std::string &getName() const; 
-    std::string GetName() override; 
-
-    std::string GetType() override; 
-};
 
 
  
   
-class ObjectVecIdxExprAST : public ExprAST {
-
-  public:
-    std::unique_ptr<ExprAST> Vec, Idx;
-    std::string _post_dot;
-
-    ObjectVecIdxExprAST(std::unique_ptr<ExprAST> Vec, std::string _post_dot, std::unique_ptr<ExprAST> Idx);
-
-    Value *codegen(Value *scope_struct) override;
-};
 
 /// VarExprAST - Expression class for var/in
 class VarExprAST : public ExprAST {
@@ -187,6 +158,47 @@ class VarExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
 };
+
+
+class TupleExprAST : public VarExprAST {
+  public:
+    Parser_Struct parser_struct;
+    Data_Tree data_type;
+
+    TupleExprAST(
+      Parser_Struct,
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type, Data_Tree data_type);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+class ListExprAST : public VarExprAST {
+  public:
+    Parser_Struct parser_struct;
+    Data_Tree data_type;
+
+    ListExprAST(
+      Parser_Struct,
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type, Data_Tree data_type);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+class DictExprAST : public VarExprAST {
+  public:
+    Parser_Struct parser_struct;
+    Data_Tree data_type;
+
+    DictExprAST(
+      Parser_Struct,
+      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::string Type, Data_Tree data_type);
+
+  Value *codegen(Value *scope_struct) override;
+};
+
 
 
 class UnkVarExprAST : public VarExprAST {
@@ -219,6 +231,20 @@ class StrVecExprAST : public ExprAST {
 };
 
 
+
+class NewTupleExprAST : public ExprAST {
+
+  public:
+    std::vector<std::unique_ptr<ExprAST>> Values;
+    Data_Tree data_type;
+    
+    NewTupleExprAST(
+        std::vector<std::unique_ptr<ExprAST>> Values);
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
 class NewVecExprAST : public ExprAST {
 
   public:
@@ -230,6 +256,7 @@ class NewVecExprAST : public ExprAST {
         std::string Type);
 
   Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
 class NewDictExprAST : public ExprAST {
@@ -253,13 +280,16 @@ class ObjectExprAST : public VarExprAST {
 public:
   Parser_Struct parser_struct;
   std::unique_ptr<ExprAST> Init;
+  std::vector<std::vector<std::unique_ptr<ExprAST>>> Args;
   int Size;
+  std::string ClassName;
 
   ObjectExprAST(
       Parser_Struct parser_struct,
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::vector<std::vector<std::unique_ptr<ExprAST>>> Args,
       std::string Type,
-      std::unique_ptr<ExprAST> Init, int Size);
+      std::unique_ptr<ExprAST> Init, int Size, std::string ClassName);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -274,12 +304,14 @@ public:
 class DataExprAST : public VarExprAST {
   public:
     std::vector<std::unique_ptr<ExprAST>> Notes;
+    Data_Tree data_type;
     Parser_Struct parser_struct;
+    bool HasNotes, IsStruct;
 
     DataExprAST(
       Parser_Struct,
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::string Type,
+      std::string Type, Data_Tree, bool, bool,
       std::vector<std::unique_ptr<ExprAST>> Notes);
 
   Value *codegen(Value *scope_struct) override;
@@ -333,7 +365,8 @@ public:
                 std::unique_ptr<ExprAST> RHS, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
-  std::string GetType() override;
+  std::string GetType(bool from_assignment=false) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
 
@@ -353,8 +386,67 @@ public:
 
   Value *codegen(Value *scope_struct) override;
 };
+
+
+
+
+class Nameable : public ExprAST {
+  public:
+  std::vector<std::string> Expr_String = {};
+  std::unique_ptr<Nameable> Inner=nullptr;
+  int Depth=1;
+  bool CanBeString=false,IsLeaf=true,Load_Last=true; 
+  Parser_Struct parser_struct;
+
+  Nameable(Parser_Struct);
+  Nameable(Parser_Struct, std::string, int);
+
+  void AddNested(std::unique_ptr<Nameable>);
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+class NameableRoot : public Nameable {
+  public:
   
-  
+  NameableRoot(Parser_Struct);
+
+
+  Value *codegen(Value *scope_struct) override;
+};
+
+
+
+class NameableCall : public Nameable {
+  public:
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  std::string Callee;
+
+  NameableCall(Parser_Struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args);
+
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+class NameableIdx : public Nameable {
+  public:
+  std::unique_ptr<IndexExprAST> Idx;
+
+  NameableIdx(Parser_Struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx);
+
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+
+
+
 class NameableExprAST : public ExprAST {
   public:
   std::vector<std::string> Expr_String = {};
@@ -367,6 +459,16 @@ class NameableExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
 };
 
+
+
+
+class VariableListExprAST : public ExprAST {
+  public:
+    std::vector<std::unique_ptr<Nameable>> ExprList;
+    VariableListExprAST(std::vector<std::unique_ptr<Nameable>> ExprList); 
+
+  Value *codegen(Value *scope_struct) override;
+};
 
 class EmptyStrExprAST : public NameableExprAST {
   
@@ -400,6 +502,8 @@ class NestedVectorIdxExprAST : public NameableExprAST {
     std::unique_ptr<IndexExprAST> Idx;
     NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST>, std::string, Parser_Struct, std::unique_ptr<IndexExprAST> Idx, std::string);
     Value *codegen(Value *scope_struct) override;
+
+    std::string GetType(bool from_assignment=false) override;
 };
 
 
@@ -417,6 +521,8 @@ class VecIdxExprAST : public NameableExprAST {
     Value *codegen(Value *scope_struct) override;
     const std::string &getName() const;
     std::string GetName() override;
+    std::string GetType(bool from_assignment=false) override;
+    Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
 
@@ -430,8 +536,9 @@ class NestedVariableExprAST : public ExprAST {
     std::unique_ptr<NameableExprAST> Inner_Expr;
     bool Load_Val = true;
     
-    NestedVariableExprAST(std::unique_ptr<NameableExprAST>, Parser_Struct, std::string);
+    NestedVariableExprAST(std::unique_ptr<NameableExprAST>, Parser_Struct, std::string, Data_Tree);
     Value *codegen(Value *scope_struct) override;
+    Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
 class NestedCallExprAST : public ExprAST {
@@ -446,6 +553,23 @@ class NestedCallExprAST : public ExprAST {
     Value *codegen(Value *scope_struct) override;
 };
   
+/// VariableExprAST - Expression class for referencing a variable, like "a".
+class VariableExprAST : public ExprAST {
+
+  public:
+    std::unique_ptr<ExprAST> NameSolver;
+    std::string Name;
+    bool CanBeString;
+    Parser_Struct parser_struct;
+    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, bool CanBeString, const std::string &Name, Parser_Struct parser_struct);
+
+    Value *codegen(Value *scope_struct) override;
+    const std::string &getName() const; 
+    std::string GetName() override; 
+
+    std::string GetType(bool from_assignment=false) override; 
+    Data_Tree GetDataTree(bool from_assignment=false) override;
+};
   
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST {

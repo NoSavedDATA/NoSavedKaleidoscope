@@ -2,4 +2,6 @@
 	
 	Function_Arg_Types["_quit_"]["0"] = "Scope_Struct";
 	
+	Function_Arg_DataTypes["_quit_"]["0"] = Data_Tree("Scope_Struct");
+	
 	Function_Arg_Names["_quit_"].push_back("0");

@@ -78,6 +78,9 @@ std::map<int, std::string> token_to_string = {
   { tok_async_finish, "finish finish/async" },
   { tok_tab, "tok tab" },
   { tok_return, "tok return"},
+  { tok_tuple, "tok tuple"},
+  { tok_list, "tok list"},
+  { tok_dict, "tok dict"},
   { tok_as, "tok as"},
   { tok_in, "tok in"},
 
@@ -180,8 +183,10 @@ std::map<int, std::string> token_to_string = {
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
 std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class, tok_eof};
 
-std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "str", "str_vec", "float_vec", "list", "dict", "MHSA", "LSTM", "Linear", 
+std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "str", "str_vec", "float_vec", "MHSA", "LSTM", "Linear", "tuple", "list", "dict",
                                         "Embedding", "EmbeddingLn", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
+std::vector<std::string> compound_tokens = {"tuple", "list", "dict"};
+std::vector<std::string> primary_data_tokens = {"int", "float", "str", "bool"};
 
 
 std::string IdentifierStr; // Filled in if tok_identifier
@@ -193,7 +198,7 @@ std::string ReverseToken(int _char)
   if (_char>=48 && _char<=57) // Handle number
     return std::to_string(NumVal);
   */
-  if (_char==tok_identifier||_char==tok_data)
+  if (_char==tok_identifier||_char==tok_data||_char==tok_struct)
     return IdentifierStr;
 
   return token_to_string[_char];
@@ -339,36 +344,6 @@ static int get_token() {
 
 
 
-  // if(!(tokenizer.get() >> tokenizer.token));
-  //   return tok_eof;
-  // tokenizer.get() >> tokenizer.token;
-  // if(tokenizer.token=="import")
-  // {
-  //   tokenizer.get() >> tokenizer.token;
-  //   std::cout << "LIB IS " << tokenizer.token << ".\n";
-  //   tokenizer.importFile(tokenizer.token+".ai");
-  //   tokenizer.get() >> tokenizer.token;
-  // }
-
-  // LastChar = tokenizer.get();
-
- 
-  // while (tokenizer.get() >> tokenizer.token) {
-  //   std::cout << "Token is: " << tokenizer.token << ".\n";
-  //   if(tokenizer.token=="import")
-  //   {
-  //     tokenizer.get() >> tokenizer.token;
-  //     std::cout << "LIB IS " << tokenizer.token << ".\n";
-  //     tokenizer.importFile(tokenizer.token+".ai");
-  //   }
-  // }
-
-  
-
-  /*
-  if (LastChar!=32)
-    std::cout << "Pre last char: " << ReverseToken(LastChar) << "\n";
-  */
 
 
   // Skip any whitespace and backspace.  
@@ -404,32 +379,36 @@ static int get_token() {
   }
 
 
-  
-  
-  if (LastChar=='.')
+  if(LastChar=='.') 
   {
-    LastChar = tokenizer.get(); // eat .
-    IdentifierStr = LastChar;
-    while (true)
-    {
-      LastChar = tokenizer.get();
-            
-      if(isalnum(LastChar) || LastChar=='_')
-      {
-        IdentifierStr += LastChar;
-        continue;
-      }
-
-      if (LastChar=='.')
-      {
-        LastChar = tokenizer.get();
-        return tok_post_class_attr_attr;
-      }
-      break;
-    }
-    
-    return tok_post_class_attr_identifier;
+    LastChar = tokenizer.get();
+    return '.';
   }
+  
+  // if (LastChar=='.')
+  // {
+  //   LastChar = tokenizer.get(); // eat .
+  //   IdentifierStr = LastChar;
+  //   while (true)
+  //   {
+  //     LastChar = tokenizer.get();
+            
+  //     if(isalnum(LastChar) || LastChar=='_')
+  //     {
+  //       IdentifierStr += LastChar;
+  //       continue;
+  //     }
+
+  //     if (LastChar=='.')
+  //     {
+  //       LastChar = tokenizer.get();
+  //       return tok_post_class_attr_attr;
+  //     }
+  //     break;
+  //   }
+    
+  //   return tok_post_class_attr_identifier;
+  // }
 
   if (isalpha(LastChar) || LastChar=='_') { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
@@ -438,7 +417,7 @@ static int get_token() {
     {
       LastChar = tokenizer.get();
 
-      if (LastChar=='[')
+      if (LastChar=='['||LastChar=='.')
         break;
       
       if(isalnum(LastChar) || LastChar=='_')
@@ -447,31 +426,35 @@ static int get_token() {
         continue;
       }
         
-      if (LastChar=='.')
-      {
-        LastChar = tokenizer.get();
-        if (IdentifierStr == "self")
-          return tok_self;
+      // if (LastChar=='.')
+      // {
+      //   LastChar = tokenizer.get();
+      //   if (IdentifierStr == "self")
+      //     return tok_self;
 
-        if(in_str(IdentifierStr, imported_libs)) // If it is from a library
-        {
-          IdentifierStr += "__";
-          while(isalnum(LastChar)||LastChar=='_')
-          {
-            IdentifierStr+=LastChar;
-            LastChar = tokenizer.get();
-          }
-        } else
-          return tok_class_attr;
-      }
+      //   if(in_str(IdentifierStr, imported_libs)) // If it is from a library
+      //   {
+      //     IdentifierStr += "__";
+      //     while(isalnum(LastChar)||LastChar=='_')
+      //     {
+      //       IdentifierStr+=LastChar;
+      //       LastChar = tokenizer.get();
+      //     }
+      //   } else
+      //     return tok_class_attr;
+      // }
       break;
     }
 
  
+    if (in_str(IdentifierStr, compound_tokens))
+      return tok_struct;
     if (in_str(IdentifierStr, data_tokens))
       return tok_data;
     if (IdentifierStr == "var")
       return tok_var;
+    if (IdentifierStr == "self")
+      return tok_self;
     if (IdentifierStr == "def")
       return tok_def;
     if (IdentifierStr == "class")

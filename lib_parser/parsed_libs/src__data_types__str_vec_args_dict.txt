@@ -3,17 +3,32 @@
 	Function_Arg_Types["LenStrVec"]["0"] = "Scope_Struct";
 	Function_Arg_Types["LenStrVec"]["1"] = "str_vec";
 	
+	Function_Arg_DataTypes["LenStrVec"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree LenStrVec_1 = Data_Tree("vec");
+	LenStrVec_1.Nested_Data.push_back(Data_Tree("str"));
+	Function_Arg_DataTypes["LenStrVec"]["1"] = LenStrVec_1;
+	
 	Function_Arg_Names["LenStrVec"].push_back("0");
 	Function_Arg_Names["LenStrVec"].push_back("1");
 	
 	Function_Arg_Types["ShuffleStrVec"]["0"] = "Scope_Struct";
 	Function_Arg_Types["ShuffleStrVec"]["1"] = "str_vec";
 	
+	Function_Arg_DataTypes["ShuffleStrVec"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree ShuffleStrVec_1 = Data_Tree("vec");
+	ShuffleStrVec_1.Nested_Data.push_back(Data_Tree("str"));
+	Function_Arg_DataTypes["ShuffleStrVec"]["1"] = ShuffleStrVec_1;
+	
 	Function_Arg_Names["ShuffleStrVec"].push_back("0");
 	Function_Arg_Names["ShuffleStrVec"].push_back("1");
 	
 	Function_Arg_Types["str_vec_print"]["0"] = "Scope_Struct";
 	Function_Arg_Types["str_vec_print"]["1"] = "str_vec";
+	
+	Function_Arg_DataTypes["str_vec_print"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree str_vec_print_1 = Data_Tree("vec");
+	str_vec_print_1.Nested_Data.push_back(Data_Tree("str"));
+	Function_Arg_DataTypes["str_vec_print"]["1"] = str_vec_print_1;
 	
 	Function_Arg_Names["str_vec_print"].push_back("0");
 	Function_Arg_Names["str_vec_print"].push_back("1");

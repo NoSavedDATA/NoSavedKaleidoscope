@@ -1,0 +1,70 @@
+
+
+
+
+class Tup
+    int x, y
+
+    def float __init__(i x, i y)
+        self.x = x
+        self.y = y
+
+
+    def float Print()
+        print("x: " + self.x + ", y: " + self.y)
+
+
+
+class D
+    list<Tup> tup_list
+
+    def float __init__(list<Tup> tup_list)
+        self.tup_list = tup_list
+
+
+
+class MyClass
+    list<D> l
+
+
+    def float __init__(list<Tup> tup_list_a, list<Tup> tup_list_b)
+
+        
+        D x, y
+        x.__init__(tup_list_a)
+        y.__init__(tup_list_b)
+
+        list<D> z = [x, y]
+
+
+        
+        Tup e
+        e = z[1].tup_list[1]
+
+        e.Print()
+
+        0
+
+
+Tup a, b, c, d
+a.__init__(1,2)
+b.__init__(3,4)
+c.__init__(5,6)
+d.__init__(7,8)
+
+list<Tup> la = [a,b]
+list<Tup> lb = [c,d]
+
+list<int> x = [1,2,3,4,5]
+
+
+
+MyClass obj
+obj.__init__(la, lb)
+
+
+
+
+
+
+

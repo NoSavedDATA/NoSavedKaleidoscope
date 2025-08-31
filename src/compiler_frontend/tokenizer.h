@@ -6,7 +6,10 @@
 #include <fstream>
 #include <stack>
 #include <string>
+#include <map>
 #include <memory>
+#include <vector>
+
 
 
 
@@ -83,7 +86,11 @@ enum Token {
     tok_no_grad = -50,
 
     tok_data = -44,
+    tok_struct = -54,
     tok_var = -45,
+    tok_tuple = -46,
+    tok_list = -47,
+    tok_dict = -48,
 };
 
 
@@ -133,7 +140,7 @@ extern int LineCounter;
 extern int SeenTabs;
 extern int LastSeenTabs;
 
-extern std::vector<std::string> data_tokens;
+extern std::vector<std::string> data_tokens, compound_tokens, primary_data_tokens;
 
 
 /// CurTok/getNextToken - Provide a simple token buffer.  CurTok is the current

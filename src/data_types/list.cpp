@@ -68,12 +68,35 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
 
 
 
+extern "C" void list_append_int(Scope_Struct *scope_struct, DT_list *list, int x) {
+  list->append(x, "int");
+}
+
+extern "C" void list_append_float(Scope_Struct *scope_struct, DT_list *list, float x) {
+  list->append(x, "float");
+}
+
+extern "C" void list_append_bool(Scope_Struct *scope_struct, DT_list *list, bool x) {
+  list->append(x, "bool");
+}
+
+extern "C" float list_append(Scope_Struct *scope_struct, DT_list *list, void *x, char *type) {
+  // std::cout << "Adding x of type " << type << ".\n";
+
+  
+  list->append(std::any(x), type);
+  return 0;
+}
+
+
+
 
 extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
   // std::cout << "\n";
   list->print();
   return 0;
 }
+
 
 
 

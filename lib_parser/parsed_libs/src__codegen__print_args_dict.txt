@@ -3,5 +3,8 @@
 	Function_Arg_Types["print"]["0"] = "Scope_Struct";
 	Function_Arg_Types["print"]["1"] = "str";
 	
+	Function_Arg_DataTypes["print"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["print"]["1"] = Data_Tree("str");
+	
 	Function_Arg_Names["print"].push_back("0");
 	Function_Arg_Names["print"].push_back("1");

@@ -26,6 +26,7 @@ return_string_fn, threaded_tensor_functions, require_scope_functions, notators_s
 
 
 extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
+extern std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 
 
@@ -40,11 +41,10 @@ extern std::map<std::string, std::vector<std::string>> lib_submodules;
 extern std::map<std::string, std::string> lib_function_remaps;
 
 
-extern std::map<std::string, std::string> functions_return_type, reverse_ops;
 
 
 
-extern std::map<std::string, std::vector<std::string>> data_typeVars;
+extern std::map<std::string, std::map<std::string, Data_Tree>> data_typeVars;
 extern std::map<std::string, std::map<std::string, std::string>> typeVars;
 
 extern std::map<std::string, std::string> floatFunctions;
@@ -56,7 +56,6 @@ extern std::vector<std::string> Classes;
 
 
 
-extern std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 extern std::unique_ptr<llvm::orc::KaleidoscopeJIT> TheJIT;
 extern ExitOnError ExitOnErr;
 

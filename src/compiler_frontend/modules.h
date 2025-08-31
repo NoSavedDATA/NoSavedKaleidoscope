@@ -42,19 +42,28 @@ inline Value *const_float(float val) {
 
 inline Function *getFunctionCheck(std::string Name) {
   // First, see if the function has already been added to the current module.
+
+
   if (auto *F = TheModule->getFunction(Name))
     return F;
+
+  auto FI = FunctionProtos.find(Name);
+  if (FI != FunctionProtos.end())
+    return FI->second->codegen();
+
+
+    
 
   LogError(-1, "The function " + Name + " was not found.");
   // If no existing prototype exists, return null.
   return nullptr;
 }
 
-inline void call(std::string fn, std::vector<Value *> args) {
+inline void call(std::string fn, const std::vector<Value *> &args) {
     if(!Shall_Exit)
         Builder->CreateCall(getFunctionCheck(fn), args);
 }
-inline Value *callret(std::string fn, std::vector<Value *> args) { 
+inline Value *callret(std::string fn, const std::vector<Value *> &args) { 
     if(!Shall_Exit)
         return Builder->CreateCall(getFunctionCheck(fn), args);
     return const_float(0);

@@ -45,3 +45,9 @@ AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
 Type *get_type_from_str(std::string type);
 
 std::string Get_Nested_Name(std::vector<std::string>, Parser_Struct, bool);
+
+
+bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Struct parser_struct);
+
+
+bool CheckIsEquivalent(std::string LType, std::string RType);

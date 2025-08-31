@@ -20,6 +20,7 @@
 
 #include "../clean_up/clean_up.h"
 #include "../common/extension_functions.h"
+#include "../data_types/data_tree.h"
 #include "../libs_llvm/so_libs.h"
 #include "include.h"
 
@@ -133,8 +134,6 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         if (!begins_with(Name, "initialize__"))
         {
             std::string type = ArgTypes[i];
-            // std::cout << "Got type " << ArgTypes[i] << ".\n";
-            // std::cout << "Got name " << ArgNames[i] << ".\n\n";
 
             if(begins_with(type, "DT_"))
                 type = remove_substring(type, "DT_");
@@ -145,6 +144,13 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
 
             Function_Arg_Names[Name].push_back(ArgNames[i]);
             Function_Arg_Types[Name][ArgNames[i]] = type;
+
+            if(ends_with(type, "_vec")) {
+                Data_Tree vec_dt = Data_Tree("vec");
+                vec_dt.Nested_Data.push_back(Data_Tree(remove_suffix(type, "_vec")));
+                Function_Arg_DataTypes[Name][ArgNames[i]] = vec_dt;
+            } else 
+                Function_Arg_DataTypes[Name][ArgNames[i]] = Data_Tree(type);
         }
         
 
@@ -171,6 +177,18 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         fn_return_type_str = "str_vec";
     Lib_Functions_Return[Name] = fn_return_type_str;
     Lib_Functions_Args[Name] = std::move(arg_types_str);
+
+
+    Data_Tree return_dt;
+    if(ends_with(fn_return_type_str, "_vec"))
+    {
+        return_dt = Data_Tree("vec");
+        return_dt.Nested_Data.push_back(Data_Tree(remove_suffix(fn_return_type_str, "_vec")));
+    } else
+        return_dt = Data_Tree(fn_return_type_str);
+
+    functions_return_data_type[Name] = return_dt;
+    
 
 
     FunctionType *llvm_function = FunctionType::get(

@@ -6,6 +6,12 @@
 	Function_Arg_Types["dict_Store_Key"]["3"] = "void";
 	Function_Arg_Types["dict_Store_Key"]["4"] = "str";
 	
+	Function_Arg_DataTypes["dict_Store_Key"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["dict_Store_Key"]["1"] = Data_Tree("dict");
+	Function_Arg_DataTypes["dict_Store_Key"]["2"] = Data_Tree("str");
+	Function_Arg_DataTypes["dict_Store_Key"]["3"] = Data_Tree("void");
+	Function_Arg_DataTypes["dict_Store_Key"]["4"] = Data_Tree("str");
+	
 	Function_Arg_Names["dict_Store_Key"].push_back("0");
 	Function_Arg_Names["dict_Store_Key"].push_back("1");
 	Function_Arg_Names["dict_Store_Key"].push_back("2");
@@ -17,6 +23,11 @@
 	Function_Arg_Types["dict_Store_Key_int"]["2"] = "str";
 	Function_Arg_Types["dict_Store_Key_int"]["3"] = "int";
 	
+	Function_Arg_DataTypes["dict_Store_Key_int"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["dict_Store_Key_int"]["1"] = Data_Tree("dict");
+	Function_Arg_DataTypes["dict_Store_Key_int"]["2"] = Data_Tree("str");
+	Function_Arg_DataTypes["dict_Store_Key_int"]["3"] = Data_Tree("int");
+	
 	Function_Arg_Names["dict_Store_Key_int"].push_back("0");
 	Function_Arg_Names["dict_Store_Key_int"].push_back("1");
 	Function_Arg_Names["dict_Store_Key_int"].push_back("2");
@@ -27,6 +38,11 @@
 	Function_Arg_Types["dict_Store_Key_float"]["2"] = "str";
 	Function_Arg_Types["dict_Store_Key_float"]["3"] = "float";
 	
+	Function_Arg_DataTypes["dict_Store_Key_float"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["dict_Store_Key_float"]["1"] = Data_Tree("dict");
+	Function_Arg_DataTypes["dict_Store_Key_float"]["2"] = Data_Tree("str");
+	Function_Arg_DataTypes["dict_Store_Key_float"]["3"] = Data_Tree("float");
+	
 	Function_Arg_Names["dict_Store_Key_float"].push_back("0");
 	Function_Arg_Names["dict_Store_Key_float"].push_back("1");
 	Function_Arg_Names["dict_Store_Key_float"].push_back("2");
@@ -35,12 +51,19 @@
 	Function_Arg_Types["dict_print"]["0"] = "Scope_Struct";
 	Function_Arg_Types["dict_print"]["1"] = "dict";
 	
+	Function_Arg_DataTypes["dict_print"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["dict_print"]["1"] = Data_Tree("dict");
+	
 	Function_Arg_Names["dict_print"].push_back("0");
 	Function_Arg_Names["dict_print"].push_back("1");
 	
 	Function_Arg_Types["dict_Query"]["0"] = "Scope_Struct";
 	Function_Arg_Types["dict_Query"]["1"] = "dict";
 	Function_Arg_Types["dict_Query"]["2"] = "str";
+	
+	Function_Arg_DataTypes["dict_Query"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["dict_Query"]["1"] = Data_Tree("dict");
+	Function_Arg_DataTypes["dict_Query"]["2"] = Data_Tree("str");
 	
 	Function_Arg_Names["dict_Query"].push_back("0");
 	Function_Arg_Names["dict_Query"].push_back("1");

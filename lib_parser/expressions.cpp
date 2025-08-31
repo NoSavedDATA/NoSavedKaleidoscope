@@ -18,6 +18,14 @@ void removeSpacesAndAsterisks(std::string& s) {
             s.end());
 }
 
+std::string remove_suffix(const std::string& input_string, std::string suffix) {
+    if (input_string.length() >= suffix.length() && 
+        input_string.substr(input_string.length() - suffix.length()) == suffix) {
+        return input_string.substr(0, input_string.length() - suffix.length());
+    }
+    return input_string;
+}
+
 
 
 ExternFunctionExpr::ExternFunctionExpr(const std::string &ReturnType, const std::string &FunctionName, std::vector<std::string> ArgTypes, bool Vararg)
@@ -109,6 +117,7 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
 
     std::string arg_names_line = "\n\t";
     std::string arg_types_line = "\n\t";
+    std::string arg_data_types_line = "\n\t";
 
 
     if (ArgTypes.size()>0)
@@ -137,11 +146,21 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
             arg_names_line = arg_names_line + "\n\tFunction_Arg_Names[\"" + FunctionName + "\"].push_back(\"" + arg_name + "\");";
 
             arg_types_line = arg_types_line + "\n\tFunction_Arg_Types[\"" + FunctionName + "\"][\"" + arg_name + "\"] = \"" + arg_type + "\";";
+
+
+
+            if(ends_with(arg_type, "vec")) {
+                std::string data_tree_type = FunctionName+"_"+arg_name;
+                arg_data_types_line = arg_data_types_line + "\n\tData_Tree " + data_tree_type + " = Data_Tree(\"vec\");";
+                arg_data_types_line = arg_data_types_line + "\n\t"+ data_tree_type + ".Nested_Data.push_back(Data_Tree(\"" +remove_suffix(arg_type,"_vec")+ "\"));";
+                arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = " + data_tree_type + ";";
+            } else
+                arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = Data_Tree(\"" + arg_type + "\");";
         }
     }
 
 
-    lib_info->arg_types_string = lib_info->arg_types_string + arg_types_line + arg_names_line;
+    lib_info->arg_types_string = lib_info->arg_types_string + arg_types_line + arg_data_types_line + arg_names_line;
 
     // std::cout << "Got lib_info " << arg_types_line << "\n\n" << arg_names_line << ".\n";
 

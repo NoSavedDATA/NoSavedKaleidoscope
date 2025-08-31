@@ -24,7 +24,7 @@ extern std::map<std::string, std::string> ops_type_return;
 extern std::map<int, std::string> op_map;
 extern std::vector<std::string> op_map_names;
 
-extern std::map<std::string, std::map<std::string, std::string>> Object_toClass;
+extern std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
 
 
 
@@ -68,6 +68,7 @@ std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string 
 std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::string class_name="", bool can_be_string=false, bool can_be_list=true); 
 
 
+std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struct, std::string class_name);
 
 
 
@@ -101,7 +102,7 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
 
 
 
-std::unique_ptr<ExprAST> ParseNewVector(Parser_Struct parser_struct, std::string class_name=""); 
+std::unique_ptr<ExprAST> ParseNewList(Parser_Struct parser_struct, std::string class_name=""); 
 
 
 std::unique_ptr<ExprAST> ParseStrVecExpr(Parser_Struct parser_struct); 
@@ -116,8 +117,9 @@ std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::un
 
 
    
+std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct parser_struct, std::string class_name="");
 
-std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string suffix="", std::string class_name=""); 
+std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string class_name=""); 
 
 
     
@@ -144,7 +146,6 @@ std::unique_ptr<ExprAST> ParseMustBeVar(std::string class_name="", std::string e
   
   
   
-std::unique_ptr<ExprAST> ParseGlobalExpr(Parser_Struct parser_struct, std::string class_name=""); 
     
   
   
@@ -192,5 +193,10 @@ std::unique_ptr<PrototypeAST> ParseExtern(Parser_Struct parser_struct);
   
 std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct); 
  
+
+
+std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth=0);
+std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name="", int depth=0);
+std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name="", bool can_be_list=true, int depth=0);
 
 

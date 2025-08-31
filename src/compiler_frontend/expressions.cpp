@@ -3,15 +3,14 @@
 #include "llvm/IR/Value.h"
 
 
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <string>
 #include <vector>
 
 #include "include.h"
-
-
-#include <filesystem>
-#include <fstream>
+#include "../data_types/data_tree.h"
 
 
 using namespace llvm;
@@ -30,8 +29,11 @@ void ExprAST::SetType(std::string Type) {
   this->Type=Type;
   this->ReturnType=Type;
 }
-std::string ExprAST::GetType() {
+std::string ExprAST::GetType(bool from_assignment) {
   return Type;
+}
+Data_Tree ExprAST::GetDataTree(bool from_assignment) {
+  return Data_Tree(this->Type);
 }
 void ExprAST::SetReturnType(std::string ReturnType) {
   this->ReturnType=ReturnType;
@@ -133,7 +135,7 @@ NullPtrExprAST::NullPtrExprAST() {
 } 
 
 
-VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<ExprAST>> ExprList)
+VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<Nameable>> ExprList)
                       : ExprList(std::move(ExprList)) {
   this->SetIsList(true);
 } 
@@ -159,10 +161,6 @@ std::string VecIdxExprAST::GetName()  { return Name; }
   
   
   
-ObjectVecIdxExprAST::ObjectVecIdxExprAST(std::unique_ptr<ExprAST> Vec, std::string _post_dot, std::unique_ptr<ExprAST> Idx)
-              : Vec(std::move(Vec)), _post_dot(_post_dot), Idx(std::move(Idx)) {
-  this->isVarLoad = true;
-}
   
   
 /// VarExprAST - Expression class for var/in
@@ -172,6 +170,11 @@ VarExprAST::VarExprAST(
     : VarNames(std::move(VarNames)), Type(Type) {}
   
   
+
+
+NewTupleExprAST::NewTupleExprAST(
+    std::vector<std::unique_ptr<ExprAST>> Values)
+    : Values(std::move(Values)) {}
 
 
   
@@ -198,9 +201,13 @@ NewDictExprAST::NewDictExprAST(
 ObjectExprAST::ObjectExprAST(
     Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+  std::vector<std::vector<std::unique_ptr<ExprAST>>> Args,
   std::string Type,
-  std::unique_ptr<ExprAST> Init, int Size)
-  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), Size(Size) {}
+  std::unique_ptr<ExprAST> Init, int Size, std::string ClassName)
+  : parser_struct(parser_struct), Args(std::move(Args)), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), Size(Size), ClassName(ClassName)
+{
+  
+}
 
 
 
@@ -277,11 +284,12 @@ NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr
 }
 
 
-NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, Parser_Struct parser_struct, std::string type)
+NestedVariableExprAST::NestedVariableExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, Parser_Struct parser_struct, std::string type, Data_Tree data_type)
       : Inner_Expr(std::move(Inner_Expr)), parser_struct(parser_struct) {
   this->SetType(type);
 
   this->Name = this->Inner_Expr->Name;
+  this->data_type = data_type;
 }
  
 UnkVarExprAST::UnkVarExprAST(
@@ -296,18 +304,108 @@ UnkVarExprAST::UnkVarExprAST(
     const std::string &VarName = this->VarNames[i].first; 
     ExprAST *Init = this->VarNames[i].second.get();
 
-    std::string init_type = Init->GetType();
-    typeVars[parser_struct.function_name][VarName] = init_type;
+    Data_Tree dt = Init->GetDataTree();
+
+    
+        
+    data_typeVars[parser_struct.function_name][VarName] = Init->GetDataTree();
+
+
+    // std::string init_type = Init->GetType();
+    // typeVars[parser_struct.function_name][VarName] = init_type;
   }
 }
+
+
+TupleExprAST::TupleExprAST(
+  Parser_Struct parser_struct,
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+  std::string Type,
+  Data_Tree data_type) : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
+
+    
+  for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+    const std::string &VarName = this->VarNames[i].first; 
+    ExprAST *Init = this->VarNames[i].second.get();
+
+    std::string init_type = Init->GetType();
+    Data_Tree other_type = Init->GetDataTree();
+    
+    if(this->Type=="tuple")
+      Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
+    
+    data_typeVars[parser_struct.function_name][VarName] = data_type;
+  }
+}
+
+ListExprAST::ListExprAST(
+  Parser_Struct parser_struct,
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+  std::string Type,
+  Data_Tree data_type) : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
+
+    
+  for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+    const std::string &VarName = this->VarNames[i].first; 
+    ExprAST *Init = this->VarNames[i].second.get();
+
+    std::string init_type = Init->GetType();
+    Data_Tree other_type = Init->GetDataTree();
+    
+    Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
+    
+    data_typeVars[parser_struct.function_name][VarName] = data_type;
+  }
+}
+
+DictExprAST::DictExprAST(
+  Parser_Struct parser_struct,
+  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+  std::string Type,
+  Data_Tree data_type) : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type) {
+
+    
+  for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+    const std::string &VarName = this->VarNames[i].first; 
+    ExprAST *Init = this->VarNames[i].second.get();
+
+    std::string init_type = Init->GetType();
+    Data_Tree other_type = Init->GetDataTree();
+    
+    Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
+    
+    data_typeVars[parser_struct.function_name][VarName] = data_type;
+  }
+}
+
   
 DataExprAST::DataExprAST(
   Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-  std::string Type,
+  std::string Type, Data_Tree data_type, bool HasNotes, bool IsStruct,
   std::vector<std::unique_ptr<ExprAST>> Notes)
-  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)),
-                Notes(std::move(Notes)) {}
+  : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsStruct(IsStruct),
+                Notes(std::move(Notes))
+{
+   
+  for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
+    if(this->isSelf)
+      continue;
+    
+    const std::string &VarName = this->VarNames[i].first; 
+    ExprAST *Init = this->VarNames[i].second.get();
+
+    std::string init_type = Init->GetType();
+    Data_Tree other_type = Init->GetDataTree();
+    
+    // if(!in_str(this->Type, {"list", "dict"}))
+    if(this->Type=="tuple")
+      Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
+
+    
+    data_typeVars[parser_struct.function_name][VarName] = data_type;
+  }
+}
 
 
 LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_Struct parser_struct)
@@ -368,8 +466,27 @@ UnaryExprAST::UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand, Parser
     : Opcode(Opcode), Operand(std::move(Operand)), parser_struct(parser_struct) {}
   
   
+
+
+
+Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
+
+  std::string LType = LHS->GetDataTree().Type, RType = RHS->GetDataTree().Type;
+  if ((LType=="list"||RType=="list") && Op!='=')
+    LogError(parser_struct.line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
   
-  /// BinaryExprAST - Expression class for a binary operator.
+  Elements = LType + "_" + RType;    
+  
+  std::string operation = op_map[Op];
+  Operation = Elements + "_" + operation;
+  
+  std::string type = (Operation=="int_int_div") ? "float" : ops_type_return[Elements];
+
+  return Data_Tree(type);
+}
+
+  
+  /// binaryexprAST - Expression class for a binary operator.
 BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
               std::unique_ptr<ExprAST> RHS, Parser_Struct parser_struct)
     : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)), parser_struct(parser_struct) {}
@@ -480,12 +597,10 @@ IncThreadIdExprAST::IncThreadIdExprAST()
 {}
 
 SplitParallelExprAST::SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {
-  // Type = Inner_Vec->GetType();
 }
 
 
 SplitStridedParallelExprAST::SplitStridedParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {
-  // Type = Inner_Vec->GetType();
 }
   
   /// FinishExprAST - Expression class for finish/async.
@@ -533,3 +648,120 @@ char PrototypeAST::getOperatorName() const {
 
 
 unsigned PrototypeAST::getBinaryPrecedence() const { return Precedence; }
+
+
+
+
+
+
+Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
+
+  Data_Tree inner_dt = Inner->GetDataTree();
+
+  std::string compound_type = inner_dt.Type;
+  
+
+  if (from_assignment || !in_str(compound_type, {"vec", "list", "dict", "tuple"}))
+    return inner_dt; //e.g: for list_Store_Idx
+
+
+  return inner_dt.Nested_Data[0];
+}
+
+
+Data_Tree NameableCall::GetDataTree(bool from_assignment) {
+  // LogBlue("Data tree of " + Callee + ", return is: " + functions_return_type[Callee]);  
+
+  std::string ret = functions_return_type[Callee];
+
+  Data_Tree return_dt;
+  if (ends_with(ret, "_vec"))
+  {
+    return_dt = Data_Tree("vec");
+    return_dt.Nested_Data.push_back(remove_suffix(ret, "_vec"));
+  } else
+    return_dt = Data_Tree(ret);
+
+  return return_dt;
+}
+
+
+Data_Tree Nameable::GetDataTree(bool from_assignment) {
+  
+  if(Depth==1) {
+    if(Name=="self")
+      return Data_Tree(parser_struct.class_name);
+    else if(data_typeVars[parser_struct.function_name].find(Name)!=data_typeVars[parser_struct.function_name].end())
+        return data_typeVars[parser_struct.function_name][Name];
+    else
+      LogError(parser_struct.line, "Could not find variable " + Name + " on scope " + parser_struct.function_name + ".");
+  }
+
+  
+  std::string scope = Inner->GetDataTree().Type;
+
+
+  if(data_typeVars[scope].find(Name)!=data_typeVars[scope].end())
+    return data_typeVars[scope][Name];
+  else
+    LogError(parser_struct.line, "Could not find variable " + Name + " on scope " + scope+". Depth: " + std::to_string(Depth));
+}
+
+
+
+
+Nameable::Nameable(Parser_Struct parser_struct) : parser_struct(parser_struct) {}
+
+Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth) : parser_struct(parser_struct), Depth(Depth) {
+  this->Name = Name;
+  this->isAttribute = Depth>1;
+  this->isSelf = (Depth==1&&Name=="self");
+}
+
+
+void Nameable::AddNested(std::unique_ptr<Nameable> Inner) {
+  this->Inner = std::move(Inner);
+  this->Inner->IsLeaf = false;
+  this->isSelf = this->isSelf||this->Inner->isSelf;
+}
+
+NameableRoot::NameableRoot(Parser_Struct parser_struct) : Nameable(parser_struct) {
+  Depth = 0;
+  Name = "";
+}
+
+NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args) : Nameable(parser_struct), Args(std::move(Args)) {
+  this->Inner = std::move(Inner);
+  this->Inner->IsLeaf = false;
+  this->isSelf = this->Inner->isSelf;
+
+  
+  Depth = this->Inner->Depth;
+
+  Callee = this->Inner->Name;
+
+  if(Depth>1) {    
+    Data_Tree inner_dt = this->Inner->Inner->GetDataTree();
+
+  
+    if(data_typeVars[inner_dt.Type].find(Callee)!=data_typeVars[inner_dt.Type].end()) // self.linear1(x)    
+      Callee = UnmangleVec(data_typeVars[inner_dt.Type][Callee]);
+    else { // x.view()
+      this->Inner = std::move(this->Inner->Inner);
+      Callee = UnmangleVec(inner_dt) + "_" + Callee;
+    }
+
+    
+    // LogBlue("Callee is " + Callee);
+  }
+
+
+  if (in_str(Callee, vararg_methods))
+    this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+}
+
+NameableIdx::NameableIdx(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx) : Nameable(parser_struct), Idx(std::move(Idx)) {
+  this->Inner = std::move(Inner); 
+  this->Inner->IsLeaf = false;
+  this->isSelf = this->Inner->isSelf;
+}

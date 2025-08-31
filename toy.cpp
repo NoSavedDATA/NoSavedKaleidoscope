@@ -1539,13 +1539,6 @@ static void InitializeModule() {
   //===----------------------------------------------------------------------===//
 
 
-  // char *
-  FunctionType *globTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false
-  );
-  TheModule->getOrInsertFunction("_glob_b_", globTy);
 
 
   //

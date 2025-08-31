@@ -626,6 +626,34 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_New", list_NewTy);
 
+	FunctionType *list_append_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("list_append_int", list_append_intTy);
+
+	FunctionType *list_append_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("list_append_float", list_append_floatTy);
+
+	FunctionType *list_append_boolTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_append_bool", list_append_boolTy);
+
+	FunctionType *list_appendTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_append", list_appendTy);
+
 	FunctionType *list_printTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy},

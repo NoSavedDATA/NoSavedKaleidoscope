@@ -4,6 +4,10 @@
 	Function_Arg_Types["arange_int"]["1"] = "int";
 	Function_Arg_Types["arange_int"]["2"] = "int";
 	
+	Function_Arg_DataTypes["arange_int"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["arange_int"]["1"] = Data_Tree("int");
+	Function_Arg_DataTypes["arange_int"]["2"] = Data_Tree("int");
+	
 	Function_Arg_Names["arange_int"].push_back("0");
 	Function_Arg_Names["arange_int"].push_back("1");
 	Function_Arg_Names["arange_int"].push_back("2");
@@ -11,11 +15,17 @@
 	Function_Arg_Types["zeros_int"]["0"] = "Scope_Struct";
 	Function_Arg_Types["zeros_int"]["1"] = "int";
 	
+	Function_Arg_DataTypes["zeros_int"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["zeros_int"]["1"] = Data_Tree("int");
+	
 	Function_Arg_Names["zeros_int"].push_back("0");
 	Function_Arg_Names["zeros_int"].push_back("1");
 	
 	Function_Arg_Types["ones_int"]["0"] = "Scope_Struct";
 	Function_Arg_Types["ones_int"]["1"] = "int";
+	
+	Function_Arg_DataTypes["ones_int"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["ones_int"]["1"] = Data_Tree("int");
 	
 	Function_Arg_Names["ones_int"].push_back("0");
 	Function_Arg_Names["ones_int"].push_back("1");
@@ -23,17 +33,32 @@
 	Function_Arg_Types["int_vec_first_nonzero"]["0"] = "Scope_Struct";
 	Function_Arg_Types["int_vec_first_nonzero"]["1"] = "int_vec";
 	
+	Function_Arg_DataTypes["int_vec_first_nonzero"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree int_vec_first_nonzero_1 = Data_Tree("vec");
+	int_vec_first_nonzero_1.Nested_Data.push_back(Data_Tree("int"));
+	Function_Arg_DataTypes["int_vec_first_nonzero"]["1"] = int_vec_first_nonzero_1;
+	
 	Function_Arg_Names["int_vec_first_nonzero"].push_back("0");
 	Function_Arg_Names["int_vec_first_nonzero"].push_back("1");
 	
 	Function_Arg_Types["int_vec_print"]["0"] = "Scope_Struct";
 	Function_Arg_Types["int_vec_print"]["1"] = "int_vec";
 	
+	Function_Arg_DataTypes["int_vec_print"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree int_vec_print_1 = Data_Tree("vec");
+	int_vec_print_1.Nested_Data.push_back(Data_Tree("int"));
+	Function_Arg_DataTypes["int_vec_print"]["1"] = int_vec_print_1;
+	
 	Function_Arg_Names["int_vec_print"].push_back("0");
 	Function_Arg_Names["int_vec_print"].push_back("1");
 	
 	Function_Arg_Types["int_vec_size"]["0"] = "Scope_Struct";
 	Function_Arg_Types["int_vec_size"]["1"] = "int_vec";
+	
+	Function_Arg_DataTypes["int_vec_size"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree int_vec_size_1 = Data_Tree("vec");
+	int_vec_size_1.Nested_Data.push_back(Data_Tree("int"));
+	Function_Arg_DataTypes["int_vec_size"]["1"] = int_vec_size_1;
 	
 	Function_Arg_Names["int_vec_size"].push_back("0");
 	Function_Arg_Names["int_vec_size"].push_back("1");
