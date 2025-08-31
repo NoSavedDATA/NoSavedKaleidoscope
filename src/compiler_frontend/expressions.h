@@ -280,6 +280,7 @@ class ObjectExprAST : public VarExprAST {
 public:
   Parser_Struct parser_struct;
   std::unique_ptr<ExprAST> Init;
+  std::vector<bool> HasInit;
   std::vector<std::vector<std::unique_ptr<ExprAST>>> Args;
   int Size;
   std::string ClassName;
@@ -287,6 +288,7 @@ public:
   ObjectExprAST(
       Parser_Struct parser_struct,
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+      std::vector<bool> HasInit,
       std::vector<std::vector<std::unique_ptr<ExprAST>>> Args,
       std::string Type,
       std::unique_ptr<ExprAST> Init, int Size, std::string ClassName);
@@ -376,16 +378,6 @@ public:
 
 
 
-class BinaryObjExprAST : public ExprAST {
-  char Op;
-  std::unique_ptr<ExprAST> LHS, RHS;
-
-public:
-  BinaryObjExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                std::unique_ptr<ExprAST> RHS);
-
-  Value *codegen(Value *scope_struct) override;
-};
 
 
 
@@ -422,7 +414,7 @@ class NameableRoot : public Nameable {
 class NameableCall : public Nameable {
   public:
   std::vector<std::unique_ptr<ExprAST>> Args;
-  std::string Callee;
+  std::string Callee, ReturnType="";
 
   NameableCall(Parser_Struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args);
 
@@ -508,22 +500,6 @@ class NestedVectorIdxExprAST : public NameableExprAST {
 
 
 
-class VecIdxExprAST : public NameableExprAST {
-  
-  public:
-    std::unique_ptr<ExprAST> Loaded_Var;
-    std::unique_ptr<IndexExprAST> Idx;
-    std::string Name;
-    Parser_Struct parser_struct;
-
-    VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, Parser_Struct);
-
-    Value *codegen(Value *scope_struct) override;
-    const std::string &getName() const;
-    std::string GetName() override;
-    std::string GetType(bool from_assignment=false) override;
-    Data_Tree GetDataTree(bool from_assignment=false) override;
-};
 
 
 
@@ -605,22 +581,6 @@ class CallExprAST : public ExprAST {
 };
 
 
-class ChainCallExprAST : public ExprAST {
-
-  std::string Call_Of;
-  Parser_Struct parser_struct;
-  
-  std::vector<std::unique_ptr<ExprAST>> Args;
-  std::unique_ptr<ExprAST> Inner_Call;
-
-  public:
-    ChainCallExprAST(const std::string &Call_Of,
-                    std::vector<std::unique_ptr<ExprAST>> Args,
-                    std::unique_ptr<ExprAST> Inner_Call,
-                    Parser_Struct parser_struct);
-
-  Value *codegen(Value *scope_struct) override;
-};
   
 
 class RetExprAST : public ExprAST {

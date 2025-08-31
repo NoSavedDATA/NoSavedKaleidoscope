@@ -1,7 +1,5 @@
 
 
-
-
 class Tup
     int x, y
 
@@ -15,56 +13,46 @@ class Tup
 
 
 
-class D
-    list<Tup> tup_list
+class Layer1
+    list<Tup> x
+    list<list<Tup>> z
 
-    def float __init__(list<Tup> tup_list)
-        self.tup_list = tup_list
+    def float __init__(list<Tup> y, list<list<Tup>> z)
+        self.x = y
+        self.z = z
+
+        var e = y[0]
 
 
-
-class MyClass
-    list<D> l
-
-
-    def float __init__(list<Tup> tup_list_a, list<Tup> tup_list_b)
-
-        
-        D x, y
-        x.__init__(tup_list_a)
-        y.__init__(tup_list_b)
-
-        list<D> z = [x, y]
-
+    def float Print(i idx, i second_idx)
 
         
-        Tup e
-        e = z[1].tup_list[1]
+        var e = self.z[idx]
 
-        e.Print()
+        e[second_idx].Print()
+
+        self.z[idx][second_idx].x = 16
+        var x = self.z[idx][second_idx].x
+        self.z[idx][second_idx].Print()
+
+        print("X is: " + x)
 
         0
 
 
-Tup a, b, c, d
-a.__init__(1,2)
-b.__init__(3,4)
-c.__init__(5,6)
-d.__init__(7,8)
 
-list<Tup> la = [a,b]
-list<Tup> lb = [c,d]
 
-list<int> x = [1,2,3,4,5]
+Tup a(1,2), b(3,4), c(5,6), d(7,8)
+
+list<Tup> lt = [a,b]
+list<Tup> l2 = [c,d]
+
+list<list<Tup>> z = [lt, l2]
 
 
 
-MyClass obj
-obj.__init__(la, lb)
+Layer1 l1
+l1.__init__(lt,z)
 
 
-
-
-
-
-
+l1.Print(1,1)

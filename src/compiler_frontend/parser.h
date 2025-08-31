@@ -62,11 +62,6 @@ std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string 
 
 
 
-/// identifierexpr
-///   ::= identifier
-///   ::= identifier '(' expression* ')'
-std::unique_ptr<ExprAST> ParseIdentifierExpr(Parser_Struct parser_struct, std::string class_name="", bool can_be_string=false, bool can_be_list=true); 
-
 
 std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struct, std::string class_name);
 
@@ -108,10 +103,8 @@ std::unique_ptr<ExprAST> ParseNewList(Parser_Struct parser_struct, std::string c
 std::unique_ptr<ExprAST> ParseStrVecExpr(Parser_Struct parser_struct); 
 
 
-std::unique_ptr<ExprAST> ParseSelfExpr(std::unique_ptr<ExprAST>, Parser_Struct parser_struct, std::string class_name=""); 
 
 
-std::unique_ptr<ExprAST> ParseChainCallExpr(Parser_Struct parser_struct, std::unique_ptr<ExprAST>, std::string class_name); 
   
   
 

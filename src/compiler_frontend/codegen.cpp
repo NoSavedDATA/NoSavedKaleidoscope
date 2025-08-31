@@ -259,11 +259,11 @@ bool Check_Is_Compatible_Type(std::string LType, const std::unique_ptr<ExprAST> 
   
   if (LType!=RType)
   { 
-    if (dynamic_cast<NestedVectorIdxExprAST *>(RHS.get()) || dynamic_cast<VecIdxExprAST *>(RHS.get()))
-    {
-      RType = Extract_List_Prefix(RType);
-      RType = remove_suffix(RType, "_vec");
-    }
+    // if (dynamic_cast<NestedVectorIdxExprAST *>(RHS.get()) || dynamic_cast<VecIdxExprAST *>(RHS.get()))
+    // {
+    //   RType = Extract_List_Prefix(RType);
+    //   RType = remove_suffix(RType, "_vec");
+    // }
 
     if (LType!=RType)
     {
@@ -335,7 +335,7 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
 
 
 
-    if(Type!="float"&&Type!="int")
+    if(Type!="float"&&Type!="int"&&ClassSize.count(Type)==0)
     {
       call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Extract_List_Suffix(Type))});
       if(is_self||is_attr)
@@ -1111,85 +1111,6 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
 
 
-Data_Tree VecIdxExprAST::GetDataTree(bool from_assignment) {  
-  // Always recalculate because from_assignment changes the decision about wether to change the type or not
-  if (data_typeVars[parser_struct.function_name].find(Name) != data_typeVars[parser_struct.function_name].end())
-  { 
-    Data_Tree data_type = data_typeVars[parser_struct.function_name][Name];
-    
-    if (from_assignment)
-      return data_type;
-     
-    return data_type.Nested_Data[0];
-  }
-}
-
-std::string VecIdxExprAST::GetType(bool from_assignment) {  
-  // Always recalculate because from_assignment changes the decision about wether to change the type or not
-  if (typeVars[parser_struct.function_name].find(Name) != typeVars[parser_struct.function_name].end())
-  { 
-    std::string type = typeVars[parser_struct.function_name][Name];
-    SetType(type);
-    if (from_assignment)
-      return type;
-    // LogBlue("vecIdx type: " + type);
-    return Extract_List_Prefix(type);
-  }
-}
-
-
-
-Value *VecIdxExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // Look this variable up in the function.
-
-  std::string msg = "VecIdxExpr Now Loading Vec indexation for type: " + Type;
-  p2t(msg);
-
-
-  std::string type = GetType();
-  if (type=="None") {
-    LogError(parser_struct.line, "Could not infer type of indexed variable " +  Name);
-    return const_float(0);
-  }
-
-
-
-
-
-  Value *loaded_var = Loaded_Var->codegen(scope_struct);
-
-  Value *idx = Idx_Calc_Codegen(Type, loaded_var, Idx, scope_struct);
-  
-
-
-
-
-  std::string homogeneous_type = Extract_List_Suffix(Type);
-  type = Extract_List_Prefix(Type);
-
-
-  if (homogeneous_type == "dict") {
-    Value *ret_val = callret("dict_Query", {scope_struct, loaded_var, idx});
-    if(type=="float"||type=="int")
-      ret_val = callret("to_"+type, {scope_struct, ret_val});
-    return ret_val;
-  }
-  
-  if (!Idx->IsSlice) {
-    std::string idx_fn = homogeneous_type + "_Idx";
-    Value *ret_val = callret(idx_fn, {scope_struct, loaded_var, idx});
-    if(type=="float"||type=="int")
-      ret_val = callret("to_"+type, {scope_struct, ret_val});
-    return ret_val;
-  } else {
-    std::string slice_fn = homogeneous_type + "_Slice";    
-    Value *ret =  callret(slice_fn, {scope_struct, loaded_var, idx});
-    call("Delete_Ptr", {idx});
-    return ret;
-  }
-}
 
 
 
@@ -1257,8 +1178,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     if (!Val)
     {
       seen_var_attr=false;
-      return nullptr;
-      
+      return nullptr; 
     }
 
 
@@ -1289,7 +1209,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         if (F)
         {
           Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
-          LogBlue("Store trigger");
           Value *Lvar_name = global_str(LHSE->Name);
           call(store_trigger, {Lvar_name, old_val, Val_indexed, scope_struct});
         }
@@ -1319,41 +1238,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
 
-    if(LHS->GetIsVec())
-    {
-      VecIdxExprAST *LHSV = static_cast<VecIdxExprAST *>(LHS.get());
-      Value *vec = LHSV->Loaded_Var->codegen(scope_struct);
-
-      Value *idx = Idx_Calc_Codegen(LHS->GetDataTree().Type, vec, LHSV->Idx, scope_struct);
-
-      store_op = Extract_List_Suffix(store_op);
-
-      if(ends_with(LHSV->GetDataTree().Type, "dict"))
-      {
-        
-        store_op = store_op + "_Key";
-        
-
-        std::string RType = RHS->GetDataTree().Type;
-        if (RType=="int" || RType=="float")
-        {
-          store_op = store_op + "_" + RType;
-          call(store_op, {scope_struct, vec, idx, Val}); 
-
-          return const_float(0);
-        }
-        
-        call(store_op, {scope_struct, vec, idx, Val, global_str(RType)});
-
-        return const_float(0);
-      }
-
-      store_op = store_op + "_Idx";
-      
-      call(store_op, {vec, idx, Val, scope_struct});
-
-      return const_float(0);
-    }
+    
 
 
     bool is_alloca = (!LHS->GetSelf()&&!LHS->GetIsAttribute());
@@ -1363,7 +1248,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     
 
     if(auto *LHSV = dynamic_cast<NameableIdx *>(LHS.get())) {
-      LogBlue("Store Idx");
       
       Value *vec = LHSV->Inner->codegen(scope_struct);
       std::string type = UnmangleVec(LHSV->GetDataTree(true));
@@ -1378,24 +1262,17 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         if (RType=="int" || RType=="float")
         {
           store_op = store_op + "_" + RType;
-          call(store_op, {scope_struct, vec, idx, Val}); 
 
+          call(store_op, {scope_struct, vec, idx, Val}); 
           return const_float(0);
         }
         
         call(store_op, {scope_struct, vec, idx, Val, global_str(RType)});
-
         return const_float(0);
       }
 
       
-
-      
-
-
-
       call(type+"_Store_Idx", {vec, idx, Val, scope_struct});
-
       return const_float(0);
     } 
 
@@ -1452,23 +1329,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       if (LType=="float"&&RHS->GetType()=="int")
         Val = Builder->CreateUIToFP(Val, Type::getFloatTy(*TheContext), "floattmp");
 
-      // p2t("Store " + LType + " at " + parser_struct.function_name + "/"+ Lname);
 
 
 
       Builder->CreateStore(Val, alloca);
     } else
     {
-      if(auto *LHSV = dynamic_cast<NameableIdx *>(LHS.get())) { 
-        Value *obj_ptr = LHSV->Inner->codegen(scope_struct);
-        std::string type = LHSV->GetDataTree(true).Type;
-
-        
-
-        Value *idx = Idx_Calc_Codegen(type, obj_ptr, LHSV->Idx, scope_struct);
-
-        call(type+"_Store_Idx", {obj_ptr, idx, Val, scope_struct});
-      } else if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
+      if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
         Data_Tree L_dt = LHSV->GetDataTree();
 
         Check_Is_Compatible_Data_Type(L_dt, RHS->GetDataTree(), parser_struct);
@@ -1488,13 +1355,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       
 
       if (LType!="float"&&LType!="int")
-        call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val, global_str(LType)});
-      
+        call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val, global_str(LType)});   
     }
-    
-
-
-
     
 
     seen_var_attr=false;
@@ -1668,84 +1530,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
 
-Value *BinaryObjExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-
-  Value *LName = Builder->CreateGlobalString(LHS->GetName());
-  Value *RName = Builder->CreateGlobalString(RHS->GetName());
-  Value *object_name;
-
-  
-
-
-  // if is attribution
-  if (Op == '=') {
-  
-    seen_var_attr=true;
-
-
-    // if (!LHS->GetIsVec())
-    // {
-    //   std::cout << "\n\n3 3 attr\n";
-    //   VariableExprAST *LHSE = static_cast<VariableExprAST *>(LHS.get());
-    //   if (!LHSE)
-    //     return LogErrorV("'=' object attribution destiny must be an object variable.");
-    //   LName = LHSE->NameSolver->codegen(scope_struct);
-      
-    //   if (RHS->GetIsVec())
-    //   {
-    //     std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
-    //     VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-    //     RName = RHSE->NameSolver->codegen(scope_struct);
-        
-    //     Builder->CreateCall(TheModule->getFunction("objAttr_var_from_vec"),
-    //                                                     {LName, RName});
-    //   } else {
-    //     VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-    //     RName = RHSE->NameSolver->codegen(scope_struct);
-        
-    //     Builder->CreateCall(TheModule->getFunction("objAttr_var_from_var"),
-    //                                                     {LName, RName});
-
-    //   }
-    
-    // } else {
-    //   std::cout << "\n\n3 3 other INDEXED attr\n";
-    //   VecIdxExprAST *LHSE = static_cast<VecIdxExprAST *>(LHS.get());
-    //   if (!LHSE)
-    //     return LogErrorV("'=' object attribution destiny must be an object variable.");
-    //   LName = LHSE->NameSolver->codegen(scope_struct);
-
-
-    //   std::cout << "ok" << "\n";
-      
-    //   if (RHS->GetIsVec())
-    //   {
-    //     std::cout << "3 3 other INDEXED of RHS->GetIsVec() && RHS->GetType()==object" << "\n";
-    //     VecIdxExprAST *RHSE = static_cast<VecIdxExprAST *>(RHS.get());
-    //     RName = RHSE->NameSolver->codegen(scope_struct);
-        
-    //     Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_vec"),
-    //                                                     {LName, RName});
-    //   } else {
-    //     std::cout << "3 3 VEC FROM VAR" << "\n";
-    //     VariableExprAST *RHSE = static_cast<VariableExprAST *>(RHS.get());
-    //     RName = RHSE->NameSolver->codegen(scope_struct);
-        
-    //     Builder->CreateCall(TheModule->getFunction("objAttr_vec_from_var"),
-    //                                                     {LName, RName});
-
-    //   }
-
-
-    // }
-    seen_var_attr=false;
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  }
-  
-}
 
 
 
@@ -2302,7 +2086,7 @@ Data_Tree NewVecExprAST::GetDataTree(bool from_assignment) {
   data_type.Type = "tuple";
   for (int i=1; i<Values.size(); i=i+2)
   {
-    std::string type = Values[i]->GetType();
+    std::string type = Values[i]->GetDataTree().Type;
     data_type.Nested_Data.push_back(Data_Tree(type));
   }
   data_type.empty=false;
@@ -2437,10 +2221,7 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
           std::cout << "\nExpected\n   ";
           expected_data_type.Print();
           std::cout << "\n\n";
-        }
-        // if (type!=expected_type && !CheckIsEquivalent(expected_type, type) && !(!(in_str(type, {"int", "bool", "float"})) && expected_type=="void"))
-        //   LogError(parser_struct.line, "Passed type " + type + " for the argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name + ", but expected " + expected_type + ".");
-        
+        } 
       }  
     }
 
@@ -2455,8 +2236,8 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
                         global_str("-")});
                         
         
-        // call("MarkToSweep_Mark", {scope_struct, copied_value, global_str(type)}); // Mark at FunctionAST
-        // call("MarkToSweep_Unmark_Scopeful", {scope_struct, copied_value});
+      // call("MarkToSweep_Mark", {scope_struct, copied_value, global_str(type)}); // Mark at FunctionAST
+      // call("MarkToSweep_Unmark_Scopeful", {scope_struct, copied_value});
       ArgsV.push_back(copied_value);
     } else
       ArgsV.push_back(arg);
@@ -2496,60 +2277,46 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i)
   {
     const std::string &VarName = VarNames[i].first;
+    ExprAST *Init = VarNames[i].second.get();
+
 
     Value *var_name, *obj_name;// = Builder->CreateCall(TheModule->getFunction("GetEmptyChar"), {});
     
-    std::string pre_dot = GetPreDot();
-    bool is_self = GetSelf();
-    bool is_attr = GetIsAttribute();
     
-    if (!GetIsVec())
-    {
-      if(!is_self&&!is_attr)
-      {   
-        AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, int8PtrTy);
-        Value *ptr = callret("malloc", {const_int64(Size)});
-        Builder->CreateStore(ptr, alloca);
-        // Value *ptr = callret("posix_memalign", {alloca, const_int64(8), const_int64(Size)});
-        // std::cout << "ADDING OBJECT " << VarName << " TO FUNCTION " << parser_struct.function_name << ".\n";
-        function_allocas[parser_struct.function_name][VarName] = alloca;
+    if(!isSelf&&!isAttribute)
+    {   
+      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, int8PtrTy);
 
+      Value *ptr;
+      if (Init==nullptr)
+        ptr = callret("malloc", {const_int64(Size)});
+      else
+        ptr = Init->codegen(scope_struct);
+      
+      Builder->CreateStore(ptr, alloca);
+      // Value *ptr = callret("posix_memalign", {alloca, const_int64(8), const_int64(Size)});
+      // std::cout << "ADDING OBJECT " << VarName << " TO FUNCTION " << parser_struct.function_name << ".\n";
+      function_allocas[parser_struct.function_name][VarName] = alloca;
+
+
+      
+      if (HasInit[i]) {
+        Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
+        call("set_scope_object", {scope_struct_copy, ptr});
+        
+        
+        int arg_type_check_offset = 1;
+        std::vector<Value *> ArgsV = {scope_struct_copy};
+
+        std::string Callee = ClassName + "___init__";
+        ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args[i]), scope_struct, Callee, false, arg_type_check_offset);
+        
+        call(Callee, ArgsV);
 
         
-        if (Args[i].size()!=0) {
-          Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
-          call("set_scope_object", {scope_struct_copy, ptr});
-
-          
-          
-          int arg_type_check_offset = 1;
-          std::vector<Value *> ArgsV = {scope_struct_copy};
-
-          std::string Callee = ClassName + "___init__";
-          ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args[i]), scope_struct, Callee, false, arg_type_check_offset);
-          
-          call(Callee, ArgsV);
-
-          
-          call("scope_struct_Delete", {scope_struct_copy});
-        }
-
-        continue;
-      }      
-    }
-    else if (Init) // init of vec[size]
-    {
-      var_name = global_str(VarName);
-
-      if (is_self||is_attr) 
-        var_name = callret("ConcatStr", {callret("get_scope_first_arg", {scope_struct}), var_name});
-      if (!(is_self||is_attr))
-        var_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), var_name});
-
-
-      call("InitObjectVecWithNull", {var_name, init});
-    } else
-    {}
+        call("scope_struct_Delete", {scope_struct_copy});
+      }
+    }      
   }
 
 
@@ -2817,8 +2584,6 @@ Value *NestedVariableExprAST::codegen(Value *scope_struct) {
 
 
 Value *NestedCallExprAST::codegen(Value *scope_struct) {
-  // std::cout << "--NestedCall Calling " << Callee << ".\n";
-  // p2t("Calling: " + Callee);
 
   
 
@@ -2920,8 +2685,6 @@ Value *NameableRoot::codegen(Value *scope_struct) {
 
 Value *Nameable::codegen(Value *scope_struct) {
 
-
-
   Data_Tree dt = GetDataTree();
 
   std::string type = dt.Type;
@@ -2937,16 +2700,14 @@ Value *Nameable::codegen(Value *scope_struct) {
 
 
 
-
   std::string scope = Inner->GetDataTree().Type;
   Value *obj_ptr = Inner->codegen(scope_struct);
 
-
   int offset = ClassVariables[scope][Name];
-
+  // std::cout << "offseting " << scope << "/" << Name << ": " << offset << ".\n";
+  // std::cout << IsLeaf << "/" << Load_Last << "/" << (!IsLeaf||Load_Last) << ".\n";
   
   obj_ptr = callret("offset_object_ptr", {obj_ptr, const_int(offset)});
-
 
 
   if(type!="int"&&type!="float" && (!IsLeaf||Load_Last))
@@ -3010,6 +2771,27 @@ Value *NameableIdx::codegen(Value *scope_struct) {
   }
 }
 
+inline bool Check_Args_Count(const std::string &Callee, int target_args_size, Parser_Struct parser_struct) {
+  Function *CalleeF;
+  CalleeF = getFunction(Callee);
+  if (!CalleeF)
+  {
+    std::string _error = "The referenced function "+ Callee +" was not yet declared.";
+    LogErrorV(parser_struct.line, _error);
+    return false;
+  }
+  
+  // If argument mismatch error.
+  if ((CalleeF->arg_size()) != target_args_size && !in_str(Callee, vararg_methods))
+  {
+    // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
+    std::string _error = "Incorrect parameters used on function " + Callee + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
+    LogErrorV(parser_struct.line, _error);
+    return false;
+  }
+  return true;
+}
+
 
 Value *NameableCall::codegen(Value *scope_struct) {  
 
@@ -3017,16 +2799,35 @@ Value *NameableCall::codegen(Value *scope_struct) {
   bool is_nsk_fn = in_str(Callee, native_methods);
   Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
 
+  call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
 
 
   std::vector<Value*> ArgsV = {scope_struct_copy};
 
-  if(Depth>1) {  
+  if(Depth>1) {
+    if (ends_with(Callee, "__init__")&&isSelf)
+    {
+      Inner->IsLeaf=true;
+      Inner->Load_Last=false; // inhibits Load_slot
+    }
+
     Value *obj_ptr = Inner->codegen(scope_struct);
    
     if(!is_nsk_fn)
     {
-      // std::cout << "setting scope object" << ".\n";
+      if(ends_with(Callee, "__init__")&&isSelf) // mallocs an object inside another
+      {
+        std::string obj_class = Inner->Inner->GetDataTree().Type;
+        
+        int size = ClassSize[obj_class];
+
+        Value *new_ptr = callret("malloc", {const_int64(size)});
+
+
+        call("tie_object_to_object", {obj_ptr, new_ptr});
+        
+        obj_ptr = new_ptr;
+      }
       call("set_scope_object", {scope_struct_copy, obj_ptr});
     }
     else{
@@ -3035,14 +2836,29 @@ Value *NameableCall::codegen(Value *scope_struct) {
       target_args_size++;
     }
   }
+  
+
+  if(!Check_Args_Count(Callee, target_args_size, parser_struct))
+    return const_float(0);
+
 
   ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
   
 
+
+
+  // LogBlue("call " + Callee);
   Value *ret = callret(Callee, ArgsV);
-
-
   call("scope_struct_Delete", {scope_struct_copy});    
+
+
+
+  if (ReturnType=="")
+    GetDataTree();
+  if (ReturnType!="float"&&ReturnType!="int"&&ReturnType!="")
+  {
+    call("MarkToSweep_Mark", {scope_struct, ret, global_str(ReturnType)});
+  }
 
   return ret;
 }
@@ -3208,28 +3024,3 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
 
 
-
-Value *ChainCallExprAST::codegen(Value *scope_struct) {
-  Value *inner_return = Inner_Call->codegen(scope_struct);
-
-  std::vector<Value *> ArgsV; 
-
-  ArgsV.push_back(inner_return);
-  
-
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Call_Of, true);
-
-
-  ArgsV.insert(ArgsV.begin(), scope_struct);
-  std::string call_fn = Call_Of;
-  Value *ret = callret(call_fn, ArgsV);
-
-  if (Type!="float"&&Type!="int"&&Type!="")
-  {
-
-    p2t("RETURN OF CHAIN CALL " + call_fn + " is " + Type);
-    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
-  }
-
-  return ret;
-}

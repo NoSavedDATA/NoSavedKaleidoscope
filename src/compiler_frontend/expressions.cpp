@@ -155,8 +155,6 @@ std::string VariableExprAST::GetName()  {
 
 
   
-const std::string &VecIdxExprAST::getName() const { return Name; }
-std::string VecIdxExprAST::GetName()  { return Name; }
 
   
   
@@ -201,10 +199,11 @@ NewDictExprAST::NewDictExprAST(
 ObjectExprAST::ObjectExprAST(
     Parser_Struct parser_struct,
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
+  std::vector<bool> HasInit,
   std::vector<std::vector<std::unique_ptr<ExprAST>>> Args,
   std::string Type,
   std::unique_ptr<ExprAST> Init, int Size, std::string ClassName)
-  : parser_struct(parser_struct), Args(std::move(Args)), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), Size(Size), ClassName(ClassName)
+  : parser_struct(parser_struct), HasInit(HasInit), Args(std::move(Args)), VarExprAST(std::move(VarNames), std::move(Type)), Init(std::move(Init)), Size(Size), ClassName(ClassName)
 {
   
 }
@@ -270,12 +269,6 @@ NestedVectorIdxExprAST::NestedVectorIdxExprAST(std::unique_ptr<NameableExprAST> 
   // Print_Names_Str(Expr_String);
 }
 
-VecIdxExprAST::VecIdxExprAST(std::unique_ptr<ExprAST> Loaded_Var, std::string Name, std::unique_ptr<IndexExprAST> Idx, Parser_Struct parser_struct)
-              : Loaded_Var(std::move(Loaded_Var)), Name(Name), Idx(std::move(Idx)), parser_struct(parser_struct) {
-  this->isVarLoad = true; //todo: remove this?
-
-  Expr_String = {Name};
-}
 
 
 NestedCallExprAST::NestedCallExprAST(std::unique_ptr<NameableExprAST> Inner_Expr, std::string Callee, Parser_Struct parser_struct,
@@ -502,10 +495,6 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
   
   
   
-BinaryObjExprAST::BinaryObjExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-              std::unique_ptr<ExprAST> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-  
   
   
   
@@ -532,13 +521,6 @@ CallExprAST::CallExprAST(std::unique_ptr<ExprAST> NameSolver,
 
 
 
-ChainCallExprAST::ChainCallExprAST(const std::string &Call_Of,
-                    std::vector<std::unique_ptr<ExprAST>> Args,
-                    std::unique_ptr<ExprAST> Inner_Call,
-                    Parser_Struct parser_struct)
-    : Call_Of(Call_Of), Args(std::move(Args)), Inner_Call(std::move(Inner_Call)), parser_struct(parser_struct) {
-  SetType("float");
-}
   
 
 
@@ -681,6 +663,8 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
     return_dt.Nested_Data.push_back(remove_suffix(ret, "_vec"));
   } else
     return_dt = Data_Tree(ret);
+
+  ReturnType = return_dt.Type;
 
   return return_dt;
 }
