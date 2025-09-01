@@ -2627,6 +2627,7 @@ int main(int argc, char* argv[]) {
   // 1 is lowest precedence.
   BinopPrecedence[tok_space] = 1;
   BinopPrecedence['='] = 4;
+  BinopPrecedence[tok_arrow] = 4;
   BinopPrecedence['!'] = 9;
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
@@ -2711,12 +2712,12 @@ int main(int argc, char* argv[]) {
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"},
-                     {"tensor_int", "tensor"}, {"int_tensor", "tensor"}};
+                     {"tensor_int", "tensor"}, {"int_tensor", "tensor"}, {"str_channel", "none"}, {"channel_str", "none"}};
                      
 
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
             {tok_diff, "different"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
-            {77, "error"}};
+            {77, "error"}, {tok_arrow, "message"}};
 
   for (auto pair : op_map)
     op_map_names.push_back(pair.second);

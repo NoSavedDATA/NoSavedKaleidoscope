@@ -20,10 +20,6 @@
 //===----------------------------------------------------------------------===//
 
 
-
-
-
-
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
 // of these for known words.
 enum Token {
@@ -50,6 +46,8 @@ enum Token {
     tok_else = -8,
     tok_for = -9,
     tok_while = -10,
+    tok_go = -55,
+    tok_channel = -56,
     tok_async = -22,
     tok_asyncs = -30,
     tok_async_finish = -23,
@@ -70,6 +68,7 @@ enum Token {
     tok_higher_eq = -35,
     tok_minor_eq = -36,
     tok_mod = -29,
+    tok_arrow = -57,
 
 
     tok_space = -14,

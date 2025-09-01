@@ -891,9 +891,9 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   CurIdx = Builder->CreateLoad(Type::getInt32Ty(*TheContext), idx_alloca, VarName.c_str());
 
 
-  std::string vec_type = Extract_List_Suffix(VecType);
+  std::string vec_type = UnmangleVec(data_type);
   Value *vec_value = callret(vec_type+"_Idx", {scope_struct, vec, CurIdx});
-  if(vec_type=="list"&&(Type=="float"||Type=="int"))
+  if((vec_type=="list"||vec_type=="tuple")&&(Type=="float"||Type=="int"))
     vec_value = callret("to_"+Type, {scope_struct, vec_value});
 
   Builder->CreateStore(vec_value, control_var_alloca);
@@ -1165,7 +1165,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
 
-  if (Op == '=') {
+  GetDataTree(); // gets the correct Elements and Operation.
+
+
+  if (Op == '=' || (Op==tok_arrow&&!begins_with(Elements, "channel"))) {
     seen_var_attr=true;
     // Assignment requires the LHS to be an identifier.
     // This assume we're building without RTTI because LLVM builds that way by
@@ -1174,7 +1177,24 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
     // Codegen the RHS.
-    Value *Val = RHS->codegen(scope_struct);
+    Value *Val;
+    if (Op==tok_arrow)
+    {
+      std::cout << "Get direction of " << parser_struct.function_name << "/" << RHS->GetName() << ".\n";
+      if(ChannelDirections[parser_struct.function_name][RHS->GetName()]==ch_receiver)
+      {
+        LogError(parser_struct.line, "Trying to unpack data from a receiver only channel.");
+        return const_float(0);
+      }
+      
+      Val = callret(Operation, {scope_struct, LHS->codegen(scope_struct), RHS->codegen(scope_struct)});
+    }
+    else
+      Val = RHS->codegen(scope_struct);
+    
+
+
+
     if (!Val)
     {
       seen_var_attr=false;
@@ -1286,7 +1306,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     if (is_alloca)
     {
 
-      // Check_Is_Compatible_Type(LType, RHS, parser_struct);
       Check_Is_Compatible_Data_Type(LHS->GetDataTree(), RHS->GetDataTree(), parser_struct);
 
 
@@ -1364,6 +1383,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   }
 
 
+  
+
 
 
   
@@ -1372,7 +1393,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
   // GetType(); // gets the correct Elements and Operation.
-  GetDataTree(); // gets the correct Elements and Operation.
+
 
 
 
@@ -1496,7 +1517,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     {
       std::string return_type = ops_type_return[Elements];
 
-      if (return_type!="float"&&return_type!="int")
+      if (return_type!="float"&&return_type!="int"&&return_type!="none")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(return_type))});
     }
 
@@ -1618,31 +1639,7 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct, Parser_Struct parser_struct, Value *barrier) {
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct, Parser_Struct parser_struct, Value *barrier, std::string async_suffix) {
   
 
 
@@ -1670,21 +1667,20 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
                              functionName,
                              TheModule.get());
 
-  // function_allocas[parser_struct.function_name][VarName] = alloca;
 
   // std::vector<Value *> previous_scope_values;
   std::vector<std::string> previous_scope_value_types;
   std::vector<std::string> previous_scope_value_names;
 
 
-  for (auto &pair : function_allocas["__anon_expr"]) {
+  for (auto &pair : function_allocas[parser_struct.function_name]) {
 
     std::string type;
     if (Object_toClass[parser_struct.function_name].count(pair.first)>0)
       type = "void";
     else
     {   
-      type = typeVars[parser_struct.function_name][pair.first];
+      type = UnmangleVec(data_typeVars[parser_struct.function_name][pair.first]);
       if(type!="float"&&type!="int")
         type="void";
       // Value *v = load_alloca(pair.first, type, "__anon_expr");
@@ -1722,6 +1718,8 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   // define body of function
   Value *V;
 
+  std::string async_scope = parser_struct.function_name + async_suffix;
+
   for(int i=0; i<previous_scope_value_names.size(); ++i) {
     std::string type = previous_scope_value_types[i];
     std::string var_name = previous_scope_value_names[i];
@@ -1731,7 +1729,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
     llvm::Type *llvm_type = get_type_from_str(type);
     AllocaInst * alloca = CreateEntryBlockAlloca(asyncFun, var_name, llvm_type);
     Builder->CreateStore(v, alloca);
-    function_allocas["asyncs"][var_name] = alloca;
+    function_allocas[async_scope][var_name] = alloca;
   }
 
   
@@ -1767,6 +1765,95 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 
 
 
+
+Value *ChannelExprAST::codegen(Value *scope_struct) {
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  
+  
+  // std::string type = UnmangleVec(data_type);
+  std::string type = "list";
+  std::cout << "channel expr of type " << type << ".\n";
+  
+  
+  Value *void_ptr = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
+
+
+
+  // Value *initial_value = callret("list_Create", {scope_struct, void_ptr, void_ptr, void_ptr, void_ptr});
+
+  Value *initial_value = callret("channel_Create", {scope_struct});
+
+
+  llvm::Type *alloca_type = get_type_from_str(type);
+  AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
+  Builder->CreateStore(initial_value, alloca);
+  function_allocas[parser_struct.function_name][Name] = alloca;
+
+
+
+  return const_float(0);
+}
+
+
+
+Value *GoExprAST::codegen(Value *scope_struct) {
+
+  std::cout << "reached go" << ".\n";
+  
+
+
+  Value *barrier = callret("get_barrier", {const_int(1)});
+
+  BasicBlock *CurrentBB = Builder->GetInsertBlock();
+
+
+  
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_go");
+
+
+  Builder->SetInsertPoint(CurrentBB);
+
+  
+  Function *pthread_create = TheModule->getFunction("pthread_create_aux");
+
+
+  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
+  
+  
+
+  Value *voidPtrNull = Constant::getNullValue(
+      Type::getInt8Ty(*TheContext)->getPointerTo());
+
+
+  
+  Builder->CreateCall(pthread_create,
+    {pthreadPtr,
+     voidPtrNull,
+     asyncFun,
+     voidPtrNull}
+  );
+  
+  p2t("AsyncExpr Created join call");
+
+
+  thread_pointers.push_back(pthreadPtr);
+
+
+  return const_float(0);
+}
+
+
+
+
+
+
+
+
+
+
+
+
 Value *AsyncExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -1781,7 +1868,7 @@ Value *AsyncExprAST::codegen(Value *scope_struct) {
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
 
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier);
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_async");
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1827,7 +1914,7 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier);
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_asyncs");
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1866,14 +1953,17 @@ Value *IncThreadIdExprAST::codegen(Value *scope_struct) {
 }
 
 
+
+
 Value *SplitParallelExprAST::codegen(Value *scope_struct) {
   // call("scope_struct_Increment_Thread", {scope_struct});
   
   Value *inner_vec = Inner_Vec->codegen(scope_struct);
-  SetType(Inner_Vec->GetType());
+  std::string type = UnmangleVec(Inner_Vec->GetDataTree());
+  SetType(type);
 
 
-  std::string split_fn = Inner_Vec->GetType() + "_Split_Parallel";
+  std::string split_fn = type + "_Split_Parallel";
 
   return callret(split_fn, {scope_struct, inner_vec});
 }
@@ -1921,7 +2011,7 @@ Value *FinishExprAST::codegen(Value *scope_struct) {
 
   call("scope_struct_Reset_Threads", {scope_struct});
   
-  return ConstantFP::get(*TheContext, APFloat(0.0f));
+  return const_float(0);
 }
 
 

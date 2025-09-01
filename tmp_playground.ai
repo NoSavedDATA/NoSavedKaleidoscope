@@ -21,7 +21,10 @@ class Layer1
         self.x = y
         self.z = z
 
-        var e = y[0]
+        Tup e = y[0], f(8,8)
+        
+        e.Print()
+        f.Print()
 
 
     def float Print(i idx, i second_idx)

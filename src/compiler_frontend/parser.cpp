@@ -19,12 +19,15 @@
 
 
 
+
 std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
 std::map<std::string, std::vector<std::string>> Equivalent_Types;
 
 std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 std::map<std::string, std::vector<std::string>> Function_Arg_Names;
+
+std::map<std::string, std::map<std::string, int>> ChannelDirections;
 
 using namespace llvm;
 
@@ -95,6 +98,69 @@ std::string Extract_List_Prefix(const std::string& input) {
     return input; // Return original string if "_list" not found
 }
 
+
+Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
+
+  Data_Tree data_type = Data_Tree(root_type);
+
+
+
+  getNextToken(); // eat <  
+  while(CurTok!='>')
+  {
+    std::string dt = IdentifierStr;
+
+    if(CurTok!=tok_data&&CurTok!=tok_struct&&!in_str(dt, Classes)) {
+      LogErrorBreakLine(parser_struct.line, root_type + " requires a data type.");
+      return data_type;
+    }
+
+    getNextToken();
+
+    
+    if(CurTok=='<') 
+      data_type.Nested_Data.push_back(Parse_Data_Type(dt, parser_struct));
+    else {
+
+      if(ends_with(dt,"_vec")) {
+        Data_Tree vec_tree = Data_Tree("vec");
+        vec_tree.Nested_Data.push_back(remove_suffix(dt,"_vec"));
+        data_type.Nested_Data.push_back(vec_tree);
+      } else    
+        data_type.Nested_Data.push_back(Data_Tree(dt));
+    }
+
+    if(CurTok==',')
+      getNextToken();
+  }
+  getNextToken(); // eat >
+  
+  
+
+
+  return data_type;
+}
+
+Data_Tree ParseDataTree(std::string data_type, bool is_struct, Parser_Struct parser_struct) {
+  
+  getNextToken(); // eat data token. 
+  Data_Tree data_tree;
+
+  if(!is_struct&&CurTok=='<')
+    LogError(parser_struct.line, "Found \"<\", but expected a compound data type, got data: " + data_type);
+  
+  if (is_struct&&CurTok=='<')
+    data_tree = Parse_Data_Type(data_type, parser_struct);
+  else
+  {
+    if(ends_with(data_type,"_vec")) {
+      data_tree = Data_Tree("vec");
+      data_tree.Nested_Data.push_back(remove_suffix(data_type,"_vec"));
+    } else    
+      data_tree = Data_Tree(data_type);
+  }
+  return data_tree;
+}
 
 
 /// numberexpr ::= number
@@ -641,38 +707,34 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
 
 
 std::unique_ptr<ExprAST> ParseForEachExpr(Parser_Struct parser_struct, std::string class_name, int cur_level_tabs, std::string IdName) {
-  std::string data_type = IdName;
-
-  getNextToken(); // eat data type
-  IdName = IdentifierStr;
-  getNextToken(); // eat identifier name
-
-  if (CurTok!=tok_in)
-    LogError(parser_struct.line, "Expected in at for each expression");
 
 
+  // if (in_str(data_type, Classes))
+  //   Object_toClass[parser_struct.function_name][IdName] = Data_Tree(data_type);
 
-
-  if (in_str(data_type, Classes))
-    Object_toClass[parser_struct.function_name][IdName] = Data_Tree(data_type);
-
-  typeVars[parser_struct.function_name][IdName] = data_type;
-
+  
   getNextToken(); // eat "in".
 
 
   auto Vec = ParseExpression(parser_struct, class_name);
   if (!Vec)
     return nullptr;
-
-  std::string vec_type = Vec->GetType();
-
   
-  std::vector<std::unique_ptr<ExprAST>> Body;
 
+  Data_Tree data_type = Vec->GetDataTree();
+  if(data_type.Nested_Data.size()==0)
+  {
+    LogError(parser_struct.line, "Using a non-compound data type at a \"for in\" expression.");
+    data_type.Print();
+  }
+
+  data_typeVars[parser_struct.function_name][IdName] = data_type.Nested_Data[0];
+
+  std::vector<std::unique_ptr<ExprAST>> Body;
   Body = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
 
-  return std::make_unique<ForEachExprAST>(IdName, std::move(Vec), std::move(Body), parser_struct, data_type, vec_type);
+
+  return std::make_unique<ForEachExprAST>(IdName, std::move(Vec), std::move(Body), parser_struct, data_type);
 }
 
 
@@ -685,15 +747,17 @@ std::unique_ptr<ExprAST> ParseForExpr(Parser_Struct parser_struct, std::string c
 
   getNextToken(); // eat the for.
 
-  if (CurTok==tok_data||in_str(IdentifierStr, Classes))
-    return ParseForEachExpr(parser_struct, class_name, cur_level_tabs, IdentifierStr);
-
-  if (CurTok != tok_identifier)
-    return LogError(parser_struct.line, "Expected for's control variable identifier.");
+  if(CurTok!=tok_identifier)
+    LogError(parser_struct.line, "Unexpected token \"" + ReverseToken(CurTok) + "\" on \"for in\" expression. Expected control variable name.");
+ 
 
   std::string IdName = IdentifierStr;
-  getNextToken(); // eat identifier.
+  getNextToken(); // eat identifier.  
 
+
+
+  if (CurTok==tok_in)
+    return ParseForEachExpr(parser_struct, class_name, cur_level_tabs, IdName);
   
 
   if (CurTok=='=')
@@ -702,8 +766,6 @@ std::unique_ptr<ExprAST> ParseForExpr(Parser_Struct parser_struct, std::string c
     data_typeVars[parser_struct.function_name][IdName] = Data_Tree("int");
     return ParseStandardForExpr(parser_struct, class_name, cur_level_tabs, IdName);
   }
-  else if(CurTok==tok_in)
-    return ParseForEachExpr(parser_struct, class_name, cur_level_tabs, "int");
   else
     return LogError(parser_struct.line, "Expected for's control variable initial value.");
 }
@@ -742,17 +804,22 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
   
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   
+  std::string async_scope = parser_struct.function_name + "_async";
   for (auto pair : typeVars[parser_struct.function_name])
-    typeVars["asyncs"][pair.first] = pair.second;
+    typeVars[async_scope][pair.first] = pair.second;
   for (auto pair : data_typeVars[parser_struct.function_name])
-    data_typeVars["asyncs"][pair.first] = pair.second;
+    data_typeVars[async_scope][pair.first] = pair.second;
 
-  parser_struct.function_name = "asyncs";
+
+
+  Parser_Struct body_parser_struct = parser_struct;
+  body_parser_struct.function_name = async_scope;
+
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
   if (CurTok != tok_space)
-    Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
+    Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
   else
-    Bodies = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
+    Bodies = ParseIdentedBodies(body_parser_struct, cur_level_tabs, class_name);
   
   
   
@@ -761,8 +828,35 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
   return std::make_unique<AsyncExprAST>(std::move(Bodies), parser_struct);
 }
 
-std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::string class_name) {
 
+std::unique_ptr<ExprAST> ParseGoExpr(Parser_Struct parser_struct, std::string class_name) {
+  int cur_level_tabs = SeenTabs;
+
+  getNextToken(); // eat go
+  
+
+  std::string async_scope = parser_struct.function_name + "_go";
+  for (auto pair : typeVars[parser_struct.function_name])
+    typeVars[async_scope][pair.first] = pair.second;
+  for (auto pair : data_typeVars[parser_struct.function_name])
+    data_typeVars[async_scope][pair.first] = pair.second;
+
+
+  Parser_Struct body_parser_struct = parser_struct;
+  body_parser_struct.function_name = async_scope;
+
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
+  if (CurTok != tok_space)
+    Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
+  else
+    Bodies = ParseIdentedBodies(body_parser_struct, cur_level_tabs, class_name);
+  
+
+  return std::make_unique<GoExprAST>(std::move(Bodies), parser_struct);
+}
+
+std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::string class_name) {
   int cur_level_tabs = SeenTabs;
 
   getNextToken(); // eat the async.
@@ -776,18 +870,20 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
   
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   
+  std::string async_scope = parser_struct.function_name + "_asyncs";
   for (auto pair : typeVars[parser_struct.function_name])
-    typeVars["asyncs"][pair.first] = pair.second;
+    typeVars[async_scope][pair.first] = pair.second;
   for (auto pair : data_typeVars[parser_struct.function_name])
-    data_typeVars["asyncs"][pair.first] = pair.second;
+    data_typeVars[async_scope][pair.first] = pair.second;
 
 
-  parser_struct.function_name = "asyncs";
+  Parser_Struct body_parser_struct = parser_struct;
+  body_parser_struct.function_name = async_scope;
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
   if (CurTok != tok_space)
-    Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
+    Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
   else
-    Bodies = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
+    Bodies = ParseIdentedBodies(body_parser_struct, cur_level_tabs, class_name);
   
   
   
@@ -1133,47 +1229,6 @@ std::unique_ptr<ExprAST> ParseVarExpr(Parser_Struct parser_struct, std::string s
 
 
 
-Data_Tree Parse_Data_Type(std::string root_type, Parser_Struct parser_struct) {
-
-  Data_Tree data_type = Data_Tree(root_type);
-
-
-
-  getNextToken(); // eat <  
-  while(CurTok!='>')
-  {
-    std::string dt = IdentifierStr;
-
-    if(CurTok!=tok_data&&CurTok!=tok_struct&&!in_str(dt, Classes)) {
-      LogErrorBreakLine(parser_struct.line, root_type + " requires a data type.");
-      return data_type;
-    }
-
-    getNextToken();
-
-    
-    if(CurTok=='<') 
-      data_type.Nested_Data.push_back(Parse_Data_Type(dt, parser_struct));
-    else {
-
-      if(ends_with(dt,"_vec")) {
-        Data_Tree vec_tree = Data_Tree("vec");
-        vec_tree.Nested_Data.push_back(remove_suffix(dt,"_vec"));
-        data_type.Nested_Data.push_back(vec_tree);
-      } else    
-        data_type.Nested_Data.push_back(Data_Tree(dt));
-    }
-
-    if(CurTok==',')
-      getNextToken();
-  }
-  getNextToken(); // eat >
-  
-  
-
-
-  return data_type;
-}
 
 
 std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct parser_struct, std::string class_name) {
@@ -1269,37 +1324,56 @@ std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct parser_struct, std::string
 
 
 
-Data_Tree ParseDataTree(std::string data_type, bool is_struct, Parser_Struct parser_struct) {
-  
-  getNextToken(); // eat data token. 
-  Data_Tree data_tree;
+std::unique_ptr<ExprAST> ParseChannelExpr(Parser_Struct parser_struct, std::string class_name, Data_Tree inner_data_tree) {
 
-  if(!is_struct&&CurTok=='<')
-    LogError(parser_struct.line, "Found \"<\", but expected a compound data type, got data: " + data_type);
-  
-  if (is_struct&&CurTok=='<')
-    data_tree = Parse_Data_Type(data_type, parser_struct);
-  else
-  {
-    if(ends_with(data_type,"_vec")) {
-      data_tree = Data_Tree("vec");
-      data_tree.Nested_Data.push_back(remove_suffix(data_type,"_vec"));
-    } else    
-      data_tree = Data_Tree(data_type);
+
+  Data_Tree data_tree = Data_Tree("channel");
+  data_tree.Nested_Data.push_back(inner_data_tree);
+
+  getNextToken(); // eat channel
+
+  int buffer_size = 1;
+  if (CurTok==tok_int) {
+    buffer_size = NumVal;
+    getNextToken();
   }
-  return data_tree;
+  std::cout << "buffer size of " << buffer_size << ".\n";
+  
+
+  if(CurTok!=tok_identifier)
+    LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected channel name.");
+
+  std::string IdName = IdentifierStr;
+
+  getNextToken(); // eat identifier
+
+
+
+  data_typeVars[parser_struct.function_name][IdName] = data_tree;
+
+  
+  return std::make_unique<ChannelExprAST>(parser_struct, data_tree, IdName, buffer_size);
 }
 
+
 std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string class_name) {
+
+  bool is_struct=(CurTok==tok_struct);
+
+  std::string data_type = IdentifierStr; 
+  Data_Tree data_tree = ParseDataTree(data_type, is_struct, parser_struct);
+
+  if (CurTok==tok_channel)
+    return ParseChannelExpr(parser_struct, class_name, data_tree);
+
+
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   std::vector<std::unique_ptr<ExprAST>> notes;
-
-  bool has_notes=false, is_struct=(CurTok==tok_struct);
-
-  std::string data_type = IdentifierStr;
-
+  bool has_notes=false;
+    
   
-  Data_Tree data_tree = ParseDataTree(data_type, is_struct, parser_struct);
+
+
 
 
   // Get the Notes vector
@@ -1543,7 +1617,6 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
 ///   ::= ifexpr
 ///   ::= forexpr
 std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string class_name, bool can_be_list) {
-  // std::cout << "ParsePrimary: " << CurTok << "/" << ReverseToken(CurTok) << ".\n";
   switch (CurTok) {
   default:
     //return std::move(std::make_unique<NumberExprAST>(0.0f));
@@ -1578,6 +1651,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseAsyncExpr(parser_struct, class_name);
   case tok_asyncs:
     return ParseAsyncsExpr(parser_struct, class_name);
+  case tok_go:
+    return ParseGoExpr(parser_struct, class_name);
   case tok_lock:
     return ParseLockExpr(parser_struct, class_name);
   case tok_no_grad:
@@ -1845,10 +1920,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   }
 
   if (CurTok != '(')
-    return LogErrorP(parser_struct.line, "Esperado '(' no protótipo");
+    return LogErrorP(parser_struct.line, "Expected \"(\" at function prototype.");
+  getNextToken(); // eat (
 
-
-  getNextToken();
 
 
   std::string type;
@@ -1884,24 +1958,64 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
       std::string data_type = type;
 
       Data_Tree data_tree = ParseDataTree(type, in_str(type, compound_tokens), parser_struct);
+
+      std::string IdName = IdentifierStr;
+
+      if(CurTok==tok_identifier)
+        getNextToken(); // get arg name;
+      else if(CurTok==tok_channel)
+      {
+        Data_Tree channel_data_tree = Data_Tree("channel");
+        channel_data_tree.Nested_Data.push_back(data_tree);
+        data_tree = channel_data_tree;
+
+        int channel_direction = ch_both;
+
+        getNextToken(); // get channel
+
+        if (CurTok==tok_arrow)
+        {
+          std::cout << "got sender channel" << ".\n";
+          channel_direction = ch_sender;
+          getNextToken();
+        }
+
+        if(CurTok!=tok_identifier)
+          LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
+        
+        IdName = IdentifierStr;
+        getNextToken(); // get arg name;
+        
+        if (CurTok==tok_arrow)
+        {
+          std::cout << "got receiver channel" << ".\n";
+          channel_direction = ch_receiver;
+          getNextToken();
+        }
+
+        std::cout << "Set direction of " << FnName << "/" << IdName << ".\n";
+        ChannelDirections[FnName][IdName] = channel_direction;
+
+
+      } else 
+        LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
        
 
       Types.push_back(data_type);
-      ArgNames.push_back(IdentifierStr);
+      ArgNames.push_back(IdName);
 
-      Function_Arg_Names[FnName].push_back(IdentifierStr);
-      Function_Arg_Types[FnName][IdentifierStr] = data_type;
-      Function_Arg_DataTypes[FnName][IdentifierStr] = data_tree;
+      Function_Arg_Names[FnName].push_back(IdName);
+      Function_Arg_Types[FnName][IdName] = data_type;
+      Function_Arg_DataTypes[FnName][IdName] = data_tree;
 
-      typeVars[FnName][IdentifierStr] = data_type;
-      data_typeVars[FnName][IdentifierStr] = data_tree;
+      typeVars[FnName][IdName] = data_type;
+      data_typeVars[FnName][IdName] = data_tree;
+
 
 
       if(in_str(data_type, Classes))
-        Object_toClass[FnName][IdentifierStr] = Data_Tree(data_type);
-
+        Object_toClass[FnName][IdName] = Data_Tree(data_type);
       
-      getNextToken(); // eat arg name
     }
     
 

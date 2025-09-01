@@ -1,61 +1,40 @@
 
 
-class Tup
-    int x, y
 
-    def float __init__(i x, i y)
-        self.x = x
-        self.y = y
+def float foo(str channel <- ch)
 
 
-    def float Print()
-        print("x: " + self.x + ", y: " + self.y)
+    str msg = "message: "
 
+    msg <- ch
 
-
-class Layer1
-    list<Tup> x
-    list<list<Tup>> z
-
-    def float __init__(list<Tup> y, list<list<Tup>> z)
-        self.x = y
-        self.z = z
-
-        Tup e = y[0], f(8,8)
-        
-        e.Print()
-        f.Print()
-
-
-    def float Print(i idx, i second_idx)
-
-        
-        var e = self.z[idx]
-
-        e[second_idx].Print()
-
-        self.z[idx][second_idx].x = 16
-        var x = self.z[idx][second_idx].x
-        self.z[idx][second_idx].Print()
-
-        print("X is: " + x)
-
-        0
+    print("foo reached " + msg)
 
 
 
 
-Tup a(1,2), b(3,4), c(5,6), d(7,8)
-
-list<Tup> lt = [a,b]
-list<Tup> l2 = [c,d]
-
-list<list<Tup>> z = [lt, l2]
 
 
 
-Layer1 l1
-l1.__init__(lt,z)
+
+str channel buffer
 
 
-l1.Print(1,1)
+
+buffer <- "oi"
+
+go foo(buffer)
+
+
+
+
+
+# finish
+#     str b = "from async"
+#     async foo(b)
+
+# foo("yes yes")
+
+sleep(2)
+
+int x

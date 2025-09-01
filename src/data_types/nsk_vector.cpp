@@ -26,7 +26,7 @@ DT_int_vec::~DT_int_vec() {
 
 
 extern "C" int nsk_vec_size(Scope_Struct *scope_struct, Nsk_Vector *vec) {
-  return vec->size;
+    return vec->size;
 }
 
 

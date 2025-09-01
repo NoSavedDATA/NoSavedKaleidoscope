@@ -19,6 +19,12 @@
 using namespace llvm;
 
 
+enum ChannelDirection {
+    ch_sender = 0,
+    ch_receiver = 1,
+    ch_both = 2
+};
+
 
 extern std::map<std::string, std::string> ops_type_return;
 extern std::map<int, std::string> op_map;
@@ -31,6 +37,8 @@ extern std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
 extern std::map<std::string, std::map<std::string, int>> ClassVariables;
 extern std::map<std::string, int> ClassSize;
 extern std::map<std::string, llvm::Type *> ClassStructs;
+
+extern std::map<std::string, std::map<std::string, int>> ChannelDirections;
 
 
 

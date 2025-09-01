@@ -1,0 +1,22 @@
+1821-08-31 20:11:52
+
+	FunctionType *str_channel_messageTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_channel_message", str_channel_messageTy);
+
+	FunctionType *channel_str_messageTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_str_message", channel_str_messageTy);
+
+	FunctionType *channel_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_Create", channel_CreateTy);

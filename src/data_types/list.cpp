@@ -106,7 +106,10 @@ extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
 extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector)
 {
   if (init_val==nullptr)
+  {
+    std::cout << "----CREATING NEW LIST" << ".\n";
     init_val = new DT_list();
+  }
 
   return init_val;
 }

@@ -199,6 +199,27 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("object_ptr_Attribute_object", object_ptr_Attribute_objectTy);
 
+	FunctionType *str_channel_messageTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_channel_message", str_channel_messageTy);
+
+	FunctionType *channel_str_messageTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_str_message", channel_str_messageTy);
+
+	FunctionType *channel_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_Create", channel_CreateTy);
+
 	FunctionType *Delete_PtrTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},

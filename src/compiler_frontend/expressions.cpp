@@ -548,10 +548,11 @@ ForExprAST::ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Star
 
 /// ForExprAST - Expression class for for.
 ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct, std::string Type, std::string VecType)
-    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)), parser_struct(parser_struct), VecType(VecType) {
+          std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct, Data_Tree data_type)
+    : VarName(VarName), Vec(std::move(Vec)), Body(std::move(Body)), parser_struct(parser_struct) {
 
-      this->SetType(Type);
+    this->data_type = data_type;
+    Type = data_type.Nested_Data[0].Type;
 }
 
 
@@ -567,6 +568,17 @@ IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vect
   Size = this->Idxs.size();
 }
   
+
+
+
+ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type, std::string Name, int BufferSize) : parser_struct(parser_struct), BufferSize(BufferSize) {
+  this->data_type = data_type;
+  this->Name = Name;
+}
+
+GoExprAST::GoExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)), parser_struct(parser_struct) {  
+
+}
   
   /// AsyncExprAST - Expression class for async.
 AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
@@ -578,9 +590,18 @@ AsyncsExprAST::AsyncsExprAST(std::vector<std::unique_ptr<ExprAST>> Body, int Asy
 IncThreadIdExprAST::IncThreadIdExprAST()
 {}
 
+
+
+Data_Tree SplitParallelExprAST::GetDataTree(bool from_assignment) {
+  return Inner_Vec->GetDataTree();
+}
+
 SplitParallelExprAST::SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {
 }
 
+Data_Tree SplitStridedParallelExprAST::GetDataTree(bool from_assignment) {
+  return Inner_Vec->GetDataTree();
+}
 
 SplitStridedParallelExprAST::SplitStridedParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec) : Inner_Vec(std::move(Inner_Vec)) {
 }

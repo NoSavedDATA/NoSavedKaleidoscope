@@ -226,6 +226,31 @@ void set_functions_args_type() {
 		Function_Arg_Names["nsk_vec_size"].push_back("1");
 	
 		
+		Function_Arg_Types["str_channel_message"]["0"] = "Scope_Struct";
+		Function_Arg_Types["str_channel_message"]["1"] = "str";
+		Function_Arg_Types["str_channel_message"]["2"] = "Channel";
+		
+		Function_Arg_DataTypes["str_channel_message"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["str_channel_message"]["1"] = Data_Tree("str");
+		Function_Arg_DataTypes["str_channel_message"]["2"] = Data_Tree("Channel");
+		
+		Function_Arg_Names["str_channel_message"].push_back("0");
+		Function_Arg_Names["str_channel_message"].push_back("1");
+		Function_Arg_Names["str_channel_message"].push_back("2");
+		
+		Function_Arg_Types["channel_str_message"]["0"] = "Scope_Struct";
+		Function_Arg_Types["channel_str_message"]["1"] = "Channel";
+		Function_Arg_Types["channel_str_message"]["2"] = "str";
+		
+		Function_Arg_DataTypes["channel_str_message"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["channel_str_message"]["1"] = Data_Tree("Channel");
+		Function_Arg_DataTypes["channel_str_message"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["channel_str_message"].push_back("0");
+		Function_Arg_Names["channel_str_message"].push_back("1");
+		Function_Arg_Names["channel_str_message"].push_back("2");
+	
+		
 		Function_Arg_Types["randint"]["0"] = "Scope_Struct";
 		Function_Arg_Types["randint"]["1"] = "int";
 		Function_Arg_Types["randint"]["2"] = "int";

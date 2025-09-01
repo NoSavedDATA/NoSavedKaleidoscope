@@ -1,24 +1,20 @@
 
-#include<map>
-#include<vector>
-#include<stdio.h>
-#include<stdlib.h>
-#include<ctype.h>
-#include<string>
-#include<iostream>
-
-#include <iostream>
+#include <ctype.h>
+#include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iostream>
+#include <map>
 #include <memory>
 #include <stack>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string>
+#include <vector>
 
 #include "../common/extension_functions.h"
 #include "tokenizer.h"
 
-#include <filesystem>
-#include <fstream>
 
 #include "include.h"
 
@@ -73,6 +69,8 @@ std::map<int, std::string> token_to_string = {
   { tok_else, "else" },
   { tok_for, "for" },
   { tok_while, "while" },
+  { tok_go, "go" },
+  { tok_channel, "channel" },
   { tok_async, "async" },
   { tok_asyncs, "asyncs" },
   { tok_async_finish, "finish finish/async" },
@@ -101,6 +99,8 @@ std::map<int, std::string> token_to_string = {
 
   { tok_global, "global"},
   { tok_no_grad, "no_grad"},
+
+  { tok_arrow, "<-"},
 
   
 
@@ -188,6 +188,12 @@ std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "str",
 std::vector<std::string> compound_tokens = {"tuple", "list", "dict"};
 std::vector<std::string> primary_data_tokens = {"int", "float", "str", "bool"};
 
+
+std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},
+                                             {"import", tok_import}, {"if", tok_if}, {"then", tok_then}, {"else", tok_else}, {"for", tok_for}, {"while", tok_while},
+                                             {"async", tok_async}, {"asyncs", tok_asyncs}, {"finish", tok_async_finish}, {"in", tok_in}, {"global", tok_global},
+                                             {"no_grad", tok_no_grad}, {"lock", tok_lock}, {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary},
+                                             {"return", tok_ret}, {"as", tok_as}, {"go", tok_go}, {"channel", tok_channel}};
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number
@@ -311,10 +317,6 @@ bool Tokenizer::importFile(std::string filename, int dots) {
     current_dir = fs::path(filename).parent_path().string();
 
 
-    // std::cout << "importing" << ".\n";
-
-
-
     // Then push the new file
     inputStack.push(std::move(file));
     dirs.push(current_dir);
@@ -385,30 +387,6 @@ static int get_token() {
     return '.';
   }
   
-  // if (LastChar=='.')
-  // {
-  //   LastChar = tokenizer.get(); // eat .
-  //   IdentifierStr = LastChar;
-  //   while (true)
-  //   {
-  //     LastChar = tokenizer.get();
-            
-  //     if(isalnum(LastChar) || LastChar=='_')
-  //     {
-  //       IdentifierStr += LastChar;
-  //       continue;
-  //     }
-
-  //     if (LastChar=='.')
-  //     {
-  //       LastChar = tokenizer.get();
-  //       return tok_post_class_attr_attr;
-  //     }
-  //     break;
-  //   }
-    
-  //   return tok_post_class_attr_identifier;
-  // }
 
   if (isalpha(LastChar) || LastChar=='_') { // identifier: [a-zA-Z][a-zA-Z0-9]*
     IdentifierStr = LastChar;
@@ -426,83 +404,23 @@ static int get_token() {
         continue;
       }
         
-      // if (LastChar=='.')
-      // {
-      //   LastChar = tokenizer.get();
-      //   if (IdentifierStr == "self")
-      //     return tok_self;
-
-      //   if(in_str(IdentifierStr, imported_libs)) // If it is from a library
-      //   {
-      //     IdentifierStr += "__";
-      //     while(isalnum(LastChar)||LastChar=='_')
-      //     {
-      //       IdentifierStr+=LastChar;
-      //       LastChar = tokenizer.get();
-      //     }
-      //   } else
-      //     return tok_class_attr;
-      // }
       break;
     }
+
 
  
     if (in_str(IdentifierStr, compound_tokens))
       return tok_struct;
     if (in_str(IdentifierStr, data_tokens))
       return tok_data;
-    if (IdentifierStr == "var")
-      return tok_var;
-    if (IdentifierStr == "self")
-      return tok_self;
-    if (IdentifierStr == "def")
-      return tok_def;
-    if (IdentifierStr == "class")
-      return tok_class;
-    if (IdentifierStr == "extern")
-      return tok_extern;
-    if (IdentifierStr == "import")
-      return tok_import;
-    if (IdentifierStr == "if")
-      return tok_if;
-    if (IdentifierStr == "then")
-      return tok_then;
-    if (IdentifierStr == "else")
-      return tok_else;
-    if (IdentifierStr == "for")
-      return tok_for;
-    if (IdentifierStr == "while")
-      return tok_while;
-    if (IdentifierStr == "async")
-      return tok_async;
-    if (IdentifierStr == "asyncs")
-      return tok_asyncs;
-    if (IdentifierStr == "finish")
-      return tok_async_finish;
-    if (IdentifierStr == "in")
-      return tok_in;
-    if (IdentifierStr == "global")
-      return tok_global;
-    if (IdentifierStr == "no_grad")
-      return tok_no_grad;
-    if (IdentifierStr == "lock")
-      return tok_lock;
-    if (IdentifierStr == "unlock")
-      return tok_unlock;
-    if (IdentifierStr == "binary")
-      return tok_binary;
-    if (IdentifierStr == "unary")
-      return tok_unary;
+    if(string_tokens.count(IdentifierStr)>0)
+      return string_tokens[IdentifierStr];
     if (IdentifierStr == "glob")
       IdentifierStr = "_glob_b_";
     if (IdentifierStr == "sleep")
       IdentifierStr = "__slee_p_";
     if (IdentifierStr == "tanh")
       IdentifierStr = "_tanh";
-    if (IdentifierStr == "return")
-      return tok_ret;
-    if (IdentifierStr == "as")
-      return tok_as;
     return tok_identifier;
   }
 
@@ -606,6 +524,11 @@ static int get_token() {
   int otherChar = LastChar;
 
 
+  if(ThisChar=='<' && LastChar=='-')
+  {
+    LastChar = tokenizer.get();
+    return tok_arrow;
+  }
 
   if (ThisChar=='=' && otherChar=='=')
   {

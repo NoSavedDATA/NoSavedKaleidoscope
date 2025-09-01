@@ -17,9 +17,13 @@ public:
     ~DT_list(); 
 
     void append(std::any value, std::string); 
+    
 
     template <typename T>
     T get(size_t index); 
+    
+    template <typename T>
+    T unqueue(); 
 
     size_t Size() const; 
 

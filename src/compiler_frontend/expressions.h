@@ -513,6 +513,7 @@ class NestedVariableExprAST : public ExprAST {
     bool Load_Val = true;
     
     NestedVariableExprAST(std::unique_ptr<NameableExprAST>, Parser_Struct, std::string, Data_Tree);
+
     Value *codegen(Value *scope_struct) override;
     Data_Tree GetDataTree(bool from_assignment=false) override;
 };
@@ -625,14 +626,14 @@ class ForExprAST : public ExprAST {
 
 /// ForExprAST - Expression class for for.
 class ForEachExprAST : public ExprAST {
-  std::string VarName, VecType;
+  std::string VarName;
   std::unique_ptr<ExprAST> Vec;
   std::vector<std::unique_ptr<ExprAST>> Body;
   Parser_Struct parser_struct;
 
   public:
     ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Vec,
-              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct, std::string Type, std::string VecType);
+              std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct, Data_Tree);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -648,6 +649,31 @@ class WhileExprAST : public ExprAST {
   Value* codegen(Value *scope_struct) override;
 };
   
+
+
+class ChannelExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+  int BufferSize;
+  
+
+  public:
+    ChannelExprAST(Parser_Struct, Data_Tree, std::string, int);
+
+  Value* codegen(Value *scope_struct) override;
+};
+
+
+class GoExprAST : public ExprAST {
+  Parser_Struct parser_struct;
+  std::vector<std::unique_ptr<ExprAST>> Body;
+
+  public:
+    GoExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct);
+
+  Value* codegen(Value *scope_struct) override;
+};
+
+
   
 /// AsyncExprAST - Expression class for async.
 class AsyncExprAST : public ExprAST {
@@ -709,18 +735,24 @@ class LockExprAST : public ExprAST {
 };
 
 
+
+
 class SplitParallelExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Inner_Vec;
+
   public:
     SplitParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec);
-  Value* codegen(Value *scope_struct) override;
+    Value* codegen(Value *scope_struct) override;
+    Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
 class SplitStridedParallelExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Inner_Vec;
+
   public:
     SplitStridedParallelExprAST(std::unique_ptr<ExprAST> Inner_Vec);
-  Value* codegen(Value *scope_struct) override;
+    Value* codegen(Value *scope_struct) override;
+    Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
 

@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <vector>
 
+
+#include "../compiler_frontend/logging_v.h"
 #include "codegen_notes.h"
 #include "nsk_vector.h"
 
@@ -15,6 +17,8 @@
 template char *DT_list::get<char *>(size_t);
 template void *DT_list::get<void *>(size_t);
 
+template char *DT_list::unqueue<char *>();
+template void *DT_list::unqueue<void *>();
 
 template <typename T>
 T DT_list::get(size_t index) {
@@ -26,7 +30,7 @@ T DT_list::get(size_t index) {
     return static_cast<T>(std::any_cast<void *>((*data)[index]));
 }
 
-template <>
+template </*float*/>
 float DT_list::get<float>(size_t index) {
     if (index >= data->size()) {
         // throw std::out_of_range("Index out of range");
@@ -36,7 +40,7 @@ float DT_list::get<float>(size_t index) {
     return std::any_cast<float>((*data)[index]);
 }
 
-template <>
+template </*int*/>
 int DT_list::get<int>(size_t index) {
     if (index >= data->size()) {
         // throw std::out_of_range("Index out of range");
@@ -45,6 +49,26 @@ int DT_list::get<int>(size_t index) {
     // std::cout << "Get float at idx " << index << " from DT_list" << ".\n";
     return std::any_cast<int>((*data)[index]);
 }
+
+template <typename T>
+T DT_list::unqueue() {
+    if (data->empty()) {
+        // throw std::out_of_range("DT_list::unqueue: list is empty");
+        LogErrorC(-1, "list out of range.");
+    }
+
+    // extract the first element
+    T value = std::any_cast<T>((*data)[0]);
+
+    // erase it from the front
+    data->erase(data->begin());
+    data_types->erase(data_types->begin());
+
+    return value;
+}
+
+
+
 
 DT_list::DT_list() : Nsk_Vector(0) {
     data = new std::vector<std::any>(); // Allocate memory
