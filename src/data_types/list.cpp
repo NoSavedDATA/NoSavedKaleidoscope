@@ -36,15 +36,15 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
       type = va_arg(args, char *);
       // std::cout << "Got list type: " << type << ".\n";
       is_type = false;
-      if (strcmp(type, "TERMINATE_VARARG")==0)
+      if (!strcmp(type, "TERMINATE_VARARG"))
         break;
     } else {   
-      if (strcmp(type, "float")==0)
+      if (!strcmp(type, "float"))
       {
         // std::cout << "appending float" << ".\n";
         float value = va_arg(args, float);
         notes_vector->append(value, type);
-      } else if (strcmp(type, "int")==0) {
+      } else if (!strcmp(type, "int")) {
         // std::cout << "appending float" << ".\n";
         int value = va_arg(args, int);
         notes_vector->append(value, type);

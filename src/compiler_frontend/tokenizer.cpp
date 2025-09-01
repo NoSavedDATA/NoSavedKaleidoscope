@@ -575,6 +575,8 @@ int getNextToken() {
 }
 
 
+
+
 void get_tok_util_space() {
   if(CurTok!=tok_space&&tokenizer.cur_c!=10) // gets until the \n before switching files
   {
@@ -584,6 +586,7 @@ void get_tok_util_space() {
     {
       int _c = c;
       c = tokenizer.get();
+
       // std::cout << "Get " << c << ".\n";
     }
   }
@@ -592,6 +595,28 @@ void get_tok_util_space() {
   cur_line = "";
   LineCounter++;
 }
+
+
+// void get_tok_util_dot_or_space() {
+//   char c=' ';
+//   IdentifierStr="";
+//   if(!(CurTok==tok_space||tokenizer.cur_c==10))
+//   {
+//     while(c!=10&&c!='.') {
+//       c = tokenizer.get();
+//       if(c!=32&&c!='.')
+//         IdentifierStr += c;
+//     }
+//   } else
+//     c = tokenizer.cur_c;
+//   if(c==10) {
+//     CurTok = tok_space;
+//     cur_line = "";
+//     LineCounter++;
+//   }
+//   if(c=='.')
+//     CurTok='.';
+// }
 
 
 /// BinopPrecedence - This holds the precedence for each binary operator that is

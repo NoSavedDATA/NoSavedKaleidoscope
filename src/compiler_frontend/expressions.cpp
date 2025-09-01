@@ -75,6 +75,14 @@ bool ExprAST::GetIsAttribute() {
 }
 
 
+void ExprAST::SetIsMsg(bool isMessage) {
+  this->isMessage=isMessage;
+}
+bool ExprAST::GetIsMsg() {
+  return isMessage;
+}
+
+
 void ExprAST::SetPreDot(std::string pre_dot) {
   this->_pre_dot=pre_dot;
 }
@@ -299,13 +307,13 @@ UnkVarExprAST::UnkVarExprAST(
 
     Data_Tree dt = Init->GetDataTree();
 
-    
+    if(Init->GetIsMsg()) {
+      if(dt.Nested_Data.size()==0)
+        LogBlue("Failed to receive message from " + Init->GetName() + ". Is it a channel?");
+      dt = dt.Nested_Data[0];
+    }
         
-    data_typeVars[parser_struct.function_name][VarName] = Init->GetDataTree();
-
-
-    // std::string init_type = Init->GetType();
-    // typeVars[parser_struct.function_name][VarName] = init_type;
+    data_typeVars[parser_struct.function_name][VarName] = dt;
   }
 }
 
@@ -379,23 +387,11 @@ DataExprAST::DataExprAST(
   std::vector<std::unique_ptr<ExprAST>> Notes)
   : parser_struct(parser_struct), VarExprAST(std::move(VarNames), std::move(Type)), data_type(data_type), HasNotes(HasNotes), IsStruct(IsStruct),
                 Notes(std::move(Notes))
-{
-   
+{  
   for (unsigned i = 0, e = this->VarNames.size(); i != e; ++i) {
     if(this->isSelf)
-      continue;
-    
-    const std::string &VarName = this->VarNames[i].first; 
-    ExprAST *Init = this->VarNames[i].second.get();
-
-    std::string init_type = Init->GetType();
-    Data_Tree other_type = Init->GetDataTree();
-    
-    // if(!in_str(this->Type, {"list", "dict"}))
-    if(this->Type=="tuple")
-      Check_Is_Compatible_Data_Type(data_type, other_type, parser_struct);
-
-    
+      continue;    
+    const std::string &VarName = this->VarNames[i].first;  
     data_typeVars[parser_struct.function_name][VarName] = data_type;
   }
 }
@@ -571,9 +567,10 @@ IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vect
 
 
 
-ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type, std::string Name, int BufferSize) : parser_struct(parser_struct), BufferSize(BufferSize) {
+ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type, std::string Name, int BufferSize, bool isSelf) : parser_struct(parser_struct), BufferSize(BufferSize) {
   this->data_type = data_type;
   this->Name = Name;
+  this->isSelf = isSelf;
 }
 
 GoExprAST::GoExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)), parser_struct(parser_struct) {  

@@ -28,6 +28,7 @@ class ExprAST {
     bool isVarLoad = false;
     bool SolverIncludeScope = true;
     bool NameSolveToLast = true;
+    bool isMessage = false;
   
     Data_Tree data_type;
 
@@ -68,6 +69,9 @@ class ExprAST {
   
     virtual void SetIsList(bool); 
     virtual bool GetIsList(); 
+
+    virtual void SetIsMsg(bool); 
+    virtual bool GetIsMsg(); 
 
   };
   
@@ -653,11 +657,10 @@ class WhileExprAST : public ExprAST {
 
 class ChannelExprAST : public ExprAST {
   Parser_Struct parser_struct;
-  int BufferSize;
-  
+  int BufferSize; 
 
   public:
-    ChannelExprAST(Parser_Struct, Data_Tree, std::string, int);
+    ChannelExprAST(Parser_Struct, Data_Tree, std::string, int, bool isSelf=false);
 
   Value* codegen(Value *scope_struct) override;
 };

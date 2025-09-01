@@ -30,7 +30,7 @@ void set_user_functions() {
 		"InstantiateObject", "objHash", "LoadObject", "InitObjectVecWithNull", "is_null", "objAttr_var_from_var", "objAttr_var_from_vec", "objAttr_vec_from_var", "objAttr_vec_from_vec", "append", "LoadObjectScopeName", "offset_object_ptr", "object_Attr_float", "object_Attr_int", "object_Load_float", "object_Load_int", "object_Load_slot", "tie_object_to_object", "object_Attr_on_Offset_float", "object_Attr_on_Offset_int", "object_Attr_on_Offset", "object_Load_on_Offset_float", "object_Load_on_Offset_int", "object_Load_on_Offset", "object_ptr_Load_on_Offset", "object_ptr_Attribute_object", 
 		"min", "max", "logE2f", "roundE", "floorE", "logical_not", 
 		"str_Create", "str_Store", "str_Copy", "str_CopyArg", "str_str_add", "str_int_add", "str_float_add", "int_str_add", "float_str_add", "PrintStr", "cat_str_float", "SplitString", "str_split_idx", "str_to_float", "str_Delete", 
-		"str_channel_message", "channel_str_message", "channel_Create", 
+		"str_channel_message", "channel_str_message", "int_channel_message", "channel_int_message", "float_channel_message", "channel_float_message", "channel_Create", 
 		"nsk_vec_size", "__idx__", "__sliced_idx__", 
 		"float_vec_Create", "float_vec_Store_Idx", "arange_float", "zeros_float", "ones_float", "float_vec_Idx", "float_vec_Idx_num", "float_vec_CalculateIdx", "float_vec_first_nonzero", "float_vec_print", "float_vec_Split_Parallel", "float_vec_Split_Strided_Parallel", "float_vec_size", 
 		"CreateNotesVector", "Dispose_NotesVector", "Add_To_NotesVector_float", "Add_To_NotesVector_int", "Add_To_NotesVector_str", 

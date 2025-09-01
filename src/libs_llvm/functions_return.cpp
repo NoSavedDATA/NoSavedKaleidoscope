@@ -35,6 +35,7 @@ void set_functions_return_type() {
 						{"objHash", "str"}, {"LoadObject", "str"}, {"LoadObjectScopeName", "str"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_int", "int"}, 
 						{"randint", "int"}, 
 						{"CreateNotesVector", "list"}, {"Add_To_NotesVector_float", "list"}, {"Add_To_NotesVector_int", "list"}, {"Add_To_NotesVector_str", "list"}, 
+						{"int_channel_message", "int"}, 
 						{"list_New", "list"}, {"list_Create", "list"}, {"list_size", "int"}, {"list_CalculateIdx", "int"}, {"to_int", "int"}, {"list_CalculateSliceIdx", ""}, {"list_Slice", "list"}, 
 
 	};

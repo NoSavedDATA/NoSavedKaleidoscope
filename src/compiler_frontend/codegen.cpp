@@ -289,9 +289,11 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
   for (unsigned i = 0, e = VarNames.size(); i != e; ++i) {
     const std::string &VarName = VarNames[i].first; 
     ExprAST *Init = VarNames[i].second.get();
+
+    if (dynamic_cast<NullPtrExprAST*>(Init))
+      continue;
     
-    
-    Value *init;
+
 
     bool is_self = GetSelf();
     bool is_attr = GetIsAttribute();
@@ -300,11 +302,14 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
 
     Value *initial_value = Init->codegen(scope_struct);
 
-    if (dynamic_cast<NullPtrExprAST*>(Init))
-      continue;
 
       
     Type = data_typeVars[parser_struct.function_name][VarName].Type;
+
+    if(Init->GetIsMsg()) {
+      Value *void_ptr = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
+      initial_value = callret(Type+"_channel_message", {scope_struct, void_ptr, initial_value});
+    }
 
 
 
@@ -421,7 +426,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     ExprAST *Init = VarNames[i].second.get();
     
     
-    Value *init;
 
     bool is_self = GetSelf();
     bool is_attr = GetIsAttribute();
@@ -433,6 +437,13 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     //   return const_float(0);
 
     Check_Is_Compatible_Data_Type(data_type, Init->GetDataTree(), parser_struct);    
+
+
+
+    if(Init->GetIsMsg()) {
+      Value *void_ptr = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
+      initial_value = callret(Type+"_channel_message", {scope_struct, void_ptr, initial_value});
+    }
 
 
     if((Type=="float"||Type=="int")&&!(is_self||is_attr))
@@ -1118,11 +1129,40 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
 
 
 
+bool CheckIs_CastInt_to_FloatChannel(std::string Operation, Data_Tree LTree) {
+  if(Operation!="channel_int_message")
+    return false;
+
+  if(LTree.Type=="channel" && LTree.Nested_Data.size()>0) {
+    if(LTree.Nested_Data[0].Type=="float")
+      return true;
+  }
+    
+  return false;
+}
 
 
 
+bool CheckIsSenderChannel(std::string Elements, Parser_Struct parser_struct, std::string LName) {
 
-
+  if(begins_with(Elements, "channel")) {
+    if(ChannelDirections[parser_struct.function_name].count(LName)>0) {
+      if(((int)ChannelDirections[parser_struct.function_name][LName])==(int)ch_sender) {
+        LogError(parser_struct.line, "1 Tried to attribute data to a sender only channel." + parser_struct.function_name + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct.function_name].count(LName)) + "; " + std::to_string(ChannelDirections[parser_struct.function_name][LName]) );
+        return false;
+      }
+    }
+    else {
+      if(ChannelDirections[parser_struct.class_name].count(LName)>0) {
+        if((int)ChannelDirections[parser_struct.class_name][LName]==(int)ch_sender) {
+          LogError(parser_struct.line, "2 Tried to attribute data to a sender only channel. " + parser_struct.class_name + "/" + LName + ": " + std::to_string(ChannelDirections[parser_struct.class_name].count(LName)));
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
 
 
 
@@ -1180,7 +1220,11 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     Value *Val;
     if (Op==tok_arrow)
     {
-      std::cout << "Get direction of " << parser_struct.function_name << "/" << RHS->GetName() << ".\n";
+      if(ChannelDirections[parser_struct.function_name].count(RHS->GetName())==0)
+      {
+        LogError(parser_struct.line, "Could not find channel " + RHS->GetName());
+        return const_float(0);
+      }
       if(ChannelDirections[parser_struct.function_name][RHS->GetName()]==ch_receiver)
       {
         LogError(parser_struct.line, "Trying to unpack data from a receiver only channel.");
@@ -1397,7 +1441,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
 
-
   
   if (!L || !R)
     return nullptr;
@@ -1415,6 +1458,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     Operation = "tensor_float_div";
     R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
   }
+  if (CheckIs_CastInt_to_FloatChannel(Operation, LHS->GetDataTree())) {
+    Operation = "channel_float_message";
+    R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
+  }
+  if(!CheckIsSenderChannel(Elements, parser_struct, LHS->GetName()))
+    return const_float(0);
+
 
   
   
@@ -1517,7 +1567,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     {
       std::string return_type = ops_type_return[Elements];
 
-      if (return_type!="float"&&return_type!="int"&&return_type!="none")
+      if (return_type!="float"&&return_type!="int"&&return_type!="None")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(return_type))});
     }
 
@@ -1734,15 +1784,15 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 
   
   for (auto &body : asyncBody)
+  {
     V = body->codegen(scope_struct_copy);
-
+  }
 
 
   if (V)
   { 
     p2t("codegenAsyncFunction create return");
-    Builder->CreateRet(Constant::getNullValue(int8PtrTy));
-    
+    Builder->CreateRet(Constant::getNullValue(int8PtrTy));  
      
     std::string functionError;
     llvm::raw_string_ostream functionErrorStream(functionError);
@@ -1769,22 +1819,18 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 Value *ChannelExprAST::codegen(Value *scope_struct) {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   
-  
   // std::string type = UnmangleVec(data_type);
-  std::string type = "list";
-  std::cout << "channel expr of type " << type << ".\n";
   
-  
+    
   Value *void_ptr = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
 
 
-
-  // Value *initial_value = callret("list_Create", {scope_struct, void_ptr, void_ptr, void_ptr, void_ptr});
-
-  Value *initial_value = callret("channel_Create", {scope_struct});
+  Value *initial_value = callret("channel_Create", {scope_struct, const_int(BufferSize)});
 
 
-  llvm::Type *alloca_type = get_type_from_str(type);
+
+
+  llvm::Type *alloca_type = get_type_from_str("channel");
   AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
   Builder->CreateStore(initial_value, alloca);
   function_allocas[parser_struct.function_name][Name] = alloca;
@@ -1797,9 +1843,6 @@ Value *ChannelExprAST::codegen(Value *scope_struct) {
 
 
 Value *GoExprAST::codegen(Value *scope_struct) {
-
-  std::cout << "reached go" << ".\n";
-  
 
 
   Value *barrier = callret("get_barrier", {const_int(1)});
@@ -2403,6 +2446,8 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         
         call(Callee, ArgsV);
 
+
+
         
         call("scope_struct_Delete", {scope_struct_copy});
       }
@@ -2917,6 +2962,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
         call("tie_object_to_object", {obj_ptr, new_ptr});
         
         obj_ptr = new_ptr;
+
       }
       call("set_scope_object", {scope_struct_copy, obj_ptr});
     }

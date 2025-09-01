@@ -288,8 +288,11 @@ Function *FunctionAST::codegen() {
     } else { 
         std::string type = "";
 
-        if (typeVars[function_name].find(arg_name) != typeVars[function_name].end())
-            type = typeVars[function_name][arg_name];
+        if (data_typeVars[function_name].find(arg_name) != data_typeVars[function_name].end())
+            type = UnmangleVec(data_typeVars[function_name][arg_name]);
+        else
+            LogError(-1, "error at argument " + arg_name + " of function " + function_name);
+
         // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
 
@@ -2712,7 +2715,8 @@ int main(int argc, char* argv[]) {
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"},
-                     {"tensor_int", "tensor"}, {"int_tensor", "tensor"}, {"str_channel", "none"}, {"channel_str", "none"}};
+                     {"tensor_int", "tensor"}, {"int_tensor", "tensor"}, {"str_channel", "str"}, {"channel_str", "float"}, {"channel_int", "float"},
+                     {"int_channel", "int"}, {"channel_float", "float"}, {"float_channel", "float"}};
                      
 
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},

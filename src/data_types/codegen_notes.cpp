@@ -19,6 +19,8 @@ template void *DT_list::get<void *>(size_t);
 
 template char *DT_list::unqueue<char *>();
 template void *DT_list::unqueue<void *>();
+template int DT_list::unqueue<int>();
+template float DT_list::unqueue<float>();
 
 template <typename T>
 T DT_list::get(size_t index) {
@@ -50,19 +52,19 @@ int DT_list::get<int>(size_t index) {
     return std::any_cast<int>((*data)[index]);
 }
 
+
+
+
 template <typename T>
 T DT_list::unqueue() {
     if (data->empty()) {
-        // throw std::out_of_range("DT_list::unqueue: list is empty");
         LogErrorC(-1, "list out of range.");
     }
-
-    // extract the first element
     T value = std::any_cast<T>((*data)[0]);
 
-    // erase it from the front
     data->erase(data->begin());
     data_types->erase(data_types->begin());
+    size--;
 
     return value;
 }

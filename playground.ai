@@ -1,40 +1,39 @@
 
 
+class ChannelTest
+    float channel ch
 
-def float foo(str channel <- ch)
+    def float __init__(float channel ch)
+        self.ch = ch
 
+        print("init")
 
-    str msg = "message: "
+        
 
-    msg <- ch
+    def float print(float channel ans_ch<-)
 
-    print("foo reached " + msg)
+        var msg <- self.ch
+        print("msg " + msg)
 
-
-
-
-
-
-
-
-str channel buffer
-
+        sleep(2)
+        ans_ch <- 10
 
 
-buffer <- "oi"
+float channel ch
+float channel ans_ch
 
-go foo(buffer)
-
+ChannelTest channel_obj(ch)
 
 
 
+go channel_obj.print(ans_ch)
 
-# finish
-#     str b = "from async"
-#     async foo(b)
+sleep(1)
 
-# foo("yes yes")
+print("send to channel")
+ch <- 8
 
-sleep(2)
 
-int x
+var ans <- ans_ch
+
+print("answer: " + ans)

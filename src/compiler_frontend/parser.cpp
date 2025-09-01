@@ -46,6 +46,8 @@ std::map<std::string, llvm::Type *> ClassStructs;
 
 
 
+
+
 std::string Extract_List_Suffix(const std::string& input) {
     static std::mutex mtx;
     std::lock_guard<std::mutex> lock(mtx);
@@ -1196,10 +1198,12 @@ std::unique_ptr<ExprAST> ParseVarExpr(Parser_Struct parser_struct, std::string s
 
 
     std::unique_ptr<ExprAST> Init;
-    if (CurTok == '=')
+    if (CurTok == '=' || CurTok == tok_arrow)
     {
+      bool is_message = CurTok==tok_arrow;
       getNextToken(); // eat the '='.
       Init = ParseExpression(parser_struct, class_name);
+      Init->SetIsMsg(is_message);
       if (!Init)
         return nullptr;
     } else
@@ -1337,7 +1341,6 @@ std::unique_ptr<ExprAST> ParseChannelExpr(Parser_Struct parser_struct, std::stri
     buffer_size = NumVal;
     getNextToken();
   }
-  std::cout << "buffer size of " << buffer_size << ".\n";
   
 
   if(CurTok!=tok_identifier)
@@ -1350,6 +1353,7 @@ std::unique_ptr<ExprAST> ParseChannelExpr(Parser_Struct parser_struct, std::stri
 
 
   data_typeVars[parser_struct.function_name][IdName] = data_tree;
+  ChannelDirections[parser_struct.function_name][IdName] = ch_both;
 
   
   return std::make_unique<ChannelExprAST>(parser_struct, data_tree, IdName, buffer_size);
@@ -1446,10 +1450,12 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
 
 
     std::unique_ptr<ExprAST> Init;
-    if (CurTok == '=')
+    if (CurTok=='='||CurTok==tok_arrow)
     {
+      bool is_message = CurTok==tok_arrow;
       getNextToken(); // eat the '='.
       Init = ParseExpression(parser_struct, class_name);
+      Init->SetIsMsg(is_message);
       if (!Init)
         return nullptr;
     } else
@@ -1968,6 +1974,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
         Data_Tree channel_data_tree = Data_Tree("channel");
         channel_data_tree.Nested_Data.push_back(data_tree);
         data_tree = channel_data_tree;
+        data_type = data_type + "_channel";
 
         int channel_direction = ch_both;
 
@@ -1975,9 +1982,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
         if (CurTok==tok_arrow)
         {
-          std::cout << "got sender channel" << ".\n";
           channel_direction = ch_sender;
-          getNextToken();
+          getNextToken(); // <-
         }
 
         if(CurTok!=tok_identifier)
@@ -1988,15 +1994,10 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
         
         if (CurTok==tok_arrow)
         {
-          std::cout << "got receiver channel" << ".\n";
           channel_direction = ch_receiver;
-          getNextToken();
+          getNextToken(); // <-
         }
-
-        std::cout << "Set direction of " << FnName << "/" << IdName << ".\n";
         ChannelDirections[FnName][IdName] = channel_direction;
-
-
       } else 
         LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
        
@@ -2056,8 +2057,8 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
 
   getNextToken(); // eat import
 
-  if(CurTok!=tok_identifier&&CurTok!=tok_class_attr&&CurTok!=tok_post_class_attr_identifier)
-    return LogError(parser_struct.line, "Expected library name after \"import\".");
+  if(CurTok!=tok_identifier)
+    return LogError(parser_struct.line, "Expected library name after \"import\". Got token: " + ReverseToken(CurTok) + ".");
 
   bool is_default = false;
   if(IdentifierStr=="default")
@@ -2069,8 +2070,11 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
 
 
 
+
   // Get lib name
-  std::string lib_name = "";
+  std::string lib_name = IdentifierStr;
+  getNextToken();
+  // get_tok_util_dot_or_space();
 
   int dots=0; // dots before beggining the lib name.
   if(CurTok==tok_post_class_attr_identifier)
@@ -2082,16 +2086,18 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     // std::cout << "get .lib" << ".\n";
   }
 
-  while(CurTok==tok_class_attr)
+  while(CurTok=='.')
   {
-    lib_name += IdentifierStr + "/";
+    dots++;
+    getNextToken(); // get dot
+    lib_name += "/" + IdentifierStr;
     getNextToken();
-    // std::cout << "get tok_class_attr" << ".\n";
   }
 
-  lib_name += IdentifierStr;
+  
 
   std::string full_path_lib = tokenizer.current_dir+"/"+lib_name+".ai";
+
 
 
 
@@ -2107,13 +2113,10 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     tokenizer.importFile(full_path_lib, dots);
 
     return nullptr;
+  } else {
+   return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);
   }
-  else
-  {
-    
-    // getNextToken(); // moved to the LibImportExprAST constructor
-    return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);
-  }
+
 }
 
 
@@ -2230,8 +2233,22 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
   { 
     std::string data_type = IdentifierStr;
     bool is_object = in_str(data_type, Classes);
+    bool is_channel=false;
 
     Data_Tree data_tree = ParseDataTree(data_type, in_str(data_type, compound_tokens), parser_struct);
+
+    
+    if (CurTok==tok_channel) 
+    {
+      is_channel=true;
+
+      data_type = "channel";
+      Data_Tree channel_data_tree = Data_Tree("channel");
+      channel_data_tree.Nested_Data.push_back(data_tree); 
+      data_tree = channel_data_tree;
+
+      getNextToken();
+    }
     
 
     while(true)
@@ -2255,6 +2272,10 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
         last_offset+=8;
       }
 
+      if(is_channel)
+        ChannelDirections[Name][IdentifierStr] = ch_both;
+      
+
 
 
       getNextToken(); // eat name
@@ -2267,6 +2288,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
       getNextToken();
   }
   ClassSize[Name] = last_offset;
+  
 
   // for (auto &pair : ClassVariables[Name])
   // {

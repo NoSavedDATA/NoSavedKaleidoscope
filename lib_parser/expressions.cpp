@@ -170,18 +170,6 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
 
 
 Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) {
-    // std::cout << "ExternFunctionExpr for file " << fname << ".\n";
-    // std::cout << "Function:\n\tReturn Type:\t" << ReturnType << "\n\tName:\t\t" << FunctionName << "\n\tArgs:\t\t";
-
-    // if(ArgTypes.size()>0)
-    // {
-    //     for (int i=0;i<ArgTypes.size()-1;++i)
-    //         std::cout << ArgTypes[i] << ", ";
-    //     std::cout << ArgTypes[ArgTypes.size()-1];
-    // }
-
-
-    // std::cout <<  "\n\n\n";
     
 
     lib_info = Generate_Function_Dict(lib_info, ReturnType, FunctionName); 

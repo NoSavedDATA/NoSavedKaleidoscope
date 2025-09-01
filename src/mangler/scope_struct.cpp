@@ -213,6 +213,7 @@ extern "C" Scope_Struct *scope_struct_Load_for_Async(char *fn_name)
 
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
+    scope_struct_copy->Alloc_MarkSweepMap();
 
     return scope_struct_copy;
 }

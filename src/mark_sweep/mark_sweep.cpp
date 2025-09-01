@@ -125,6 +125,8 @@ void MarkSweep::clean_up(bool clean_scopeful) {
             ++it;
         }
     }
+
+
     // std::cout << "-----" << "\n\n\n";
 }
 
