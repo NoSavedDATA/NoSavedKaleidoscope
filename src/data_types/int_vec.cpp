@@ -226,13 +226,16 @@ extern "C" int int_vec_print(Scope_Struct *scope_struct, DT_int_vec *vec) {
 
 extern "C" DT_int_vec *int_vec_Split_Parallel(Scope_Struct *scope_struct, DT_int_vec *vec)
 {
+    // std::cout << "SPLITTING int VEC"  << ".\n";
+    // std::cout << "Threads count: " << scope_struct->asyncs_count << ".\n";
+    // std::cout << "Thread id: " << scope_struct->thread_id << ".\n\n";
     int threads_count = scope_struct->asyncs_count;
     int thread_id = scope_struct->thread_id-1;
 
     int vec_size = vec->size;
     int segment_size;
 
-    segment_size = ceilf(vec_size/threads_count);
+    segment_size = ceilf(vec_size/(float)threads_count);
 
     // std::cout << "SEGMENT SIZE IS " << segment_size << ".\n";
 
@@ -263,12 +266,12 @@ extern "C" DT_int_vec *int_vec_Split_Strided_Parallel(Scope_Struct *scope_struct
     int thread_id = scope_struct->thread_id-1;
     // std::cout << "SPLITTING int VEC"  << ".\n";
     // std::cout << "Threads count: " << scope_struct->asyncs_count << ".\n";
-    // std::cout << "Threads id: " << scope_struct->thread_id << ".\n\n";
+    // std::cout << "Thread id: " << scope_struct->thread_id << ".\n\n";
 
     int vec_size = vec->size;
     int segment_size;
 
-    segment_size = ceilf(vec_size/threads_count);
+    segment_size = ceilf(vec_size/(float)threads_count);
 
     // std::cout << "SEGMENT SIZE IS " << segment_size << ".\n";
 

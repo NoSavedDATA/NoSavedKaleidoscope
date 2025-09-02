@@ -1,39 +1,3 @@
 
 
-class ChannelTest
-    float channel ch
 
-    def float __init__(float channel ch)
-        self.ch = ch
-
-        print("init")
-
-        
-
-    def float print(float channel ans_ch<-)
-
-        var msg <- self.ch
-        print("msg " + msg)
-
-        sleep(2)
-        ans_ch <- 10
-
-
-float channel ch
-float channel ans_ch
-
-ChannelTest channel_obj(ch)
-
-
-
-go channel_obj.print(ans_ch)
-
-sleep(1)
-
-print("send to channel")
-ch <- 8
-
-
-var ans <- ans_ch
-
-print("answer: " + ans)

@@ -166,14 +166,20 @@ static std::atomic<int> next_thread_id(1);
 std::atomic<int> next_id(1);
 
 extern "C" float scope_struct_Reset_Threads(Scope_Struct *scope_struct) {
+    // std::cout << "-----------------RESET THREADS--------------------------"  << ".\n";
     assigned_ids.clear();    
+    next_id = 1;
     return 0;
 }
 
 extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
     static thread_local bool has_id = false;
     static thread_local int thread_id = 0;
-    
+    // std::cout << "start from thread_id: " << thread_id << ".\n";
+    // std::cout << "found id:" << ".\n";
+    // for (int asg_id : assigned_ids)
+    //     std::cout << "" << asg_id << " ";
+    // std::cout << "" << "\n";
     if (!has_id) {
         std::lock_guard<std::mutex> lock(id_mutex);
         thread_id = next_id++;

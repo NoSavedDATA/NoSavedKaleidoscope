@@ -37,6 +37,9 @@ inline Value *const_int64(int val) {
 inline Value *const_float(float val) {
     return ConstantFP::get(*TheContext, APFloat(val));
 }
+inline Value *const_bool(bool val) {
+    return ConstantInt::get(Type::getInt1Ty(*TheContext), val);
+}
 
 
 

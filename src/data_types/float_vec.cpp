@@ -154,7 +154,7 @@ extern "C" DT_float_vec *float_vec_Split_Parallel(Scope_Struct *scope_struct, DT
     int vec_size = vec->size;
     int segment_size;
 
-    segment_size = ceilf(vec_size/threads_count);
+    segment_size = ceilf(vec_size/(float)threads_count);
 
     // std::cout << "SEGMENT SIZE IS " << segment_size << ".\n";
 
@@ -188,7 +188,7 @@ extern "C" DT_float_vec *float_vec_Split_Strided_Parallel(Scope_Struct *scope_st
     int vec_size = vec->size;
     int segment_size;
 
-    segment_size = ceilf(vec_size/threads_count);
+    segment_size = ceilf(vec_size/(float)threads_count);
 
     // std::cout << "SEGMENT SIZE IS " << segment_size << ".\n";
 

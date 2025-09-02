@@ -316,7 +316,7 @@ Function *FunctionAST::codegen() {
         } else
         {
             Builder->CreateStore(&Arg, arg_alloca);
-            if(type!="float"&&type!="int")
+            if(!in_str(type, primary_data_tokens))
             {
                 // p2t("HELLO FROM ELSE for arg_name " + arg_name + " of type " + type);
                 // call("MarkToSweep_Unmark_Scopeless", {scope_struct, &Arg});
@@ -2634,6 +2634,10 @@ int main(int argc, char* argv[]) {
   BinopPrecedence['!'] = 9;
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
+  BinopPrecedence[tok_and] = 10;
+  BinopPrecedence[tok_not] = 10;
+  BinopPrecedence[tok_or] = 10;
+  BinopPrecedence[tok_xor] = 10;
   BinopPrecedence[tok_equal] = 10;
   BinopPrecedence[tok_diff] = 10;
   BinopPrecedence[tok_minor_eq] = 10;
@@ -2712,6 +2716,7 @@ int main(int argc, char* argv[]) {
 
   ops_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
                      {"float_str", "str"}, {"int_int", "int"}, {"int_float", "float"}, {"float_int", "float"}, {"str_int", "str"}, {"int_str", "str"},
+                     {"str_bool", "str"}, {"bool_str", "str"}, {"bool_bool", "bool"},
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
                      {"pinned_tensor_tensor", "pinned_tensor"}, {"pinned_tensor_float", "pinned_tensor"},
                      {"object_object", "object"}, {"str_object", "object"},
@@ -2721,7 +2726,7 @@ int main(int argc, char* argv[]) {
 
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
             {tok_diff, "different"}, {tok_higher_eq, "higher_eq"}, {tok_minor_eq, "minor_eq"}, {'%', "mod"}, {'=', "attr"},
-            {77, "error"}, {tok_arrow, "message"}};
+            {77, "error"}, {tok_arrow, "message"}, {tok_and, "and"}, {tok_not, "not"}, {tok_or, "or"}, {tok_xor, "xor"}};
 
   for (auto pair : op_map)
     op_map_names.push_back(pair.second);

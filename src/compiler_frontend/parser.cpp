@@ -21,7 +21,7 @@
 
 
 std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
-std::map<std::string, std::vector<std::string>> Equivalent_Types;
+std::map<std::string, std::vector<std::string>> Equivalent_Types = {{"float", {"int"}}, {"int", {"float"}}};
 
 std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
@@ -177,6 +177,14 @@ std::unique_ptr<ExprAST> ParseIntExpr(Parser_Struct parser_struct) {
   getNextToken(); // consume the number
   return std::move(Result);
 }
+
+
+std::unique_ptr<ExprAST> ParseBoolExpr(Parser_Struct parser_struct) {
+  auto Result = std::make_unique<BoolExprAST>(BoolVal);
+  getNextToken(); // consume the bool
+  return std::move(Result);
+}
+
 
 std::unique_ptr<ExprAST> ParseStringExpr(Parser_Struct parser_struct) {
   auto Result = std::make_unique<StringExprAST>(IdentifierStr);
@@ -545,8 +553,12 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
 
   // condition.
   auto Cond = ParseExpression(parser_struct, class_name);
-  if (!Cond)
+
+  if (!Cond) {
+    std::cout << "cond is null" << ".\n";
     return nullptr;
+  }
+
 
   if(CurTok==tok_space)
     getNextToken();
@@ -927,6 +939,38 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
                                          std::move(IsAsync));
 }
 
+
+
+
+
+std::unique_ptr<ExprAST> ParseMainExpr(Parser_Struct parser_struct, std::string class_name) {
+
+  int cur_level_tabs = SeenTabs;
+  
+  getNextToken(); // eat main
+
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::vector<bool> IsAsync;
+  
+
+  if (CurTok!=tok_space)
+    LogError(parser_struct.line, "\"main\" requires a line break.");
+
+  getNextToken(); 
+
+  handle_tok_space();
+
+  while(!in_char(CurTok, terminal_tokens))
+  {
+    if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
+      break;
+    Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
+    handle_tok_space();
+  }
+
+
+  return std::make_unique<MainExprAST>(std::move(Bodies));
+}
 
 
 
@@ -1366,6 +1410,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
 
   std::string data_type = IdentifierStr; 
   Data_Tree data_tree = ParseDataTree(data_type, is_struct, parser_struct);
+  
 
   if (CurTok==tok_channel)
     return ParseChannelExpr(parser_struct, class_name, data_tree);
@@ -1464,6 +1509,8 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
         Init = std::make_unique<NumberExprAST>(0.0f);
       else if (data_type=="int")
         Init = std::make_unique<IntExprAST>(0);
+      else if (data_type=="bool")
+        Init = std::make_unique<BoolExprAST>(false);
       else if (data_type=="str")
         Init = std::make_unique<StringExprAST>("");
       else
@@ -1641,6 +1688,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseNumberExpr(parser_struct);
   case tok_int:
     return ParseIntExpr(parser_struct);
+  case tok_bool:
+    return ParseBoolExpr(parser_struct);
   case tok_str:
     return ParseStringExpr(parser_struct);
   case '(':
@@ -1661,6 +1710,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseGoExpr(parser_struct, class_name);
   case tok_lock:
     return ParseLockExpr(parser_struct, class_name);
+  case tok_main:
+    return ParseMainExpr(parser_struct, class_name);
   case tok_no_grad:
     return ParseNoGradExpr(parser_struct, class_name);
   case tok_ret:

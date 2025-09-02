@@ -18,20 +18,6 @@ Data_Tree::Data_Tree(std::string Type, std::vector<Data_Tree> Nested_Data) : Typ
 Data_Tree::Data_Tree(std::string Type) : Type(Type) {}
 
 
-bool CheckChannel(Data_Tree *L_ptr, Data_Tree R) {
-    Data_Tree L = *L_ptr;
-
-    if(!(L.Type=="channel"||R.Type=="channel"))
-        return false;
-    
-    if(L.Type=="channel")
-        L = L.Nested_Data[0];
-    if(R.Type=="channel")
-        R = R.Nested_Data[0];
-    
-    return L.Compare(R)==0;
-}
-
 bool CompareListTuple(Data_Tree *L, Data_Tree R) {
 
     if(L->Type!="list"||R.Type!="tuple")
@@ -39,6 +25,7 @@ bool CompareListTuple(Data_Tree *L, Data_Tree R) {
 
 
     std::string list_type = L->Nested_Data[0].Type;
+
 
 
     for (auto data_tree : R.Nested_Data)
@@ -51,18 +38,37 @@ bool CompareListTuple(Data_Tree *L, Data_Tree R) {
     return true;
 }
 
-int Data_Tree::Compare(Data_Tree other_tree) {
+
+
+bool CheckChannel(Data_Tree *L_ptr, Data_Tree R) {
+    Data_Tree L = *L_ptr;
+
+    if(!(L.Type=="channel"||R.Type=="channel"))
+        return false;
     
+    if(L.Type=="channel")
+        L = L.Nested_Data[0];
+    if(R.Type=="channel")
+        R = R.Nested_Data[0];
+
+    
+    return L.Compare(R)==0;
+}
+
+
+
+int Data_Tree::Compare(Data_Tree other_tree) {    
     int comparisons = 0;
 
 
-    if(!in_str(Type, {primary_data_tokens}) && other_tree.Type=="nullptr")
+    if(!in_str(Type, primary_data_tokens) && other_tree.Type=="nullptr")
         return comparisons;
  
-
- 
-    if(Type!=other_tree.Type&&!CompareListTuple(this, other_tree)&&!CheckIsEquivalent(Type, other_tree.Type))
-        comparisons++;
+    if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_tree.Type))
+        return comparisons+1;
+     
+    if(!CompareListTuple(this, other_tree))
+        return comparisons+1;
 
     if (Type=="list"&&other_tree.Type=="tuple"||CheckChannel(this, other_tree))
         return comparisons;
@@ -104,5 +110,7 @@ void Data_Tree::Print() {
 std::string UnmangleVec(Data_Tree dt) {
     if (dt.Type=="vec")
         return  dt.Nested_Data[0].Type + "_vec";
+    if (dt.Type=="channel")
+        return  dt.Nested_Data[0].Type + "_channel";
     return dt.Type;
 }

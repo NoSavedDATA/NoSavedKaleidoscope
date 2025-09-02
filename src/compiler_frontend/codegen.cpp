@@ -58,6 +58,8 @@ Value *load_alloca(std::string name, std::string type, std::string from_function
       load_type = Type::getFloatTy(*TheContext);
     else if(type=="int")
       load_type = Type::getInt32Ty(*TheContext);
+    else if(type=="bool")
+      load_type = Type::getInt1Ty(*TheContext);
     else
       load_type = int8PtrTy;
 
@@ -155,13 +157,16 @@ Value *Get_Object_Value(NameSolverAST *name_solver, Parser_Struct parser_struct)
 }
 
 bool CheckIsEquivalent(std::string LType, std::string RType) {
-    if (Equivalent_Types.count(RType)>0)
-    for(std::string equivalent : Equivalent_Types[RType])
-    {
-        if (equivalent==LType)
-            return true;
-    }
-    return false;
+  if(LType==RType)
+    return true;
+
+  if (Equivalent_Types.count(RType)>0)
+  for(std::string equivalent : Equivalent_Types[RType])
+  {
+      if (LType==equivalent)
+          return true;
+  }
+  return false;
 }
 
 
@@ -183,6 +188,15 @@ Value *IntExprAST::codegen(Value *scope_struct) {
   p2t(msg);
 
   return const_int(Val);
+}
+
+
+Value *BoolExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return const_bool(false);
+  
+
+  return const_bool(Val);
 }
 
 Value *StringExprAST::codegen(Value *scope_struct) {
@@ -220,6 +234,8 @@ llvm::Type *get_type_from_str(std::string type)
     llvm_type = Type::getFloatTy(*TheContext);
   else if (type=="int")
     llvm_type = Type::getInt32Ty(*TheContext);
+  else if (type=="bool")
+    llvm_type = Type::getInt1Ty(*TheContext);
   else
     llvm_type = int8PtrTy;
   return llvm_type;
@@ -314,7 +330,7 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
 
 
 
-    if((Type=="float"||Type=="int")&&!(is_self||is_attr))
+    if(in_str(Type, primary_data_tokens)&&!(is_self||is_attr))
     { 
       llvm::Type *alloca_type = get_type_from_str(Type);
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
@@ -433,8 +449,6 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     Value *initial_value = Init->codegen(scope_struct);
 
 
-    // if(!Check_Is_Compatible_Type(Type, VarNames[i].second, parser_struct))
-    //   return const_float(0);
 
     Check_Is_Compatible_Data_Type(data_type, Init->GetDataTree(), parser_struct);    
 
@@ -446,7 +460,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     }
 
 
-    if((Type=="float"||Type=="int")&&!(is_self||is_attr))
+    if(in_str(Type, primary_data_tokens)&&!(is_self||is_attr))
     { 
       if (Type=="float"&&Init->GetType()=="int")
         initial_value = Builder->CreateUIToFP(initial_value, Type::getFloatTy(*TheContext), "floattmp");
@@ -590,12 +604,13 @@ Value *IfExprAST::codegen(Value *scope_struct) {
 
   // Convert condition to a bool by comparing equal to 0.0.
   
-  if(Cond->GetType()=="int")
+  if(Cond->GetDataTree().Type=="int")
     CondV = Builder->CreateICmpNE(
         CondV, const_int(0), "ifcond");
-  if(Cond->GetType()=="float")
+  if(Cond->GetDataTree().Type=="float")
     CondV = Builder->CreateFCmpONE(
         CondV, const_float(0), "ifcond");
+
 
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
@@ -604,6 +619,7 @@ Value *IfExprAST::codegen(Value *scope_struct) {
   BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "then", TheFunction);
   BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "else");
   BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "ifcont");
+  
 
   Builder->CreateCondBr(CondV, ThenBB, ElseBB);
 
@@ -964,10 +980,15 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
   Value* condVal = Cond->codegen(scope_struct);
   if (!condVal)
     return nullptr;
-  // Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
-  // condVal = Builder->CreateFCmpONE(condVal, _zero, "loopcond");
-  Value *_zero = const_int(0);
-  condVal = Builder->CreateICmpNE(condVal, _zero, "whilecond");
+
+  std::string cond_type = Cond->GetDataTree().Type;
+  if (cond_type=="float") {
+    Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
+    condVal = Builder->CreateFCmpONE(condVal, _zero, "loopcond");
+  } else if (cond_type=="int") {
+    Value *_zero = const_int(0);
+    condVal = Builder->CreateICmpNE(condVal, _zero, "whilecond");
+  } 
 
 
   // Create the conditional branch
@@ -1285,10 +1306,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
         Builder->CreateStore(Val_indexed, alloca);
 
-        if (LType!="float"&&LType!="int")
-        {
+        
+        if(!in_str(LType, primary_data_tokens))
           call("MarkToSweep_Mark", {scope_struct, Val_indexed, global_str(Extract_List_Suffix(LType))});
-        }
+        
         
       }
       return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -1349,7 +1370,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     if (is_alloca)
     {
-
       Check_Is_Compatible_Data_Type(LHS->GetDataTree(), RHS->GetDataTree(), parser_struct);
 
 
@@ -1371,7 +1391,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
 
-      if (LType!="float"&&LType!="int")
+      if(!in_str(LType, primary_data_tokens))
       {
         Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
         call("MarkToSweep_Mark_Scopeful", {scope_struct, old_val, global_str(Extract_List_Suffix(LType))});
@@ -1387,7 +1407,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         Val = callret(store_trigger, {Lvar_name, old_val, Val, scope_struct});
       }
 
-      if (LType!="float"&&LType!="int")
+      if(!in_str(LType, primary_data_tokens))
         call("MarkToSweep_Unmark_Scopeful", {scope_struct, Val, global_str(LType)});
       if (LType=="float"&&RHS->GetType()=="int")
         Val = Builder->CreateUIToFP(Val, Type::getFloatTy(*TheContext), "floattmp");
@@ -1417,7 +1437,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       } else {}
       
 
-      if (LType!="float"&&LType!="int")
+      if(!in_str(LType, primary_data_tokens))
         call("MarkToSweep_Unmark_Scopeless", {scope_struct, Val, global_str(LType)});   
     }
     
@@ -1467,6 +1487,16 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
   
+  if (Elements=="bool_bool") {
+    switch (Op) {
+      case tok_equal:
+        return Builder->CreateICmpEQ(L, R, "booleq");
+      case tok_and:
+          return Builder->CreateAnd(L, R, "booland");
+      case tok_or:
+          return Builder->CreateOr(L, R, "boolor");
+    }
+  }
   
 
   if (Elements=="float_float")
@@ -1561,13 +1591,17 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     }
   } else {
 
+    
+    if(LHS->GetDataTree().Type=="channel"||RHS->GetDataTree().Type=="channel")    
+      Check_Is_Compatible_Data_Type(LHS->GetDataTree(), RHS->GetDataTree(), parser_struct);
+
     Value *ret = callret(Operation, {scope_struct, L, R});
 
     if(ops_type_return.count(Elements)>0)
     {
       std::string return_type = ops_type_return[Elements];
 
-      if (return_type!="float"&&return_type!="int"&&return_type!="None")
+      if(!in_str(return_type, primary_data_tokens)&&return_type!="None")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(return_type))});
     }
 
@@ -2029,28 +2063,22 @@ Value *FinishExprAST::codegen(Value *scope_struct) {
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   std::string functionName = TheFunction->getName().str();
 
-
   for (int i=0; i < Bodies.size(); i++)
     Bodies[i]->codegen(scope_struct);
   
-
   PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
 
   Function *pthread_join = TheModule->getFunction("pthread_join_aux");
 
 
-  //std::cout << "\n\n\n\nFINISH HAS " << thread_pointers.size() << " ASYNC EXPRESSIONS "  << "\n\n\n\n\n";
-
 
   for (Value *pthreadPtr : thread_pointers)
   {
     Value *pthread = Builder->CreateLoad(pthreadTy, pthreadPtr);
-
-    Builder->CreateCall(pthread_join,
-                        {pthread});
-    
+    Builder->CreateCall(pthread_join, {pthread});
   }
   thread_pointers.clear();
+
 
   call("scope_struct_Reset_Threads", {scope_struct});
   
@@ -2068,6 +2096,28 @@ Value *LockExprAST::codegen(Value *scope_struct){
   Builder->CreateCall(TheModule->getFunction("UnlockMutex"), {Builder->CreateGlobalString(Name)});
 
   return ConstantFP::get(*TheContext, APFloat(0.0f));
+}
+
+
+
+
+Value *MainExprAST::codegen(Value *scope_struct) {
+  if (not ShallCodegen)
+    return const_float(0);
+  
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  std::string functionName = TheFunction->getName().str();
+
+
+  for (const auto &body : Bodies) {
+
+    body->codegen(scope_struct);
+    if (!body)
+      return const_float(1);
+  }
+
+  
+  return const_float(0);
 }
 
 
@@ -2101,8 +2151,9 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   { 
     // p2t("Reached if");
     Value *ret = Vars[0]->codegen(scope_struct);
-    std::string type = Vars[0]->GetType();
-    if(type!="float"&&type!="int")
+    std::string type = Vars[0]->GetDataTree().Type;
+
+    if(!in_str(type, primary_data_tokens))
       call("MarkToSweep_Unmark_Scopeless", {scope_struct, ret});
 
     seen_var_attr=false;
@@ -2115,7 +2166,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   for (int i=0; i<Vars.size(); i++)
   {
     Value *value = Vars[i]->codegen(scope_struct);
-    if(Vars[i]->GetType()!="float"&&Vars[i]->GetType()!="int")
+    
+    if(!in_str(Vars[i]->GetDataTree().Type, primary_data_tokens))
       call("MarkToSweep_Unmark_Scopeless", {scope_struct, value});
     std::string type = Vars[i]->GetType();
     values.push_back(global_str(type));
@@ -2186,7 +2238,7 @@ Value *NewTupleExprAST::codegen(Value *scope_struct) {
     
     if (!is_type)
     {
-      if (type!="float"&&type!="int")
+      if(!in_str(type, primary_data_tokens))
       {
         std::string copy_fn = type + "_Copy";
         
@@ -2244,7 +2296,7 @@ Value *NewVecExprAST::codegen(Value *scope_struct) {
     if (!is_type)
     {
       // std::cout << "VALUE TYPE IS: " << type << ".\n";
-      if (type!="float"&&type!="int")
+      if(!in_str(type, primary_data_tokens))
       {
 
         std::string copy_fn = type + "_Copy";
@@ -2298,7 +2350,7 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
     Value *value = Values[i]->codegen(scope_struct);
 
 
-    if (type!="float"&&type!="int")
+    if(!in_str(type, primary_data_tokens))
     {
 
       std::string copy_fn = type + "_Copy";
@@ -2801,7 +2853,8 @@ Value *NestedCallExprAST::codegen(Value *scope_struct) {
   // Clean-up
   call("scope_struct_Delete", {scope_struct_copy});
   
-  if(!in_str(Type, {"float", "int", "", "None"}))
+    
+  if(!in_str(Type, primary_data_tokens) && !in_str(Type, {"", "None"}))
     call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
   
   return ret;
@@ -2819,36 +2872,28 @@ Value *NameableRoot::codegen(Value *scope_struct) {
 
 
 Value *Nameable::codegen(Value *scope_struct) {
-
   Data_Tree dt = GetDataTree();
-
   std::string type = dt.Type;
-
 
   if(Depth==1)
   {
     if(Name=="self")
-      return callret("get_scope_object", {scope_struct});
-    
+      return callret("get_scope_object", {scope_struct}); 
     return load_alloca(Name, type, parser_struct.function_name); 
   }
-
-
 
   std::string scope = Inner->GetDataTree().Type;
   Value *obj_ptr = Inner->codegen(scope_struct);
 
   int offset = ClassVariables[scope][Name];
-  // std::cout << "offseting " << scope << "/" << Name << ": " << offset << ".\n";
-  // std::cout << IsLeaf << "/" << Load_Last << "/" << (!IsLeaf||Load_Last) << ".\n";
+
   
   obj_ptr = callret("offset_object_ptr", {obj_ptr, const_int(offset)});
 
 
-  if(type!="int"&&type!="float" && (!IsLeaf||Load_Last))
+  if(!in_str(type, primary_data_tokens) && (!IsLeaf||Load_Last))
     obj_ptr = callret("object_Load_slot", {obj_ptr});
-
-  if (Load_Last&&(type=="float"||type=="int"))
+  if (Load_Last&&in_str(type, primary_data_tokens))
     return callret("object_Load_"+type, {obj_ptr});
 
 
@@ -2991,10 +3036,10 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   if (ReturnType=="")
     GetDataTree();
-  if (ReturnType!="float"&&ReturnType!="int"&&ReturnType!="")
-  {
+
+  if(!in_str(ReturnType, primary_data_tokens)&&ReturnType!="")
     call("MarkToSweep_Mark", {scope_struct, ret, global_str(ReturnType)});
-  }
+  
 
   return ret;
 }
@@ -3128,7 +3173,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
     call("scope_struct_Delete", {scope_struct_copy});
 
-    if (Type!="float"&&Type!="int"&&Type!="")
+    if(!in_str(Type, primary_data_tokens)&&Type!="")
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
     
     return ret;
@@ -3151,7 +3196,7 @@ Value *CallExprAST::codegen(Value *scope_struct) {
 
     call("scope_struct_Delete", {scope_struct_copy});    
 
-    if (Type!="float"&&Type!=""&&Type!="int")
+    if(!in_str(Type, primary_data_tokens)&&Type!="")
       call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
     
     return ret;

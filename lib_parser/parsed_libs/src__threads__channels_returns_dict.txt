@@ -1,1 +1,1 @@
-{"int_channel_message", "int"}, 
+{"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_alive", "bool"}, 

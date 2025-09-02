@@ -119,6 +119,14 @@ class IntExprAST : public ExprAST {
   Value *codegen(Value *scope_struct) override;
 }; 
 
+
+class BoolExprAST : public ExprAST {
+  bool Val;
+  public:
+    BoolExprAST(bool Val); 
+  Value *codegen(Value *scope_struct) override;
+}; 
+
   
 class StringExprAST : public ExprAST {
   std::string Val;
@@ -759,16 +767,26 @@ class SplitStridedParallelExprAST : public ExprAST {
 };
 
 
-  /// NoGradExprAST
-  class NoGradExprAST : public ExprAST {
-    std::vector<std::unique_ptr<ExprAST>> Bodies;
-  
-    public:
-      NoGradExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies);
-  
-  
-    Value* codegen(Value *scope_struct) override;
-  };
+class MainExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+
+  public:
+    MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies);
+
+
+  Value* codegen(Value *scope_struct) override;
+};
+
+/// NoGradExprAST
+class NoGradExprAST : public ExprAST {
+  std::vector<std::unique_ptr<ExprAST>> Bodies;
+
+  public:
+    NoGradExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies);
+
+
+  Value* codegen(Value *scope_struct) override;
+};
   
   
   

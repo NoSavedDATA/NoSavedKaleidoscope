@@ -85,7 +85,9 @@ std::map<int, std::string> token_to_string = {
 
   // operators
   { tok_binary, "tok binary" },
-  { tok_unary,"tok unary" },
+  { tok_unary, "tok unary" },
+
+  { tok_main , "tok main" },
 
 
   { tok_space, "tok_space" },
@@ -108,6 +110,11 @@ std::map<int, std::string> token_to_string = {
   { 32, "blank space"},
   { 13, "carriage return"},
 
+
+  { tok_and, "tok and" },
+  { tok_not, "tok not" },
+  { tok_or, "tok or" },
+  { tok_xor, "tok xor" },
   
   { '.', "dot<.>" },
 
@@ -136,6 +143,7 @@ std::map<int, std::string> token_to_string = {
   { 61, "=" },
   { 62, ">" },
   { 64, "@" },
+
 
   { 91, "[" },
   { 93, "]" },
@@ -183,20 +191,22 @@ std::map<int, std::string> token_to_string = {
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
 std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class, tok_eof};
 
-std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "str", "str_vec", "float_vec", "MHSA", "LSTM", "Linear", "tuple", "list", "dict",
+std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "bool", "str", "str_vec", "float_vec", "MHSA", "LSTM", "Linear", "tuple", "list", "dict",
                                         "Embedding", "EmbeddingLn", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
 std::vector<std::string> compound_tokens = {"tuple", "list", "dict"};
-std::vector<std::string> primary_data_tokens = {"int", "float", "str", "bool"};
+std::vector<std::string> primary_data_tokens = {"int", "float", "bool"};
 
 
 std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},
                                              {"import", tok_import}, {"if", tok_if}, {"then", tok_then}, {"else", tok_else}, {"for", tok_for}, {"while", tok_while},
                                              {"async", tok_async}, {"asyncs", tok_asyncs}, {"finish", tok_async_finish}, {"in", tok_in}, {"global", tok_global},
                                              {"no_grad", tok_no_grad}, {"lock", tok_lock}, {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary},
-                                             {"return", tok_ret}, {"as", tok_as}, {"go", tok_go}, {"channel", tok_channel}};
+                                             {"return", tok_ret}, {"as", tok_as}, {"go", tok_go}, {"channel", tok_channel}, {"main", tok_main},
+                                             {"and", tok_and}, {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}};
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number
+bool BoolVal;
 
 std::string ReverseToken(int _char)
 {
@@ -415,6 +425,14 @@ static int get_token() {
       return tok_data;
     if(string_tokens.count(IdentifierStr)>0)
       return string_tokens[IdentifierStr];
+    if (IdentifierStr=="true"||IdentifierStr=="false")
+    {
+      if(IdentifierStr=="true")
+        BoolVal = true;
+      if(IdentifierStr=="false")
+        BoolVal = false;
+      return tok_bool;
+    }
     if (IdentifierStr == "glob")
       IdentifierStr = "_glob_b_";
     if (IdentifierStr == "sleep")

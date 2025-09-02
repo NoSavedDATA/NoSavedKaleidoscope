@@ -17,9 +17,10 @@
 struct Channel {
 
     int buffer_size;
+    bool terminated=false;
 
     DT_list *data_list;
-    std::string name;
+    // std::string name;
     
     std::mutex mtx;
     std::condition_variable cv;

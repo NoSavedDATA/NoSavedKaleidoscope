@@ -1,4 +1,4 @@
-1821-08-30 20:44:11
+1821-09-02 13:27:18
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -62,6 +62,20 @@
 		false
 	);
 	TheModule->getOrInsertFunction("float_str_add", float_str_addTy);
+
+	FunctionType *str_bool_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt1Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("str_bool_add", str_bool_addTy);
+
+	FunctionType *bool_str_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt1Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("bool_str_add", bool_str_addTy);
 
 	FunctionType *PrintStrTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

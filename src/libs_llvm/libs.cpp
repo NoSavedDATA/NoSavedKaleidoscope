@@ -199,6 +199,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("object_ptr_Attribute_object", object_ptr_Attribute_objectTy);
 
+	FunctionType *channel_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_Create", channel_CreateTy);
+
 	FunctionType *str_channel_messageTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy},
@@ -213,19 +220,26 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("channel_str_message", channel_str_messageTy);
 
-	FunctionType *int_channel_messageTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_channel_message", int_channel_messageTy);
-
-	FunctionType *channel_int_messageTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+	FunctionType *str_channel_IdxTy= FunctionType::get(
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("channel_int_message", channel_int_messageTy);
+	TheModule->getOrInsertFunction("str_channel_Idx", str_channel_IdxTy);
+
+	FunctionType *str_channel_terminateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_channel_terminate", str_channel_terminateTy);
+
+	FunctionType *str_channel_aliveTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_channel_alive", str_channel_aliveTy);
 
 	FunctionType *float_channel_messageTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -241,12 +255,89 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("channel_float_message", channel_float_messageTy);
 
-	FunctionType *channel_CreateTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+	FunctionType *float_channel_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("channel_Create", channel_CreateTy);
+	TheModule->getOrInsertFunction("float_channel_Idx", float_channel_IdxTy);
+
+	FunctionType *float_channel_sumTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_channel_sum", float_channel_sumTy);
+
+	FunctionType *float_channel_meanTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_channel_mean", float_channel_meanTy);
+
+	FunctionType *float_channel_terminateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_channel_terminate", float_channel_terminateTy);
+
+	FunctionType *float_channel_aliveTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_channel_alive", float_channel_aliveTy);
+
+	FunctionType *int_channel_messageTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("int_channel_message", int_channel_messageTy);
+
+	FunctionType *channel_int_messageTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_int_message", channel_int_messageTy);
+
+	FunctionType *int_channel_IdxTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("int_channel_Idx", int_channel_IdxTy);
+
+	FunctionType *int_channel_sumTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("int_channel_sum", int_channel_sumTy);
+
+	FunctionType *int_channel_meanTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("int_channel_mean", int_channel_meanTy);
+
+	FunctionType *int_channel_terminateTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("int_channel_terminate", int_channel_terminateTy);
+
+	FunctionType *int_channel_aliveTy= FunctionType::get(
+		Type::getInt1Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("int_channel_alive", int_channel_aliveTy);
 
 	FunctionType *Delete_PtrTy= FunctionType::get(
 		int8PtrTy,
@@ -1171,6 +1262,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_str_add", float_str_addTy);
+
+	FunctionType *str_bool_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt1Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("str_bool_add", str_bool_addTy);
+
+	FunctionType *bool_str_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt1Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("bool_str_add", bool_str_addTy);
 
 	FunctionType *PrintStrTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

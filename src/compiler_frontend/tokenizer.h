@@ -39,8 +39,17 @@ enum Token {
     tok_number = -5,
     tok_int = -13,
     tok_str = -40, // ""
+    tok_bool = -58,
 
+
+    // bools
+    tok_and = -59,
+    tok_not = -60,
+    tok_or = -61,
+    tok_xor = -62,
+    
     // control
+    tok_main = -59,
     tok_if = -6,
     tok_then = -7,
     tok_else = -8,
@@ -58,6 +67,7 @@ enum Token {
     tok_ret = -41,
     tok_as = -33,
     tok_in = -42,
+ 
 
     // operators
     tok_binary = -11,
@@ -132,6 +142,7 @@ extern std::vector<char> terminal_tokens;
 
 extern std::string IdentifierStr; // Filled in if tok_identifier
 extern float NumVal;             // Filled in if tok_number
+extern bool BoolVal;
 
 
 extern int LineCounter;

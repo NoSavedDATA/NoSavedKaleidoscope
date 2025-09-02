@@ -73,6 +73,8 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
         return_type = "str";
     else if (in_return_type=="int")
         return_type = "int";
+    else if (in_return_type=="bool")
+        return_type = "bool";
     else if (in_return_type=="std::vector<char*>*")
         return_type = "str_vec";
     else if (in_return_type=="std::vector<float>*")
@@ -189,6 +191,8 @@ Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_inf
             line2="\t\tType::getFloatTy(*TheContext),\n";
         else if (ReturnType=="int")
             line2="\t\tType::getInt32Ty(*TheContext),\n";
+        else if (ReturnType=="bool")
+            line2="\t\tType::getInt1Ty(*TheContext),\n";
         else
             line2="\t\tint8PtrTy,\n";
 
@@ -203,6 +207,8 @@ Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_inf
                     line3 = line3 + "Type::getFloatTy(*TheContext)";
                 else if (ArgTypes[i]=="int")
                     line3 = line3 + "Type::getInt32Ty(*TheContext)";
+                else if (ArgTypes[i]=="bool")
+                    line3 = line3 + "Type::getInt1Ty(*TheContext)";
                 else
                     line3 = line3 + "int8PtrTy";
 

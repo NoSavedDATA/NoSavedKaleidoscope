@@ -129,6 +129,10 @@ NumberExprAST::NumberExprAST(float Val) : Val(Val) {
 IntExprAST::IntExprAST(int Val) : Val(Val) {
   this->SetType("int");
 } 
+
+BoolExprAST::BoolExprAST(bool Val) : Val(Val) {
+  this->SetType("bool");
+} 
   
   
 
@@ -622,6 +626,8 @@ NoGradExprAST::NoGradExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
   
   
   
+MainExprAST::MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
+        : Bodies(std::move(Bodies)) {}
   
   
   
@@ -670,7 +676,6 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 
 
 Data_Tree NameableCall::GetDataTree(bool from_assignment) {
-  // LogBlue("Data tree of " + Callee + ", return is: " + functions_return_type[Callee]);  
 
   std::string ret = functions_return_type[Callee];
 

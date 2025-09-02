@@ -163,20 +163,66 @@ extern "C" char * float_str_add(Scope_Struct *scope_struct, float lc, char *rc)
   ss << std::fixed << std::setprecision(2) << lc; // Adjust precision as needed
   std::string lc_str = ss.str();
   size_t length_lc = lc_str.length();
- 
   
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
-  
 
   char *result_cstr = get_from_char_pool(length_lc+length_rc, "float_str_add");
-
   
   memcpy(result_cstr, lc_str.c_str(), length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
 
+  return result_cstr;
+}
+
+
+
+extern "C" char * str_bool_add(Scope_Struct *scope_struct, char *lc, bool rc)
+{
+  size_t length_lc = strlen(lc);
+
+  size_t length_rc;
+  std::string r;
+  if(rc) {
+    length_rc = 5;
+    r = "true";
+  } else {
+    length_rc = 6;
+    r = "false";
+  }
+
+  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+
+  memcpy(result_cstr, lc, length_lc);
+  memcpy(result_cstr + length_lc, r.c_str(), length_rc);
 
   return result_cstr;
 }
+
+extern "C" char * bool_str_add(Scope_Struct *scope_struct, bool lc, char *rc)
+{
+  size_t length_lc;
+  std::string l;
+  if(rc) {
+    length_lc = 4;
+    l = "true";
+  } else {
+    length_lc = 5;
+    l = "false";
+  }
+
+  size_t length_rc = strlen(rc)+1;
+
+  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+
+  memcpy(result_cstr, l.c_str(), length_lc);
+  memcpy(result_cstr + length_lc, rc, length_rc);
+
+  return result_cstr;
+}
+
+
+
+
 
 
 
