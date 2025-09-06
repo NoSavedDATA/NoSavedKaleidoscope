@@ -782,7 +782,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *list_append_boolTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, Type::getInt1Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("list_append_bool", list_append_boolTy);

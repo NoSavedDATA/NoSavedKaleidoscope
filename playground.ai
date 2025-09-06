@@ -1,3 +1,16 @@
 
 
+bool c = not true
 
+print("c is " + c)
+
+
+int i
+
+while c
+    i = i+1
+    c = i<10.0
+    print("got it")
+
+
+print("end")

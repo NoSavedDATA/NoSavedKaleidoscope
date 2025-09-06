@@ -1,5 +1,6 @@
 
 
+
 class Tup
     int x, y
 
@@ -7,9 +8,10 @@ class Tup
         self.x = x
         self.y = y
 
-
     def float Print()
         print("x: " + self.x + ", y: " + self.y)
+
+
 
 
 
@@ -33,6 +35,7 @@ class Layer1
         var e = self.z[idx]
 
         e[second_idx].Print()
+
 
         self.z[idx][second_idx].x = 16
         var x = self.z[idx][second_idx].x

@@ -33,7 +33,7 @@ using namespace llvm;
 
 
 
-std::map<std::string, std::string> ops_type_return;
+std::map<std::string, std::string> elements_type_return, ops_type_return;
 std::map<int, std::string> op_map;
 std::vector<std::string> op_map_names;
 
@@ -1740,7 +1740,7 @@ std::unique_ptr<ExprAST> ParseUnary(Parser_Struct parser_struct, std::string cla
   // If the current token is not an operator, it must be a primary expr.
   
   
-  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok == '{' || CurTok=='<' || CurTok=='>' || CurTok==':')
+  if ((!isascii(CurTok) || CurTok == '(' || CurTok == ',' || CurTok == '[' || CurTok == '{' || CurTok=='<' || CurTok=='>' || CurTok==':')&&CurTok!=tok_not)
   {
     //std::cout << "Returning, non-ascii found.\n";
     // if(CurTok=='>'||CurTok=='^')
@@ -1758,7 +1758,7 @@ std::unique_ptr<ExprAST> ParseUnary(Parser_Struct parser_struct, std::string cla
   getNextToken();
   if (auto Operand = ParseUnary(parser_struct, class_name, can_be_list))
   {    
-    std::string operand_type = Operand->GetType();
+    std::string operand_type = Operand->GetDataTree().Type;
     auto expr = std::make_unique<UnaryExprAST>(Opc, std::move(Operand), parser_struct);
     expr->SetType(operand_type);
 

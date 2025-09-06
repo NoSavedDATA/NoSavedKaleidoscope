@@ -700,9 +700,8 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     return const_float(0);
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
-  std::string cond_type = End->GetDataTree().Type;
-
-  llvm::Type *llvm_type = get_type_from_str(cond_type);
+  std::string start_type = Start->GetDataTree().Type;
+  llvm::Type *llvm_type = get_type_from_str(start_type);
   
 
   // Create an alloca for the variable in the entry block.
@@ -712,20 +711,12 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Emit the start code first, without 'variable' in scope.
   Value *StartVal = Start->codegen(scope_struct);
+
+
   if (!StartVal)
     return nullptr;
 
-  Value *_zero;
-  
-  if (cond_type=="int")
-    _zero = const_int(0);
-  if (cond_type=="float")
-    _zero = const_float(0.0f);
 
-  if(Start->GetType()=="int"&&cond_type=="float")
-    StartVal = Builder->CreateSIToFP(StartVal, Type::getFloatTy(*TheContext), "lfp");
-
-  // std::cout << "CURRENT FUNCTION ON CODEGEN " << parser_struct.function_name << ".\n";
 
 
 
@@ -770,8 +761,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
       return nullptr;
   } 
 
-  if(Step->GetType()=="int"&&cond_type=="float")
-    StepVal = Builder->CreateSIToFP(StepVal, Type::getFloatTy(*TheContext), "lfp");
 
 
   // Compute the end condition.
@@ -781,14 +770,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   // Convert condition to a bool by comparing equal to 0.0.
 
-  if(cond_type=="int")
-    EndCond = Builder->CreateICmpNE(
-        EndCond, _zero, "for expr loopcond"); 
-  else if(cond_type=="float")
-    EndCond = Builder->CreateFCmpONE(
-        EndCond, _zero, "for expr loopcond");
-  else
-      return LogErrorV(parser_struct.line, "Unsupported type " + cond_type + " on the for expression");
 
 
 
@@ -817,9 +798,9 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   // the body of the loop mutates the variable.
   Value *CurVal = Builder->CreateLoad(llvm_type, control_var_alloca, VarName.c_str());
   Value *NextVal;
-  if (cond_type=="int")
+  if (start_type=="int")
     NextVal = Builder->CreateAdd(CurVal, StepVal, "nextvar"); // Increment  
-  if (cond_type=="float")
+  if (start_type=="float")
     NextVal = Builder->CreateFAdd(CurVal, StepVal, "nextvar"); // Increment 
   Builder->CreateStore(NextVal, control_var_alloca);
 
@@ -980,15 +961,6 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
   Value* condVal = Cond->codegen(scope_struct);
   if (!condVal)
     return nullptr;
-
-  std::string cond_type = Cond->GetDataTree().Type;
-  if (cond_type=="float") {
-    Value *_zero = ConstantFP::get(*TheContext, APFloat(0.0));
-    condVal = Builder->CreateFCmpONE(condVal, _zero, "loopcond");
-  } else if (cond_type=="int") {
-    Value *_zero = const_int(0);
-    condVal = Builder->CreateICmpNE(condVal, _zero, "whilecond");
-  } 
 
 
   // Create the conditional branch
@@ -1213,7 +1185,17 @@ std::string BinaryExprAST::GetType(bool from_assignment) {
     std::string operation = op_map[Op];
     Operation = Elements + "_" + operation;
     
-    std::string type = (Operation=="int_int_div") ? "float" : ops_type_return[Elements];
+
+    std::string type;
+    if (Operation=="int_int_div")
+      type = "float";
+    if (elements_type_return.count(Operation)>0)
+    {
+      type = elements_type_return[Operation];
+      std::cout << "found " << type << " for " << Operation << ".\n";
+    }
+    if (elements_type_return.count(Elements)>0)
+      type = elements_type_return[Elements];
     SetType(type);
 
     // LogBlue("operation: " + Operation + " with elements: " + Elements + " and return type " + type);
@@ -1465,12 +1447,10 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   if (!L || !R)
     return nullptr;
 
-  if (Elements=="int_float") {
-    Elements = "float_float"; 
+  if (cast_L_to=="int_to_float") {
     L = Builder->CreateSIToFP(L, Type::getFloatTy(*TheContext), "lfp");
   }
-  if (Elements=="float_int") {
-    Elements = "float_float"; 
+  if (cast_R_to=="int_to_float") {
     R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
   }
   if (Operation=="tensor_int_div")
@@ -1478,6 +1458,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     Operation = "tensor_float_div";
     R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
   }
+
   if (CheckIs_CastInt_to_FloatChannel(Operation, LHS->GetDataTree())) {
     Operation = "channel_float_message";
     R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
@@ -1520,27 +1501,17 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       case tok_int_div:
         return LogErrorV(parser_struct.line, "GOTCHA");
       case '<':
-        L = Builder->CreateFCmpULT(L, R, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+        return Builder->CreateFCmpULT(L, R, "cmptmp");
       case '>':
-        L = Builder->CreateFCmpULT(R, L, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+        return Builder->CreateFCmpULT(R, L, "cmptmp");
       case tok_equal:
-        L = Builder->CreateFCmpUEQ(L, R, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+        return Builder->CreateFCmpUEQ(L, R, "cmptmp");
       case tok_diff:
-        L = Builder->CreateFCmpUNE(L, R, "cmptmp");
-        // Convert bool 0/1 to float 0.0 or 1.0
-        return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+        return Builder->CreateFCmpUNE(L, R, "cmptmp");
       case tok_minor_eq:
-          L = Builder->CreateFCmpULE(L, R, "cmptmp");  // less or equal
-          return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+          return Builder->CreateFCmpULE(L, R, "cmptmp");  // less or equal
       case tok_higher_eq:
-          L = Builder->CreateFCmpUGE(L, R, "cmptmp");  // greater or equal
-          return Builder->CreateUIToFP(L, Type::getFloatTy(*TheContext), "booltmp");
+          return Builder->CreateFCmpUGE(L, R, "cmptmp");  // greater or equal
       default:
         break;
       }
@@ -1569,23 +1540,17 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       case tok_int_div:
         return Builder->CreateSDiv(L, R, "divtmp");  // Signed division
       case '<':
-        L = Builder->CreateICmpSLT(L, R, "cmptmp");
-        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+        return Builder->CreateICmpSLT(L, R, "cmptmp");
       case '>':
-        L = Builder->CreateICmpSGT(L, R, "cmptmp");
-        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+        return Builder->CreateICmpSGT(L, R, "cmptmp");
       case tok_equal:
-        L = Builder->CreateICmpEQ(L, R, "cmptmp");
-        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+        return Builder->CreateICmpEQ(L, R, "cmptmp");
       case tok_diff:
-        L = Builder->CreateICmpNE(L, R, "cmptmp");
-        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+        return Builder->CreateICmpNE(L, R, "cmptmp");
       case tok_minor_eq:
-        L = Builder->CreateICmpSLE(L, R, "cmptmp");
-        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+        return Builder->CreateICmpSLE(L, R, "cmptmp");
       case tok_higher_eq:
-        L = Builder->CreateICmpSGE(L, R, "cmptmp");
-        return Builder->CreateZExt(L, Type::getInt32Ty(*TheContext), "booltmp");
+        return Builder->CreateICmpSGE(L, R, "cmptmp");
       default:
         break;
     }
@@ -1597,9 +1562,9 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
     Value *ret = callret(Operation, {scope_struct, L, R});
 
-    if(ops_type_return.count(Elements)>0)
+    if(elements_type_return.count(Elements)>0)
     {
-      std::string return_type = ops_type_return[Elements];
+      std::string return_type = elements_type_return[Elements];
 
       if(!in_str(return_type, primary_data_tokens)&&return_type!="None")
         call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(return_type))});
@@ -1662,11 +1627,11 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
   
   
   
-  //std::cout << "Operand type: " << Operand->GetType();
+  std::string operand_type = Operand->GetDataTree().Type;
   if (Opcode=='-')
   {
     //std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
-    if (Operand->GetType()=="tensor")
+    if (operand_type=="tensor")
     {
       Value *tensor_name = global_str(Operand->GetName());
 
@@ -1699,19 +1664,25 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
                               OperandV, "multmp");
   }
 
-  //std::cout << "Opcode: " << Opcode << "\n";
+  std::cout << "Opcode: " << Opcode << "\n";
 
+  if (Opcode==tok_not) {
+    if(operand_type!="bool")
+      LogError(parser_struct.line, "Cannot use not with type: " + operand_type);
 
-  if (Opcode='!')
+    return Builder->CreateNot(OperandV, "logicalnot");
+  }
+
+  if (Opcode=='!')
   {
     return Builder->CreateCall(TheModule->getFunction("logical_not"), {OperandV});
   }
-  if (Opcode=';')
+  if (Opcode==';')
     return OperandV;
     // return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
   
 
-  Function *F = getFunction(std::string("unary") + Opcode);
+  Function *F = getFunction(std::string("unary") + std::to_string(Opcode));
   if (!F)
     return LogErrorV(parser_struct.line,"Unknown unary operator.");
 

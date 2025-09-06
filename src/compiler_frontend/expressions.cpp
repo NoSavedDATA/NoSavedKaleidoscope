@@ -455,7 +455,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
   
   
   /// UnaryExprAST - Expression class for a unary operator.
-UnaryExprAST::UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct parser_struct)
+UnaryExprAST::UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct parser_struct)
     : Opcode(Opcode), Operand(std::move(Operand)), parser_struct(parser_struct) {}
   
   
@@ -469,11 +469,31 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
     LogError(parser_struct.line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
   
   Elements = LType + "_" + RType;    
+
+
+  if (Elements=="int_float") {
+    Elements = "float_float"; 
+    cast_L_to="int_to_float";
+  }
+  if (Elements=="float_int") {
+    Elements = "float_float"; 
+    cast_R_to="int_to_float";
+  }
   
   std::string operation = op_map[Op];
   Operation = Elements + "_" + operation;
   
-  std::string type = (Operation=="int_int_div") ? "float" : ops_type_return[Elements];
+
+  std::string type;
+  if (Operation=="int_int_div")
+    type = "float";
+  else if (ops_type_return.count(Operation)>0)
+  {
+    type = ops_type_return[Operation];
+  }
+  else if (elements_type_return.count(Elements)>0)
+    type = elements_type_return[Elements];
+  else {}
 
   return Data_Tree(type);
 }

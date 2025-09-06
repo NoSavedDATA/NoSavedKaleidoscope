@@ -258,7 +258,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
             if(begins_with(nsk_data_type, "DT_"))
                 nsk_data_type.erase(0, 3);
 
-            ops_type_return.insert(std::make_pair(operands, nsk_data_type));
+            elements_type_return.insert(std::make_pair(operands, nsk_data_type));
 
             break;
         }

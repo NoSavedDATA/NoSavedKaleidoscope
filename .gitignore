@@ -1,7 +1,6 @@
 samples/
 obj/
 lib/
-bin/
 include/_mma/
 include/cutlass/
 a.out

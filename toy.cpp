@@ -2632,12 +2632,12 @@ int main(int argc, char* argv[]) {
   BinopPrecedence['='] = 4;
   BinopPrecedence[tok_arrow] = 4;
   BinopPrecedence['!'] = 9;
+  BinopPrecedence[tok_and] = 9;
+  BinopPrecedence[tok_not] = 9;
+  BinopPrecedence[tok_or] = 9;
+  BinopPrecedence[tok_xor] = 9;
   BinopPrecedence['>'] = 10;
   BinopPrecedence['<'] = 10;
-  BinopPrecedence[tok_and] = 10;
-  BinopPrecedence[tok_not] = 10;
-  BinopPrecedence[tok_or] = 10;
-  BinopPrecedence[tok_xor] = 10;
   BinopPrecedence[tok_equal] = 10;
   BinopPrecedence[tok_diff] = 10;
   BinopPrecedence[tok_minor_eq] = 10;
@@ -2714,7 +2714,7 @@ int main(int argc, char* argv[]) {
 
   reverse_ops = {{"float_tensor", "tensor_float"}};
 
-  ops_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
+  elements_type_return = {{"tensor_tensor", "tensor"}, {"float_float", "float"}, {"str_str", "str"}, {"str_float", "str"},
                      {"float_str", "str"}, {"int_int", "int"}, {"int_float", "float"}, {"float_int", "float"}, {"str_int", "str"}, {"int_str", "str"},
                      {"str_bool", "str"}, {"bool_str", "str"}, {"bool_bool", "bool"},
                      {"tensor_float", "tensor"}, {"pinned_tensor_pinned_tensor", "pinned_tensor"},
@@ -2722,6 +2722,12 @@ int main(int argc, char* argv[]) {
                      {"object_object", "object"}, {"str_object", "object"},
                      {"tensor_int", "tensor"}, {"int_tensor", "tensor"}, {"str_channel", "str"}, {"channel_str", "float"}, {"channel_int", "float"},
                      {"int_channel", "int"}, {"channel_float", "float"}, {"float_channel", "float"}};
+
+  ops_type_return = {{"int_int_higher", "bool"}, {"int_int_minor", "bool"}, {"int_int_equal", "bool"}, {"int_int_different", "bool"},
+                     {"int_int_higher_eq", "bool"}, {"int_int_minor_eq", "bool"},
+                     {"float_float_higher", "bool"}, {"float_float_minor", "bool"}, {"float_float_equal", "bool"}, {"float_float_different", "bool"},
+                     {"float_float_higher_eq", "bool"}, {"float_float_minor_eq", "bool"}};
+
                      
 
   op_map = {{'*', "mult"}, {'@', "mma"},  {'+', "add"}, {'-', "sub"}, {'/', "div"}, {'<', "minor"}, {'>', "higher"}, {tok_equal, "equal"},
