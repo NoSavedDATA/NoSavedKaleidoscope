@@ -69,7 +69,7 @@ std::map<int, std::string> token_to_string = {
   { tok_else, "else" },
   { tok_for, "for" },
   { tok_while, "while" },
-  { tok_go, "go" },
+  { tok_spawn, "spawn" },
   { tok_channel, "channel" },
   { tok_async, "async" },
   { tok_asyncs, "asyncs" },
@@ -201,7 +201,7 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
                                              {"import", tok_import}, {"if", tok_if}, {"then", tok_then}, {"else", tok_else}, {"for", tok_for}, {"while", tok_while},
                                              {"async", tok_async}, {"asyncs", tok_asyncs}, {"finish", tok_async_finish}, {"in", tok_in}, {"global", tok_global},
                                              {"no_grad", tok_no_grad}, {"lock", tok_lock}, {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary},
-                                             {"return", tok_ret}, {"as", tok_as}, {"go", tok_go}, {"channel", tok_channel}, {"main", tok_main},
+                                             {"return", tok_ret}, {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel}, {"main", tok_main},
                                              {"and", tok_and}, {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}};
 
 std::string IdentifierStr; // Filled in if tok_identifier

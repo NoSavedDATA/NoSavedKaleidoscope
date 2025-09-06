@@ -17,6 +17,7 @@ struct Lib_Files {
     std::string file_name="";
     std::string user_cpp="";
     std::string returns_dict="";
+    std::string returns_data_dict="";
     std::string args_dict="";
     std::string clean_up="";
     std::string backward="";

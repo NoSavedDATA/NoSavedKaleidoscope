@@ -96,6 +96,7 @@ int main() {
     std::vector<fs::path> files = glob_cpp(root, "llvm_lib.txt");
     std::vector<fs::path> cpp_files = glob_cpp(root, "user_cpp.txt");
     std::vector<fs::path> dict_files = glob_cpp(root, "returns_dict.txt");
+    std::vector<fs::path> return_data_files = glob_cpp(root, "returns_data_dict.txt");
     std::vector<fs::path> args_dict_files = glob_cpp(root, "args_dict.txt");
     std::vector<fs::path> clean_up_files = glob_cpp(root, "clean_up.txt");
     std::vector<fs::path> backward_files = glob_cpp(root, "backward.txt");
@@ -132,6 +133,21 @@ int main() {
             all_return_dicts = all_return_dicts + "\t\t\t\t\t\t" + line + "\n";
         file.close();
     }
+    
+    all_return_dicts = all_return_dicts + "\n\t};\n\n\tfunctions_return_data_type = {";
+
+    for (auto &parsed_file : return_data_files)
+    {
+        file.open(parsed_file);
+
+        while(std::getline(file, line))
+            all_return_dicts = all_return_dicts + "\t\t\t\t\t\t" + line + "\n";
+        file.close();
+    }
+
+    all_return_dicts = all_return_dicts + "\n\t};\n}";
+
+
 
     for (auto &parsed_file : args_dict_files)
     {
@@ -159,7 +175,6 @@ int main() {
     }
 
     all_libs = all_libs + "\n}";
-    all_return_dicts = all_return_dicts + "\n\t};\n}";
     all_args_dicts = all_args_dicts + "\n}";
 
     

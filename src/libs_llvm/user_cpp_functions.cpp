@@ -18,7 +18,7 @@ void set_user_functions() {
 		"int_Create", "int_Load", "int_Store", 
 		"get_barrier", 
 		"print", 
-		"list_New", "list_append_int", "list_append_float", "list_append_bool", "list_append", "list_print", "list_Create", "list_size", "list_CalculateIdx", "list_Idx", "to_int", "to_float", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", 
+		"list_New", "list_append_int", "list_append_float", "list_append_bool", "list_append", "list_print", "list_Create", "list_size", "list_CalculateIdx", "list_Idx", "to_int", "to_float", "list_CalculateSliceIdx", "list_Slice", "assign_wise_list_Idx", "int_list_Store_Idx", 
 		"__slee_p_", "random_sleep", "silent_sleep", "start_timer", "end_timer", 
 		"str_vec_Create", "LenStrVec", "ShuffleStrVec", "shuffle_str", "IndexStrVec", "str_vec_Idx", "str_vec_CalculateIdx", "str_vec_print", 
 		"nullptr_get", "check_is_null", 

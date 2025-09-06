@@ -84,17 +84,19 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
         if (ends_with(return_type, "*"))
             return_type = remove_substring(return_type, "*");
     }
-    else {
-
-    }
+    else {}
 
 
     // std::cout << in_return_type << " --> " << return_type << ".\n";
 
 
-    if (in_return_type!="float"&&in_return_type!="void"&&in_return_type!="void*") 
+    if (in_return_type!="float"&&in_return_type!="void"&&in_return_type!="void*") {
+        lib_info->return_data_string = lib_info->return_data_string + "{\"" + function_name + "\", Data_Tree(\"" + return_type + "\")}, ";
         lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, "; // {"tensor_tensor_add", "tensor"}
+    }
     lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", "; // user_cpp_functions
+
+    
 
     return lib_info;
 }

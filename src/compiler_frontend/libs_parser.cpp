@@ -291,7 +291,6 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
     // Create a remap when using "import default"
     if(is_default && begins_with(Name, lib_name)) {
         std::string remaped_fn = erase_before_pattern(Name, "__");
-
         lib_function_remaps[remaped_fn] = Name;
     }
 }

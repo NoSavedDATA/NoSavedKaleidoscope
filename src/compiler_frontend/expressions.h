@@ -408,8 +408,11 @@ class Nameable : public ExprAST {
 
   void AddNested(std::unique_ptr<Nameable>);
 
+
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  Nameable *InnerMost();
+  std::string GetLibCallee();
 };
 
 
@@ -426,6 +429,7 @@ class NameableRoot : public Nameable {
 
 class NameableCall : public Nameable {
   public:
+  bool FromLib=false;
   std::vector<std::unique_ptr<ExprAST>> Args;
   std::string Callee, ReturnType="";
 

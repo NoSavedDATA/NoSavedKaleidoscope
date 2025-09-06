@@ -536,14 +536,11 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
 
 
-    if(Type!="float"&&Type!="int")
-    {
-      call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Extract_List_Suffix(Type))});
-      if(is_self||is_attr)
-        call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
-      else
-        call("MarkToSweep_Unmark_Scopeful", {scope_struct, initial_value});
-    }
+    call("MarkToSweep_Mark", {scope_struct, initial_value, global_str(Extract_List_Suffix(Type))});
+    if(is_self||is_attr)
+      call("MarkToSweep_Unmark_Scopeless", {scope_struct, initial_value});
+    else
+      call("MarkToSweep_Unmark_Scopeful", {scope_struct, initial_value});
 
 
       
@@ -1317,13 +1314,21 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
     if(auto *LHSV = dynamic_cast<NameableIdx *>(LHS.get())) {
       
       Value *vec = LHSV->Inner->codegen(scope_struct);
-      std::string type = UnmangleVec(LHSV->GetDataTree(true));
+      Data_Tree dt = LHSV->GetDataTree(true);
+      std::string type = UnmangleVec(dt);
 
       Value *idx = Idx_Calc_Codegen(type, vec, LHSV->Idx, scope_struct);
+
+      if(type=="list"||type=="dict") {
+        std::string nested_type = dt.Nested_Data[0].Type;
+        if (in_str(nested_type, primary_data_tokens))
+          type = nested_type + "_" + type;
+      }
+      // LogBlue("New type is: " + type);
       
-      if(type=="dict")
+      if(ends_with(type, "dict"))
       {
-        store_op = "dict_Store_Key";
+        store_op = type+"_Store_Key";
         
         std::string RType = RHS->GetDataTree().Type;
         if (RType=="int" || RType=="float")
@@ -1856,7 +1861,7 @@ Value *GoExprAST::codegen(Value *scope_struct) {
 
 
   
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_go");
+  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_spawn");
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -2955,7 +2960,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   std::vector<Value*> ArgsV = {scope_struct_copy};
 
-  if(Depth>1) {
+  if(Depth>1&&!FromLib) {
     if (ends_with(Callee, "__init__")&&isSelf)
     {
       Inner->IsLeaf=true;

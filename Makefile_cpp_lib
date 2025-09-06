@@ -1,5 +1,5 @@
 #
-CXX := clang++-19
+CXX := clang++
 CXXFLAGS := -g -O3 -rdynamic -fPIC -mavx -w
 SYSTEM_LIBS := -ldl -lrt -pthread
 OTHER_FLAGS := -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -flto -finline-functions -funroll-loops -w

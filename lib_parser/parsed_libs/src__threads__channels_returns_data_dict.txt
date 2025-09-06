@@ -1,0 +1,1 @@
+{"str_channel_Idx", Data_Tree("str")}, {"str_channel_alive", Data_Tree("int")}, {"float_channel_alive", Data_Tree("int")}, {"int_channel_message", Data_Tree("int")}, {"int_channel_Idx", Data_Tree("int")}, {"int_channel_sum", Data_Tree("int")}, {"int_channel_alive", Data_Tree("bool")}, 

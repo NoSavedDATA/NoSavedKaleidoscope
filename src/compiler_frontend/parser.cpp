@@ -494,17 +494,12 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
     IdentifierList.push_back(std::move(nameable));
     while(CurTok==',')
     {
-
-
-            
       getNextToken(); // get comma
       getNextToken(); // get identifier
 
       nameable = std::make_unique<Nameable>(parser_struct, IdentifierStr, depth);
       IdentifierList.push_back(std::move(nameable));
-      
     } 
-
     
     return std::move(std::make_unique<VariableListExprAST>(std::move(IdentifierList)));
   } 
@@ -517,16 +512,12 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
     return ParseNameableExpr(parser_struct, std::move(nameable), class_name, can_be_list, depth);
   }
 
-
   if (CurTok=='(')
     return ParseCallExpr(parser_struct, std::move(nameable), class_name, depth);
 
-
-
   if (CurTok=='[')
-  {
     return ParseIdxExpr(parser_struct, std::move(nameable), class_name, depth);
-  }
+  
   
   std::unique_ptr<ExprAST> expr_ptr(static_cast<ExprAST*>(nameable.release()));
   return std::move(expr_ptr);
@@ -843,13 +834,13 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
 }
 
 
-std::unique_ptr<ExprAST> ParseGoExpr(Parser_Struct parser_struct, std::string class_name) {
+std::unique_ptr<ExprAST> ParseSpawnExpr(Parser_Struct parser_struct, std::string class_name) {
   int cur_level_tabs = SeenTabs;
 
-  getNextToken(); // eat go
+  getNextToken(); // eat spawn
   
 
-  std::string async_scope = parser_struct.function_name + "_go";
+  std::string async_scope = parser_struct.function_name + "_spawn";
   for (auto pair : typeVars[parser_struct.function_name])
     typeVars[async_scope][pair.first] = pair.second;
   for (auto pair : data_typeVars[parser_struct.function_name])
@@ -1706,8 +1697,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseAsyncExpr(parser_struct, class_name);
   case tok_asyncs:
     return ParseAsyncsExpr(parser_struct, class_name);
-  case tok_go:
-    return ParseGoExpr(parser_struct, class_name);
+  case tok_spawn:
+    return ParseSpawnExpr(parser_struct, class_name);
   case tok_lock:
     return ParseLockExpr(parser_struct, class_name);
   case tok_main:
@@ -1932,6 +1923,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
   return_type = IdentifierStr;
   Data_Tree return_data_type = ParseDataTree(return_type, in_str(IdentifierStr,compound_tokens), parser_struct);
+  // std::cout << "return is"  << ".\n";
+  // return_data_type.Print();
 
   
 
@@ -2127,15 +2120,7 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
   getNextToken();
   // get_tok_util_dot_or_space();
 
-  int dots=0; // dots before beggining the lib name.
-  if(CurTok==tok_post_class_attr_identifier)
-  {
-    lib_name += IdentifierStr;
-    getNextToken();
-    dots++;
-    IdentifierStr="";
-    // std::cout << "get .lib" << ".\n";
-  }
+  int dots=0; 
 
   while(CurTok=='.')
   {
@@ -2144,18 +2129,13 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     lib_name += "/" + IdentifierStr;
     getNextToken();
   }
-
   
 
   std::string full_path_lib = tokenizer.current_dir+"/"+lib_name+".ai";
 
-
-
-
   // Import logic
-  if(fs::exists(full_path_lib)||dots>0)
+  if(fs::exists(full_path_lib))
   {
-    // std::cout << "READING AI LIB " << full_path_lib << ".\n";
 
     // std::cout << "Reverse: " << ReverseToken(CurTok) << ".\n";
     // std::cout << "cur_line: " << cur_line << ".\n";
@@ -2164,9 +2144,9 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     tokenizer.importFile(full_path_lib, dots);
 
     return nullptr;
-  } else {
-   return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);
-  }
+  } else
+    return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);
+  
 
 }
 

@@ -55,7 +55,7 @@ enum Token {
     tok_else = -8,
     tok_for = -9,
     tok_while = -10,
-    tok_go = -55,
+    tok_spawn = -55,
     tok_channel = -56,
     tok_async = -22,
     tok_asyncs = -30,

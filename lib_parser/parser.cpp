@@ -79,6 +79,7 @@ void Save_llvm_string(Lib_Info *lib_info) {
     Write_Txt(lib_files->file_name, save_llvm_string);
     Write_Txt(lib_files->user_cpp, lib_info->functions_string);
     Write_Txt(lib_files->returns_dict, lib_info->dict_string);
+    Write_Txt(lib_files->returns_data_dict, lib_info->return_data_string);
     Write_Txt(lib_files->args_dict, lib_info->arg_types_string);
     Write_Txt(lib_files->clean_up, lib_info->clean_up_functions);
     Write_Txt(lib_files->backward, lib_info->backward_functions);

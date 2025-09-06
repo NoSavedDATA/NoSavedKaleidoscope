@@ -864,6 +864,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("assign_wise_list_Idx", assign_wise_list_IdxTy);
 
+	FunctionType *int_list_Store_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("int_list_Store_Idx", int_list_Store_IdxTy);
+
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},

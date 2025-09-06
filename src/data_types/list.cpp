@@ -256,3 +256,16 @@ extern "C" void *assign_wise_list_Idx(DT_list *vec, int idx)
 }
 
 
+
+
+extern "C" float int_list_Store_Idx(DT_list *list, int idx, int value, Scope_Struct *scope_struct) {
+  std::any& slot = (*list->data)[idx];
+  slot = value;
+  return 0;
+}
+
+extern "C" float float_list_Store_Idx(DT_list *list, int idx, float value, Scope_Struct *scope_struct) {
+  std::any& slot = (*list->data)[idx];
+  slot = value;
+  return 0;
+}

@@ -30,7 +30,7 @@ class Layer1
 
 
     def float Print(i idx, i second_idx)
-
+        
         
         var e = self.z[idx]
 
@@ -44,6 +44,8 @@ class Layer1
         print("X is: " + x)
 
         0
+
+
 
 
 

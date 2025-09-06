@@ -1,4 +1,4 @@
-CXX := clang++-19
+CXX := clang++
 NXX := nvcc
 CXXFLAGS := -g -O3 -rdynamic -fPIC
 CUDA_PATH := /usr/local/cuda-12.1

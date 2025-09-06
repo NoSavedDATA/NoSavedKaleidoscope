@@ -408,6 +408,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
   std::string ai_path = LibName+".ai";
 
   if (!(in_str(LibName, imported_libs))) {
+    // std::cout << "import " << LibName << ".\n";
     
     bool has_nsk_ai=false, has_so_lib=false;
     std::string lib_path = std::getenv("NSK_LIBS");
@@ -416,7 +417,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
     std::string so_lib_path = lib_dir + "/lib.so";
 
     if(fs::exists(so_lib_path))
-    {   
+    {
       has_so_lib=true;
       LibParser *lib_parser = new LibParser(lib_dir);
       
@@ -431,8 +432,10 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
       has_nsk_ai=true;
       get_tok_util_space();
       tokenizer.importFile(include_path, 0);
-    } else
+    } else 
       getNextToken(); // eat lib name
+    
+
 
     if(!(has_nsk_ai||has_so_lib))
       LogError(parser_struct.line, "Failed to import library: " + LibName + ".\n\t    Could not find .ai or lib.so file.");
@@ -679,6 +682,19 @@ unsigned PrototypeAST::getBinaryPrecedence() const { return Precedence; }
 
 
 
+Nameable *Nameable::InnerMost() {
+  if (Inner->Depth==0)
+    return this;
+  return Inner->InnerMost(); 
+}
+
+
+std::string Nameable::GetLibCallee() {
+  if (Inner->Depth==0)
+    return Name;
+  return Inner->GetLibCallee() + "__" + Name;
+}
+
 
 Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 
@@ -695,21 +711,22 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 }
 
 
-Data_Tree NameableCall::GetDataTree(bool from_assignment) {
+Data_Tree NameableCall::GetDataTree(bool from_assignment) { 
 
-  std::string ret = functions_return_type[Callee];
+  Data_Tree ret = functions_return_data_type[Callee];
+  
 
-  Data_Tree return_dt;
-  if (ends_with(ret, "_vec"))
-  {
-    return_dt = Data_Tree("vec");
-    return_dt.Nested_Data.push_back(remove_suffix(ret, "_vec"));
-  } else
-    return_dt = Data_Tree(ret);
+  // Data_Tree return_dt;
+  // if (ends_with(ret, "_vec"))
+  // {
+  //   return_dt = Data_Tree("vec");
+  //   return_dt.Nested_Data.push_back(remove_suffix(ret, "_vec"));
+  // } else
+  //   return_dt = Data_Tree(ret);
 
-  ReturnType = return_dt.Type;
+  // ReturnType = return_dt.Type;
 
-  return return_dt;
+  return ret;
 }
 
 
@@ -767,25 +784,38 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
   Callee = this->Inner->Name;
 
-  if(Depth>1) {    
-    Data_Tree inner_dt = this->Inner->Inner->GetDataTree();
-
   
-    if(data_typeVars[inner_dt.Type].find(Callee)!=data_typeVars[inner_dt.Type].end()) // self.linear1(x)    
-      Callee = UnmangleVec(data_typeVars[inner_dt.Type][Callee]);
-    else { // x.view()
-      this->Inner = std::move(this->Inner->Inner);
-      Callee = UnmangleVec(inner_dt) + "_" + Callee;
+  if (Depth==1 && lib_function_remaps.count(Callee)>0)
+    Callee = lib_function_remaps[Callee];
+
+  if(Depth>1) {    
+    std::string inner_most_name = this->Inner->InnerMost()->Name;
+
+
+    if (in_str(inner_most_name, imported_libs))
+    {
+      FromLib=true;
+      Callee = this->Inner->GetLibCallee();
+    }
+    else {  
+
+      Data_Tree inner_dt = this->Inner->Inner->GetDataTree();
+      if(data_typeVars[inner_dt.Type].find(Callee)!=data_typeVars[inner_dt.Type].end()) // self.linear1(x)    
+        Callee = UnmangleVec(data_typeVars[inner_dt.Type][Callee]);
+      else { // x.view()
+        this->Inner = std::move(this->Inner->Inner);
+        Callee = UnmangleVec(inner_dt) + "_" + Callee;
+      }
     }
 
     
     // LogBlue("Callee is " + Callee);
   }
 
-
   if (in_str(Callee, vararg_methods))
     this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
 }
+
 
 NameableIdx::NameableIdx(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx) : Nameable(parser_struct), Idx(std::move(Idx)) {
   this->Inner = std::move(Inner); 

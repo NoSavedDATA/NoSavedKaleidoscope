@@ -1,16 +1,22 @@
 
 
-bool c = not true
+def list<int> bobo_sort(list<int> arr)
+        int n = arr.size()
+        int i = 0
+        while i < n - 1
+                if arr[i] > arr[i + 1]
+                        int temp = arr[i]
+                        arr[i] = arr[i + 1]
+                        arr[i + 1] = temp
+                        i = 0
+                else
+                        i = i + 1
+        return arr
 
-print("c is " + c)
+list<int> lista = [5, 3, 2, 4, 1]
+lista.print()
+
+lista = bobo_sort(lista)
+lista.print()
 
 
-int i
-
-while c
-    i = i+1
-    c = i<10.0
-    print("got it")
-
-
-print("end")
