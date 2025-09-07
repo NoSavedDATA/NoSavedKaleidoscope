@@ -17,6 +17,7 @@ std::map<std::string, std::vector<std::string>> Lib_Functions_Args;
 void Generate_Lib_Functions() {
     
     llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+    llvm::Type *boolTy = Type::getInt1Ty(*TheContext);
     llvm::Type *floatTy = Type::getFloatTy(*TheContext);
     llvm::Type *intTy = Type::getInt32Ty(*TheContext);
 
@@ -31,6 +32,8 @@ void Generate_Lib_Functions() {
             fn_return_type = intTy;
         else if (pair.second=="float")
             fn_return_type = floatTy;
+        else if (pair.second=="bool")
+            fn_return_type = boolTy;
         else
             fn_return_type = int8PtrTy;
 

@@ -871,6 +871,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("int_list_Store_Idx", int_list_Store_IdxTy);
 
+	FunctionType *float_list_Store_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_list_Store_Idx", float_list_Store_IdxTy);
+
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -1297,13 +1304,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("cat_str_float", cat_str_floatTy);
-
-	FunctionType *SplitStringTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("SplitString", SplitStringTy);
 
 	FunctionType *str_split_idxTy= FunctionType::get(
 		int8PtrTy,

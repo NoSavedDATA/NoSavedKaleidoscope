@@ -1,22 +1,10 @@
 
 
-def list<int> bobo_sort(list<int> arr)
-        int n = arr.size()
-        int i = 0
-        while i < n - 1
-                if arr[i] > arr[i + 1]
-                        int temp = arr[i]
-                        arr[i] = arr[i + 1]
-                        arr[i + 1] = temp
-                        i = 0
-                else
-                        i = i + 1
-        return arr
+str aux = "/home/nosaveddata/mnist/training/6/2967.png"
 
-list<int> lista = [5, 3, 2, 4, 1]
-lista.print()
+print("aux is " + aux)
 
-lista = bobo_sort(lista)
-lista.print()
+var aa = aux.split_idx("/", -2).to_float()
 
 
+# print("aa is: " + aa)

@@ -3012,8 +3012,13 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   if (ReturnType=="")
     GetDataTree();
+  // if(ReturnType=="")
+  //   when it is void
 
-  if(!in_str(ReturnType, primary_data_tokens)&&ReturnType!="")
+  if(ReturnType=="void_ptr")
+    LogError(-1, "return " + Callee);
+
+  if(!in_str(ReturnType, primary_data_tokens))
     call("MarkToSweep_Mark", {scope_struct, ret, global_str(ReturnType)});
   
 

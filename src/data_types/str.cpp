@@ -255,27 +255,6 @@ extern "C" char *cat_str_float(char *c, float v)
 
 
 
-extern "C" std::vector<char *> *SplitString(Scope_Struct *scope_struct,char *self, char *pattern)
-{
-
-  std::cout << "\n\nSPLITTING: " << self << ", with pattern: " << pattern << "\n";
-
-
-  std::vector<char *> result;
-  char *input = strdup(self); // Duplicate the input string to avoid modifying the original
-  char *token = strtok(input, pattern); // Get the first token
-
-  while (token != nullptr) {
-    result.push_back(token);
-    token = strtok(nullptr, pattern); // Get the next token
-  }
-
-  std::string random_str = RandomString(15);
-  StrVecAuxHash[random_str] = result;
-    
-  return &StrVecAuxHash[random_str];
-    
-}
 
 
 

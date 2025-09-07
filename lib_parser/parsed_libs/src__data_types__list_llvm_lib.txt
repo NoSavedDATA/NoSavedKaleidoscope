@@ -1,4 +1,4 @@
-1821-09-06 19:25:24
+1821-09-06 19:26:26
 
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,
@@ -111,3 +111,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("int_list_Store_Idx", int_list_Store_IdxTy);
+
+	FunctionType *float_list_Store_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_list_Store_Idx", float_list_Store_IdxTy);

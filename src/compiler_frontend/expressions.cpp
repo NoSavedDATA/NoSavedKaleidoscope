@@ -714,17 +714,18 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
 Data_Tree NameableCall::GetDataTree(bool from_assignment) { 
 
   Data_Tree ret = functions_return_data_type[Callee];
+
+
+  std::string ret_type = ret.Type;
+  if (ends_with(ret_type, "_vec")) {
+    Data_Tree return_dt = Data_Tree("vec");
+    return_dt.Nested_Data.push_back(remove_suffix(ret_type, "_vec"));
+    ret = return_dt;
+  }
+
+
+  ReturnType = ret.Type;
   
-
-  // Data_Tree return_dt;
-  // if (ends_with(ret, "_vec"))
-  // {
-  //   return_dt = Data_Tree("vec");
-  //   return_dt.Nested_Data.push_back(remove_suffix(ret, "_vec"));
-  // } else
-  //   return_dt = Data_Tree(ret);
-
-  // ReturnType = return_dt.Type;
 
   return ret;
 }

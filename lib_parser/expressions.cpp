@@ -73,6 +73,8 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
         return_type = "str";
     else if (in_return_type=="int")
         return_type = "int";
+    else if (in_return_type=="float")
+        return_type = "float";
     else if (in_return_type=="bool")
         return_type = "bool";
     else if (in_return_type=="std::vector<char*>*")
@@ -90,7 +92,7 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
     // std::cout << in_return_type << " --> " << return_type << ".\n";
 
 
-    if (in_return_type!="float"&&in_return_type!="void"&&in_return_type!="void*") {
+    if (in_return_type!="void"&&in_return_type!="void*") {
         lib_info->return_data_string = lib_info->return_data_string + "{\"" + function_name + "\", Data_Tree(\"" + return_type + "\")}, ";
         lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, "; // {"tensor_tensor_add", "tensor"}
     }

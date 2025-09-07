@@ -27,7 +27,6 @@ extern "C" void *str_vec_Create(Scope_Struct *scope_struct, char *name, char *sc
 
 
 void str_vec_Clean_Up(void *data_ptr) {
-  // ClassStrVecs.erase(name);
 }
 
 
@@ -39,7 +38,7 @@ extern "C" int LenStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
 }
 
 
-extern "C" void * ShuffleStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
+extern "C" std::vector<char*> *ShuffleStrVec(Scope_Struct *scope_struct, std::vector<char*> vec)
 {
   std::random_device rd;
   std::mt19937 g(rd()^get_millisecond_time());

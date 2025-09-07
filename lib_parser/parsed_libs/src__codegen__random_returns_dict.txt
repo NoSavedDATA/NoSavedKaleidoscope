@@ -1,1 +1,1 @@
-{"randint", "int"}, 
+{"print_randoms", "float"}, {"randint", "int"}, 

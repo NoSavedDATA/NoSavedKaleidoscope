@@ -85,6 +85,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
 
     llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     llvm::Type *floatTy = Type::getFloatTy(*TheContext);
+    llvm::Type *boolTy = Type::getInt1Ty(*TheContext);
     llvm::Type *intTy = Type::getInt32Ty(*TheContext);
 
     llvm::Type *fn_return_type;
@@ -95,18 +96,23 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
 
 
     
-    if(ReturnType=="int"&&!IsPointer)
-    {
+    if(ReturnType=="int"&&!IsPointer) {
         fn_return_type = intTy;
         fn_return_type_str = "int";
     }
-    else if(ReturnType=="float"&&!IsPointer)
-    {
+    else if(ReturnType=="float"&&!IsPointer) {
         fn_return_type = floatTy;
         fn_return_type_str = "float";
     }
-    else
-    {
+    else if(ReturnType=="bool"&&!IsPointer) {
+        fn_return_type = boolTy;
+        fn_return_type_str = "bool";
+    }
+    else if(begins_with(ReturnType, "DT_")) {
+        fn_return_type = int8PtrTy;
+        fn_return_type_str = remove_substring(ReturnType, "DT_");
+    }
+    else {
         fn_return_type = int8PtrTy;
         fn_return_type_str = "void_ptr";
     }
@@ -128,7 +134,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
 
 
 
-    // std::cout << "\n\nFn name: " << Name << ".\n";
+    // std::cout << "\n\nFn name " << Name << ".\n";
 
     for(int i=0; i<ArgTypes.size(); ++i) {
         if (!begins_with(Name, "initialize__"))
@@ -140,7 +146,10 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
             if(type=="char"&&ArgIsPointer[i])
                 type = "str";
             if(type=="std::vector<char*>"||type=="std::vector<char>")
+            {
+                LogBlue("It is vec char*");
                 type = "str_vec";
+            }
 
             Function_Arg_Names[Name].push_back(ArgNames[i]);
             Function_Arg_Types[Name][ArgNames[i]] = type;
@@ -154,18 +163,15 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         }
         
 
-        if(ArgTypes[i]=="int"&&!ArgIsPointer[i])
-        {
+        if(ArgTypes[i]=="int"&&!ArgIsPointer[i]) {
             arg_types.push_back(intTy);
             arg_types_str.push_back("int");
         }
-        else if(ArgTypes[i]=="float"&&!ArgIsPointer[i])
-        {
+        else if(ArgTypes[i]=="float"&&!ArgIsPointer[i]) {
             arg_types.push_back(floatTy);
             arg_types_str.push_back("float");
         }
-        else
-        {
+        else {
             arg_types.push_back(int8PtrTy);
             arg_types_str.push_back("void_ptr");
         }
@@ -175,7 +181,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
 
     if (Name=="_glob_b_")
         fn_return_type_str = "str_vec";
-    Lib_Functions_Return[Name] = fn_return_type_str;
+    Lib_Functions_Return[Name] = fn_return_type_str; // for llvm return type (so_libs.cpp)
     Lib_Functions_Args[Name] = std::move(arg_types_str);
 
 

@@ -1,1 +1,1 @@
-{"randint", Data_Tree("int")}, 
+{"print_randoms", Data_Tree("float")}, {"randint", Data_Tree("int")}, 
