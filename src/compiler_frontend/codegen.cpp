@@ -2509,6 +2509,8 @@ Function *PrototypeAST::codegen() {
       types.push_back(Type::getFloatTy(*TheContext));
     else if(type=="i"||type=="int")
       types.push_back(Type::getInt32Ty(*TheContext));
+    else if(type=="b"||type=="bool")
+      types.push_back(Type::getInt1Ty(*TheContext));
     else
       types.push_back(int8PtrTy);
   }

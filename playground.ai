@@ -1,11 +1,10 @@
+# bobosort.ai
+
+def bool esta_ordenado()    
+    return true
 
 
+if not false
+        print("a")
 
-def bool foo()
-        return false
-
-
-if foo()
-        print("opa")
-
-print("post")
+print("b")
