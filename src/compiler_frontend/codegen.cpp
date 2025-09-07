@@ -1625,7 +1625,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 Value *UnaryExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+    return const_float(0);
   Value *OperandV = Operand->codegen(scope_struct);
   if (!OperandV)
     return nullptr;
@@ -1669,19 +1669,15 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
                               OperandV, "multmp");
   }
 
-  std::cout << "Opcode: " << Opcode << "\n";
 
-  if (Opcode==tok_not) {
+  
+  if (Opcode==tok_not||Opcode=='!') {
     if(operand_type!="bool")
       LogError(parser_struct.line, "Cannot use not with type: " + operand_type);
-
+    LogBlue("got not");
     return Builder->CreateNot(OperandV, "logicalnot");
   }
 
-  if (Opcode=='!')
-  {
-    return Builder->CreateCall(TheModule->getFunction("logical_not"), {OperandV});
-  }
   if (Opcode==';')
     return OperandV;
     // return ConstantFP::get(Type::getFloatTy(*TheContext), 0);
@@ -2520,6 +2516,8 @@ Function *PrototypeAST::codegen() {
     FT = FunctionType::get(Type::getFloatTy(*TheContext), types, false);
   else if (Return_Type=="int")
     FT = FunctionType::get(Type::getInt32Ty(*TheContext), types, false);
+  else if (Return_Type=="bool")
+    FT = FunctionType::get(Type::getInt1Ty(*TheContext), types, false);
   else
     FT = FunctionType::get(int8PtrTy, types, false); 
   

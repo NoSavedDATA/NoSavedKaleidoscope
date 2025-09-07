@@ -1993,6 +1993,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
       type="str";
     else if (IdentifierStr=="t"||IdentifierStr=="tensor")
       type="tensor";
+    else if (IdentifierStr=="b"||IdentifierStr=="bool")
+      type="bool";
     else if (IdentifierStr=="i"||IdentifierStr=="int")
       type="int";
     else if (IdentifierStr=="f"||IdentifierStr=="float")

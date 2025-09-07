@@ -4,7 +4,10 @@ def bool esta_ordenado()
     return true
 
 
-if not false
-        print("a")
+bool bo = esta_ordenado()
 
-print("b")
+
+if esta_ordenado()
+    print("opa")
+
+print("bo is " + bo)
