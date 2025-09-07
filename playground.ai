@@ -1,10 +1,11 @@
 
 
-str aux = "/home/nosaveddata/mnist/training/6/2967.png"
 
-print("aux is " + aux)
-
-var aa = aux.split_idx("/", -2).to_float()
+def bool foo()
+        return false
 
 
-# print("aa is: " + aa)
+if foo()
+        print("opa")
+
+print("post")

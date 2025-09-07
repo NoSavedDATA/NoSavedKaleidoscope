@@ -1623,8 +1623,6 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
   std::unique_ptr<ExprAST> expr;
   
 
-  if (CurTok != tok_identifier && CurTok != tok_class_attr && CurTok != tok_self && CurTok != tok_number && CurTok != tok_int)
-    return LogError(parser_struct.line, "Expected identifier after return.");
 
   
   while(true) {
