@@ -269,6 +269,7 @@ bin/nsk: toy.cpp /usr/lib/llvm-19/include/llvm/ADT/APFloat.h \
   src/compiler_frontend/codegen.h \
   src/compiler_frontend/../data_types/include.h \
   src/compiler_frontend/../data_types/any_map.h \
+  src/compiler_frontend/../data_types/bool.h \
   src/compiler_frontend/../data_types/codegen_notes.h \
   src/compiler_frontend/../data_types/data_tree.h \
   src/compiler_frontend/../data_types/dict.h \
@@ -299,11 +300,11 @@ bin/nsk: toy.cpp /usr/lib/llvm-19/include/llvm/ADT/APFloat.h \
   src/libs_llvm/functions_args.h \
   src/libs_llvm/../compiler_frontend/include.h \
   src/libs_llvm/functions_return.h src/libs_llvm/libs.h \
-  src/libs_llvm/so_libs.h src/libs_llvm/user_cpp_functions.h \
-  src/math/include.h src/math/functions.h src/mangler/include.h \
-  src/mangler/scope_struct.h src/mark_sweep/include.h \
-  src/notators/include.h src/os/include.h src/os/dir/include.h \
-  src/os/dir/dir.h src/threads/include.h
+  src/libs_llvm/so_libs.h src/libs_llvm/struct_types.h \
+  src/libs_llvm/user_cpp_functions.h src/math/include.h \
+  src/math/functions.h src/mangler/include.h src/mangler/scope_struct.h \
+  src/mark_sweep/include.h src/notators/include.h src/os/include.h \
+  src/os/dir/include.h src/os/dir/dir.h src/threads/include.h
 /usr/lib/llvm-19/include/llvm/ADT/APFloat.h:
 /usr/lib/llvm-19/include/llvm/ADT/APInt.h:
 /usr/lib/llvm-19/include/llvm/Support/Compiler.h:
@@ -588,6 +589,7 @@ src/compiler_frontend/include.h:
 src/compiler_frontend/codegen.h:
 src/compiler_frontend/../data_types/include.h:
 src/compiler_frontend/../data_types/any_map.h:
+src/compiler_frontend/../data_types/bool.h:
 src/compiler_frontend/../data_types/codegen_notes.h:
 src/compiler_frontend/../data_types/data_tree.h:
 src/compiler_frontend/../data_types/dict.h:
@@ -626,6 +628,7 @@ src/libs_llvm/../compiler_frontend/include.h:
 src/libs_llvm/functions_return.h:
 src/libs_llvm/libs.h:
 src/libs_llvm/so_libs.h:
+src/libs_llvm/struct_types.h:
 src/libs_llvm/user_cpp_functions.h:
 src/math/include.h:
 src/math/functions.h:

@@ -1,1 +1,1 @@
-{"print_float", Data_Tree("float")}, 
+{"read_float", Data_Tree("float")}, {"float_to_str", Data_Tree("str")}, 

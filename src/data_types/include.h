@@ -6,6 +6,7 @@
 #include <map>
 
 #include "any_map.h"
+#include "bool.h"
 #include "codegen_notes.h"
 #include "data_tree.h"
 #include "dict.h"

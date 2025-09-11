@@ -1,13 +1,5 @@
-# bobosort.ai
-
-def bool esta_ordenado()    
-    return true
 
 
-bool bo = esta_ordenado()
+int x = true
 
-
-if esta_ordenado()
-    print("opa")
-
-print("bo is " + bo)
+print(3)

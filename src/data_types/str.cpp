@@ -1,15 +1,17 @@
+#include <cstdio>
+#include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <string>
-
 #include <sstream>
-#include <iomanip>
 
 #include "../char_pool/include.h"
 #include "../common/extension_functions.h"
 #include "../codegen/random.h"
 #include "../codegen/string.h"
-#include "../compiler_frontend/logging.h"
+#include "../compiler_frontend/logging_v.h"
+#include "../compiler_frontend/tokenizer.h"
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
@@ -282,7 +284,7 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
   if(splits.size()<=1)
   {
     std::string _err = "\nFailed to split.";
-    LogErrorS(scope_struct->code_line, _err);
+    LogErrorC(scope_struct->code_line, _err);
     std::cout << "" << self << "\n";
     return nullptr;
   }
@@ -328,3 +330,19 @@ extern "C" void str_Delete(char *in_str) {
   move_to_char_pool(strlen(in_str)+1, in_str, "free");
 }
 
+
+
+extern "C" char *readline(Scope_Struct *scope_struct) {
+    std::string line;
+    if (!std::getline(std::cin, line)) {
+        // EOF or error
+        char* buf = (char*)malloc(1);
+        buf[0] = '\0';
+        return buf;
+    }
+
+    char* buf = (char*)malloc(line.size() + 1);
+    if (!buf) return nullptr;
+    std::memcpy(buf, line.c_str(), line.size() + 1);
+    return buf;
+}

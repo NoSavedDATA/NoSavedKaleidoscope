@@ -12,13 +12,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <string>
 #include <iostream>
 #include <numeric>
 #include <utility>
-#include <vector>
 #include <iomanip>
 #include <math.h>
 #include <fenv.h>
@@ -32,7 +32,11 @@
 #include <filesystem>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
+
+
+namespace fs = std::filesystem;
 
 #include "../common/include.h"
 #include "include.h"
@@ -49,9 +53,29 @@ std::unique_ptr<ExprAST> LogErrorS(int line, std::string Str) {
   Shall_Exit = true;
   //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
 
-  std::cout << "\n\n" << tokenizer.current_file << "\n";
+  
   if(line!=-1)
-    std::cout << "Line: " << line << "\n   ";   
+  {
+    if (tokenizer.current_file!="main file") {
+      std::cout << "\n\n" << tokenizer.current_file << "\n";
+
+      
+      
+      std::ifstream file;
+      std::string str_line;
+      
+      int l=0;
+      file.open(tokenizer.current_file);
+      while(l<line&&std::getline(file, str_line))
+        l++;
+
+      file.close();
+      printf("%s", str_line.c_str());
+    }
+
+    std::cout << "\nLine: " << line << "\n   ";
+  } else
+    std::cout << "\n\n" << tokenizer.current_file << "\n";
 
 
   if (Str!=" ")

@@ -407,6 +407,7 @@ static void InitializeModule() {
 
   Generate_LLVM_Functions();
   Generate_Lib_Functions();
+  Generate_Struct_Types();
 
 
   //===----------------------------------------------------------------------===//
@@ -2620,6 +2621,10 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         // std::cout << "Argument " << i << ": " << argv[i] << "\n";
         Sys_Arguments.push_back(argv[i]);
+        if(i==1) {
+           tokenizer.files.pop();
+           tokenizer.files.push(argv[i]);
+        }
     }
   
   

@@ -179,6 +179,12 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["str_to_float"].push_back("0");
 		Function_Arg_Names["str_to_float"].push_back("1");
+		
+		Function_Arg_Types["readline"]["0"] = "Scope_Struct";
+		
+		Function_Arg_DataTypes["readline"]["0"] = Data_Tree("Scope_Struct");
+		
+		Function_Arg_Names["readline"].push_back("0");
 	
 		
 		Function_Arg_Types["__slee_p_"]["0"] = "Scope_Struct";
@@ -442,6 +448,21 @@ void set_functions_args_type() {
 		Function_Arg_Names["zeros_int"].push_back("0");
 		Function_Arg_Names["zeros_int"].push_back("1");
 		
+		Function_Arg_Types["rand_int_vec"]["0"] = "Scope_Struct";
+		Function_Arg_Types["rand_int_vec"]["1"] = "int";
+		Function_Arg_Types["rand_int_vec"]["2"] = "int";
+		Function_Arg_Types["rand_int_vec"]["3"] = "int";
+		
+		Function_Arg_DataTypes["rand_int_vec"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["rand_int_vec"]["1"] = Data_Tree("int");
+		Function_Arg_DataTypes["rand_int_vec"]["2"] = Data_Tree("int");
+		Function_Arg_DataTypes["rand_int_vec"]["3"] = Data_Tree("int");
+		
+		Function_Arg_Names["rand_int_vec"].push_back("0");
+		Function_Arg_Names["rand_int_vec"].push_back("1");
+		Function_Arg_Names["rand_int_vec"].push_back("2");
+		Function_Arg_Names["rand_int_vec"].push_back("3");
+		
 		Function_Arg_Types["ones_int"]["0"] = "Scope_Struct";
 		Function_Arg_Types["ones_int"]["1"] = "int";
 		
@@ -555,6 +576,13 @@ void set_functions_args_type() {
 		Function_Arg_Names["dict_Query"].push_back("2");
 	
 		
+		Function_Arg_Types["read_int"]["0"] = "Scope_Struct";
+		
+		Function_Arg_DataTypes["read_int"]["0"] = Data_Tree("Scope_Struct");
+		
+		Function_Arg_Names["read_int"].push_back("0");
+	
+		
 		Function_Arg_Types["list_append_int"]["0"] = "Scope_Struct";
 		Function_Arg_Types["list_append_int"]["1"] = "unknown_list";
 		Function_Arg_Types["list_append_int"]["2"] = "int";
@@ -641,6 +669,13 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["to_float"].push_back("0");
 		Function_Arg_Names["to_float"].push_back("1");
+	
+		
+		Function_Arg_Types["read_float"]["0"] = "Scope_Struct";
+		
+		Function_Arg_DataTypes["read_float"]["0"] = Data_Tree("Scope_Struct");
+		
+		Function_Arg_Names["read_float"].push_back("0");
 	
 		
 		Function_Arg_Types["arange_float"]["0"] = "Scope_Struct";

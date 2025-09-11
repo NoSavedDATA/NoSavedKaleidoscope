@@ -27,6 +27,9 @@ extern std::unique_ptr<IRBuilder<>> Builder;
 extern std::unique_ptr<Module> TheModule;
 extern std::unique_ptr<Module> GlobalModule;
 
+
+extern std::map<std::string, StructType*> struct_types;
+
 extern std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
 inline Value *const_int(int val) {

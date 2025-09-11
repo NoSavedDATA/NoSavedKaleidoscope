@@ -1,0 +1,15 @@
+1821-09-11 18:40:32
+
+	FunctionType *read_intTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("read_int", read_intTy);
+
+	FunctionType *int_to_strTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("int_to_str", int_to_strTy);

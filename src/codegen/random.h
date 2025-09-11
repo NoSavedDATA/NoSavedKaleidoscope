@@ -2,8 +2,11 @@
 
 #include <array>
 #include <cstdint>
+#include <mutex>
 #include <random> 
 
+
+extern std::mutex MAIN_PRNG_MUTEX;
 
 unsigned long long get_int_seed();
 

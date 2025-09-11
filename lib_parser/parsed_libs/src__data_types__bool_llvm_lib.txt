@@ -1,0 +1,8 @@
+1821-09-11 18:45:08
+
+	FunctionType *bool_to_strTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt1Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("bool_to_str", bool_to_strTy);

@@ -1,8 +1,15 @@
-1821-09-03 09:39:44
+1821-09-11 18:43:16
 
-	FunctionType *print_floatTy= FunctionType::get(
+	FunctionType *read_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("read_float", read_floatTy);
+
+	FunctionType *float_to_strTy= FunctionType::get(
+		int8PtrTy,
 		{Type::getFloatTy(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("print_float", print_floatTy);
+	TheModule->getOrInsertFunction("float_to_str", float_to_strTy);

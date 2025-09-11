@@ -107,3 +107,9 @@
 	
 	Function_Arg_Names["str_to_float"].push_back("0");
 	Function_Arg_Names["str_to_float"].push_back("1");
+	
+	Function_Arg_Types["readline"]["0"] = "Scope_Struct";
+	
+	Function_Arg_DataTypes["readline"]["0"] = Data_Tree("Scope_Struct");
+	
+	Function_Arg_Names["readline"].push_back("0");

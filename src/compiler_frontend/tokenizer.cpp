@@ -13,10 +13,10 @@
 #include <vector>
 
 #include "../common/extension_functions.h"
+#include "logging_v.h"
 #include "tokenizer.h"
 
 
-#include "include.h"
 
 
 namespace fs = std::filesystem;
@@ -245,8 +245,6 @@ char Tokenizer::get() {
 
         
         char c = current->get();
-        // std::cout << "get: " << std::to_string((int)c) << "/" << c << ".\n";
-        // std::cout << "get: " << c << ".\n";
         if (c != EOF) {
           cur_line += c;
           cur_c = c;
@@ -289,7 +287,7 @@ bool Tokenizer::openFile(std::string filename) {
     auto file = std::make_unique<std::ifstream>(filename);
     if (!file->is_open())
     {
-      LogError(-1, "Failed to open file: " + filename);
+      LogErrorC(-1, "Failed to open file: " + filename);
       return false;
     }
     
@@ -319,7 +317,7 @@ bool Tokenizer::importFile(std::string filename, int dots) {
     if (!file->is_open())
     {
       std::cout << "" << current_dir << ".\n";
-      LogError(-1, "Failed to open library: " + filename);
+      LogErrorC(-1, "Failed to open library: " + filename);
       return false;
     }
     
@@ -376,6 +374,11 @@ static int get_token() {
   {
 
     LastChar = tokenizer.get();
+    if (LastChar=='"') {
+      IdentifierStr = "";
+      LastChar = tokenizer.get();
+      return tok_str;
+    }
     IdentifierStr = LastChar;
 
     while (true)

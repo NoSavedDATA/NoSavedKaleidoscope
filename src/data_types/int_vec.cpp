@@ -10,60 +10,26 @@
 
 
 
-
-
 extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
 {
   // std::cout << "int_vec_Create" << ".\n";
 
   if (init_val!=nullptr)
-  {
     DT_int_vec *vec = static_cast<DT_int_vec *>(init_val);
-    NamedIntVecs[name] = vec;
-  }
 
 
   return init_val;
 }
 
-extern "C" DT_int_vec *int_vec_Load(Scope_Struct *scope_struct, char *object_var_name) {
-  // std::cout << "Load int_vec On Demand var to load: " << object_var_name << "\n";
-  // std::cout << "scope: " << scope_struct->scope << ".\n";
-  
-  DT_int_vec *vec = NamedIntVecs[object_var_name];
-  // std::cout << "vec size is " << vec->size << ".\n";
-
-  return vec;
-}
-
-extern "C" int int_vec_Store(char *name, DT_int_vec *value, Scope_Struct *scope_struct){
-  // std::cout << "STORING " << name << " on demand as int vec type" << ".\n";
-
-  NamedIntVecs[name] = value;
-  return 0;
-}
-
  
 void int_vec_Clean_Up(void *data_ptr) {
-
 }
 
 
 extern "C" int int_vec_Store_Idx(DT_int_vec *vec, int idx, int value, Scope_Struct *scope_struct){
-  // std::cout << "int_vec_Store_Idx[" << idx << "]: " << value << ".\n";
-
   vec->vec[idx] = value;
-
   return 0;
 }
-
-
-
-
-extern "C" void earth_cable(void *ptr) {
-}
-
-
 
 
 extern "C" DT_int_vec *arange_int(Scope_Struct *scope_struct, int begin, int end) {
@@ -90,11 +56,28 @@ extern "C" DT_int_vec *zeros_int(Scope_Struct *scope_struct, int size) {
 }
 
 
+extern "C" DT_int_vec *rand_int_vec(Scope_Struct *scope_struct, int size, int min_val, int max_val) {
+    DT_int_vec *vec = new DT_int_vec(size);
+
+    std::uniform_int_distribution<int> dist(min_val, max_val);
+
+    for (int i = 0; i < size; ++i) {
+        int r;
+        {
+            std::lock_guard<std::mutex> lock(MAIN_PRNG_MUTEX);
+            r = dist(MAIN_PRNG);
+        }
+        vec->vec[i] = r;
+    }
+
+    return vec;
+}
+
+
 extern "C" DT_int_vec *ones_int(Scope_Struct *scope_struct, int size) {
   DT_int_vec *vec = new DT_int_vec(size);
   for(int i=0; i<size; ++i)
     vec->vec[i] = 1;
-   
 
   return vec;
 }
@@ -102,17 +85,10 @@ extern "C" DT_int_vec *ones_int(Scope_Struct *scope_struct, int size) {
 
 extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
 {
-  // std::cout << "int_vec_Idx on idx " << idx << " for the vector " << vec << ".\n";
-
-  // std::cout << "Loaded vec" << ".\n";
-
   if (idx>vec->size)
     LogErrorEE(scope_struct->code_line, "Index " + std::to_string(idx) + " is out of bounds for a vector of size: " + std::to_string(vec->size) + ".");
 
-  int ret = vec->vec[idx];
-  // std::cout << "returning" << ".\n"; 
-  // std::cout << "got: " << ret << ".\n";
-  return ret;
+  return vec->vec[idx];
 }
 
 extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int _idx)
@@ -130,6 +106,8 @@ extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int 
 extern "C" int int_vec_CalculateIdx(DT_int_vec *vec, int first_idx, ...) {
   if (first_idx<0)
     first_idx = vec->size+first_idx;
+  if (first_idx>vec->size)
+    LogErrorEE(-1, "Vector out of bounds. Index: " + std::to_string(first_idx) + " vs size " + std::to_string(vec->size));
 
   return first_idx;
 }

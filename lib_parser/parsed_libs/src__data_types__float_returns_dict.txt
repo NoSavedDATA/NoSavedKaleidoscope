@@ -1,1 +1,1 @@
-{"print_float", "float"}, 
+{"read_float", "float"}, {"float_to_str", "str"}, 

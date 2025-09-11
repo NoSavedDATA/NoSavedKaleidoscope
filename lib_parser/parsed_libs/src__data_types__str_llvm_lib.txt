@@ -1,4 +1,4 @@
-1821-09-06 19:50:34
+1821-09-07 15:12:11
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -111,3 +111,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("str_Delete", str_DeleteTy);
+
+	FunctionType *readlineTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("readline", readlineTy);

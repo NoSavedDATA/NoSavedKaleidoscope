@@ -1,4 +1,4 @@
-1821-09-03 09:39:44
+1821-09-07 21:23:13
 
 	FunctionType *int_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -7,33 +7,12 @@
 	);
 	TheModule->getOrInsertFunction("int_vec_Create", int_vec_CreateTy);
 
-	FunctionType *int_vec_LoadTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Load", int_vec_LoadTy);
-
-	FunctionType *int_vec_StoreTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Store", int_vec_StoreTy);
-
 	FunctionType *int_vec_Store_IdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("int_vec_Store_Idx", int_vec_Store_IdxTy);
-
-	FunctionType *earth_cableTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("earth_cable", earth_cableTy);
 
 	FunctionType *arange_intTy= FunctionType::get(
 		int8PtrTy,
@@ -48,6 +27,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("zeros_int", zeros_intTy);
+
+	FunctionType *rand_int_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("rand_int_vec", rand_int_vecTy);
 
 	FunctionType *ones_intTy= FunctionType::get(
 		int8PtrTy,

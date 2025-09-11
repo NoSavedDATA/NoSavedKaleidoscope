@@ -113,7 +113,6 @@ struct Tokenizer {
     bool has_main = false;
 
     std::string token;
-
     std::string current_file = "main";
     
     public:

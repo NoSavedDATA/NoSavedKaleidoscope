@@ -674,7 +674,7 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(Parser_Struct parser_st
 std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::string class_name, int cur_level_tabs, std::string IdName) {
   getNextToken(); // eat '='.
 
-  auto Start = ParseExpression(parser_struct, class_name);
+  auto Start = ParseExpression(parser_struct, class_name, false);
   if (!Start)
     return nullptr;
   if (CurTok != ',')
@@ -712,10 +712,6 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
 
 
 std::unique_ptr<ExprAST> ParseForEachExpr(Parser_Struct parser_struct, std::string class_name, int cur_level_tabs, std::string IdName) {
-
-
-  // if (in_str(data_type, Classes))
-  //   Object_toClass[parser_struct.function_name][IdName] = Data_Tree(data_type);
 
   
   getNextToken(); // eat "in".

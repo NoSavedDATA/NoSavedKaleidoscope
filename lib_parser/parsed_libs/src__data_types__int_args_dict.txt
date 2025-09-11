@@ -1,0 +1,7 @@
+
+	
+	Function_Arg_Types["read_int"]["0"] = "Scope_Struct";
+	
+	Function_Arg_DataTypes["read_int"]["0"] = Data_Tree("Scope_Struct");
+	
+	Function_Arg_Names["read_int"].push_back("0");

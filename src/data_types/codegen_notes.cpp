@@ -95,22 +95,33 @@ size_t DT_list::Size() const {
 
 
 void DT_list::print() {
-    std::cout << "\n";
-    for(int i=0; i<data->size(); i++)
+    std::cout << "[";
+
+    int i=0;
+    if (data_types->at(i)=="str")
+        std::cout << get<char *>(i);
+    else if (data_types->at(i)=="float")
+        std::cout << get<float>(i);
+    else if (data_types->at(i)=="int")
+        std::cout << get<int>(i);
+    else
+        std::cout << ", void*";
+
+    for(i=1; i<data->size(); i++)
     {
         if (data_types->at(i)=="str")
-            std::cout << "Notes["<<i<<"]: " << get<char *>(i) << ".\n";
+            std::cout << ", " << get<char *>(i);
         else if (data_types->at(i)=="float")
-            std::cout << "Notes["<<i<<"]: " << get<float>(i) << ".\n";
+            std::cout << ", " << get<float>(i);
         else if (data_types->at(i)=="int")
-            std::cout << "Notes["<<i<<"]: " << get<int>(i) << ".\n";
+            std::cout << ", " << get<int>(i);
         else
         {
             void *t = get<void *>(i);
-            std::cout << "Notes["<<i<<"] is a pointer" << ".\n";
+            std::cout << ", void*";
         }
     }
-    std::cout << "\n";
+    std::cout << "]\n";
 }
 
 

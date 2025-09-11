@@ -1674,7 +1674,6 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
   if (Opcode==tok_not||Opcode=='!') {
     if(operand_type!="bool")
       LogError(parser_struct.line, "Cannot use not with type: " + operand_type);
-    LogBlue("got not");
     return Builder->CreateNot(OperandV, "logicalnot");
   }
 
@@ -2360,9 +2359,15 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
     Data_Tree data_type = Args[i]->GetDataTree();
     std::string type = data_type.Type;
 
-      
+    if (fn_name=="print" && i==0 && type!="str")
+    {
+      std::string to_string_fn = type+"_to_str";
+      arg = callret(to_string_fn, {arg});
+      call("MarkToSweep_Mark", {scope_struct, arg, global_str("str")});
+    }
+    
 
-    if (!in_str(fn_name, {"to_int", "to_float"}))
+    if (!in_str(fn_name, {"to_int", "to_float", "print"}))
     { 
       if (Function_Arg_Types.count(fn_name)>0)
       {
@@ -2912,10 +2917,22 @@ Value *NameableIdx::codegen(Value *scope_struct) {
   
   if (!Idx->IsSlice) {
     std::string idx_fn = compound_type + "_Idx";
+  
+    
+    Value *ret_val;
+    if (compound_type!="int_vec")
+      ret_val = callret(idx_fn, {scope_struct, loaded_var, idx});
+    else {
+      StructType *st = struct_types[compound_type];
+      
+      Value *vecPtr_element = Builder->CreateStructGEP(st, loaded_var, 2, "vec_ptr_ptr");      
+      Value *vecPtr = Builder->CreateLoad(Type::getInt32Ty(*TheContext)->getPointerTo(), vecPtr_element, "vec_ptr");
 
-    Value *ret_val = callret(idx_fn, {scope_struct, loaded_var, idx});
+      Value *element = Builder->CreateGEP(Type::getInt32Ty(*TheContext), vecPtr, idx, "elem_ptr");
+      ret_val = Builder->CreateLoad(Type::getInt32Ty(*TheContext), element, "elem");  
+    }
 
-    if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"))
+    if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"||type=="bool"))
       ret_val = callret("to_"+type, {scope_struct, ret_val});
     
     return ret_val;
