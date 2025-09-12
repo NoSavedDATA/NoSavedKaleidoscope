@@ -17,6 +17,12 @@ std::map<std::string, Data_Tree> functions_return_data_type;
 Data_Tree::Data_Tree(std::string Type, std::vector<Data_Tree> Nested_Data) : Type(Type), Nested_Data(std::move(Nested_Data)) {}
 Data_Tree::Data_Tree(std::string Type) : Type(Type) {}
 
+bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
+    if((L->Type=="list"&&R.Type=="unknown_list")||L->Type=="unknown_list"&&R.Type=="list")
+        return true;
+    return false;
+}
+
 
 bool CompareListTuple(Data_Tree *L, Data_Tree R) {
 
@@ -58,17 +64,22 @@ bool CheckChannel(Data_Tree *L_ptr, Data_Tree R) {
 
 
 int Data_Tree::Compare(Data_Tree other_tree) {    
-    int comparisons = 0;
-
+    int comparisons = 0;    
 
     if(!in_str(Type, primary_data_tokens) && other_tree.Type=="nullptr")
-        return comparisons;
+        return 0;
+
+
+    if(Type=="any"||other_tree.Type=="any")
+        return 0;
+
  
     if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_tree.Type))
         return comparisons+1;
      
     if(!CompareListTuple(this, other_tree))
         return comparisons+1;
+
 
     if (Type=="list"&&other_tree.Type=="tuple"||CheckChannel(this, other_tree))
         return comparisons;

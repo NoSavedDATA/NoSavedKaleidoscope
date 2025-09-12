@@ -30,7 +30,7 @@ class ExprAST {
     bool NameSolveToLast = true;
     bool isMessage = false;
   
-    Data_Tree data_type;
+    Data_Tree data_type = Data_Tree("");
 
   
   
@@ -113,8 +113,8 @@ class NumberExprAST : public ExprAST {
 }; 
   
 class IntExprAST : public ExprAST {
-  int Val;
   public:
+    int Val;
     IntExprAST(int Val); 
   Value *codegen(Value *scope_struct) override;
 }; 

@@ -140,8 +140,7 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
             std::string arg_name = std::to_string(i);
 
             
-            if (arg_type=="DT_list")
-                arg_type = "unknown_list";
+            
             if(arg_type=="std::vector<char>")
                 arg_type = "str_vec";
             if (arg_type=="char")
@@ -159,6 +158,11 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
                 std::string data_tree_type = FunctionName+"_"+arg_name;
                 arg_data_types_line = arg_data_types_line + "\n\tData_Tree " + data_tree_type + " = Data_Tree(\"vec\");";
                 arg_data_types_line = arg_data_types_line + "\n\t"+ data_tree_type + ".Nested_Data.push_back(Data_Tree(\"" +remove_suffix(arg_type,"_vec")+ "\"));";
+                arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = " + data_tree_type + ";";
+            } else if (arg_type=="list") {
+                std::string data_tree_type = FunctionName+"_"+arg_name;
+                arg_data_types_line = arg_data_types_line + "\n\tData_Tree " + data_tree_type + " = Data_Tree(\"list\");";
+                arg_data_types_line = arg_data_types_line + "\n\t"+ data_tree_type + ".Nested_Data.push_back(Data_Tree(\"any\"));";
                 arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = " + data_tree_type + ";";
             } else
                 arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = Data_Tree(\"" + arg_type + "\");";

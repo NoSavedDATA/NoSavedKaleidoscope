@@ -2378,10 +2378,10 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
         int differences = expected_data_type.Compare(data_type);
         if (differences>0) { 
           LogError(parser_struct.line, "Got an incorrect type for argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name);
-          std::cout << "Passed\n   ";
-          data_type.Print();
-          std::cout << "\nExpected\n   ";
+          std::cout << "Expected\n   ";
           expected_data_type.Print();
+          std::cout << "\nPassed\n   ";
+          data_type.Print();
           std::cout << "\n\n";
         } 
       }  
@@ -2412,6 +2412,7 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
       return {};
     }
   }
+
 
   return std::move(ArgsV);
 }
@@ -2482,6 +2483,9 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
       }
     }      
   }
+
+  
+
 
 
   return ConstantFP::get(*TheContext, APFloat(0.0));
@@ -2896,7 +2900,13 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
   std::string compound_type = UnmangleVec(inner_dt);
   std::string type;
-  if(in_str(compound_type, compound_tokens)||ends_with(compound_type, "_vec"))
+  if (compound_type=="tuple") {
+    if (IntExprAST *expr = dynamic_cast<IntExprAST*>(Idx->Idxs[0].get())) {
+      int idx = expr->Val;
+      type = inner_dt.Nested_Data[idx].Type;
+    }
+  }
+  else if(in_str(compound_type, compound_tokens)||ends_with(compound_type, "_vec"))
     type = inner_dt.Nested_Data[0].Type;
   else
     type = compound_type;
@@ -2933,7 +2943,9 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     }
 
     if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"||type=="bool"))
+    {
       ret_val = callret("to_"+type, {scope_struct, ret_val});
+    }
     
     return ret_val;
   } else {
@@ -3016,6 +3028,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
     return const_float(0);
 
 
+  if (ReturnType=="")
+    GetDataTree();
   ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
   
 
@@ -3027,8 +3041,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
 
 
-  if (ReturnType=="")
-    GetDataTree();
   // if(ReturnType=="")
   //   when it is void
 

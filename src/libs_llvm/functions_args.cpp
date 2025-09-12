@@ -584,11 +584,13 @@ void set_functions_args_type() {
 	
 		
 		Function_Arg_Types["list_append_int"]["0"] = "Scope_Struct";
-		Function_Arg_Types["list_append_int"]["1"] = "unknown_list";
+		Function_Arg_Types["list_append_int"]["1"] = "list";
 		Function_Arg_Types["list_append_int"]["2"] = "int";
 		
 		Function_Arg_DataTypes["list_append_int"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["list_append_int"]["1"] = Data_Tree("unknown_list");
+		Data_Tree list_append_int_1 = Data_Tree("list");
+		list_append_int_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["list_append_int"]["1"] = list_append_int_1;
 		Function_Arg_DataTypes["list_append_int"]["2"] = Data_Tree("int");
 		
 		Function_Arg_Names["list_append_int"].push_back("0");
@@ -596,11 +598,13 @@ void set_functions_args_type() {
 		Function_Arg_Names["list_append_int"].push_back("2");
 		
 		Function_Arg_Types["list_append_float"]["0"] = "Scope_Struct";
-		Function_Arg_Types["list_append_float"]["1"] = "unknown_list";
+		Function_Arg_Types["list_append_float"]["1"] = "list";
 		Function_Arg_Types["list_append_float"]["2"] = "float";
 		
 		Function_Arg_DataTypes["list_append_float"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["list_append_float"]["1"] = Data_Tree("unknown_list");
+		Data_Tree list_append_float_1 = Data_Tree("list");
+		list_append_float_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["list_append_float"]["1"] = list_append_float_1;
 		Function_Arg_DataTypes["list_append_float"]["2"] = Data_Tree("float");
 		
 		Function_Arg_Names["list_append_float"].push_back("0");
@@ -608,11 +612,13 @@ void set_functions_args_type() {
 		Function_Arg_Names["list_append_float"].push_back("2");
 		
 		Function_Arg_Types["list_append_bool"]["0"] = "Scope_Struct";
-		Function_Arg_Types["list_append_bool"]["1"] = "unknown_list";
+		Function_Arg_Types["list_append_bool"]["1"] = "list";
 		Function_Arg_Types["list_append_bool"]["2"] = "bool";
 		
 		Function_Arg_DataTypes["list_append_bool"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["list_append_bool"]["1"] = Data_Tree("unknown_list");
+		Data_Tree list_append_bool_1 = Data_Tree("list");
+		list_append_bool_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["list_append_bool"]["1"] = list_append_bool_1;
 		Function_Arg_DataTypes["list_append_bool"]["2"] = Data_Tree("bool");
 		
 		Function_Arg_Names["list_append_bool"].push_back("0");
@@ -620,12 +626,14 @@ void set_functions_args_type() {
 		Function_Arg_Names["list_append_bool"].push_back("2");
 		
 		Function_Arg_Types["list_append"]["0"] = "Scope_Struct";
-		Function_Arg_Types["list_append"]["1"] = "unknown_list";
+		Function_Arg_Types["list_append"]["1"] = "list";
 		Function_Arg_Types["list_append"]["2"] = "void";
 		Function_Arg_Types["list_append"]["3"] = "str";
 		
 		Function_Arg_DataTypes["list_append"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["list_append"]["1"] = Data_Tree("unknown_list");
+		Data_Tree list_append_1 = Data_Tree("list");
+		list_append_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["list_append"]["1"] = list_append_1;
 		Function_Arg_DataTypes["list_append"]["2"] = Data_Tree("void");
 		Function_Arg_DataTypes["list_append"]["3"] = Data_Tree("str");
 		
@@ -635,19 +643,34 @@ void set_functions_args_type() {
 		Function_Arg_Names["list_append"].push_back("3");
 		
 		Function_Arg_Types["list_print"]["0"] = "Scope_Struct";
-		Function_Arg_Types["list_print"]["1"] = "unknown_list";
+		Function_Arg_Types["list_print"]["1"] = "list";
 		
 		Function_Arg_DataTypes["list_print"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["list_print"]["1"] = Data_Tree("unknown_list");
+		Data_Tree list_print_1 = Data_Tree("list");
+		list_print_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["list_print"]["1"] = list_print_1;
 		
 		Function_Arg_Names["list_print"].push_back("0");
 		Function_Arg_Names["list_print"].push_back("1");
 		
+		Function_Arg_Types["tuple_print"]["0"] = "Scope_Struct";
+		Function_Arg_Types["tuple_print"]["1"] = "list";
+		
+		Function_Arg_DataTypes["tuple_print"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree tuple_print_1 = Data_Tree("list");
+		tuple_print_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["tuple_print"]["1"] = tuple_print_1;
+		
+		Function_Arg_Names["tuple_print"].push_back("0");
+		Function_Arg_Names["tuple_print"].push_back("1");
+		
 		Function_Arg_Types["list_size"]["0"] = "Scope_Struct";
-		Function_Arg_Types["list_size"]["1"] = "unknown_list";
+		Function_Arg_Types["list_size"]["1"] = "list";
 		
 		Function_Arg_DataTypes["list_size"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["list_size"]["1"] = Data_Tree("unknown_list");
+		Data_Tree list_size_1 = Data_Tree("list");
+		list_size_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["list_size"]["1"] = list_size_1;
 		
 		Function_Arg_Names["list_size"].push_back("0");
 		Function_Arg_Names["list_size"].push_back("1");
@@ -669,6 +692,67 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["to_float"].push_back("0");
 		Function_Arg_Names["to_float"].push_back("1");
+		
+		Function_Arg_Types["zip"]["0"] = "Scope_Struct";
+		Function_Arg_Types["zip"]["1"] = "list";
+		Function_Arg_Types["zip"]["2"] = "list";
+		Function_Arg_Types["zip"]["3"] = "list";
+		Function_Arg_Types["zip"]["4"] = "list";
+		Function_Arg_Types["zip"]["5"] = "list";
+		Function_Arg_Types["zip"]["6"] = "list";
+		Function_Arg_Types["zip"]["7"] = "list";
+		Function_Arg_Types["zip"]["8"] = "list";
+		Function_Arg_Types["zip"]["9"] = "list";
+		Function_Arg_Types["zip"]["10"] = "list";
+		Function_Arg_Types["zip"]["11"] = "list";
+		
+		Function_Arg_DataTypes["zip"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree zip_1 = Data_Tree("list");
+		zip_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["1"] = zip_1;
+		Data_Tree zip_2 = Data_Tree("list");
+		zip_2.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["2"] = zip_2;
+		Data_Tree zip_3 = Data_Tree("list");
+		zip_3.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["3"] = zip_3;
+		Data_Tree zip_4 = Data_Tree("list");
+		zip_4.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["4"] = zip_4;
+		Data_Tree zip_5 = Data_Tree("list");
+		zip_5.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["5"] = zip_5;
+		Data_Tree zip_6 = Data_Tree("list");
+		zip_6.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["6"] = zip_6;
+		Data_Tree zip_7 = Data_Tree("list");
+		zip_7.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["7"] = zip_7;
+		Data_Tree zip_8 = Data_Tree("list");
+		zip_8.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["8"] = zip_8;
+		Data_Tree zip_9 = Data_Tree("list");
+		zip_9.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["9"] = zip_9;
+		Data_Tree zip_10 = Data_Tree("list");
+		zip_10.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["10"] = zip_10;
+		Data_Tree zip_11 = Data_Tree("list");
+		zip_11.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["zip"]["11"] = zip_11;
+		
+		Function_Arg_Names["zip"].push_back("0");
+		Function_Arg_Names["zip"].push_back("1");
+		Function_Arg_Names["zip"].push_back("2");
+		Function_Arg_Names["zip"].push_back("3");
+		Function_Arg_Names["zip"].push_back("4");
+		Function_Arg_Names["zip"].push_back("5");
+		Function_Arg_Names["zip"].push_back("6");
+		Function_Arg_Names["zip"].push_back("7");
+		Function_Arg_Names["zip"].push_back("8");
+		Function_Arg_Names["zip"].push_back("9");
+		Function_Arg_Names["zip"].push_back("10");
+		Function_Arg_Names["zip"].push_back("11");
 	
 		
 		Function_Arg_Types["read_float"]["0"] = "Scope_Struct";

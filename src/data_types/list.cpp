@@ -41,19 +41,17 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
     } else {   
       if (!strcmp(type, "float"))
       {
-        // std::cout << "appending float" << ".\n";
         float value = va_arg(args, float);
         notes_vector->append(value, type);
       } else if (!strcmp(type, "int")) {
-        // std::cout << "appending float" << ".\n";
         int value = va_arg(args, int);
         notes_vector->append(value, type);
+      } else if (!strcmp(type, "bool")) {
+        bool value = va_arg(args, bool);
+        notes_vector->append(value, type);
       } else {
-        // std::cout << "appending void *: " << type << ".\n";
         void *value = va_arg(args, void *);
-        // std::cout << "decoded"  << ".\n";
         notes_vector->append(std::any(value), type);
-        // std::cout << "appended"  << ".\n";
       }
       is_type = true;
     }
@@ -92,6 +90,13 @@ extern "C" float list_append(Scope_Struct *scope_struct, DT_list *list, void *x,
 
 
 extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
+  // std::cout << "\n";
+  list->print();
+  return 0;
+}
+
+
+extern "C" float tuple_print(Scope_Struct *scope_struct, DT_list *list) {
   // std::cout << "\n";
   list->print();
   return 0;
@@ -139,26 +144,7 @@ extern "C" int list_CalculateIdx(DT_list *list, int first_idx, ...) {
 
 
 
-extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
-{
-  // std::cout << "INDEX AT " << idx << ".\n";
-    
-  std::string type = vec->data_types->at(idx);
-  // std::cout << "list_Idx on index " << idx << " for data type " << type << ".\n";
 
-  if (type=="float")
-  {
-    float* float_ptr = new float(vec->get<float>(idx));
-    return (void*)float_ptr;
-  }
-  if (type=="int")
-  {
-    int* ptr = new int(vec->get<int>(idx));
-    return static_cast<void*>(ptr);
-  }
-
-  return std::any_cast<void *>((*vec->data)[idx]);
-}
 
 
 extern "C" int to_int(Scope_Struct *scope_struct, void *ptr) {
@@ -268,4 +254,112 @@ extern "C" float float_list_Store_Idx(DT_list *list, int idx, float value, Scope
   std::any& slot = (*list->data)[idx];
   slot = value;
   return 0;
+}
+
+
+
+extern "C" DT_list *zip(Scope_Struct *scope_struct, DT_list *list, ...) {
+
+
+  va_list args;
+  va_start(args, list);
+
+
+  std::vector<DT_list*> lists = {list};
+
+
+  DT_list *new_list = va_arg(args, DT_list*);
+  if (new_list==nullptr)
+  {
+    LogError(scope_struct->code_line, "Zipping a single list");
+    return list;
+  }
+
+  do {
+    if (new_list!=nullptr)
+      lists.push_back(new_list);
+    new_list = va_arg(args, DT_list*);
+  } while(new_list!=nullptr);
+  
+  // std::cout << "got " << lists.size() << " list " << ".\n";
+
+
+  int list_size = list->size;
+  for (int i=1; i<lists.size(); ++i) {
+    if (lists[i]->size!=list_size) {
+      LogError(scope_struct->code_line, "Zipping lists of different size.");
+      return list;
+    }
+  }
+
+ 
+  DT_list *out_list = new DT_list();
+  for (int i=0; i<list_size; ++i)
+  { 
+    DT_list *inner_list = new DT_list();
+    
+    for (DT_list *inner : lists) {
+      if(inner->data_types->at(i)=="float")
+        inner_list->append(inner->get<float>(i), "float");
+      else if(inner->data_types->at(i)=="int")
+        inner_list->append(inner->get<int>(i), "int");
+      else if(inner->data_types->at(i)=="bool")
+        inner_list->append(inner->get<bool>(i), "bool");
+      else if(inner->data_types->at(i)=="str")
+        inner_list->append(inner->get<char *>(i), "str");
+      else
+      {
+        inner_list->append(std::any(inner->get<void *>(i)), inner->data_types->at(i));
+      }
+    } 
+    out_list->append(std::any(static_cast<void *>(inner_list)), "list");
+  }
+
+
+  return out_list;
+}
+
+
+extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
+{
+  // std::cout << "INDEX AT " << idx << ".\n";
+    
+  std::string type = vec->data_types->at(idx);
+  std::cout << "list_Idx on index " << idx << " for data type " << type << ".\n";
+
+  if (type=="float") {
+    float* float_ptr = new float(vec->get<float>(idx));
+    return (void*)float_ptr;
+  } else if (type=="int") {
+    int* ptr = new int(vec->get<int>(idx));
+    return static_cast<void*>(ptr);
+  } else if (type=="bool") {
+    bool* ptr = new bool(vec->get<bool>(idx));
+    return static_cast<void*>(ptr); 
+  } else
+    return std::any_cast<void *>((*vec->data)[idx]);
+}
+
+
+
+extern "C" void *tuple_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
+{
+  // std::cout << "INDEX AT " << idx << ".\n";
+    
+  std::string type = vec->data_types->at(idx);
+  // std::cout << "tuple_Idx on index " << idx << " for data type " << type << ".\n";
+
+  if (type=="float") {
+    float* float_ptr = new float(vec->get<float>(idx));
+    return (void*)float_ptr;
+  } else if (type=="int") {
+    int* ptr = new int(vec->get<int>(idx));
+    return static_cast<void*>(ptr);
+  } else if (type=="bool") {
+    bool* ptr = new bool(vec->get<bool>(idx));
+    return static_cast<void*>(ptr); 
+  } else
+  {
+    return std::any_cast<void *>((*vec->data)[idx]);
+  }
 }

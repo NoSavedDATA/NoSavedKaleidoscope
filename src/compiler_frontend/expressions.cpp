@@ -697,6 +697,7 @@ std::string Nameable::GetLibCallee() {
 
 
 Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
+  
 
   Data_Tree inner_dt = Inner->GetDataTree();
 
@@ -706,12 +707,25 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
   if (from_assignment || !in_str(compound_type, {"vec", "list", "dict", "tuple"}))
     return inner_dt; //e.g: for list_Store_Idx
 
+  if(compound_type=="tuple") {
+    if (IntExprAST *expr = dynamic_cast<IntExprAST*>(Idx->Idxs[0].get())) {
+
+      int idx = expr->Val;
+      if (idx>=inner_dt.Nested_Data.size())
+        LogError(parser_struct.line, "Tuple index out of range. Index at: " + std::to_string(idx) + ", but the tuple size is " + std::to_string(inner_dt.Nested_Data.size()));
+
+      return Data_Tree(inner_dt.Nested_Data[idx].Type);
+    } else
+      LogError(parser_struct.line, "Can only index tuple with a constant integer.");
+  }
 
   return inner_dt.Nested_Data[0];
 }
 
 
 Data_Tree NameableCall::GetDataTree(bool from_assignment) { 
+  if (data_type.Type!="")
+    return data_type;
 
   Data_Tree ret = functions_return_data_type[Callee];
 
@@ -723,9 +737,22 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
     ret = return_dt;
   }
 
+  if(Callee=="zip") {
 
+    Data_Tree return_dt = Data_Tree("list");
+    return_dt.Nested_Data.push_back(Data_Tree("list"));
+
+    for(int i=0; i<Args.size(); ++i) {
+
+      std::string type = Args[i]->GetDataTree().Nested_Data[0].Type;
+      return_dt.Nested_Data[0].Nested_Data.push_back(Data_Tree(type));
+    }
+
+    ret = return_dt;
+  }
+
+  data_type = ret;
   ReturnType = ret.Type;
-  
 
   return ret;
 }
@@ -813,8 +840,16 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
     // LogBlue("Callee is " + Callee);
   }
 
+
   if (in_str(Callee, vararg_methods))
-    this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+  {
+    if (Callee=="zip") {
+      GetDataTree();
+      this->Args.push_back(std::make_unique<NullPtrExprAST>());
+    }
+    else
+      this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+  }
 }
 
 

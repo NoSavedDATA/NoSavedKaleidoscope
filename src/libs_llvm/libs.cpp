@@ -822,6 +822,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_print", list_printTy);
 
+	FunctionType *tuple_printTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("tuple_print", tuple_printTy);
+
 	FunctionType *list_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -842,13 +849,6 @@ void Generate_LLVM_Functions() {
 		true //vararg
 	);
 	TheModule->getOrInsertFunction("list_CalculateIdx", list_CalculateIdxTy);
-
-	FunctionType *list_IdxTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);
 
 	FunctionType *to_intTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
@@ -898,6 +898,27 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_list_Store_Idx", float_list_Store_IdxTy);
+
+	FunctionType *zipTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		true //vararg
+	);
+	TheModule->getOrInsertFunction("zip", zipTy);
+
+	FunctionType *list_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Idx", list_IdxTy);
+
+	FunctionType *tuple_IdxTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("tuple_Idx", tuple_IdxTy);
 
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,

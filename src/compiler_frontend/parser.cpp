@@ -1159,7 +1159,7 @@ std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struc
       if (CurTok != ',')
       {
 
-        LogError(parser_struct.line, "Expected ')' or ',' on the Function Call arguments list.");
+        LogError(parser_struct.line, "Expected ')' or ',' on the call arguments list.");
         return {};
       }
       getNextToken();

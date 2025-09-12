@@ -15,11 +15,13 @@
 
 
 template char *DT_list::get<char *>(size_t);
+template bool  DT_list::get<bool>(size_t);
 template void *DT_list::get<void *>(size_t);
 
 template char *DT_list::unqueue<char *>();
+template bool  DT_list::unqueue<bool>();
 template void *DT_list::unqueue<void *>();
-template int DT_list::unqueue<int>();
+template int   DT_list::unqueue<int>();
 template float DT_list::unqueue<float>();
 
 template <typename T>
