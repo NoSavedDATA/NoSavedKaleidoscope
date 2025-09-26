@@ -10,64 +10,9 @@ std::map<std::string, int> objectVecsLastId;
 
 
 
-extern "C" void InstantiateObject(char *obj_name, char *full_name)
-{
-  // std::cout << "\n\n\n\nInstantiateObject of: " << full_name << "\n\n\n";
-  std::string _obj_name = obj_name;
-
-  NamedObjects[full_name] = _obj_name + RandomString(13);
-  // std::cout << "Saving " << NamedObjects[full_name]  << "\n\n";
-}
 
 
-extern "C" char *objHash(char *scope, char *obj_name)
-{
-  std::string _obj_name = obj_name;
-  std::string ret = NamedObjects[scope+_obj_name];
-  return str_to_char(ret);
-}
 
-
-extern "C" char *LoadObject(char *obj_name)
-{
-  // std::cout << "LOADING OBJECT " << obj_name << "\n";
-  std::string ret = NamedObjects[obj_name];
-  delete[] obj_name;
-  // std::cout << "GOT OBJECT : " << ret << "\n";
-
-  // std::cout << "Objects found: " << ".\n";
-  // for (auto &pair : NamedObjects)
-  // {
-  //   std::cout << pair.first << " --> " << pair.second << ".\n";
-  // }
-
-  return str_to_char(ret);
-}
-
-
-extern "C" float InitObjectVecWithNull(char *name, float vec_size) 
-{
-  std::cout << "InitObjectVecWithNull of " << name << " with vec_size " << vec_size << "\n\n\n\n";
-
-  for (int i=0; i<vec_size; i++)
-  {
-    std::string indexed_name = name + std::to_string(i);
-    objectVecs[indexed_name] = "nullptr";
-  }
-  
-  delete[] name; //TODO: Break?
-  return 0;
-}
-
-
-extern "C" float is_null(char *name)
-{
-  //std::cout << "\n\nIS NULL OF: " << name << "\n\n\n";
-
-  if (objectVecs[name]=="nullptr")
-    return 1;
-  return 0;
-}
 
 
 
@@ -151,40 +96,7 @@ extern "C" float append(char *self, char *obj_name)
   return 0;
 }
 
-extern "C" char *LoadObjectScopeName(char *self)
-{
-  // if (objectVecs.count(self)==0)
-  // {
-  //   std::string _self = self;
-  //   std::string _error = "Object "+_self+" does not exist";
-  //   LogErrorS(_error);
-  //   return "";
-  // }
 
-  // /*
-  // for (auto &pair : objectVecs)
-  // {
-  //   std::cout <<  pair.first << ": " << pair.second << "\n";
-  // }
-  // */
-  // std::string ret = objectVecs[self];
-  // if(ret.length()==0)
-  // {
-  //   for (auto &pair : objectVecs)
-  //     std::cout <<  pair.first << ": " << pair.second << "\n";
-
-  //   std::string _self = self;
-  //   std::string _error = "Loaded object "+_self+" has zero length.";
-  //   LogErrorS(_error);
-  // }
-
-
-  // //std::cout << "LoadObjectScopeName is: " << ret << ", from self: " << self << "\n";
-
-  // delete[] self;
-
-  // return str_to_char(ret);
-}
 
 
 extern "C" void *offset_object_ptr(void *object_ptr, int offset) {

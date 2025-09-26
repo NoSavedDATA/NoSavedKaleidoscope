@@ -103,7 +103,7 @@ extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, std::vector<char*> vec
 
   // std::cout << "Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
 
-  return CopyString(vec[idx]);
+  return CopyString(scope_struct, vec[idx]);
 }
 
 

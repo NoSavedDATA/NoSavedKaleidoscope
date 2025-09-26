@@ -1,11 +1,13 @@
 #pragma once
 
 #include <map>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
-#include "../mangler/scope_struct.h"
 
+
+struct Scope_Struct;
 
 struct MarkSweepAtom {
     std::string data_type;
@@ -32,4 +34,31 @@ struct MarkSweep {
     void unmark_scopeful(void *);
     void unmark_scopeless(void *);
     void clean_up(bool);
+};
+
+
+//---------------------------------------------------------//
+
+struct MarkSweep_Node {
+    std::string type;
+    bool marked;
+
+    MarkSweep_Node(std::string, bool);
+};
+
+struct GC_Node{
+    void *ptr;
+    std::string type;
+
+    GC_Node(void *, std::string);
+};
+
+
+struct GarbageCollector {
+    int size_occupied=0;
+    std::vector<GC_Node> root_nodes;
+    std::vector<GC_Node> pointer_nodes;
+
+    void MergeNodes();
+    void sweep(Scope_Struct *);
 };

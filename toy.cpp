@@ -1677,13 +1677,6 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("objAttr_vec_from_vec", objAttr_vec_from_vecTy);
 
 
-  //
-  FunctionType *LoadObjectScopeNameTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("LoadObjectScopeName", LoadObjectScopeNameTy);
 
 
 
@@ -1889,22 +1882,8 @@ static void InitializeModule() {
   TheModule->getOrInsertFunction("write_zerosw", write_zeroswTy);
 
 
-  //
-  FunctionType *InitObjectVecWithNullTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("InitObjectVecWithNull", InitObjectVecWithNullTy);
 
 
-  //
-  FunctionType *is_nullTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("is_null", is_nullTy);
 
 
   //===----------------------------------------------------------------------===//
@@ -1923,31 +1902,6 @@ static void InitializeModule() {
 
 
 
-  // 
-  FunctionType *objHashTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("objHash", objHashTy);
-  
-
-  // 
-  FunctionType *LoadObjectTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("LoadObject", LoadObjectTy);
-  
-
-  //
-  FunctionType *InstantiateObjectTy = FunctionType::get(
-      Type::getVoidTy(*TheContext),
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("InstantiateObject", InstantiateObjectTy);
   
 
   //
@@ -2702,7 +2656,7 @@ int main(int argc, char* argv[]) {
   native_functions = {"ShuffleStrVec", "gload_img", "wload_img", "silent_sleep", "__slee_p_",
                       "LenStrVec", "zeros_vec", "ones_vec", "start_timer", "end_timer",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
-                      "load_preprocess_img", "max", "min", "unbug", "is_null",
+                      "load_preprocess_img", "max", "min", "unbug",
                       "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",

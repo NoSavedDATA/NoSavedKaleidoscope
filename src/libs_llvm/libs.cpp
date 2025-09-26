@@ -17,41 +17,6 @@ void Generate_LLVM_Functions() {
     int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     
 
-	FunctionType *InstantiateObjectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("InstantiateObject", InstantiateObjectTy);
-
-	FunctionType *objHashTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objHash", objHashTy);
-
-	FunctionType *LoadObjectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("LoadObject", LoadObjectTy);
-
-	FunctionType *InitObjectVecWithNullTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("InitObjectVecWithNull", InitObjectVecWithNullTy);
-
-	FunctionType *is_nullTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("is_null", is_nullTy);
-
 	FunctionType *objAttr_var_from_varTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -86,13 +51,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("append", appendTy);
-
-	FunctionType *LoadObjectScopeNameTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("LoadObjectScopeName", LoadObjectScopeNameTy);
 
 	FunctionType *offset_object_ptrTy= FunctionType::get(
 		int8PtrTy,
@@ -208,7 +166,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *int_to_strTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getInt32Ty(*TheContext)},
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("int_to_str", int_to_strTy);
@@ -369,7 +327,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *GetEmptyCharTy= FunctionType::get(
 		int8PtrTy,
-		{},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("GetEmptyChar", GetEmptyCharTy);
@@ -390,49 +348,35 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *CopyStringTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("CopyString", CopyStringTy);
 
 	FunctionType *ConcatStrTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("ConcatStr", ConcatStrTy);
 
 	FunctionType *ConcatStrFreeLeftTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("ConcatStrFreeLeft", ConcatStrFreeLeftTy);
 
-	FunctionType *ConcatStrFreeRightTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("ConcatStrFreeRight", ConcatStrFreeRightTy);
-
-	FunctionType *ConcatStrFreeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("ConcatStrFree", ConcatStrFreeTy);
-
 	FunctionType *ConcatFloatToStrTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("ConcatFloatToStr", ConcatFloatToStrTy);
 
 	FunctionType *ConcatNumToStrFreeTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("ConcatNumToStrFree", ConcatNumToStrFreeTy);
@@ -647,6 +591,27 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Copy_MarkSweepMap", scope_struct_Copy_MarkSweepMapTy);
 
+	FunctionType *scope_struct_Clear_GC_RootTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Clear_GC_Root", scope_struct_Clear_GC_RootTy);
+
+	FunctionType *scope_struct_Add_GC_RootTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Add_GC_Root", scope_struct_Add_GC_RootTy);
+
+	FunctionType *scope_struct_Add_PointerTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Add_Pointer", scope_struct_Add_PointerTy);
+
 	FunctionType *scope_struct_SweepTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
@@ -705,7 +670,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *float_to_strTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getFloatTy(*TheContext)},
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("float_to_str", float_to_strTy);
@@ -717,12 +682,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("nullptr_get", nullptr_getTy);
 
-	FunctionType *check_is_nullTy= FunctionType::get(
-		int8PtrTy,
+	FunctionType *is_nullTy= FunctionType::get(
+		Type::getInt1Ty(*TheContext),
 		{int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("check_is_null", check_is_nullTy);
+	TheModule->getOrInsertFunction("is_null", is_nullTy);
 
 	FunctionType *printTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -1066,6 +1031,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_size", float_vec_sizeTy);
+
+	FunctionType *allocate_voidTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("allocate_void", allocate_voidTy);
 
 	FunctionType *print_randomsTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

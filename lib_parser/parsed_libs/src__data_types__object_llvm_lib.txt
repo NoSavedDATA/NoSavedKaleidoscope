@@ -1,39 +1,4 @@
-1821-09-03 09:39:44
-
-	FunctionType *InstantiateObjectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("InstantiateObject", InstantiateObjectTy);
-
-	FunctionType *objHashTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objHash", objHashTy);
-
-	FunctionType *LoadObjectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("LoadObject", LoadObjectTy);
-
-	FunctionType *InitObjectVecWithNullTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("InitObjectVecWithNull", InitObjectVecWithNullTy);
-
-	FunctionType *is_nullTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("is_null", is_nullTy);
+1821-09-25 14:08:41
 
 	FunctionType *objAttr_var_from_varTy= FunctionType::get(
 		int8PtrTy,
@@ -69,13 +34,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("append", appendTy);
-
-	FunctionType *LoadObjectScopeNameTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("LoadObjectScopeName", LoadObjectScopeNameTy);
 
 	FunctionType *offset_object_ptrTy= FunctionType::get(
 		int8PtrTy,

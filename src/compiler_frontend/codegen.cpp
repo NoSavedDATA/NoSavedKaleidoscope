@@ -203,7 +203,7 @@ Value *StringExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
   SetName(Val);
-  Value *_str = callret("CopyString", {global_str(Val)});
+  Value *_str = callret("CopyString", {scope_struct, global_str(Val)});
   call("MarkToSweep_Mark", {scope_struct, _str, global_str("str")});
   return _str;
 }
@@ -343,8 +343,8 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
     Value *var_name, *scopeless_name;
 
     // --- Name Solving --- //
-    var_name = callret("CopyString", {global_str(VarName)});
-    scopeless_name = callret("CopyString", {var_name});
+    var_name = callret("CopyString", {scope_struct, global_str(VarName)});
+    scopeless_name = callret("CopyString", {scope_struct, var_name});
  
 
 
@@ -475,8 +475,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     Value *var_name, *scopeless_name;
 
     // --- Name Solving --- //
-    var_name = callret("CopyString", {global_str(VarName)});
-    scopeless_name = callret("CopyString", {var_name});
+    var_name = callret("CopyString", {scope_struct, global_str(VarName)});
+    scopeless_name = callret("CopyString", {scope_struct, var_name});
 
 
 
@@ -497,7 +497,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
           notes_vector = callret("Add_To_NotesVector_int", {notes_vector, note->codegen(scope_struct)});
         }
         else if (StringExprAST* expr = dynamic_cast<StringExprAST*>(note)) {
-          Value *str_val = callret("CopyString", {note->codegen(scope_struct)});
+          Value *str_val = callret("CopyString", {scope_struct, note->codegen(scope_struct)});
           notes_vector = callret("Add_To_NotesVector_str", {notes_vector, str_val});
         }
         else if (Nameable* expr = dynamic_cast<Nameable*>(note)) {
@@ -505,10 +505,10 @@ Value *DataExprAST::codegen(Value *scope_struct) {
           
           if(expr->Depth==1&&data_typeVars[parser_struct.function_name].count(expr->Name)==0)
           { 
-            Value *_str = callret("CopyString", {global_str(expr->Name)});
+            Value *_str = callret("CopyString", {scope_struct, global_str(expr->Name)});
             call("MarkToSweep_Mark", {scope_struct, _str, global_str("str")});
 
-            Value *str_val = callret("CopyString", {_str});
+            Value *str_val = callret("CopyString", {scope_struct, _str});
             notes_vector = callret("Add_To_NotesVector_str", {notes_vector, str_val});
           } else {
             std::string type = expr->GetDataTree().Type;
@@ -1041,7 +1041,7 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
       LogError(parser_struct.line, "Variable " + Name + " was not found on scope " + parser_struct.function_name + ".");
       return ConstantFP::get(*TheContext, APFloat(0.0f));
     }
-    Value *_str = callret("CopyString", {global_str(Name)});
+    Value *_str = callret("CopyString", {scope_struct, global_str(Name)});
     call("MarkToSweep_Mark", {scope_struct, _str, global_str("str")});
     return _str;
   }
@@ -1053,8 +1053,6 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
   bool is_self = GetSelf();
   bool is_attr = GetIsAttribute();
     
-
-
 
 
 
@@ -1390,7 +1388,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       if (F)
       {
         Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
-        Value *Lvar_name = callret("CopyString", {global_str(Lname)});
+        Value *Lvar_name = callret("CopyString", {scope_struct, global_str(Lname)});
         Val = callret(store_trigger, {Lvar_name, old_val, Val, scope_struct});
       }
 
@@ -1635,30 +1633,13 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
   std::string operand_type = Operand->GetDataTree().Type;
   if (Opcode=='-')
   {
-    //std::cout << "\n\n\n\n\n\nIT'S A MINUS " << Operand->GetType() << "\n\n\n\n\n\n\n";
+
     if (operand_type=="tensor")
     {
-      Value *tensor_name = global_str(Operand->GetName());
-
-      std::string pre_dot = Operand->GetPreDot();
-      bool is_self = Operand->GetSelf();
-      bool is_attr = Operand->GetIsAttribute();
-
-      if (is_attr) { // Gets from pre_dot if it is a class attribute
-        Value * object_name = global_str(pre_dot);
-
-        tensor_name = callret("ConcatStr", {object_name, tensor_name});
-      }
-      if (is_self)
-        tensor_name = callret("ConcatStr", {callret("get_scope_first_arg", {scope_struct}), tensor_name});
-      if (!(is_self||is_attr))
-        tensor_name = callret("ConcatStr", {callret("get_scope_scope", {scope_struct}), tensor_name});
-        
-
-      Value *tensorPtr = callret("tensor_Load", {scope_struct, tensor_name});
-      Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
-
-      return callret("CudaScalarMult", {tensorPtr, R, callret("get_scope_thread_id", {scope_struct})});
+      // Value *tensor_name = global_str(Operand->GetName());
+      // Value *tensorPtr = callret("tensor_Load", {scope_struct, tensor_name});
+      // Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
+      // return callret("CudaScalarMult", {tensorPtr, R, callret("get_scope_thread_id", {scope_struct})});
     }
     
     if (Operand->GetType()=="int")
@@ -1703,9 +1684,6 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
   while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
     fnIndex++;
   
-  // todo: solve thread stream
-  // cudaStream_t thread_stream = createCudaStream();
-  // ThreadsStream[fnIndex] = thread_stream;
 
   // Create function for this async function
   llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
@@ -2004,7 +1982,6 @@ Value *IncThreadIdExprAST::codegen(Value *scope_struct) {
 
 
 Value *SplitParallelExprAST::codegen(Value *scope_struct) {
-  // call("scope_struct_Increment_Thread", {scope_struct});
   
   Value *inner_vec = Inner_Vec->codegen(scope_struct);
   std::string type = UnmangleVec(Inner_Vec->GetDataTree());
@@ -2362,8 +2339,7 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
     if (fn_name=="print" && i==0 && type!="str")
     {
       std::string to_string_fn = type+"_to_str";
-      arg = callret(to_string_fn, {arg});
-      call("MarkToSweep_Mark", {scope_struct, arg, global_str("str")});
+      arg = callret(to_string_fn, {scope_struct, arg});
     }
     
 
@@ -2418,11 +2394,6 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
 }
 
 
-Value* callMalloc(Value *size) {
-    // Get or declare malloc: `i8* @malloc(i64)`
-    // Call malloc
-    return callret("malloc", {size});
-}
 
 Value *ObjectExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
@@ -2451,8 +2422,12 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
       AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, VarName, int8PtrTy);
 
       Value *ptr;
-      if (Init==nullptr)
-        ptr = callret("malloc", {const_int64(Size)});
+      if (Init==nullptr) {
+
+        ptr = callret("allocate_void", {scope_struct, const_int(Size), global_str(ClassName)});
+        call("scope_struct_Add_GC_Root", {scope_struct, ptr, global_str(ClassName)});
+        // ptr = callret("malloc", {const_int64(Size)});
+      }
       else
         ptr = Init->codegen(scope_struct);
       
@@ -2756,93 +2731,95 @@ Value *NestedVariableExprAST::codegen(Value *scope_struct) {
 
 
 Value *NestedCallExprAST::codegen(Value *scope_struct) {
+  return const_float(0);
 
   
 
   
-  bool is_nsk_fn = in_str(Callee, native_fn);
+  // bool is_nsk_fn = in_str(Callee, native_fn);
 
   
-  Value *obj_ptr;
-  Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
+  // Value *obj_ptr;
+  // Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
 
-  call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
-
-
-  // p2t("Calling: " + Callee);
+  // call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
 
 
-
-  if(ends_with(Callee, "__init__")&&Inner_Expr->From_Self) // mallocs an object inside another
-  {
-    Inner_Expr->Load_Last=false; // inhibits Load_slot
-    obj_ptr = Inner_Expr->codegen(scope_struct);
+  // // p2t("Calling: " + Callee);
 
 
-    int size = Get_Nested_Class_Size(Inner_Expr->Expr_String, parser_struct);
-    Value *new_ptr = callret("malloc", {const_int64(size)});
 
-    // p2t("Malloc size of " + Inner_Expr->Name + " is " + std::to_string(size));
+  // if(ends_with(Callee, "__init__")&&Inner_Expr->From_Self) // mallocs an object inside another
+  // {
+  //   Inner_Expr->Load_Last=false; // inhibits Load_slot
+  //   obj_ptr = Inner_Expr->codegen(scope_struct);
 
-    call("tie_object_to_object", {obj_ptr, new_ptr});
+
+  //   int size = Get_Nested_Class_Size(Inner_Expr->Expr_String, parser_struct);
+  //   // Value *new_ptr = callret("malloc", {const_int64(size)});
+  //   Value *new_ptr = callret("allocate_void", {scope_struct, const_int(size), global_str("unk class")});
+
+  //   p2t("Malloc size of " + Inner_Expr->Name + " is " + std::to_string(size));
+
+  //   call("tie_object_to_object", {obj_ptr, new_ptr});
     
-    obj_ptr = new_ptr;  
-  } else
-    obj_ptr = Inner_Expr->codegen(scope_struct);
+  //   obj_ptr = new_ptr;  
+  // } else
+  //   obj_ptr = Inner_Expr->codegen(scope_struct);
   
   
-  if(!is_nsk_fn)
-    call("set_scope_object", {scope_struct_copy, obj_ptr});
+  // if(!is_nsk_fn)
+  //   call("set_scope_object", {scope_struct_copy, obj_ptr});
 
 
   
 
 
 
-  int target_args_size = Args.size()+1; // +1 for scope_struct
+  // int target_args_size = Args.size()+1; // +1 for scope_struct
 
 
 
-  std::vector<Value *> ArgsV = {scope_struct_copy};
-  int arg_type_check_offset = 1; // 1 for scope_struct
-  if (is_nsk_fn) // load of x at x.shape()
-  {
-    target_args_size++;
-    ArgsV.push_back(obj_ptr);
-    arg_type_check_offset++;
-  }
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
+  // std::vector<Value *> ArgsV = {scope_struct_copy};
+  // int arg_type_check_offset = 1; // 1 for scope_struct
+  // if (is_nsk_fn) // load of x at x.shape()
+  // {
+  //   target_args_size++;
+  //   ArgsV.push_back(obj_ptr);
+  //   arg_type_check_offset++;
+  // }
+  // ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
 
 
 
-  Function *CalleeF;
-  CalleeF = getFunction(Callee);
-  if (!CalleeF)
-  {
-    std::string _error = "The referenced function "+ Callee +" was not yet declared.";
-    return LogErrorV(parser_struct.line, _error);
-  }
-  std::string tgt_function_name = CalleeF->getName().str();
-  // If argument mismatch error.
-  if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
-  {
-    // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
-    std::string _error = "Incorrect parameters used on function " + Callee + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
-    return LogErrorV(parser_struct.line, _error);
-  }
+  // Function *CalleeF;
+  // CalleeF = getFunction(Callee);
+  // if (!CalleeF)
+  // {
+  //   std::string _error = "The referenced function "+ Callee +" was not yet declared.";
+  //   return LogErrorV(parser_struct.line, _error);
+  // }
+  // std::string tgt_function_name = CalleeF->getName().str();
+  // // If argument mismatch error.
+  // if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
+  // {
+  //   // std::cout << "CalleeF->arg_size() " << std::to_string(CalleeF->arg_size()) << " target_args_size " << std::to_string(target_args_size) << "\n";
+  //   std::string _error = "Incorrect parameters used on function " + Callee + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
+  //   return LogErrorV(parser_struct.line, _error);
+  // }
 
 
-  // Call function
-  Value *ret = callret(Callee, ArgsV);
+  // // Call function
+  // Value *ret = callret(Callee, ArgsV);
 
-  // Clean-up
-  call("scope_struct_Delete", {scope_struct_copy});
+  // // Clean-up
+  // call("scope_struct_Delete", {scope_struct_copy});
   
     
-  if(!in_str(Type, primary_data_tokens) && !in_str(Type, {"", "None"}))
-    call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
+  // if(!in_str(Type, primary_data_tokens) && !in_str(Type, {"", "None"}))
+  //   call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
   
-  return ret;
+  // return ret;
 }
 
 
@@ -2894,8 +2871,6 @@ Value *Nameable::codegen(Value *scope_struct) {
 
 
 Value *NameableIdx::codegen(Value *scope_struct) {
-
-
   Data_Tree inner_dt = Inner->GetDataTree();
 
   std::string compound_type = UnmangleVec(inner_dt);
@@ -2982,12 +2957,32 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   int arg_type_check_offset=1, target_args_size=Args.size()+1;
   bool is_nsk_fn = in_str(Callee, native_methods);
+
+  if(!is_nsk_fn) { // collect roots for gc
+    // p2t("callee: " + Callee);
+    call("scope_struct_Clear_GC_Root", {scope_struct});
+    // LogBlue("Current function is: " + parser_struct.function_name + "/"+ Callee);
+
+    for (const auto &pair : function_allocas[parser_struct.function_name]) {
+      std::string type = typeVars[parser_struct.function_name][pair.first];
+      if (!in_str(type, primary_data_tokens)) {
+
+        if (pair.first!="y") 
+        {
+          Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
+          call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
+        } 
+      }
+    }
+  }
+
   Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
 
   call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
 
 
   std::vector<Value*> ArgsV = {scope_struct_copy};
+
 
   if(Depth>1&&!FromLib) {
     if (ends_with(Callee, "__init__")&&isSelf)
@@ -3006,7 +3001,10 @@ Value *NameableCall::codegen(Value *scope_struct) {
         
         int size = ClassSize[obj_class];
 
-        Value *new_ptr = callret("malloc", {const_int64(size)});
+
+        // Value *new_ptr = callret("malloc", {const_int64(size)});
+        Value *new_ptr = callret("allocate_void", {scope_struct, const_int(size), global_str(obj_class)});
+        call("scope_struct_Add_GC_Root", {scope_struct, new_ptr, global_str(obj_class)});
 
 
         call("tie_object_to_object", {obj_ptr, new_ptr});
@@ -3064,112 +3062,112 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
 
 Value *CallExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return const_float(0);
-  // Look up the name in the global module table.
+  // if (not ShallCodegen)
+  //   return const_float(0);
+  // // Look up the name in the global module table.
 
   
 
-  std::string tgt_function = (CalleeOverride!="none") ? CalleeOverride : Callee;
+  // std::string tgt_function = (CalleeOverride!="none") ? CalleeOverride : Callee;
   
 
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
-  std::string functionName = TheFunction->getName().str();
-  std::string tgt_function_name;
-  std::string msg;
+  // Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  // std::string functionName = TheFunction->getName().str();
+  // std::string tgt_function_name;
+  // std::string msg;
 
 
 
-  int nested_function;
-  if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
-    nested_function=0;
-  else
-    nested_function=1;
+  // int nested_function;
+  // if (functionName=="__anon_expr" || starts_with(functionName.c_str(), "__async_"))
+  //   nested_function=0;
+  // else
+  //   nested_function=1;
 
 
-  bool has_scope = false;
-  bool changed_first_arg = false;
-  bool has_first_arg_copy = false;
-  bool must_free_arg0 = false;
+  // bool has_scope = false;
+  // bool changed_first_arg = false;
+  // bool has_first_arg_copy = false;
+  // bool must_free_arg0 = false;
 
-  Value *name;
-  
-
-
-  Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
-  Value *first_arg, *scope_string;
-
-
-
-
-  
-  
-  Value *_pre_dot_str = global_str(_pre_dot);
-  Value *first_arg_copy;
-
-
-  int target_args_size = Args.size();
-  std::vector<Value *> ArgsV; 
-  
-
+  // Value *name;
   
 
 
-  
+  // Value *scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
+  // Value *first_arg, *scope_string;
 
-  bool is_self_of_nested_function = (nested_function==1 && isSelf);
-  bool is_user_cpp_function = in_str(tgt_function, user_cpp_functions);
-  bool is_nsk_fn = in_str(tgt_function, native_methods);
-  
-
-  
-  
-  call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
 
 
 
   
+  
+  // Value *_pre_dot_str = global_str(_pre_dot);
+  // Value *first_arg_copy;
 
 
-  if (!(CalleeOverride!="none" || in_str(Callee, native_fn)) || Callee=="print_scope" || is_user_cpp_function) // user defined functions
-  {
-    has_scope = true;
-    if(Callee!="print_scope" && !is_user_cpp_function)
-    {
-      scope_string = global_str(Scope_Random_Str);
-      scope_string = callret("str_int_add", {scope_struct, scope_string, callret("get_scope_thread_id", {scope_struct})});
-      call("set_scope_scope", {scope_struct_copy, scope_string});
-    }
-  }
-  target_args_size+=1; //always add scope_struct
+  // int target_args_size = Args.size();
+  // std::vector<Value *> ArgsV; 
+  
+
+  
+
+
+  
+
+  // bool is_self_of_nested_function = (nested_function==1 && isSelf);
+  // bool is_user_cpp_function = in_str(tgt_function, user_cpp_functions);
+  // bool is_nsk_fn = in_str(tgt_function, native_methods);
+  
+
+  
+  
+  // call("set_scope_function_name", {scope_struct_copy, global_str(tgt_function)});
+
+
+
+  
+
+
+  // if (!(CalleeOverride!="none" || in_str(Callee, native_fn)) || Callee=="print_scope" || is_user_cpp_function) // user defined functions
+  // {
+  //   has_scope = true;
+  //   if(Callee!="print_scope" && !is_user_cpp_function)
+  //   {
+  //     scope_string = global_str(Scope_Random_Str);
+  //     scope_string = callret("str_int_add", {scope_struct, scope_string, callret("get_scope_thread_id", {scope_struct})});
+  //     call("set_scope_scope", {scope_struct_copy, scope_string});
+  //   }
+  // }
+  // target_args_size+=1; //always add scope_struct
  
 
 
-  Function *CalleeF;
-  CalleeF = getFunction(tgt_function);
-  if (!CalleeF)
-  {
-    std::string _error = "The referenced function "+ tgt_function +" was not yet declared.";
-    return LogErrorV(parser_struct.line, _error);
-  }
+  // Function *CalleeF;
+  // CalleeF = getFunction(tgt_function);
+  // if (!CalleeF)
+  // {
+  //   std::string _error = "The referenced function "+ tgt_function +" was not yet declared.";
+  //   return LogErrorV(parser_struct.line, _error);
+  // }
 
-  tgt_function_name = CalleeF->getName().str();
+  // tgt_function_name = CalleeF->getName().str();
 
-  // If argument mismatch error.
-  if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
-  {
-    std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
-    return LogErrorV(parser_struct.line, _error);
-  }
-
-
+  // // If argument mismatch error.
+  // if ((CalleeF->arg_size()) != target_args_size && !in_str(tgt_function_name, vararg_methods))
+  // {
+  //   std::string _error = "Incorrect parameters used on function " + tgt_function + " call.\n\t    Expected " +  std::to_string(CalleeF->arg_size()-1) + " arguments, got " + std::to_string(target_args_size-1);
+  //   return LogErrorV(parser_struct.line, _error);
+  // }
 
 
 
-  // Sends the non-changed scope_struct to load/codegen the arguments from the argument list
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, tgt_function, is_nsk_fn);
-  // Always include scope on the beggining
-  ArgsV.insert(ArgsV.begin(), scope_struct_copy);
+
+
+  // // Sends the non-changed scope_struct to load/codegen the arguments from the argument list
+  // ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, tgt_function, is_nsk_fn);
+  // // Always include scope on the beggining
+  // ArgsV.insert(ArgsV.begin(), scope_struct_copy);
 
 
 
@@ -3177,40 +3175,40 @@ Value *CallExprAST::codegen(Value *scope_struct) {
   
 
   
-  Value *ret;
-  if (CalleeOverride=="none")
-  {
-    ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-    call("scope_struct_Delete", {scope_struct_copy});
+  // Value *ret;
+  // if (CalleeOverride=="none")
+  // {
+  //   ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  //   call("scope_struct_Delete", {scope_struct_copy});
 
-    if(!in_str(Type, primary_data_tokens)&&Type!="")
-      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
+  //   if(!in_str(Type, primary_data_tokens)&&Type!="")
+  //     call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
     
-    return ret;
-  }
-  else
-  {    
-    if (in_str(CalleeOverride, native_modules))
-    {
-      CalleeF = getFunction(CalleeOverride);
+  //   return ret;
+  // }
+  // else
+  // {    
+  //   if (in_str(CalleeOverride, native_modules))
+  //   {
+  //     CalleeF = getFunction(CalleeOverride);
       
-      if (CalleeF->arg_size() != ArgsV.size())
-      {
-        std::string _error = "Incorrect parameters used on function " + tgt_function + " call.";
-        return LogErrorV(parser_struct.line, _error);
-      }
-      ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
-    }
-    else
-      ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
+  //     if (CalleeF->arg_size() != ArgsV.size())
+  //     {
+  //       std::string _error = "Incorrect parameters used on function " + tgt_function + " call.";
+  //       return LogErrorV(parser_struct.line, _error);
+  //     }
+  //     ret = Builder->CreateCall(CalleeF, ArgsV, "calltmp");
+  //   }
+  //   else
+  //     ret = Builder->CreateCall(getFunction(CalleeOverride), ArgsV, "calltmp");
 
-    call("scope_struct_Delete", {scope_struct_copy});    
+  //   call("scope_struct_Delete", {scope_struct_copy});    
 
-    if(!in_str(Type, primary_data_tokens)&&Type!="")
-      call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
+  //   if(!in_str(Type, primary_data_tokens)&&Type!="")
+  //     call("MarkToSweep_Mark", {scope_struct, ret, global_str(Extract_List_Suffix(Type))});
     
-    return ret;
-  }  
+  //   return ret;
+  // }  
 }
 
 

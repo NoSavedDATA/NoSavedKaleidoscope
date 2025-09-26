@@ -247,26 +247,22 @@ bin/nsk: toy.cpp /usr/lib/llvm-19/include/llvm/ADT/APFloat.h \
   /usr/lib/llvm-19/include/llvm/Support/CFGDiff.h \
   /usr/lib/llvm-19/include/llvm/Support/CFGUpdate.h \
   /usr/lib/llvm-19/include/llvm/Support/GenericDomTree.h src/include.h \
-  src/char_pool/include.h src/char_pool/char_pool.h \
-  src/char_pool/../common/extension_functions.h \
-  src/char_pool/../threads/include.h src/char_pool/../threads/barrier.h \
-  src/char_pool/../threads/channels.h \
-  src/char_pool/../threads/../data_types/list.h \
-  src/char_pool/../threads/../data_types/../mangler/scope_struct.h \
-  src/char_pool/../threads/../data_types/../mangler/../mark_sweep/include.h \
-  src/char_pool/../threads/../data_types/../mangler/../mark_sweep/clean_up.h \
-  src/char_pool/../threads/../data_types/../mangler/../mark_sweep/mark_sweep.h \
-  src/char_pool/../threads/../data_types/../mangler/../mark_sweep/../mangler/scope_struct.h \
-  src/char_pool/../threads/../data_types/codegen_notes.h \
-  src/char_pool/../threads/../data_types/nsk_vector.h \
-  src/char_pool/../threads/lock.h src/char_pool/../threads/utils.h \
   src/clean_up/include.h src/clean_up/clean_up.h src/codegen/include.h \
-  src/codegen/../threads/include.h src/codegen/call_expr.h \
-  src/codegen/../mangler/scope_struct.h src/codegen/functions.h \
-  src/codegen/print.h src/codegen/random.h src/codegen/string.h \
-  src/codegen/time.h src/common/include.h src/common/cu_commons.h \
-  src/common/extension_functions.h src/compiler_frontend/include.h \
-  src/compiler_frontend/codegen.h \
+  src/codegen/../threads/include.h src/codegen/../threads/barrier.h \
+  src/codegen/../threads/channels.h \
+  src/codegen/../threads/../data_types/list.h \
+  src/codegen/../threads/../data_types/../mangler/scope_struct.h \
+  src/codegen/../threads/../data_types/../mangler/../mark_sweep/include.h \
+  src/codegen/../threads/../data_types/../mangler/../mark_sweep/clean_up.h \
+  src/codegen/../threads/../data_types/../mangler/../mark_sweep/mark_sweep.h \
+  src/codegen/../threads/../data_types/codegen_notes.h \
+  src/codegen/../threads/../data_types/nsk_vector.h \
+  src/codegen/../threads/lock.h src/codegen/../threads/utils.h \
+  src/codegen/call_expr.h src/codegen/../mangler/scope_struct.h \
+  src/codegen/functions.h src/codegen/print.h src/codegen/random.h \
+  src/codegen/string.h src/codegen/time.h src/common/include.h \
+  src/common/cu_commons.h src/common/extension_functions.h \
+  src/compiler_frontend/include.h src/compiler_frontend/codegen.h \
   src/compiler_frontend/../data_types/include.h \
   src/compiler_frontend/../data_types/any_map.h \
   src/compiler_frontend/../data_types/bool.h \
@@ -304,7 +300,9 @@ bin/nsk: toy.cpp /usr/lib/llvm-19/include/llvm/ADT/APFloat.h \
   src/libs_llvm/user_cpp_functions.h src/math/include.h \
   src/math/functions.h src/mangler/include.h src/mangler/scope_struct.h \
   src/mark_sweep/include.h src/notators/include.h src/os/include.h \
-  src/os/dir/include.h src/os/dir/dir.h src/threads/include.h
+  src/os/dir/include.h src/os/dir/dir.h src/pool/include.h \
+  src/pool/../mangler/scope_struct.h src/pool/../mark_sweep/include.h \
+  src/pool/pool.h src/threads/include.h
 /usr/lib/llvm-19/include/llvm/ADT/APFloat.h:
 /usr/lib/llvm-19/include/llvm/ADT/APInt.h:
 /usr/lib/llvm-19/include/llvm/Support/Compiler.h:
@@ -555,26 +553,21 @@ src/KaleidoscopeJIT.h:
 /usr/lib/llvm-19/include/llvm/Support/CFGUpdate.h:
 /usr/lib/llvm-19/include/llvm/Support/GenericDomTree.h:
 src/include.h:
-src/char_pool/include.h:
-src/char_pool/char_pool.h:
-src/char_pool/../common/extension_functions.h:
-src/char_pool/../threads/include.h:
-src/char_pool/../threads/barrier.h:
-src/char_pool/../threads/channels.h:
-src/char_pool/../threads/../data_types/list.h:
-src/char_pool/../threads/../data_types/../mangler/scope_struct.h:
-src/char_pool/../threads/../data_types/../mangler/../mark_sweep/include.h:
-src/char_pool/../threads/../data_types/../mangler/../mark_sweep/clean_up.h:
-src/char_pool/../threads/../data_types/../mangler/../mark_sweep/mark_sweep.h:
-src/char_pool/../threads/../data_types/../mangler/../mark_sweep/../mangler/scope_struct.h:
-src/char_pool/../threads/../data_types/codegen_notes.h:
-src/char_pool/../threads/../data_types/nsk_vector.h:
-src/char_pool/../threads/lock.h:
-src/char_pool/../threads/utils.h:
 src/clean_up/include.h:
 src/clean_up/clean_up.h:
 src/codegen/include.h:
 src/codegen/../threads/include.h:
+src/codegen/../threads/barrier.h:
+src/codegen/../threads/channels.h:
+src/codegen/../threads/../data_types/list.h:
+src/codegen/../threads/../data_types/../mangler/scope_struct.h:
+src/codegen/../threads/../data_types/../mangler/../mark_sweep/include.h:
+src/codegen/../threads/../data_types/../mangler/../mark_sweep/clean_up.h:
+src/codegen/../threads/../data_types/../mangler/../mark_sweep/mark_sweep.h:
+src/codegen/../threads/../data_types/codegen_notes.h:
+src/codegen/../threads/../data_types/nsk_vector.h:
+src/codegen/../threads/lock.h:
+src/codegen/../threads/utils.h:
 src/codegen/call_expr.h:
 src/codegen/../mangler/scope_struct.h:
 src/codegen/functions.h:
@@ -639,4 +632,8 @@ src/notators/include.h:
 src/os/include.h:
 src/os/dir/include.h:
 src/os/dir/dir.h:
+src/pool/include.h:
+src/pool/../mangler/scope_struct.h:
+src/pool/../mark_sweep/include.h:
+src/pool/pool.h:
 src/threads/include.h:

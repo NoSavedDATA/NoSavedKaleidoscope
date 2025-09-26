@@ -1,31 +1,29 @@
-
 import nsk_cuda
 
 
-tensor[2,2] x
-tensor[2,3] y
-tensor[2,4] z
+class Note
+    int x
+    def float __init__(i x)
+        self.x = x
+    def float print()
+        print(self.x)
 
 
 
-list<int> a = [1,2,3]
-list<tensor> b = [x, y, z]
-# list<int> b = [4,5,6]
+def float foo()
+    print(1)
 
 
-a.print()
-b.print()
-
-list<tuple<int,tensor>> c = zip(a,b)
-
+int x = 1
+float y = 0
+bool b = false
 
 
+Note c(1)
 
 
-tensor[0] ll
+for i=0, i<10
+    c.print()
 
-ll = c[1][1]
-
-ll.print()
-
+foo()
 

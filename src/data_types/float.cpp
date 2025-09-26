@@ -8,6 +8,7 @@
 #include "../codegen/string.h"
 #include "../common/extension_functions.h"
 #include "../mangler/scope_struct.h"
+#include "../pool/include.h"
 #include "include.h"
 
 
@@ -25,14 +26,14 @@ extern "C" float read_float(Scope_Struct *scope_struct) {
 
 
 
-extern "C" char *float_to_str(float x) {
+extern "C" char *float_to_str(Scope_Struct *scope_struct, float x) {
     // Enough for 32-bit int including sign and null terminator
     char buffer[32];  
     int len = std::snprintf(buffer, sizeof(buffer), "%f", x);
 
     if (len < 0) return nullptr;  // snprintf error
 
-    char *result = (char *)std::malloc(len + 1);
+    char *result = allocate<char>(scope_struct, len+1, "str");
     if (!result) return nullptr;  // malloc failed
 
     std::memcpy(result, buffer, len + 1); // copy with '\0'

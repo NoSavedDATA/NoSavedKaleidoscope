@@ -1,0 +1,13 @@
+
+	
+	Function_Arg_Types["allocate_void"]["0"] = "Scope_Struct";
+	Function_Arg_Types["allocate_void"]["1"] = "int";
+	Function_Arg_Types["allocate_void"]["2"] = "str";
+	
+	Function_Arg_DataTypes["allocate_void"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["allocate_void"]["1"] = Data_Tree("int");
+	Function_Arg_DataTypes["allocate_void"]["2"] = Data_Tree("str");
+	
+	Function_Arg_Names["allocate_void"].push_back("0");
+	Function_Arg_Names["allocate_void"].push_back("1");
+	Function_Arg_Names["allocate_void"].push_back("2");

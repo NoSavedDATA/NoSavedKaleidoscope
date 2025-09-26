@@ -1,5 +1,7 @@
 samples/
 obj/
+bin/
+*.o
 lib/
 include/_mma/
 include/cutlass/

@@ -4,6 +4,8 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <vector>
+#include <unordered_map>
 
 
 
@@ -14,3 +16,6 @@ extern bool Shall_Exit;
 
 
 extern std::map<std::string, std::string> functions_return_type, reverse_ops;
+
+extern std::unordered_map<std::string, std::vector<int>> ClassPointers;
+extern std::unordered_map<std::string, std::vector<std::string>> ClassPointersType;

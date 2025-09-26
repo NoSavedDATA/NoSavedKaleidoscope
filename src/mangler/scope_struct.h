@@ -7,6 +7,7 @@
 
 
 struct Scope_Struct { 
+    Scope_Struct *previous_scope=nullptr;
     void *object_ptr = nullptr;
 
     char *first_arg = nullptr;
@@ -15,6 +16,8 @@ struct Scope_Struct {
 
     // MarkSweep *mark_sweep_map = nullptr;
     MarkSweep *mark_sweep_map = nullptr;
+
+    GarbageCollector gc;
     
     int thread_id=0;
     int has_grad=1;
@@ -40,5 +43,6 @@ struct Scope_Struct {
 
 };
 
+Scope_Struct *get_inner_most_scope(Scope_Struct *);
 
 extern std::map<std::string, Scope_Struct *> NamedScopeStructs;

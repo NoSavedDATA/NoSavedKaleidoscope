@@ -8,10 +8,11 @@
 #include <vector>
 
 #include "../data_types/include.h"
-#include "../notators/include.h"
 #include "../KaleidoscopeJIT.h"
+#include "../notators/include.h"
 #include "parser_struct.h"
 #include "tokenizer.h"
+
 #include "include.h"
 
 
@@ -25,13 +26,15 @@ enum ChannelDirection {
     ch_both = 2
 };
 
-
 extern std::map<std::string, std::string> elements_type_return, ops_type_return;
 extern std::map<int, std::string> op_map;
 extern std::vector<std::string> op_map_names;
 
 extern std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
 
+
+extern std::map<std::string, std::map<std::string, Data_Tree>> data_typeVars;
+extern std::map<std::string, std::map<std::string, std::string>> typeVars;
 
 
 

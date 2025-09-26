@@ -3,6 +3,7 @@
 #include <cstring>
 
 
+#include "../pool/include.h"
 #include "channels.h"
 
 
@@ -44,7 +45,7 @@ extern "C" float channel_str_message(Scope_Struct *scope_struct, Channel *ch, ch
         return -1;
 
     size_t length = strlen(str) + 1;
-    char *copied = (char*)malloc(length);
+    char *copied = allocate<char>(scope_struct, length, "str");
     memcpy(copied, str, length);
 
     ch->data_list->append(std::any(copied), "str");

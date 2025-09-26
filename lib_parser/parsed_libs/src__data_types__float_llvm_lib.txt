@@ -1,4 +1,4 @@
-1821-09-11 18:43:16
+1821-09-25 14:04:27
 
 	FunctionType *read_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -9,7 +9,7 @@
 
 	FunctionType *float_to_strTy= FunctionType::get(
 		int8PtrTy,
-		{Type::getFloatTy(*TheContext)},
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("float_to_str", float_to_strTy);

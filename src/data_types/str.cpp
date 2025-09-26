@@ -13,6 +13,7 @@
 #include "../compiler_frontend/logging_v.h"
 #include "../compiler_frontend/tokenizer.h"
 #include "../mangler/scope_struct.h"
+#include "../pool/include.h" 
 #include "include.h"
 
 
@@ -35,7 +36,7 @@ extern "C" char *str_Create(Scope_Struct *scope_struct, char *name, char *scopel
 
 extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) {
   
-  //NamedStrs[name] = CopyString(value); //TODO: Break?
+  //NamedStrs[name] = CopyString(scope_struct, value); //TODO: Break?
   
   
   NamedStrs[name] = value;
@@ -59,14 +60,14 @@ void str_Clean_Up(void *data_ptr)
 
 extern "C" char *str_Copy(Scope_Struct *scope_struct, char *str) {
   // std::cout << "Copying string: " << str << ".\n";
-  char *ret = CopyString(str);
+  char *ret = CopyString(scope_struct, str);
   return ret;
 }
 
 
 extern "C" char *str_CopyArg(Scope_Struct *scope_struct, char *str, char *argname) {
   // std::cout << "Copying string: " << str << ".\n";
-  char *ret = CopyString(str);
+  char *ret = CopyString(scope_struct, str);
   return ret;
 }
 
@@ -76,8 +77,9 @@ extern "C" char * str_str_add(Scope_Struct *scope_struct, char *lc, char *rc)
   // std::cout << "Concat: " << lc << " -- " << rc << ".\n";
   size_t length_lc = strlen(lc);
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
-  char *result_cstr = get_from_char_pool(length_lc+length_rc, "concat");
-  //char* result_cstr = new char[length_lc+length_rc]; 
+  char *result_cstr = allocate<char>(scope_struct, length_lc+length_rc, "str");
+
+
   
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
@@ -103,7 +105,7 @@ extern "C" char * str_int_add(Scope_Struct *scope_struct, char *lc, int rc)
   std::string rc_str = ss.str();
   size_t length_rc = rc_str.length() + 1; // +1 for null terminator
 
-  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+  char *result_cstr = allocate<char>(scope_struct, length_lc+length_rc, "str");
 
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc_str.c_str(), length_rc);
@@ -128,7 +130,7 @@ extern "C" char * str_float_add(Scope_Struct *scope_struct, char *lc, float rc)
   std::string rc_str = ss.str();
   size_t length_rc = rc_str.length() + 1; // +1 for null terminator
 
-  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+  char *result_cstr = allocate<char>(scope_struct, length_lc+length_rc, "str");
 
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, rc_str.c_str(), length_rc);
@@ -147,8 +149,7 @@ extern "C" char * int_str_add(Scope_Struct *scope_struct, int lc, char *rc)
   
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
   
-
-  char *result_cstr = get_from_char_pool(length_lc+length_rc, "float_str_add");
+  char *result_cstr = allocate<char>(scope_struct, length_lc+length_rc, "str");
 
   
   memcpy(result_cstr, lc_str.c_str(), length_lc);
@@ -168,7 +169,7 @@ extern "C" char * float_str_add(Scope_Struct *scope_struct, float lc, char *rc)
   
   size_t length_rc = strlen(rc) + 1; // +1 for null terminator
 
-  char *result_cstr = get_from_char_pool(length_lc+length_rc, "float_str_add");
+  char *result_cstr = allocate<char>(scope_struct, length_lc+length_rc, "str");
   
   memcpy(result_cstr, lc_str.c_str(), length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
@@ -192,7 +193,7 @@ extern "C" char * str_bool_add(Scope_Struct *scope_struct, char *lc, bool rc)
     r = "false";
   }
 
-  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+  char *result_cstr = allocate<char>(scope_struct, length_lc+length_rc, "str");
 
   memcpy(result_cstr, lc, length_lc);
   memcpy(result_cstr + length_lc, r.c_str(), length_rc);
@@ -214,7 +215,7 @@ extern "C" char * bool_str_add(Scope_Struct *scope_struct, bool lc, char *rc)
 
   size_t length_rc = strlen(rc)+1;
 
-  char *result_cstr = get_from_char_pool(length_lc + length_rc, "str_float_add");
+  char *result_cstr = allocate<char>(scope_struct, length_lc+length_rc, "str");
 
   memcpy(result_cstr, l.c_str(), length_lc);
   memcpy(result_cstr + length_lc, rc, length_rc);
@@ -295,7 +296,7 @@ extern "C" char *str_split_idx(Scope_Struct *scope_struct, char *self, char *pat
   // std::cout << "Spltting " << self << " with " << pattern <<" at ["<<idx<<"]:  " << splits[idx] << "\n";
  
   // Convert the retained token to a std::string
-  char *result = CopyString(splits[idx]);
+  char *result = CopyString(scope_struct, splits[idx]);
 
 
   free(input);

@@ -12,8 +12,6 @@ extern "C" void *nullptr_get() {
   return nullptr;
 }
 
-extern "C" void check_is_null(void *ptr) {
-  if (ptr!=nullptr)
-    printf("Not null");
-
+extern "C" bool is_null(void *ptr) {
+  return ptr==nullptr;
 }

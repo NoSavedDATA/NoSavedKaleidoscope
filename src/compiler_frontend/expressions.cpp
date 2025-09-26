@@ -758,8 +758,7 @@ Data_Tree NameableCall::GetDataTree(bool from_assignment) {
 }
 
 
-Data_Tree Nameable::GetDataTree(bool from_assignment) {
-  
+Data_Tree Nameable::GetDataTree(bool from_assignment) {  
   if(Depth==1) {
     if(Name=="self")
       return Data_Tree(parser_struct.class_name);
@@ -768,17 +767,14 @@ Data_Tree Nameable::GetDataTree(bool from_assignment) {
     else
       LogError(parser_struct.line, "Could not find variable " + Name + " on scope " + parser_struct.function_name + ".");
   }
-
   
   std::string scope = Inner->GetDataTree().Type;
-
 
   if(data_typeVars[scope].find(Name)!=data_typeVars[scope].end())
     return data_typeVars[scope][Name];
   else
     LogError(parser_struct.line, "Could not find variable " + Name + " on scope " + scope+". Depth: " + std::to_string(Depth));
 }
-
 
 
 
@@ -822,7 +818,7 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
     if (in_str(inner_most_name, imported_libs))
     {
-      FromLib=true;
+      FromLib=true; //example_lib.sum  
       Callee = this->Inner->GetLibCallee();
     }
     else {  

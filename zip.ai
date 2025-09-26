@@ -1,0 +1,31 @@
+
+import nsk_cuda
+
+
+tensor[2,2] x
+tensor[2,3] y
+tensor[2,4] z
+
+
+
+list<int> a = [1,2,3]
+list<tensor> b = [x, y, z]
+# list<int> b = [4,5,6]
+
+
+a.print()
+b.print()
+
+list<tuple<int,tensor>> c = zip(a,b)
+
+
+
+
+
+tensor[0] ll
+
+ll = c[1][1]
+
+ll.print()
+
+

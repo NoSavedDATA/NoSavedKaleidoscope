@@ -3,7 +3,9 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <unordered_map>
 
+#include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging.h"
 #include "../clean_up/clean_up.h"
 #include "../mangler/scope_struct.h"
@@ -171,4 +173,130 @@ extern "C" void MarkToSweep_Unmark_Scopeless(Scope_Struct *scope_struct, void *v
         return;
     // std::cout << "Unmark " << value << ".\n";
     scope_struct->mark_sweep_map->unmark_scopeless(value);
+}
+
+
+
+//---------------------------------------------------------//
+
+MarkSweep_Node::MarkSweep_Node(std::string type, bool marked) : type(type), marked(marked) {}
+GC_Node::GC_Node(void *ptr, std::string type) : ptr(ptr), type(type) {}
+
+
+
+std::unordered_map<void *, MarkSweep_Node> mark_worklist_pointers(std::vector<GC_Node> work_list, std::unordered_map<void *,MarkSweep_Node> mark_sweep_dict) {
+
+    for (int i=0; i<work_list.size(); ++i) {
+        GC_Node node = work_list[i];
+        
+        mark_sweep_dict.emplace(node.ptr, MarkSweep_Node(node.type, true));
+
+        if (ClassPointers.count(node.type)>0) {
+            for (int j=0; j<ClassPointers[node.type].size(); ++j) {
+                int offset = ClassPointers[node.type][j];
+                std::string type = ClassPointersType[node.type][j];
+                // std::cout << "add nested " << type << " from " << node.type << ".\n";
+
+                void **slot = (void **)(static_cast<char*>(node.ptr)+offset);
+                work_list.push_back(GC_Node(*slot, type));            
+            }
+        }
+    }
+    
+
+    return mark_sweep_dict;
+}
+
+
+std::unordered_map<void *, MarkSweep_Node> get_recursive_roots(Scope_Struct *scope_struct, std::unordered_map<void *,MarkSweep_Node> mark_sweep_dict) {
+
+
+    std::vector<GC_Node> work_list;
+    
+    for (GC_Node root : scope_struct->gc.root_nodes)
+    {
+        // if(root.type=="Model"||root.type=="Dataset")
+        //     std::cout << "mark " << root.type << ".\n";
+
+        if (ClassPointers.count(root.type)>0) {
+            for (int i=0; i<ClassPointers[root.type].size(); ++i) {
+                int offset = ClassPointers[root.type][i];
+                std::string type = ClassPointersType[root.type][i];
+
+
+                void **slot = (void **)(static_cast<char*>(root.ptr)+offset);
+                work_list.push_back(GC_Node(*slot, type));
+            }
+        }
+
+
+        mark_sweep_dict.emplace(root.ptr, MarkSweep_Node(root.type, true));
+    }
+
+    mark_sweep_dict = mark_worklist_pointers(work_list, mark_sweep_dict);
+
+    // scope_struct->gc.root_nodes.clear();
+
+    if (scope_struct->previous_scope!=nullptr)
+        mark_sweep_dict = get_recursive_roots(scope_struct->previous_scope, mark_sweep_dict);
+
+    return mark_sweep_dict;
+}
+
+
+std::unordered_map<void *, MarkSweep_Node> get_recursive_pointers(Scope_Struct *scope_struct, std::unordered_map<void *,MarkSweep_Node> mark_sweep_dict) {
+
+    for (GC_Node pointer : scope_struct->gc.pointer_nodes)
+        mark_sweep_dict.emplace(pointer.ptr, MarkSweep_Node(pointer.type, false));
+
+    scope_struct->gc.pointer_nodes.clear();
+
+    if (scope_struct->previous_scope!=nullptr) {
+        if (scope_struct->previous_scope->thread_id==scope_struct->thread_id)
+            mark_sweep_dict = get_recursive_pointers(scope_struct->previous_scope, mark_sweep_dict);
+    }
+    
+
+    return mark_sweep_dict;
+}
+
+void GarbageCollector::sweep(Scope_Struct *scope_struct) {
+
+
+    std::unordered_map<void *, MarkSweep_Node> mark_sweep_dict = get_recursive_roots(scope_struct, {});
+    mark_sweep_dict = get_recursive_pointers(scope_struct, mark_sweep_dict);
+
+
+    Scope_Struct *inner_most_scope = get_inner_most_scope(scope_struct);
+    
+    // std::cout << "sweep" << ".\n";
+
+    for (const auto &pair : mark_sweep_dict) {
+        void *ptr = pair.first;
+        MarkSweep_Node node = pair.second;
+
+        if (node.marked) {
+            inner_most_scope->gc.pointer_nodes.push_back(GC_Node(ptr, node.type));
+        } else {
+            // if(node.type=="Dataset"||node.type=="Model")
+            //     continue;
+
+            if(node.type!="tensor") {
+                std::cout << "clean: " << ptr << ".\n";
+                std::cout << "of type: " << node.type << ".\n\n";
+                std::cout << "is class: " << ClassPointers.count(node.type) << ".\n\n";
+            }
+
+            if (node.type=="str"||ClassPointers.count(node.type)>0)
+                free(ptr);
+            else
+            {
+                if(node.type!="tensor") {
+                    // std::cout << "CLEANING: " << node.type << ".\n";
+                    clean_up_functions[node.type](ptr);
+                }
+            }
+            
+        }
+    }
 }

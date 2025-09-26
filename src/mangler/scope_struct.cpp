@@ -10,6 +10,7 @@
 #include "../codegen/time.h"
 #include "../compiler_frontend/global_vars.h"
 #include "../mark_sweep/include.h" 
+#include "../pool/include.h" 
 #include "../threads/include.h"
 
 #include "scope_struct.h"
@@ -21,14 +22,26 @@ void check_exit() {
 }
 
 Scope_Struct::Scope_Struct() {
-    first_arg = get_from_char_pool(1,"Scope mangler first_arg");
-    scope = get_from_char_pool(1,"Scope mangler scope");
-    function_name = get_from_char_pool(1,"Scope mangler function name");
+    first_arg = (char*)malloc(1);
+    scope = (char*)malloc(1);
+    function_name = (char*)malloc(1);
+    // first_arg = allocate<char>(this, 1, "str");
+    // scope = allocate<char>(this, 1, "str");
+    // function_name = allocate<char>(this, 1, "str");
 
     first_arg[0] = '\0';
     scope[0] = '\0';
     function_name[0] = '\0';
 }
+
+Scope_Struct *get_inner_most_scope(Scope_Struct *scope_struct) {
+    Scope_Struct *inner_most = scope_struct;
+
+    while(scope_struct->previous_scope!=nullptr)
+        inner_most = scope_struct->previous_scope;
+    return inner_most;
+}
+
 std::map<std::string, Scope_Struct *> NamedScopeStructs;
 
 void Scope_Struct::Set_First_Arg(char *first_arg) {
@@ -41,7 +54,7 @@ void Scope_Struct::Set_Scope(char *scope) {
 }
 void Scope_Struct::Set_Function_Name(char *function_name) {
     delete[] this->function_name;
-    this->function_name = CopyString(function_name);
+    this->function_name = CopyString(this, function_name);
 }
 void Scope_Struct::Set_Thread_Id(int thread_id) {
     this->thread_id = thread_id;
@@ -51,15 +64,10 @@ void Scope_Struct::Set_Has_Grad(int has_grad) {
 }
 void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 {
-    delete[] first_arg;
-    delete[] scope;
-    delete[] function_name;
-
-
     object_ptr = scope_to_copy->object_ptr;
-    first_arg = CopyString(scope_to_copy->first_arg);
-    scope = CopyString(scope_to_copy->scope);
-    function_name = CopyString(scope_to_copy->function_name);
+    first_arg = CopyString(scope_to_copy, scope_to_copy->first_arg);
+    scope = CopyString(scope_to_copy, scope_to_copy->scope);
+    function_name = CopyString(scope_to_copy, scope_to_copy->function_name);
 
 
     thread_id = scope_to_copy->thread_id;
@@ -67,6 +75,8 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     code_line = scope_to_copy->code_line;
 
     asyncs_count = scope_to_copy->asyncs_count;
+    
+    previous_scope = scope_to_copy;
 }
 
 void Scope_Struct::Alloc_MarkSweepMap() {
@@ -236,7 +246,7 @@ extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
 
 extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thread_id, int has_grad) {
     // std::exit(0);
-    scope_struct->scope = GetEmptyChar();
+    scope_struct->scope = GetEmptyChar(scope_struct);
     scope_struct->thread_id = thread_id;
     scope_struct->has_grad = has_grad;
     // std::cout << "ASYNC SCOPE SET" << ".\n";
@@ -253,6 +263,25 @@ extern "C" void scope_struct_Copy_MarkSweepMap(Scope_Struct *in_scope, Scope_Str
     // std::cout << "COPY MARKSWEEP" << ".\n";
     // The input struct receives the scope vars to clean. Cleaning scope vars from FunctionAST did not work.
     in_scope->mark_sweep_map = out_scope->mark_sweep_map;
+}
+
+
+extern "C" void scope_struct_Clear_GC_Root(Scope_Struct *scope_struct) {
+    // std::cout << "clear gc root  "  << ".\n";
+    scope_struct->gc.root_nodes.clear();
+}
+
+extern "C" void scope_struct_Add_GC_Root(Scope_Struct *scope_struct, void * root_pointer, char *type) {
+    // std::cout << "add gc root of type " << type << ".\n";
+    scope_struct->gc.root_nodes.push_back(GC_Node(root_pointer, type));
+}
+
+extern "C" void scope_struct_Add_Pointer(Scope_Struct *scope_struct, void * root_pointer, char *type) {
+    // std::cout << "\n\nscope_struct_Add_GC_Pointer" << ".\n";
+    // std::cout << "ptr: " << root_pointer << ".\n";
+    // std::cout << "type: " << type << ".\n";
+
+    scope_struct->gc.root_nodes.push_back(GC_Node(root_pointer, type));
 }
 
 
@@ -277,7 +306,8 @@ inline void delete_scope(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
-    scope_struct->mark_sweep_map->clean_up(false);
+    // scope_struct->mark_sweep_map->clean_up(false);
+    scope_struct->gc.sweep(scope_struct);
 }  
 
 
@@ -290,8 +320,9 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     }
 
     // std::cout << "\n\n\n\nCLEANING SCOPE OF " <<  scope_struct->function_name << "-----------------------------------------------------------*****************----------------.\n\n\n\n\n";
-    scope_struct->mark_sweep_map->clean_up(true);
+    // scope_struct->mark_sweep_map->clean_up(true);
     // std::cout << "Delete scope" << ".\n";
+    scope_struct->gc.sweep(scope_struct);
     delete_scope(scope_struct);
     // std::cout << "Scope cleaned." << ".\n";
 }

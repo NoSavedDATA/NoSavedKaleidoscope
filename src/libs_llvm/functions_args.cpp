@@ -68,8 +68,68 @@ void set_functions_args_type() {
 		
 		
 		
+		Function_Arg_Types["GetEmptyChar"]["0"] = "Scope_Struct";
 		
+		Function_Arg_DataTypes["GetEmptyChar"]["0"] = Data_Tree("Scope_Struct");
 		
+		Function_Arg_Names["GetEmptyChar"].push_back("0");
+		
+		Function_Arg_Types["CopyString"]["0"] = "Scope_Struct";
+		Function_Arg_Types["CopyString"]["1"] = "str";
+		
+		Function_Arg_DataTypes["CopyString"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["CopyString"]["1"] = Data_Tree("str");
+		
+		Function_Arg_Names["CopyString"].push_back("0");
+		Function_Arg_Names["CopyString"].push_back("1");
+		
+		Function_Arg_Types["ConcatStr"]["0"] = "Scope_Struct";
+		Function_Arg_Types["ConcatStr"]["1"] = "str";
+		Function_Arg_Types["ConcatStr"]["2"] = "str";
+		
+		Function_Arg_DataTypes["ConcatStr"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["ConcatStr"]["1"] = Data_Tree("str");
+		Function_Arg_DataTypes["ConcatStr"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["ConcatStr"].push_back("0");
+		Function_Arg_Names["ConcatStr"].push_back("1");
+		Function_Arg_Names["ConcatStr"].push_back("2");
+		
+		Function_Arg_Types["ConcatStrFreeLeft"]["0"] = "Scope_Struct";
+		Function_Arg_Types["ConcatStrFreeLeft"]["1"] = "str";
+		Function_Arg_Types["ConcatStrFreeLeft"]["2"] = "str";
+		
+		Function_Arg_DataTypes["ConcatStrFreeLeft"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["ConcatStrFreeLeft"]["1"] = Data_Tree("str");
+		Function_Arg_DataTypes["ConcatStrFreeLeft"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["ConcatStrFreeLeft"].push_back("0");
+		Function_Arg_Names["ConcatStrFreeLeft"].push_back("1");
+		Function_Arg_Names["ConcatStrFreeLeft"].push_back("2");
+		
+		Function_Arg_Types["ConcatFloatToStr"]["0"] = "Scope_Struct";
+		Function_Arg_Types["ConcatFloatToStr"]["1"] = "str";
+		Function_Arg_Types["ConcatFloatToStr"]["2"] = "float";
+		
+		Function_Arg_DataTypes["ConcatFloatToStr"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["ConcatFloatToStr"]["1"] = Data_Tree("str");
+		Function_Arg_DataTypes["ConcatFloatToStr"]["2"] = Data_Tree("float");
+		
+		Function_Arg_Names["ConcatFloatToStr"].push_back("0");
+		Function_Arg_Names["ConcatFloatToStr"].push_back("1");
+		Function_Arg_Names["ConcatFloatToStr"].push_back("2");
+		
+		Function_Arg_Types["ConcatNumToStrFree"]["0"] = "Scope_Struct";
+		Function_Arg_Types["ConcatNumToStrFree"]["1"] = "str";
+		Function_Arg_Types["ConcatNumToStrFree"]["2"] = "float";
+		
+		Function_Arg_DataTypes["ConcatNumToStrFree"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["ConcatNumToStrFree"]["1"] = Data_Tree("str");
+		Function_Arg_DataTypes["ConcatNumToStrFree"]["2"] = Data_Tree("float");
+		
+		Function_Arg_Names["ConcatNumToStrFree"].push_back("0");
+		Function_Arg_Names["ConcatNumToStrFree"].push_back("1");
+		Function_Arg_Names["ConcatNumToStrFree"].push_back("2");
 	
 		
 		Function_Arg_Types["str_str_add"]["0"] = "Scope_Struct";
@@ -232,6 +292,19 @@ void set_functions_args_type() {
 		
 		
 		
+	
+		
+		Function_Arg_Types["allocate_void"]["0"] = "Scope_Struct";
+		Function_Arg_Types["allocate_void"]["1"] = "int";
+		Function_Arg_Types["allocate_void"]["2"] = "str";
+		
+		Function_Arg_DataTypes["allocate_void"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["allocate_void"]["1"] = Data_Tree("int");
+		Function_Arg_DataTypes["allocate_void"]["2"] = Data_Tree("str");
+		
+		Function_Arg_Names["allocate_void"].push_back("0");
+		Function_Arg_Names["allocate_void"].push_back("1");
+		Function_Arg_Names["allocate_void"].push_back("2");
 	
 		
 		Function_Arg_Types["nsk_vec_size"]["0"] = "Scope_Struct";
@@ -581,6 +654,15 @@ void set_functions_args_type() {
 		Function_Arg_DataTypes["read_int"]["0"] = Data_Tree("Scope_Struct");
 		
 		Function_Arg_Names["read_int"].push_back("0");
+		
+		Function_Arg_Types["int_to_str"]["0"] = "Scope_Struct";
+		Function_Arg_Types["int_to_str"]["1"] = "int";
+		
+		Function_Arg_DataTypes["int_to_str"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["int_to_str"]["1"] = Data_Tree("int");
+		
+		Function_Arg_Names["int_to_str"].push_back("0");
+		Function_Arg_Names["int_to_str"].push_back("1");
 	
 		
 		Function_Arg_Types["list_append_int"]["0"] = "Scope_Struct";
@@ -760,6 +842,15 @@ void set_functions_args_type() {
 		Function_Arg_DataTypes["read_float"]["0"] = Data_Tree("Scope_Struct");
 		
 		Function_Arg_Names["read_float"].push_back("0");
+		
+		Function_Arg_Types["float_to_str"]["0"] = "Scope_Struct";
+		Function_Arg_Types["float_to_str"]["1"] = "float";
+		
+		Function_Arg_DataTypes["float_to_str"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["float_to_str"]["1"] = Data_Tree("float");
+		
+		Function_Arg_Names["float_to_str"].push_back("0");
+		Function_Arg_Names["float_to_str"].push_back("1");
 	
 		
 		Function_Arg_Types["arange_float"]["0"] = "Scope_Struct";

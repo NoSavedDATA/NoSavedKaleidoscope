@@ -8,6 +8,7 @@
 #include <random>
 #include <thread>
 #include <vector>
+#include <unordered_map>
 
 
 
@@ -42,6 +43,8 @@ std::map<std::string, std::map<std::string, std::string>> typeVars;
 
 std::map<std::string, std::map<std::string, int>> ClassVariables;
 std::map<std::string, int> ClassSize;
+std::unordered_map<std::string, std::vector<int>> ClassPointers;
+std::unordered_map<std::string, std::vector<std::string>> ClassPointersType;
 std::map<std::string, llvm::Type *> ClassStructs;
 
 
@@ -2261,9 +2264,10 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     std::string data_type = IdentifierStr;
     bool is_object = in_str(data_type, Classes);
     bool is_channel=false;
-
+    
     Data_Tree data_tree = ParseDataTree(data_type, in_str(data_type, compound_tokens), parser_struct);
-
+    
+    // LogBlue("data type is: " + data_type);
     
     if (CurTok==tok_channel) 
     {
@@ -2288,13 +2292,18 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
       }
       typeVars[Name][IdentifierStr] = data_type; 
       data_typeVars[Name][IdentifierStr] = data_tree; 
-
       ClassVariables[Name][IdentifierStr] = last_offset;
       
       if (data_type=="float"||data_type=="int") {
         llvm_types.push_back(Type::getInt32Ty(*TheContext));
         last_offset+=4;
+      } else if(data_type=="bool") {
+        llvm_types.push_back(Type::getInt1Ty(*TheContext));
+        last_offset+=1;
       } else {
+        ClassPointers[Name].push_back(last_offset);
+        ClassPointersType[Name].push_back(data_type);
+        // LogBlue("push class pointer type " + data_type + " for class " + Name);
         llvm_types.push_back(int8PtrTy);
         last_offset+=8;
       }
@@ -2302,8 +2311,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
       if(is_channel)
         ChannelDirections[Name][IdentifierStr] = ch_both;
       
-
-
 
       getNextToken(); // eat name
 
@@ -2315,6 +2322,8 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
       getNextToken();
   }
   ClassSize[Name] = last_offset;
+
+
   
 
   // for (auto &pair : ClassVariables[Name])

@@ -5,3 +5,12 @@
 	Function_Arg_DataTypes["read_float"]["0"] = Data_Tree("Scope_Struct");
 	
 	Function_Arg_Names["read_float"].push_back("0");
+	
+	Function_Arg_Types["float_to_str"]["0"] = "Scope_Struct";
+	Function_Arg_Types["float_to_str"]["1"] = "float";
+	
+	Function_Arg_DataTypes["float_to_str"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["float_to_str"]["1"] = Data_Tree("float");
+	
+	Function_Arg_Names["float_to_str"].push_back("0");
+	Function_Arg_Names["float_to_str"].push_back("1");

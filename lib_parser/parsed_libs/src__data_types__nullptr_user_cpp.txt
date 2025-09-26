@@ -1,1 +1,1 @@
-"nullptr_get", "check_is_null", 
+"nullptr_get", "is_null", 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include"char_pool/include.h"
 #include"clean_up/include.h"
 #include"codegen/include.h"
 #include"common/include.h"
@@ -13,4 +12,5 @@
 #include"mark_sweep/include.h"
 #include"notators/include.h"
 #include"os/include.h"
+#include"pool/include.h"
 #include"threads/include.h"

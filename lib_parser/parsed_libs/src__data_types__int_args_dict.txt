@@ -5,3 +5,12 @@
 	Function_Arg_DataTypes["read_int"]["0"] = Data_Tree("Scope_Struct");
 	
 	Function_Arg_Names["read_int"].push_back("0");
+	
+	Function_Arg_Types["int_to_str"]["0"] = "Scope_Struct";
+	Function_Arg_Types["int_to_str"]["1"] = "int";
+	
+	Function_Arg_DataTypes["int_to_str"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["int_to_str"]["1"] = Data_Tree("int");
+	
+	Function_Arg_Names["int_to_str"].push_back("0");
+	Function_Arg_Names["int_to_str"].push_back("1");
