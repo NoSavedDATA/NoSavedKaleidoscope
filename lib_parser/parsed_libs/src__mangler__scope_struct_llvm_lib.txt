@@ -1,4 +1,11 @@
-1821-09-25 21:11:14
+1821-09-30 18:53:48
+
+	FunctionType *scope_struct_specTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_spec", scope_struct_specTy);
 
 	FunctionType *set_scope_lineTy= FunctionType::get(
 		int8PtrTy,

@@ -39,7 +39,6 @@ extern std::map<std::string, std::map<std::string, std::string>> typeVars;
 
 
 extern std::map<std::string, std::map<std::string, int>> ClassVariables;
-extern std::map<std::string, int> ClassSize;
 extern std::map<std::string, llvm::Type *> ClassStructs;
 
 extern std::map<std::string, std::map<std::string, int>> ChannelDirections;

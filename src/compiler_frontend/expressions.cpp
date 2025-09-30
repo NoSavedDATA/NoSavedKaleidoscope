@@ -547,8 +547,8 @@ CallExprAST::CallExprAST(std::unique_ptr<ExprAST> NameSolver,
   
 
 
-RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars)
-    : Vars(std::move(Vars)) {}
+RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct parser_struct)
+    : Vars(std::move(Vars)), parser_struct(parser_struct) {}
     
   
   
@@ -581,8 +581,8 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprA
 
   
   /// WhileExprAST - Expression class for while.
-WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body)
-  : Cond(std::move(Cond)), Body(std::move(Body)) {}
+WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
+  : Cond(std::move(Cond)), Body(std::move(Body)), parser_struct(parser_struct) {}
 
 
 

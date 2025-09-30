@@ -794,7 +794,7 @@ std::unique_ptr<ExprAST> ParseWhileExpr(Parser_Struct parser_struct, std::string
   
   std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
 
-  return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body));
+  return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body), parser_struct);
 }
 
 
@@ -1643,7 +1643,7 @@ std::unique_ptr<ExprAST> ParseRetExpr(Parser_Struct parser_struct, std::string c
     getNextToken(); // eat ,
   }
 
-  return make_unique<RetExprAST>(std::move(Vars));
+  return make_unique<RetExprAST>(std::move(Vars), parser_struct);
 }
 
 

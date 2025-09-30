@@ -416,6 +416,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("MarkToSweep_Unmark_Scopeless", MarkToSweep_Unmark_ScopelessTy);
 
+	FunctionType *scope_struct_specTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_spec", scope_struct_specTy);
+
 	FunctionType *set_scope_lineTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},

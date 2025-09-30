@@ -605,8 +605,9 @@ class RetExprAST : public ExprAST {
 
   public:
     std::vector<std::unique_ptr<ExprAST>> Vars;
+    Parser_Struct parser_struct;
     
-    RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars);
+    RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
 };
@@ -659,9 +660,10 @@ class ForEachExprAST : public ExprAST {
 class WhileExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
   std::vector<std::unique_ptr<ExprAST>> Body;
+  Parser_Struct parser_struct;
 
   public:
-    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body);
+    WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct);
 
   Value* codegen(Value *scope_struct) override;
 };

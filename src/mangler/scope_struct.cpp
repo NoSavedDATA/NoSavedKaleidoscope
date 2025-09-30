@@ -37,8 +37,12 @@ Scope_Struct::Scope_Struct() {
 Scope_Struct *get_inner_most_scope(Scope_Struct *scope_struct) {
     Scope_Struct *inner_most = scope_struct;
 
-    while(scope_struct->previous_scope!=nullptr)
-        inner_most = scope_struct->previous_scope;
+    while(inner_most->previous_scope!=nullptr)
+    {
+        if (inner_most->thread_id!=inner_most->previous_scope->thread_id)
+            break;
+        inner_most = inner_most->previous_scope;
+    }
     return inner_most;
 }
 
@@ -69,7 +73,6 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     scope = CopyString(scope_to_copy, scope_to_copy->scope);
     function_name = CopyString(scope_to_copy, scope_to_copy->function_name);
 
-
     thread_id = scope_to_copy->thread_id;
     has_grad = scope_to_copy->has_grad;
     code_line = scope_to_copy->code_line;
@@ -88,6 +91,11 @@ void Scope_Struct::Print() {
     std::cout << "Scope struct:\n\tFirst arg: " << first_arg << "\n\tScope: " << scope << "\n\tThread id: " << thread_id << "\n\tHas grad: " << has_grad << ".\n\n";
 }
 
+
+extern "C" float scope_struct_spec(Scope_Struct *scope_struct) {
+    std::cout << "scope_struct: " << scope_struct << ".\n";
+    return 0;
+}
 
 
 
@@ -271,8 +279,7 @@ extern "C" void scope_struct_Clear_GC_Root(Scope_Struct *scope_struct) {
     scope_struct->gc.root_nodes.clear();
 }
 
-extern "C" void scope_struct_Add_GC_Root(Scope_Struct *scope_struct, void * root_pointer, char *type) {
-    // std::cout << "add gc root of type " << type << ".\n";
+extern "C" void scope_struct_Add_GC_Root(Scope_Struct *scope_struct, void *root_pointer, char *type) {
     scope_struct->gc.root_nodes.push_back(GC_Node(root_pointer, type));
 }
 
@@ -280,7 +287,6 @@ extern "C" void scope_struct_Add_Pointer(Scope_Struct *scope_struct, void * root
     // std::cout << "\n\nscope_struct_Add_GC_Pointer" << ".\n";
     // std::cout << "ptr: " << root_pointer << ".\n";
     // std::cout << "type: " << type << ".\n";
-
     scope_struct->gc.root_nodes.push_back(GC_Node(root_pointer, type));
 }
 
@@ -311,17 +317,33 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
 }  
 
 
+// extern "C" void scope_struct_Debug_Map(Scope_Struct *scope_struct) {
+
+//     for (const auto &pair : scope_struct->debug_map) {
+
+//         std::cout << pair.first << " | ";
+//         for (const auto &item_vec : pair.second) {
+//             for (const auto &item : item_vec) {
+//                 std::cout << item << ", ";
+//             }
+//             std::cout << "\t| ";
+//         }
+//         std::cout << "\n\n";
+//     }
+// }
+
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
-    if (strcmp(scope_struct->function_name,"")==0)
-    {
-        // std::cout << "\n\n\n\nCLEANING SCOPE OF " <<  scope_struct->function_name << "-----------------------------------------------------------*****************----------------.\n\n\n\n\n";
-        return;
-    }
-
+    // if (strcmp(scope_struct->function_name,"")==0)
+    // {
+    //     // std::cout << "\n\n\n\nCLEANING SCOPE OF " <<  scope_struct->function_name << "-----------------------------------------------------------*****************----------------.\n\n\n\n\n";
+    //     return;
+    // }
     // std::cout << "\n\n\n\nCLEANING SCOPE OF " <<  scope_struct->function_name << "-----------------------------------------------------------*****************----------------.\n\n\n\n\n";
     // scope_struct->mark_sweep_map->clean_up(true);
     // std::cout << "Delete scope" << ".\n";
+
+
     scope_struct->gc.sweep(scope_struct);
     delete_scope(scope_struct);
     // std::cout << "Scope cleaned." << ".\n";

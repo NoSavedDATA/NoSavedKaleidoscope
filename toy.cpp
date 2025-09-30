@@ -293,43 +293,20 @@ Function *FunctionAST::codegen() {
         else
             LogError(-1, "error at argument " + arg_name + " of function " + function_name);
 
-        // std::cout << "------------------------------------TYPE OF " << arg_name << " IS " << type << ".\n";
 
-
-        
         llvm::Type *alloca_type = get_type_from_str(type);
         AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
 
-
         
-        std::string copy_fn = type+"_CopyArg";
-        Function *F = TheModule->getFunction(copy_fn);
-        if (F)
+        Builder->CreateStore(&Arg, arg_alloca);
+        if(!in_str(type, primary_data_tokens))
         {
-            // Value *copied_value = callret(copy_fn, // Moved to CallExpr
-            //                 {scope_struct,
-            //                 &Arg,
-            //                 global_str(arg_name)}); 
-            Builder->CreateStore(&Arg, arg_alloca);
-            call("MarkToSweep_Mark", {scope_struct, &Arg, global_str(Extract_List_Suffix(type))});
-            call("MarkToSweep_Unmark_Scopeful", {scope_struct, &Arg});
-        } else
-        {
-            Builder->CreateStore(&Arg, arg_alloca);
-            if(!in_str(type, primary_data_tokens))
-            {
-                // p2t("HELLO FROM ELSE for arg_name " + arg_name + " of type " + type);
-                // call("MarkToSweep_Unmark_Scopeless", {scope_struct, &Arg});
-            }
+            // p2t("HELLO FROM ELSE for arg_name " + arg_name + " of type " + type);
+            // call("MarkToSweep_Unmark_Scopeless", {scope_struct, &Arg});
         }
         function_allocas[current_codegen_function][arg_name] = arg_alloca;
-        
     }
   }
-  
-
-
-
 
   bool expr_is_return = false;
   Value *RetVal;
@@ -337,29 +314,27 @@ Function *FunctionAST::codegen() {
   {
 
     expr_is_return = ends_with(typeid(*body).name(), "RetExprAST");
-
     RetVal = body->codegen(scope_struct);
   }
 
-
-
- 
-
-
   if (RetVal) {
     // Finish off the function.
-    
     if(!expr_is_return)
     {
+        call("scope_struct_Clear_GC_Root", {scope_struct});
+        for (const auto &pair : function_allocas[current_codegen_function]) {
+            std::string type = typeVars[current_codegen_function][pair.first];
+            if (!in_str(type, primary_data_tokens)) {
+                Value *loaded_var = load_alloca(pair.first, type, current_codegen_function);
+                call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
+            }
+        }
         call("scope_struct_Clean_Scope", {scope_struct}); 
         Builder->CreateRet(RetVal); 
     }
-    
 
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
-
-
 
     // TheModule->print(llvm::errs(), nullptr);
     // Validate the generated code, checking for consistency.

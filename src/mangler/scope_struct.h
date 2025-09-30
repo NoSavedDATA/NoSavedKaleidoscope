@@ -2,6 +2,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "../mark_sweep/include.h" 
 
@@ -26,6 +27,10 @@ struct Scope_Struct {
     int asyncs_count = 0;
 
     bool is_at_return = false;
+
+
+
+    // std::map<std::string, std::vector<std::vector<std::string>>> debug_map;
 
 
     Scope_Struct();
