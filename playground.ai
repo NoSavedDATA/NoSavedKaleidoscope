@@ -8,39 +8,7 @@ start_timer()
 
 
 
-class Convs
-    Conv2d conv1, conv2
 
-    def float __init__()
-        Conv2d[1,5,5,2,1,he_normal_relu] self.conv1
-        Conv2d[5,50,5,2,0,he_normal_relu] self.conv2
-
-    def tensor forward(t x)
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
-
-class Model
-    Convs conv
-    Linear w1, w2
-
-    def float __init__()
-        self.conv.__init__()
-        Linear[1250, 100, xavu_relu, param] self.w1
-        Linear[100, 10, xavu, param] self.w2
-        
-
-    def tensor forward(t x)
-
-        x = self.conv.forward(x)
-
-        x = x.view(-1,5*5*50)
-
-        x = self.w1(x)
-        x = relu(x)
-        x = self.w2(x)
-
-        return x
 
 
 
@@ -128,6 +96,47 @@ class Dataset
 
 
 
+class Convs
+    Conv2d conv1, conv2
+
+    def float __init__()
+        Conv2d[1,5,5,2,1,he_normal_relu] self.conv1
+        Conv2d[5,50,5,2,0,he_normal_relu] self.conv2
+
+    def tensor forward(t x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        return x
+
+class Model
+    Conv2d conv1, conv2
+    Linear w1, w2
+
+
+    def float __init__()
+        Conv2d[1,5,5,2,1,he_normal_relu] self.conv1
+        Conv2d[5,50,5,2,0,he_normal_relu] self.conv2
+        # self.conv.__init__()
+        Linear[1250, 100, xavu_relu, param] self.w1
+        Linear[100, 10, xavu, param] self.w2
+        
+
+    def tensor forward(t x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+
+        # x = self.conv.forward(x)
+
+        x = x.view(-1,5*5*50)
+
+        x = self.w1(x)
+        x = relu(x)
+        x = self.w2(x)
+
+        return x
+
+
+
 main
     int batch_size = 32 
 
@@ -143,27 +152,24 @@ main
         
 
         for i=0, i<1000
+            tensor[0] x, y
             print("i: "+i)
-            tensor[0] x
-            tensor[0] y
-            
-
 
             x, y = dataset.attr_w(x, y)
 
-
             x = model.forward(x)
-            y = y.onehot(10)
+            # y = y.onehot(10)
 
-
-            cross_entropy(x, y, 1/batch_size)
+            # cross_entropy(x, y, 1/batch_size)
+            cross_entropy_idx(x, y, 1/batch_size)
             backprop()
 
 
             AdamW(0.0001, 0.9, 0.999, 0.01, 1.0)
+
         dataset.terminate_workers()
 
-
+    infer_mode(model) 
 
 
     print("Finished eval. Get new tensor")

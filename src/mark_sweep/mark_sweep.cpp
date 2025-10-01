@@ -212,7 +212,7 @@ std::unordered_map<void *, MarkSweep_Node> get_recursive_roots(Scope_Struct *sco
             for (int i=0; i<ClassPointers[root.type].size(); ++i) {
                 int offset = ClassPointers[root.type][i];
                 std::string type = ClassPointersType[root.type][i];
-
+                
                 void **slot = (void **)(static_cast<char*>(root.ptr)+offset);
                 work_list.push_back(GC_Node(*slot, type));
             }

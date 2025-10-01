@@ -64,7 +64,10 @@ bool CheckChannel(Data_Tree *L_ptr, Data_Tree R) {
 
 
 int Data_Tree::Compare(Data_Tree other_tree) {    
-    int comparisons = 0;    
+    int comparisons = 0;
+
+    if(Type=="void")
+        return 0;
 
     if(!in_str(Type, primary_data_tokens) && other_tree.Type=="nullptr")
         return 0;

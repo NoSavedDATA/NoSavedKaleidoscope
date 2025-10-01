@@ -2281,7 +2281,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
       getNextToken();
     }
     
-
+    
     while(true)
     {
       if (CurTok!=tok_identifier)
@@ -2303,7 +2303,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
       } else {
         ClassPointers[Name].push_back(last_offset);
         ClassPointersType[Name].push_back(data_type);
-        // LogBlue("push class pointer type " + data_type + " for class " + Name);
+        // LogBlue("push class pointer type " + data_type + " for class " + Name + " on offset " + std::to_string(last_offset) + " for " + IdentifierStr);
         llvm_types.push_back(int8PtrTy);
         last_offset+=8;
       }

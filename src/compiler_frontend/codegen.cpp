@@ -2894,6 +2894,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
         call("scope_struct_Add_GC_Root", {scope_struct, new_ptr, global_str(obj_class)});
 
 
+
         call("tie_object_to_object", {obj_ptr, new_ptr});
         
         obj_ptr = new_ptr;
