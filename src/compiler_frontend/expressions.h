@@ -681,15 +681,30 @@ class ChannelExprAST : public ExprAST {
 };
 
 
-class GoExprAST : public ExprAST {
+
+class AsyncFnPriorExprAST : public ExprAST {
+  // std::string Async_Name;
+  // Parser_Struct parser_struct;
+  // std::vector<std::unique_ptr<ExprAST>> Body;
+
+  public:
+    AsyncFnPriorExprAST();
+    // AsyncFnPriorExprAST(std::string, std::vector<std::unique_ptr<ExprAST>>, Parser_Struct);
+
+  Value* codegen(Value *scope_struct) override;
+};
+
+class SpawnExprAST : public ExprAST {
   Parser_Struct parser_struct;
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    GoExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct);
+    SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct);
 
   Value* codegen(Value *scope_struct) override;
 };
+
+
 
 
   

@@ -5,6 +5,7 @@
 
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "../data_types/include.h"
@@ -42,6 +43,7 @@ extern std::map<std::string, std::map<std::string, int>> ClassVariables;
 extern std::map<std::string, llvm::Type *> ClassStructs;
 
 extern std::map<std::string, std::map<std::string, int>> ChannelDirections;
+// extern std::map<std::string, std::vector<std::unique_ptr<ExprAST>>> asyncs_body;
 
 
 

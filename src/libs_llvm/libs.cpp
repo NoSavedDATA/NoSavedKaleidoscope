@@ -535,6 +535,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Increment_Thread", scope_struct_Increment_ThreadTy);
 
+	FunctionType *scope_struct_PrintTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Print", scope_struct_PrintTy);
+
 	FunctionType *set_scope_objectTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -569,13 +576,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Store_Asyncs_Count", scope_struct_Store_Asyncs_CountTy);
-
-	FunctionType *scope_struct_PrintTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Print", scope_struct_PrintTy);
 
 	FunctionType *scope_struct_Get_Async_ScopeTy= FunctionType::get(
 		int8PtrTy,

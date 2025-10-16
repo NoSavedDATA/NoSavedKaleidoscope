@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 
@@ -23,6 +24,7 @@ namespace fs = std::filesystem;
 
 
 std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
+std::unordered_map<std::string, Function *> async_fn;
 std::string current_codegen_function;
 
 
@@ -1668,19 +1670,89 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
 }
 
 
+Value *ChannelExprAST::codegen(Value *scope_struct) {
+
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+  // std::string type = UnmangleVec(data_type);
+    
+  Value *void_ptr = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
+
+  Value *initial_value = callret("channel_Create", {scope_struct, const_int(BufferSize)});
+
+  llvm::Type *alloca_type = get_type_from_str("channel");
+  AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
+  Builder->CreateStore(initial_value, alloca);
+  function_allocas[parser_struct.function_name][Name] = alloca;
+
+  return const_float(0);
+}
 
 
 
-
-Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody, Value *scope_struct, Parser_Struct parser_struct, Value *barrier, std::string async_suffix) {
+Value *AsyncFnPriorExprAST::codegen(Value *scope_struct) {
+  int fnIndex = 1;
+  while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
+    fnIndex++;
   
+  
+  BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
+
+  // Create function for this async function
+  llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+
+  FunctionType *asyncFunTy = FunctionType::get(
+                                            int8PtrTy,
+                                            {int8PtrTy},
+                                            false);
+                                            
+  std::string functionName = "__async_" + std::to_string(fnIndex);
+  
+  Function *asyncFun =
+      Function::Create(asyncFunTy,
+                             Function::ExternalLinkage,
+                             functionName,
+                             TheModule.get());
+
+  // emit EntryBB value
+  BasicBlock *BB = BasicBlock::Create(*TheContext, "async_bb", asyncFun);
+  Builder->SetInsertPoint(BB);
+
+  Value *V = const_float(0.0);
+
+  Builder->CreateRet(Constant::getNullValue(int8PtrTy));  
+
+  Builder->SetInsertPoint(CurrentBB);
+
+  return const_float(0.0);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, Value *scope_struct, Parser_Struct parser_struct, std::string async_suffix) {
+
+  // std::unique_ptr<LLVMContext> TheContext = std::make_unique<LLVMContext>();
+  // std::unique_ptr<Module> TheModule = std::make_unique<Module>("my cool jit", *TheContext);
+  // TheModule->setDataLayout(TheJIT->getDataLayout());
 
   // find existing unique function name (_async_1, _async_2, _async_3 etc)
   int fnIndex = 1;
   while (TheModule->getFunction("__async_" + std::to_string(fnIndex)))
     fnIndex++;
   
+
+  
+
+
 
   // Create function for this async function
   llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
@@ -1698,58 +1770,51 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
                              TheModule.get());
 
 
-  // std::vector<Value *> previous_scope_values;
   std::vector<std::string> previous_scope_value_types;
   std::vector<std::string> previous_scope_value_names;
-
-
   for (auto &pair : function_allocas[parser_struct.function_name]) {
-
     std::string type;
     if (Object_toClass[parser_struct.function_name].count(pair.first)>0)
       type = "void";
     else
     {   
       type = UnmangleVec(data_typeVars[parser_struct.function_name][pair.first]);
-      if(type!="float"&&type!="int")
+      if(type!="float"&&type!="int"&&type!="bool")
         type="void";
       // Value *v = load_alloca(pair.first, type, "__anon_expr");
       // std::cout << "Got type " << type << ".\n";
       // call("earth_cable", {v});
       // continue;
     }
-
-    Value *local = load_alloca(pair.first, type, "__anon_expr");
+    // Value *local = load_alloca(pair.first, type, "__anon_expr");
+    std::cout << "dive: " << pair.first << ".\n";
+    Value *local = load_alloca(pair.first, type, parser_struct.function_name);
     call("dive_"+type, {global_str(functionName), local, global_str(pair.first)});
-
 
     previous_scope_value_types.push_back(type);
     previous_scope_value_names.push_back(pair.first);
-
   }
+
   
   //Dive scope_struct
-  Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName), barrier}); 
-
-
+  Builder->CreateCall(TheModule->getFunction("scope_struct_Save_for_Async"), {scope_struct, Builder->CreateGlobalString(functionName)}); 
 
   // emit EntryBB value
   BasicBlock *BB = BasicBlock::Create(*TheContext, "async_bb", asyncFun);
   Builder->SetInsertPoint(BB);
   
-
-
-
-  
-
   // Recover scope_struct Value * on the new function
   Value *scope_struct_copy = Builder->CreateCall(TheModule->getFunction("scope_struct_Load_for_Async"), {Builder->CreateGlobalString(functionName)}); 
 
   // define body of function
-  Value *V;
+  Value *V = const_float(0.0);
+
+  Value *scope_struct_typed = Builder->CreateBitCast(
+    scope_struct_copy, 
+    scope_struct->getType()  // the original struct type
+  );
 
   std::string async_scope = parser_struct.function_name + async_suffix;
-
   for(int i=0; i<previous_scope_value_names.size(); ++i) {
     std::string type = previous_scope_value_types[i];
     std::string var_name = previous_scope_value_names[i];
@@ -1762,24 +1827,21 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
     function_allocas[async_scope][var_name] = alloca;
   }
 
-  
   for (auto &body : asyncBody)
-  {
-    V = body->codegen(scope_struct_copy);
-  }
+    V = body->codegen(scope_struct_typed);
 
 
   if (V)
   { 
-    p2t("codegenAsyncFunction create return");
     Builder->CreateRet(Constant::getNullValue(int8PtrTy));  
+
      
     std::string functionError;
     llvm::raw_string_ostream functionErrorStream(functionError);
 
     if (verifyFunction(*asyncFun, &functionErrorStream)) {
       functionErrorStream.flush();
-      llvm::errs() << "codegenAsyncFunction: Function verification failed:\n" << functionError << "\n";
+      llvm::errs() << "codegen Async Function: Function verification failed:\n" << functionError << "\n";
     } 
 
     verifyModule(*TheModule);
@@ -1794,74 +1856,25 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> &asyncBody,
 
 
 
-
-
-Value *ChannelExprAST::codegen(Value *scope_struct) {
-  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+Value *SpawnExprAST::codegen(Value *scope_struct) {
   
-  // std::string type = UnmangleVec(data_type);
-  
-    
-  Value *void_ptr = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
-
-
-  Value *initial_value = callret("channel_Create", {scope_struct, const_int(BufferSize)});
-
-
-
-
-  llvm::Type *alloca_type = get_type_from_str("channel");
-  AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
-  Builder->CreateStore(initial_value, alloca);
-  function_allocas[parser_struct.function_name][Name] = alloca;
-
-
-
-  return const_float(0);
-}
-
-
-
-Value *GoExprAST::codegen(Value *scope_struct) {
-
-
-  Value *barrier = callret("get_barrier", {const_int(1)});
-
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
-
-
-  
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_spawn");
-
-
+  Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_spawn");
   Builder->SetInsertPoint(CurrentBB);
 
-  
-  Function *pthread_create = TheModule->getFunction("pthread_create_aux");
-
-
-  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
   
   
-
-  Value *voidPtrNull = Constant::getNullValue(
-      Type::getInt8Ty(*TheContext)->getPointerTo());
-
+  Value *voidPtrNull = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
 
   
-  Builder->CreateCall(pthread_create,
+  call("pthread_create_aux",
     {pthreadPtr,
      voidPtrNull,
      asyncFun,
      voidPtrNull}
   );
-  
-  p2t("AsyncExpr Created join call");
-
-
-  thread_pointers.push_back(pthreadPtr);
-
 
   return const_float(0);
 }
@@ -1880,27 +1893,18 @@ Value *GoExprAST::codegen(Value *scope_struct) {
 Value *AsyncExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
-
-  
   // Create/Spawn Threads
 
-  
-
-  Value *barrier = callret("get_barrier", {const_int(1)});
+  // Value *barrier = callret("get_barrier", {const_int(1)});
 
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
-
-
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_async");
-
-
+  Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_async");
   Builder->SetInsertPoint(CurrentBB);
-
   
   Function *pthread_create = TheModule->getFunction("pthread_create_aux");
 
 
-  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
   Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
   
   
@@ -1931,13 +1935,12 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
   
   // Create/Spawn Threads
 
-
   call("scope_struct_Store_Asyncs_Count", {scope_struct, const_int(AsyncsCount)});
-  Value *barrier = callret("get_barrier", {const_int(AsyncsCount)});
+  // Value *barrier = callret("get_barrier", {const_int(AsyncsCount)});
 
   BasicBlock *CurrentBB = Builder->GetInsertBlock();
 
-  Function *asyncFun = codegenAsyncFunction(Body, scope_struct, parser_struct, barrier, "_asyncs");
+  Function *asyncFun = codegenAsyncFunction(std::move(Body), scope_struct, parser_struct, "_asyncs");
 
 
   Builder->SetInsertPoint(CurrentBB);
@@ -1946,12 +1949,13 @@ Value *AsyncsExprAST::codegen(Value *scope_struct) {
 
   for(int i=0; i<AsyncsCount; i++) 
   {
-    PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+    PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     Value *pthreadPtr = Builder->CreateAlloca(pthreadTy, nullptr);
     
     Value *voidPtrNull = Constant::getNullValue(
         Type::getInt8Ty(*TheContext)->getPointerTo());
     
+
     call("pthread_create_aux",
       {pthreadPtr,
       voidPtrNull,
@@ -2011,7 +2015,7 @@ Value *FinishExprAST::codegen(Value *scope_struct) {
   for (int i=0; i < Bodies.size(); i++)
     Bodies[i]->codegen(scope_struct);
   
-  PointerType *pthreadTy = Type::getInt8Ty(*GlobalContext)->getPointerTo();
+  PointerType *pthreadTy = Type::getInt8Ty(*TheContext)->getPointerTo();
 
   Function *pthread_join = TheModule->getFunction("pthread_join_aux");
 
@@ -2862,7 +2866,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
     }
 
     scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
-    call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
+    // call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
   } else 
     scope_struct_copy = scope_struct;
 

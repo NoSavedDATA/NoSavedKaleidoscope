@@ -1,44 +1,39 @@
+
+import glob
+
 import default nsk_cuda
 import default networks
-import glob
 
 start_timer()
 
 
 
-
-
-
-
-
-
 class Dataset
-    int batch_size, yield_ptr, _len, num_workers
+    int batch_size, seq_len, num_workers, _len, yield_ptr
+    int channel load_ch
     str_vec files
     pinned_tensor p_x, p_y
-    int channel load_ch
-
-    def float __init__(i batch_size, i num_workers)
+    def float __init__(i batch_size, i seq_len, i num_workers, s path)
         self.batch_size = batch_size
         self.num_workers = num_workers
-            
-        self.files = glob("/home/nosaveddata/mnist/training/*/*.png")
+        self.seq_len = seq_len
 
-        
-        self.yield_ptr = 0
         self._len = 0
+        self.yield_ptr = 0
 
+        self.files = glob(path)
 
-        int channel 3 load_ch
+        int channel 8 load_ch
         self.load_ch = load_ch
 
-
-        pinned_tensor[num_workers, batch_size, 1,28,28] self.p_x
+        pinned_tensor[num_workers, batch_size, seq_len] self.p_x
         pinned_tensor[num_workers, batch_size] self.p_y
+
 
     def int len()
         self._len  = LenStrVec(self.files)
         self.files = ShuffleStrVec(self.files)
+        self.yield_ptr = 0
         self._len
 
 
@@ -49,151 +44,212 @@ class Dataset
 
     def int increment_yield_ptr()
         lock "yield"
-            if (self.yield_ptr + self.batch_size*(self.num_workers+2)) > self._len
+            if (self.yield_ptr + self.batch_size*(self.num_workers+1)) > self._len
                 self.yield_ptr = 0
                 self.files = ShuffleStrVec(self.files)
+                0
             else
                 self.yield_ptr = self.yield_ptr + self.batch_size
         self.yield_ptr
 
-
-    
     def float getitem_w(i idx, i b, i w)
         var aux = self.files[idx]
 
-        wload_img(self.p_x, aux, w, b)
-        
-        float aa = aux.split_idx("/", -2).to_float()
-        
+        wtokenize_pad_left_idx(self.p_x, aux, self.seq_len, w, b)
 
-        self.p_y[w,b] = aa
+        aux = aux.split_idx("/", -2)
+        self.p_y[w,b] = aux.to_float()
         
-
-
     def float worker()
-        print("Start worker")
+        int w = tid()
 
-        int yield_ptr, bs=self.batch_size, w=tid()
+        int bs, can_process, yield_ptr
+        bs = self.batch_size
 
         while self.load_ch.alive()
             yield_ptr = self.increment_yield_ptr()
             
+            # write_zerosw(self.p_x, w)
             for b=0, b < bs
                 self.getitem_w(yield_ptr+b, b, w)
                 
             self.load_ch <- w
 
-
     def list attr_w(t x, t y)
         int w <- self.load_ch
+        # print("ATTRIBUTING " + w)        
 
-                
         x.gpuw(self.p_x, w)
         y.gpuw(self.p_y, w)
-        
 
         return x, y
 
 
+class RNN
+    Embedding embedding
+    Linear w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, cls
+    def float __init__(i vocab_size, i hiddens, i out_hiddens)
+        # EmbeddingLn[vocab_size, hiddens, 2048] self.embedding
+        Embedding[vocab_size, hiddens] self.embedding
 
-class Convs
-    Conv2d conv1, conv2
-
-    def float __init__()
-        Conv2d[1,5,5,2,1,he_normal_relu] self.conv1
-        Conv2d[5,50,5,2,0,he_normal_relu] self.conv2
+        # param[out_hiddens, hiddens, xavu] self.cls
+        # Linear[hiddens, out_hiddens, xavu] self.cls
+        Linear[hiddens, 2048, xavu] self.w1
+        Linear[2048, 2048, xavu, i4] self.w2
+        Linear[2048, 2048, xavu, i4] self.w3
+        Linear[2048, 2048, xavu, i4] self.w4
+        # Linear[2048, 2048, xavu, i4] self.w5
+        # Linear[2048, 2048, xavu, i4] self.w6
+        # Linear[2048, 2048, xavu, i4] self.w6
+        # Linear[2048, 2048, xavu, i4] self.w7
+        # Linear[2048, 2048, xavu, i4] self.w8
+        # Linear[2048, 2048, xavu, i4] self.w9
+        # Linear[2048, 2048, xavu, i4] self.w10
+        Linear[2048, out_hiddens, xavu] self.cls
+        # Linear[hiddens, out_hiddens, xavu] self.cls
+        0
 
     def tensor forward(t x)
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
-
-class Model
-    Conv2d conv1, conv2
-    Linear w1, w2
-
-
-    def float __init__()
-        Conv2d[1,5,5,2,1,he_normal_relu] self.conv1
-        Conv2d[5,50,5,2,0,he_normal_relu] self.conv2
-        # self.conv.__init__()
-        Linear[1250, 100, xavu_relu, param] self.w1
-        Linear[100, 10, xavu, param] self.w2
+        x = self.embedding(x)
         
-
-    def tensor forward(t x)
-        x = self.conv1(x)
-        x = self.conv2(x)
-
-        # x = self.conv.forward(x)
-
-        x = x.view(-1,5*5*50)
-
         x = self.w1(x)
-        x = relu(x)
         x = self.w2(x)
+        x = self.w3(x)
+        x = self.w4(x)
+        # x = self.w5(x)
+        # x = self.w6(x)
+        # x = self.w7(x)
+        # x = self.w8(x)
+        # x = self.w9(x)
+        # x = self.w10(x)
+        x = x.mean(-2)
+        x = self.cls(x) 
 
         return x
+
+
+
+
+
+def float train_it(RNN rnn, Dataset dataset)
+
+    
+    float lr = 0.001
+
+    int max_steps = 300
+
+    finish
+        asyncs 8 dataset.worker()
+
+        for i=0, i<max_steps
+            tensor[0] x, y
+            print("i " + i)
+
+            x, y = dataset.attr_w(x, y)
+
+            x = rnn.forward(x)
+
+            cross_entropy_idx(x, y, 1/1000)
+            backprop()
+            
+            AdamW(lr, 0.9, 0.999, 0.0001, 5.0)
+            
+
+
+        dataset.terminate_workers()
 
 
 
 main
-    int batch_size = 32 
+    RNN rnn(32768,256,2)
+    # RNN rnn(32768,256,256,2)
 
+    build_vocab("/mnt/d/datasets/acl_IMDB/vocab.txt", 32768)
 
-    Model model()
-    Dataset dataset(batch_size, 3)
+    int batch_size = 32
+    int seq_len = 200
+    float lr = 0.001
 
+    # int max_steps = 10
+    # int max_steps = 25000//batch_size*4
+    # int max_steps = 2000
+    int max_steps = 300
+    # int max_steps = 80
+    # int max_steps = 10
+
+    Dataset dataset(batch_size, seq_len, 8, "/mnt/d/datasets/IMDB/train/*/*.txt")
     dataset.len()
+
+    train_it(rnn, dataset)
+
+    # finish
+    #     asyncs 8 dataset.worker()
+
+    #     for i=0, i<max_steps
+    #         tensor[0] x, y
+    #         print("i " + i)
+
+    #         x, y = dataset.attr_w(x, y)
+
+    #         x = rnn.forward(x)
+
+    #         # cross_entropy_idx(x, y, 1/(batch_size*seq_len))
+    #         cross_entropy_idx(x, y, 1/1000)
+    #         backprop()
+            
+    #         AdamW(lr, 0.9, 0.999, 0.0001, 5.0)
+            
+
+
+    #     dataset.terminate_workers()
+
+
+
+    infer_mode(rnn)
+
+
+
+
+    Dataset val_dataset(batch_size, seq_len, 10, "/mnt/d/datasets/IMDB/test/*/*.txt")
+
+    int val_steps = val_dataset.len()
+    val_steps = val_steps//batch_size
+    val_steps = 50
+
+
+
+    print("Val steps: " + val_steps)
+
+
+    tensor[1,zeros] acc
 
 
     finish
-        asyncs 3 dataset.worker()
-        
-
-        for i=0, i<1000
-            tensor[0] x, y
-            print("i: "+i)
-
-            x, y = dataset.attr_w(x, y)
-
-            x = model.forward(x)
-            # y = y.onehot(10)
-
-            # cross_entropy(x, y, 1/batch_size)
-            cross_entropy_idx(x, y, 1/batch_size)
-            backprop()
+        asyncs 3 val_dataset.worker()
 
 
-            AdamW(0.0001, 0.9, 0.999, 0.01, 1.0)
+        tensor[1] batch_acc
+        tensor[0] x, y
+        for i=0, i<val_steps
+            print("i " + i)
 
-        dataset.terminate_workers()
+            x, y = val_dataset.attr_w(x, y)
 
-    infer_mode(model) 
+            
+            x = rnn.forward(x)
+            
+            x = x.argmax(-1)
+            
+            batch_acc = x==y
+            
+            acc = acc + batch_acc.mean()
+            
+        val_dataset.terminate_workers()
+    
 
+    acc = 100.0*acc/val_steps
 
-    print("Finished eval. Get new tensor")
-
-    tensor[1,1,28,28] x
-
-
-    print("Loading image")
-
-    # load_preprocess_img(x, "/home/nosaveddata/mnist/testing/0/3.png")
-    # load_preprocess_img(x, "/home/nosaveddata/mnist/testing/1/489.png")
-    # load_preprocess_img(x, "/home/nosaveddata/mnist/testing/2/35.png")
-    # load_preprocess_img(x, "/home/nosaveddata/mnist/testing/4/27.png")
-    load_preprocess_img(x, "/home/nosaveddata/mnist/testing/9/662.png")
-
-
-    x = x.view(1,1,28,28)
-
-    x = model.forward(x)
-    print("Pre softmax")
-    x.print()
-    x = softmax(x)
-    print("Post softmax")
-    x.print()
-
+    print("Accuracy ")
+    acc.print()
 
     end_timer()

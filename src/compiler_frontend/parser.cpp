@@ -2,13 +2,14 @@
 
 
 #include <cstdio>
-#include <stdio.h>
+#include <execinfo.h>
 #include <iostream>
 #include <map>
 #include <random>
+#include <stdio.h>
 #include <thread>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 
 
@@ -18,6 +19,19 @@
 #include "include.h"
 
 
+
+void print_caller() {
+    void* buffer[10];
+    int nptrs = backtrace(buffer, 10);
+    char** symbols = backtrace_symbols(buffer, nptrs);
+
+    if (nptrs >= 3)
+        std::cout << "Previous function: " << symbols[2] << '\n';
+    else
+        std::cout << "No previous function found.\n";
+
+    free(symbols);
+}
 
 
 
@@ -29,6 +43,10 @@ std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 
 std::map<std::string, std::map<std::string, int>> ChannelDirections;
+
+int has_previous_async=0;
+
+std::vector<std::unique_ptr<ExprAST>> asyncs_body;
 
 using namespace llvm;
 
@@ -478,7 +496,8 @@ std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_
 
 
 
-std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, bool can_be_list, int depth) {
+std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, bool can_be_list, int depth)
+{
   depth++;
 
   std::string IdName = IdentifierStr;
@@ -535,7 +554,8 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
 
 
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
-std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string class_name) {
+std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string class_name)
+{
   
   int cur_level_tabs = SeenTabs;
 
@@ -632,12 +652,10 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
 
 
 
-std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(Parser_Struct parser_struct, int cur_level_tabs, std::string class_name)
+std::vector<std::unique_ptr<ExprAST>> ParseIndentedBodies(Parser_Struct parser_struct, int cur_level_tabs, std::string class_name)
 {
   std::vector<std::unique_ptr<ExprAST>> Body, NullBody;
   //std::cout << "\nSeen tabs on for body POST: " << SeenTabs << "\n\n";
-  if (CurTok==tok_space)
-    getNextToken();
 
   handle_tok_space();
   while(!in_char(CurTok, terminal_tokens))
@@ -664,8 +682,7 @@ std::vector<std::unique_ptr<ExprAST>> ParseIdentedBodies(Parser_Struct parser_st
     handle_tok_space();
   }
 
-  while (CurTok==tok_space)
-    getNextToken();
+  handle_tok_space();
     
   return std::move(Body);
 }
@@ -707,7 +724,7 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
   
   std::vector<std::unique_ptr<ExprAST>> Body;
 
-  Body = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
+  Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body), parser_struct);
@@ -735,7 +752,7 @@ std::unique_ptr<ExprAST> ParseForEachExpr(Parser_Struct parser_struct, std::stri
   data_typeVars[parser_struct.function_name][IdName] = data_type.Nested_Data[0];
 
   std::vector<std::unique_ptr<ExprAST>> Body;
-  Body = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
+  Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
 
 
   return std::make_unique<ForEachExprAST>(IdName, std::move(Vec), std::move(Body), parser_struct, data_type);
@@ -792,7 +809,7 @@ std::unique_ptr<ExprAST> ParseWhileExpr(Parser_Struct parser_struct, std::string
   if (!Cond)
     return nullptr;
   
-  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
 
   return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body), parser_struct);
 }
@@ -823,11 +840,12 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
   else
-    Bodies = ParseIdentedBodies(body_parser_struct, cur_level_tabs, class_name);
+    Bodies = ParseIndentedBodies(body_parser_struct, cur_level_tabs, class_name);
   
   
   
-  //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
+  if(parser_struct.function_name!="__anon_expr")
+    has_previous_async++;
 
   return std::make_unique<AsyncExprAST>(std::move(Bodies), parser_struct);
 }
@@ -854,10 +872,13 @@ std::unique_ptr<ExprAST> ParseSpawnExpr(Parser_Struct parser_struct, std::string
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
   else
-    Bodies = ParseIdentedBodies(body_parser_struct, cur_level_tabs, class_name);
+    Bodies = ParseIndentedBodies(body_parser_struct, cur_level_tabs, class_name);
   
-
-  return std::make_unique<GoExprAST>(std::move(Bodies), parser_struct);
+  
+  if(parser_struct.function_name!="__anon_expr")
+    has_previous_async++;
+   
+  return std::make_unique<SpawnExprAST>(std::move(Bodies), parser_struct);
 }
 
 std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::string class_name) {
@@ -887,11 +908,12 @@ std::unique_ptr<ExprAST> ParseAsyncsExpr(Parser_Struct parser_struct, std::strin
   if (CurTok != tok_space)
     Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
   else
-    Bodies = ParseIdentedBodies(body_parser_struct, cur_level_tabs, class_name);
+    Bodies = ParseIndentedBodies(body_parser_struct, cur_level_tabs, class_name);
   
   
   
-  //std::cout << "Post async: " << ReverseToken(CurTok) << "\n";
+  if(parser_struct.function_name!="__anon_expr")
+    has_previous_async++;
 
   return std::make_unique<AsyncsExprAST>(std::move(Bodies), async_count, parser_struct);
 }
@@ -935,12 +957,21 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
 
 std::unique_ptr<ExprAST> ParseMainExpr(Parser_Struct parser_struct, std::string class_name) {
 
+
+
+  
+
+  
   int cur_level_tabs = SeenTabs;
   
   getNextToken(); // eat main
 
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   std::vector<bool> IsAsync;
+
+  for (int i=0; i<has_previous_async; ++i)
+    Bodies.push_back(std::make_unique<AsyncFnPriorExprAST>());
+  
   
 
   if (CurTok!=tok_space)
@@ -1065,7 +1096,8 @@ std::unique_ptr<ExprAST> ParseNewDict(Parser_Struct parser_struct, std::string c
 }
 
 
-std::string CheckListAppend(std::string callee, std::vector<std::unique_ptr<ExprAST>> &arguments, std::string fn_name, std::string Prev_IdName, Parser_Struct parser_struct) {
+std::string CheckListAppend(std::string callee, std::vector<std::unique_ptr<ExprAST>> &arguments, std::string fn_name, std::string Prev_IdName, Parser_Struct parser_struct)
+{
   if(callee!="list_append")
     return callee;
 
@@ -1364,6 +1396,7 @@ std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct parser_struct, std::string
 
 std::unique_ptr<ExprAST> ParseChannelExpr(Parser_Struct parser_struct, std::string class_name, Data_Tree inner_data_tree) {
 
+  LogBlue("Parse channel");
 
   Data_Tree data_tree = Data_Tree("channel");
   data_tree.Nested_Data.push_back(inner_data_tree);
@@ -1590,7 +1623,7 @@ std::unique_ptr<ExprAST> ParseLockExpr(Parser_Struct parser_struct, std::string 
   }
   
   
-  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
 
 
   return std::make_unique<LockExprAST>(std::move(Body), Name);
@@ -1602,7 +1635,7 @@ std::unique_ptr<ExprAST> ParseNoGradExpr(Parser_Struct parser_struct, std::strin
   int cur_level_tabs = SeenTabs;
   getNextToken(); // eat no_grad
   
-  std::vector<std::unique_ptr<ExprAST>> Body = ParseIdentedBodies(parser_struct, cur_level_tabs, class_name);
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
 
   return std::make_unique<NoGradExprAST>(std::move(Body));
 }
@@ -1889,10 +1922,15 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
 std::unique_ptr<ExprAST> ParseExpression(Parser_Struct parser_struct, std::string class_name, bool can_be_list) {
   parser_struct.line = LineCounter;
   
+
+  int pre_tabs = SeenTabs;
   
   auto LHS = ParseUnary(parser_struct, class_name, can_be_list);
   if (!LHS)
     return nullptr;
+
+  if (CurTok!=tok_space && pre_tabs!=SeenTabs)
+    return std::move(LHS);
 
   return std::get<0>(ParseBinOpRHS(parser_struct, 0, std::move(LHS), class_name));
 }
@@ -2026,7 +2064,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
         if (CurTok==tok_arrow)
         {
           channel_direction = ch_sender;
-          getNextToken(); // <-
+          getNextToken(); // <- ch
         }
 
         if(CurTok!=tok_identifier)
@@ -2038,7 +2076,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
         if (CurTok==tok_arrow)
         {
           channel_direction = ch_receiver;
-          getNextToken(); // <-
+          getNextToken(); // ch <-
         }
         ChannelDirections[FnName][IdName] = channel_direction;
       } else 

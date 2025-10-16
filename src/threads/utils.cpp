@@ -100,7 +100,6 @@ extern "C" void pthread_join_aux(pthread_t thread)
 extern "C" void pthread_create_aux(pthread_t *thread, pthread_attr_t *attr,
                    void *(*function_ptr) (void *arg), void *arg)
 {
-  // std::cout << "Creating thread" << "\n";
   pthread_create(thread, attr, function_ptr, arg);
   // std::cout << "Created" << "\n";
 }

@@ -600,9 +600,10 @@ ChannelExprAST::ChannelExprAST(Parser_Struct parser_struct, Data_Tree data_type,
   this->isSelf = isSelf;
 }
 
-GoExprAST::GoExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)), parser_struct(parser_struct) {  
+SpawnExprAST::SpawnExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Body(std::move(Body)), parser_struct(parser_struct) {}
 
-}
+// AsyncFnPriorExprAST::AsyncFnPriorExprAST(std::string Async_Name, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct) : Async_Name(Async_Name), Body(std::move(Body)), parser_struct(parser_struct) {}
+AsyncFnPriorExprAST::AsyncFnPriorExprAST() {}
   
   /// AsyncExprAST - Expression class for async.
 AsyncExprAST::AsyncExprAST(std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)

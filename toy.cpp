@@ -17,6 +17,8 @@
 #include "src/KaleidoscopeJIT.h"
 
 
+
+
 #include <algorithm>
 #include <cstdarg>
 #include <cassert>
@@ -240,18 +242,13 @@ Function *FunctionAST::codegen() {
 
   
   // Record the function arguments in the NamedValues map.
-  Value *thread_id, *has_grad, *scope_struct;
+  Value *scope_struct;
+  
+
+  
 
   
   scope_struct = callret("scope_struct_Create", {});
-
-
-  thread_id = ConstantInt::get(Type::getInt32Ty(*TheContext), 0);
-  has_grad  = ConstantInt::get(Type::getInt32Ty(*TheContext), 1);
-
- 
-  
-  call("set_scope_has_grad", {scope_struct, has_grad});
   
 
   current_codegen_function = function_name;
@@ -312,7 +309,6 @@ Function *FunctionAST::codegen() {
   Value *RetVal;
   for (auto &body : Body)
   {
-
     expr_is_return = ends_with(typeid(*body).name(), "RetExprAST");
     RetVal = body->codegen(scope_struct);
   }
@@ -360,10 +356,12 @@ Function *FunctionAST::codegen() {
 //===----------------------------------------------------------------------===//
 
 
+
 static void InitializeModule() {
   //std::cout << "\nINITIALIZING A NEW MODULE"  << "\n\n";
 
   // Open a new context and module.
+
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("my cool jit", *TheContext);
   TheModule->setDataLayout(TheJIT->getDataLayout());
@@ -2021,167 +2019,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("BatchNorm2d_Create", BatchNorm2d_Create);
 
-  FunctionType *scope_struct_CreateTy = FunctionType::get(
-      int8PtrTy,
-      {},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Create", scope_struct_CreateTy);
-
-
-  FunctionType *set_scope_function_nameTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("set_scope_function_name", set_scope_function_nameTy);
-
-
-  FunctionType *set_scope_first_argTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("set_scope_first_arg", set_scope_first_argTy);
-
-  FunctionType *set_scope_scopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("set_scope_scope", set_scope_scopeTy);
-  
-  FunctionType *set_scope_previous_scopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("set_scope_previous_scope", set_scope_previous_scopeTy);
-
-
-
-  FunctionType *set_scope_has_gradTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getInt32Ty(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("set_scope_has_grad", set_scope_has_gradTy);
-
-  FunctionType *get_scope_first_argTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("get_scope_first_arg", get_scope_first_argTy);
-
-  FunctionType *get_scope_scopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("get_scope_scope", get_scope_scopeTy);
-
-  FunctionType *get_scope_previous_scopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("get_scope_previous_scope", get_scope_previous_scopeTy);
-
-  FunctionType *get_scope_thread_idTy = FunctionType::get(
-      Type::getInt32Ty(*TheContext),
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("get_scope_thread_id", get_scope_thread_idTy);
-
-  FunctionType *get_scope_has_gradTy = FunctionType::get(
-      Type::getInt32Ty(*TheContext),
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
-
-  
-  FunctionType *print_scopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Print", print_scopeTy);
-
-  FunctionType *scope_struct_CopyTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);
-
-  FunctionType *scope_struct_OverwriteTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Overwrite", scope_struct_OverwriteTy);
-
-  FunctionType *scope_struct_DiveTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
- 
-  //
-  FunctionType *print_randomsTy = FunctionType::get(
-      Type::getFloatTy(*TheContext),
-      {Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
-      false 
-  );
-  TheModule->getOrInsertFunction("print_randoms", print_randomsTy);
-  
-
-  FunctionType *scope_struct_Save_for_AsyncTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Save_for_Async", scope_struct_Save_for_AsyncTy);
-
-
-  FunctionType *scope_struct_Alloc_MarkSeepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Alloc_MarkSweepMap", scope_struct_Alloc_MarkSeepTy);
-
-  FunctionType *scope_struct_Copy_MarkSeepTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Copy_MarkSweepMap", scope_struct_Copy_MarkSeepTy);
-
-  FunctionType *scope_struct_Clean_ScopeTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Clean_Scope", scope_struct_Clean_ScopeTy);
-
-  FunctionType *scope_struct_DeleteTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Delete", scope_struct_DeleteTy);
-
-  FunctionType *scope_struct_Load_for_AsyncTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy},
-      false 
-  );
-  TheModule->getOrInsertFunction("scope_struct_Load_for_Async", scope_struct_Load_for_AsyncTy);
 
   // 
   FunctionType *randintTy = FunctionType::get(
@@ -2191,12 +2028,6 @@ static void InitializeModule() {
   );
   TheModule->getOrInsertFunction("randint", randintTy);
 
-  FunctionType *scope_struct_Get_Async_Scope = FunctionType::get(
-    int8PtrTy,
-    {int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-    false
-  );
-  TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_Async_Scope);
 
 
   //

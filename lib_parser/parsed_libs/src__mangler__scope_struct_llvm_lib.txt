@@ -1,4 +1,4 @@
-1821-09-30 18:53:48
+1821-10-16 16:09:44
 
 	FunctionType *scope_struct_specTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -119,6 +119,13 @@
 	);
 	TheModule->getOrInsertFunction("scope_struct_Increment_Thread", scope_struct_Increment_ThreadTy);
 
+	FunctionType *scope_struct_PrintTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Print", scope_struct_PrintTy);
+
 	FunctionType *set_scope_objectTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -153,13 +160,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Store_Asyncs_Count", scope_struct_Store_Asyncs_CountTy);
-
-	FunctionType *scope_struct_PrintTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Print", scope_struct_PrintTy);
 
 	FunctionType *scope_struct_Get_Async_ScopeTy= FunctionType::get(
 		int8PtrTy,

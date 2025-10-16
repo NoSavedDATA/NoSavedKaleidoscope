@@ -1,10 +1,11 @@
 #pragma once
 
 
-#include "llvm/IR/Value.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Value.h"
+#include "llvm/IR/Verifier.h"
 
 #include <memory>
 #include <string>
@@ -123,4 +124,16 @@ inline Value *load_int(AllocaInst *alloca) {
 }
 inline Value *load_float(AllocaInst *alloca) {
     Builder->CreateLoad(Type::getFloatTy(*TheContext), alloca, "loaded");
+}
+
+
+
+inline void check_llvm_err(){
+    std::string err;
+    llvm::raw_string_ostream os(err);
+    if (llvm::verifyModule(*TheModule, &os)) {
+        errs() << "Module broken:\n" << os.str();
+        TheModule->print(llvm::errs(), nullptr);
+        // abort();
+    }
 }

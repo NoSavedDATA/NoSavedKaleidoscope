@@ -3,7 +3,7 @@
 
 void move_to_char_pool(size_t length, char *char_ptr, std::string from)
 {
-  delete[] char_ptr;
+  free(char_ptr);
   return;
   
   if (length==0)
@@ -26,7 +26,7 @@ void move_to_char_pool(size_t length, char *char_ptr, std::string from)
     else
     {
       // std::cout << "FREEING CHAR WITH length: " << length << " from: " << from <<  "\n";
-      delete[] char_ptr;
+      free(char_ptr);
     }
   } 
 }

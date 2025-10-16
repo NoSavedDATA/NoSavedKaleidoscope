@@ -262,20 +262,20 @@ void GarbageCollector::sweep(Scope_Struct *scope_struct) {
             inner_most_scope->gc.pointer_nodes.push_back(GC_Node(ptr, node.type));
         } else {
 
-            // if(node.type!="tensor") {
-            //     std::cout << "clean: " << ptr << ".\n";
-            //     std::cout << "of type: " << node.type << ".\n\n";
-            //     // std::cout << "is class: " << ClassPointers.count(node.type) << ".\n\n";
-            // }
+            if(node.type!="tensor") {
+                std::cout << "clean: " << ptr << ".\n";
+                std::cout << "of type: " << node.type << ".\n\n";
+                // std::cout << "is class: " << ClassPointers.count(node.type) << ".\n\n";
+            }
 
             if (node.type=="str"||ClassPointers.count(node.type)>0)
                 free(ptr);
             else
             {
-                // if(node.type!="tensor") {
-                    // std::cout << "CLEANING: " << node.type << ".\n";
-                    clean_up_functions[node.type](ptr);
-                // }
+                if(node.type!="tensor")
+                    std::cout << "CLEANING: " << node.type << ".\n";
+                clean_up_functions[node.type](ptr);
+                
             }
             
         }

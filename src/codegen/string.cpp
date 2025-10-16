@@ -20,7 +20,7 @@ char *RandomString(size_t length) {
   //MT19937 mt(generate_custom_seed());
   //LCG rng(generate_custom_seed());
 
-  char *random_string = new char[length+1];
+  char *random_string = (char*)malloc(length+1);
 
   for (int i = 0; i < length; i++) {
 
@@ -59,7 +59,7 @@ extern "C" char *GetEmptyChar(Scope_Struct *scope_struct)
 
 extern "C" void FreeCharFromFunc(char *_char, char *func) {
   std::cout << "FREEING " << _char << " at function: " << func << "\n";
-  delete[] _char;
+  free(_char);
   std::cout << "freed" << "\n";
 }
 
@@ -69,7 +69,6 @@ extern "C" void FreeChar(char *_char) {
   // std::cout << "FREEING " << _char << "\n";
 
   move_to_char_pool(strlen(_char)+1, _char, "free");
-  //delete[] _char;
 }
 
 
@@ -148,7 +147,6 @@ extern "C" char * ConcatNumToStrFree(Scope_Struct *scope_struct, char *lc, float
   char *result_cstr = (char*)malloc(result_str.length()+1);
   std::strcpy(result_cstr, result_str.c_str());
 
-  // delete[] lc;
   
   return result_cstr;
 }
