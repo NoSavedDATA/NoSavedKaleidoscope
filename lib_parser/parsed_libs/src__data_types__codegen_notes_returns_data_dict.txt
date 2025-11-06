@@ -1,1 +1,5 @@
-{"CreateNotesVector", Data_Tree("list")}, {"Dispose_NotesVector", Data_Tree("float")}, {"Add_To_NotesVector_float", Data_Tree("list")}, {"Add_To_NotesVector_int", Data_Tree("list")}, {"Add_To_NotesVector_str", Data_Tree("list")}, 
+	functions_return_data_type["CreateNotesVector"] = Data_Tree("list");
+	functions_return_data_type["Dispose_NotesVector"] = Data_Tree("float");
+	functions_return_data_type["Add_To_NotesVector_float"] = Data_Tree("list");
+	functions_return_data_type["Add_To_NotesVector_int"] = Data_Tree("list");
+	functions_return_data_type["Add_To_NotesVector_str"] = Data_Tree("list");

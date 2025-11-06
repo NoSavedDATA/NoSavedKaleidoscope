@@ -1,1 +1,4 @@
-{"emerge_int", Data_Tree("int")}, {"emerge_float", Data_Tree("float")}, {"_tid", Data_Tree("float")}, {"tid", Data_Tree("int")}, 
+	functions_return_data_type["emerge_int"] = Data_Tree("int");
+	functions_return_data_type["emerge_float"] = Data_Tree("float");
+	functions_return_data_type["_tid"] = Data_Tree("float");
+	functions_return_data_type["tid"] = Data_Tree("int");

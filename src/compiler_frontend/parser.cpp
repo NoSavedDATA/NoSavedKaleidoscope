@@ -443,6 +443,23 @@ void PrintNameable(const std::unique_ptr<Nameable> &name) {
 }
 
 
+
+std::unique_ptr<ExprAST> ParseLLVM_IR_CallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name) {
+  std::vector<std::unique_ptr<ExprAST>> Args = Parse_Arguments(parser_struct, class_name);
+  std::unique_ptr<NameableLLVMIRCall> call_expr = std::make_unique<NameableLLVMIRCall>(parser_struct, std::move(inner), std::move(Args));
+
+  // if (CurTok=='.')
+  // {
+  //   std::cout << "call expr parsing to nameable" << ".\n";
+  //   getNextToken();
+  //   return ParseNameableExpr(parser_struct, std::move(call_expr), class_name, false, depth);
+  // }
+
+  std::unique_ptr<ExprAST> expr_ptr(static_cast<ExprAST*>(call_expr.release()));
+  return std::move(expr_ptr);
+}
+
+
 std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth) {
   
   getNextToken(); // eat [
@@ -484,7 +501,6 @@ std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_
 
   if (CurTok=='.')
   {
-    std::cout << "call expr parsing to nameable" << ".\n";
     getNextToken();
     return ParseNameableExpr(parser_struct, std::move(call_expr), class_name, false, depth);
   }
@@ -527,13 +543,15 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
   } 
 
 
+  
+  if(in_str(IdName,LLVM_IR_Functions) && CurTok=='(' && depth==1)
+    return ParseLLVM_IR_CallExpr(parser_struct, std::move(nameable), class_name);
 
   if (CurTok=='.')
   {
     getNextToken();
     return ParseNameableExpr(parser_struct, std::move(nameable), class_name, can_be_list, depth);
   }
-
   if (CurTok=='(')
     return ParseCallExpr(parser_struct, std::move(nameable), class_name, depth);
 
@@ -1455,13 +1473,18 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
     getNextToken();
      
     while (true) {
-      if (CurTok != tok_number && CurTok != tok_int && CurTok != tok_identifier && CurTok != tok_self)
-        return LogError(parser_struct.line, "Expected a number or var on the tensor dimension.");
+      if (CurTok!=tok_number && CurTok!=tok_int && CurTok!=tok_identifier && CurTok!=tok_self && CurTok!=tok_str)
+        return LogError(parser_struct.line, "Expected a number, string or var on the notes of " + data_type + ".");
+      
       
       if (CurTok==tok_number)
       { 
         notes.push_back(std::make_unique<NumberExprAST>(NumVal));
         getNextToken();
+      } else if (CurTok==tok_str) {
+        notes.push_back(std::make_unique<StringExprAST>(IdentifierStr));
+        getNextToken();
+
       } else if (CurTok==tok_number) {
         notes.push_back(std::make_unique<IntExprAST>(NumVal));
         getNextToken();
@@ -1480,7 +1503,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
 
     
     if (CurTok != ']')
-      return LogError(parser_struct.line, "] not found at tensor declaration.");
+      return LogError(parser_struct.line, "] not found at " + data_type + " variable declaration.");
     getNextToken();
   }
 

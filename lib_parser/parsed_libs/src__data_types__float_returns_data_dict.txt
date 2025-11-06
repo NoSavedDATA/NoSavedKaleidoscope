@@ -1,1 +1,4 @@
-{"read_float", Data_Tree("float")}, {"float_to_str", Data_Tree("str")}, 
+	functions_return_data_type["read_float"] = Data_Tree("float");
+	functions_return_data_type["float_to_str"] = Data_Tree("str");
+	functions_return_data_type["nsk_pow"] = Data_Tree("float");
+	functions_return_data_type["nsk_sqrt"] = Data_Tree("float");

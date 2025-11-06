@@ -113,9 +113,7 @@ bool ExprAST::GetIsList() {
   return isList;
 }
 
-
-// Tensor related
-    
+ 
   
 NameSolverAST::NameSolverAST(std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names)
                 : Names(std::move(Names)) {} 
@@ -467,10 +465,17 @@ UnaryExprAST::UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_
 
 Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
 
-  std::string LType = LHS->GetDataTree().Type, RType = RHS->GetDataTree().Type;
+  // std::string LType = LHS->GetDataTree().Type, RType = RHS->GetDataTree().Type;
+  std::string LType = UnmangleVec(LHS->GetDataTree()), RType = UnmangleVec(RHS->GetDataTree());
+  if(ends_with(LType, "channel"))
+    LType = "channel";
+  if(ends_with(RType, "channel"))
+    RType = "channel";
+
   if ((LType=="list"||RType=="list") && Op!='=')
     LogError(parser_struct.line, "Tuple elements type are unknown during parsing type. Please load the element into a static type variable first.");
-  
+
+
   Elements = LType + "_" + RType;    
 
 
@@ -491,9 +496,11 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   if (Operation=="int_int_div")
     type = "float";
   else if (ops_type_return.count(Operation)>0)
-  {
-    type = ops_type_return[Operation];
-  }
+    return Data_Tree(ops_type_return[Operation]);
+  else if (functions_return_data_type.count(Operation))
+    return functions_return_data_type[Operation];
+  // else if (functions_return_type.count(Operation)>0)
+  //   type = functions_return_type[Operation];
   else if (elements_type_return.count(Elements)>0)
     type = elements_type_return[Elements];
   else {}
@@ -576,6 +583,7 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprA
 
     this->data_type = data_type;
     Type = data_type.Nested_Data[0].Type;
+    typeVars[parser_struct.function_name][VarName] = "foreach_control_var";
 }
 
 
@@ -698,11 +706,19 @@ std::string Nameable::GetLibCallee() {
 
 
 Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
-  
-
   Data_Tree inner_dt = Inner->GetDataTree();
 
   std::string compound_type = inner_dt.Type;
+
+  
+  if(Idx_Fn_Return.count(compound_type+"_Idx")) {
+    Data_Tree idx_data_tree = Data_Tree(Idx_Fn_Return[compound_type+"_Idx"]);
+    // std::cout << "_Idx data tree:" << ".\n";
+    // idx_data_tree.Print();
+    // std::cout << "" << "\n";
+
+    return Data_Tree(Idx_Fn_Return[compound_type+"_Idx"]);
+  }
   
 
   if (from_assignment || !in_str(compound_type, {"vec", "list", "dict", "tuple"}))
@@ -718,18 +734,49 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
       return Data_Tree(inner_dt.Nested_Data[idx].Type);
     } else
       LogError(parser_struct.line, "Can only index tuple with a constant integer.");
-  }
+  } 
+
+  // std::cout << "---> Data tree of Nameable IDX is " << ".\n";
+  // inner_dt.Print();
 
   return inner_dt.Nested_Data[0];
 }
 
 
-Data_Tree NameableCall::GetDataTree(bool from_assignment) { 
+Data_Tree NameableLLVMIRCall::GetDataTree(bool from_assignment) {
+  if (Callee=="pow"||Callee=="sqrt")
+    return Data_Tree("float");
+
+  return Data_Tree("unk");
+}
+
+NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args) : Nameable(parser_struct), Args(std::move(Args)) {
+  this->Inner = std::move(Inner);
+  this->Inner->IsLeaf = false;
+  this->isSelf = this->Inner->isSelf;
+
+  Depth = this->Inner->Depth;
+  Callee = this->Inner->Name;
+  // if (in_str(Callee, vararg_methods))
+  // {
+  //   if (Callee=="zip") {
+  //     GetDataTree();
+  //     this->Args.push_back(std::make_unique<NullPtrExprAST>());
+  //   }
+  //   else
+  //     this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
+  // }
+}
+
+
+
+Data_Tree NameableCall::GetDataTree(bool from_assignment) {
   if (data_type.Type!="")
     return data_type;
 
   Data_Tree ret = functions_return_data_type[Callee];
 
+  
 
   std::string ret_type = ret.Type;
   if (ends_with(ret_type, "_vec")) {
@@ -809,6 +856,9 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
   Callee = this->Inner->Name;
 
+
+  if (Callee=="pow")
+    LogBlue("POW DEPTH IS "+std::to_string(Depth));
   
   if (Depth==1 && lib_function_remaps.count(Callee)>0)
     Callee = lib_function_remaps[Callee];
@@ -836,6 +886,12 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
     
     // LogBlue("Callee is " + Callee);
   }
+
+  if(Callee=="list_append" && this->Args[0]->GetDataTree().Type=="int")
+    Callee = "list_append_int";
+  if(Callee=="list_append" && this->Args[0]->GetDataTree().Type=="float")
+    Callee = "list_append_float";
+    
 
 
   if (in_str(Callee, vararg_methods))

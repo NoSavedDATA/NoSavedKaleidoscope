@@ -1,1 +1,10 @@
-{"LenStrVec", Data_Tree("int")}, {"ShuffleStrVec", Data_Tree("str_vec")}, {"shuffle_str", Data_Tree("str")}, {"IndexStrVec", Data_Tree("str")}, {"str_vec_Idx", Data_Tree("str")}, {"str_vec_CalculateIdx", Data_Tree("int")}, {"str_vec_print", Data_Tree("float")}, 
+	functions_return_data_type["LenStrVec"] = Data_Tree("int");
+
+	Data_Tree ShuffleStrVec_vec = Data_Tree("vec");
+	ShuffleStrVec_vec.Nested_Data.push_back(Data_Tree("str"));
+	functions_return_data_type["ShuffleStrVec"] = ShuffleStrVec_vec;
+	functions_return_data_type["shuffle_str"] = Data_Tree("str");
+	functions_return_data_type["IndexStrVec"] = Data_Tree("str");
+	functions_return_data_type["str_vec_Idx"] = Data_Tree("str");
+	functions_return_data_type["str_vec_CalculateIdx"] = Data_Tree("int");
+	functions_return_data_type["str_vec_print"] = Data_Tree("float");

@@ -93,7 +93,16 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
 
 
     if (in_return_type!="void"&&in_return_type!="void*") {
-        lib_info->return_data_string = lib_info->return_data_string + "{\"" + function_name + "\", Data_Tree(\"" + return_type + "\")}, ";
+        if (ends_with(return_type, "_vec")) {
+            std::string vec_type = remove_substring(return_type, "_vec");
+            std::string data_str = "\n\tData_Tree " + function_name+"_vec = Data_Tree(\"vec\");\n";
+            data_str += "\t"+function_name+"_vec.Nested_Data.push_back(Data_Tree(\"" + vec_type + "\"));\n";
+            data_str += "\tfunctions_return_data_type[\""+function_name+"\"] = " + function_name+"_vec;\n";
+
+            lib_info->return_data_string = lib_info->return_data_string + data_str; 
+        }
+        else
+            lib_info->return_data_string = lib_info->return_data_string + "\tfunctions_return_data_type[\"" + function_name + "\"] = Data_Tree(\"" + return_type + "\");\n";
         lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, "; // {"tensor_tensor_add", "tensor"}
     }
     lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", "; // user_cpp_functions

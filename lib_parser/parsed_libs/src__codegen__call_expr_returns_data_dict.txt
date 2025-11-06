@@ -1,1 +1,1 @@
-{"FirstArgOnDemand", Data_Tree("str")}, 
+	functions_return_data_type["FirstArgOnDemand"] = Data_Tree("str");

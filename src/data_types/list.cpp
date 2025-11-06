@@ -13,6 +13,9 @@
 #include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging.h"
 #include "../mangler/scope_struct.h"
+#include "../pool/include.h"
+
+#include "float_vec.h"
 
 #include "codegen_notes.h"
 
@@ -22,7 +25,6 @@
 
 extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
 {
-  // std::cout << "list_New. First type: " << type << ".\n";
   va_list args;
   va_start(args, type);
 
@@ -79,10 +81,9 @@ extern "C" void list_append_bool(Scope_Struct *scope_struct, DT_list *list, bool
 }
 
 extern "C" float list_append(Scope_Struct *scope_struct, DT_list *list, void *x, char *type) {
-  // std::cout << "Adding x of type " << type << ".\n";
-
-  
+  // std::cout << "Appending x of type " << type << ".\n";  
   list->append(std::any(x), type);
+  // std::cout << "new list size: " << list->size << ".\n";
   return 0;
 }
 
@@ -111,10 +112,7 @@ extern "C" float tuple_print(Scope_Struct *scope_struct, DT_list *list) {
 extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector)
 {
   if (init_val==nullptr)
-  {
-    std::cout << "----CREATING NEW LIST" << ".\n";
     init_val = new DT_list();
-  }
 
   return init_val;
 }
@@ -122,6 +120,18 @@ extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *sc
 
 extern "C" int list_size(Scope_Struct *scope_struct, DT_list *list) {
   return list->size;
+}
+
+extern "C" DT_float_vec *list_as_float_vec(Scope_Struct *scope_struct, DT_list *list) {
+  int size = list->size;
+
+  DT_float_vec *vec = newT<DT_float_vec>(scope_struct, "float_vec");
+  vec->New(size);
+
+  for (int i=0; i<size; ++i)
+    vec->vec[i] = list->get<float>(i);
+
+  return vec;
 }
 
 
@@ -256,6 +266,12 @@ extern "C" float float_list_Store_Idx(DT_list *list, int idx, float value, Scope
   return 0;
 }
 
+extern "C" float list_Store_Idx(DT_list *list, int idx, void *value, Scope_Struct *scope_struct) {
+  std::any& slot = (*list->data)[idx];
+  slot = value;
+  return 0;
+}
+
 
 
 extern "C" DT_list *zip(Scope_Struct *scope_struct, DT_list *list, ...) {
@@ -322,10 +338,8 @@ extern "C" DT_list *zip(Scope_Struct *scope_struct, DT_list *list, ...) {
 
 extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
 {
-  // std::cout << "INDEX AT " << idx << ".\n";
-    
   std::string type = vec->data_types->at(idx);
-  std::cout << "list_Idx on index " << idx << " for data type " << type << ".\n";
+  // std::cout << "list_Idx on index " << idx << " for data type " << type << ".\n";
 
   if (type=="float") {
     float* float_ptr = new float(vec->get<float>(idx));
@@ -336,6 +350,11 @@ extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
   } else if (type=="bool") {
     bool* ptr = new bool(vec->get<bool>(idx));
     return static_cast<void*>(ptr); 
+  } else if (type=="str") {
+    // std::cout << "Get as string" << ".\n";
+    // std::cout << "get str " << vec->get<char*>(idx) << ".\n";
+    // return static_cast<char*>(ptr);
+    return vec->get<char*>(idx);
   } else
     return std::any_cast<void *>((*vec->data)[idx]);
 }

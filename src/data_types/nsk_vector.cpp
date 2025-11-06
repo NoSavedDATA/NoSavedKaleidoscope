@@ -10,14 +10,27 @@
 
 
 
+Nsk_Vector::Nsk_Vector() {
+    size = 0;
+    dims = {};
+}
 Nsk_Vector::Nsk_Vector(int size) : size(size) {
     dims = {size};
 }
 Nsk_Vector::Nsk_Vector(int size, std::vector<int> dims) : size(size), dims(std::move(dims)) {}
 
+
+
+DT_int_vec::DT_int_vec() {}
 DT_int_vec::DT_int_vec(int size) : Nsk_Vector(size) {
   vec = (int*)malloc(size*sizeof(int));
 }
+
+void DT_int_vec::New(int size)  {
+    this->size = size;
+    vec = (int*)malloc(size*sizeof(int));
+}
+
 DT_int_vec::~DT_int_vec() {
     // free(vec);
 }
@@ -29,9 +42,11 @@ extern "C" int nsk_vec_size(Scope_Struct *scope_struct, Nsk_Vector *vec) {
     return vec->size;
 }
 
+bool is_first_idx_call = true;
 
 extern "C" int __idx__(Nsk_Vector *vec, int first_idx, ...) {
-    std::cout << "CALLING DEFAULT __idx__ FUNCTION" << ".\n";
+    if(is_first_idx_call)
+        std::cout << "CALLING DEFAULT __idx__ FUNCTION" << ".\n";
 
     std::vector<int> indices;
 
@@ -55,7 +70,10 @@ extern "C" int __idx__(Nsk_Vector *vec, int first_idx, ...) {
     va_end(args);
 
 
-    std::cout << "Index at: " << idx_at << ".\n";
+    if(is_first_idx_call) {
+        std::cout << "Index at: " << idx_at << ".\n";
+        is_first_idx_call=false;
+    }
 
     return idx_at;
 }

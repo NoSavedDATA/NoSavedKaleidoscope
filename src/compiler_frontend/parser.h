@@ -200,6 +200,7 @@ std::unique_ptr<PrototypeAST> ParseExtern(Parser_Struct parser_struct);
 std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct); 
  
 
+std::unique_ptr<ExprAST> ParseLLVM_IR_CallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name="");
 
 std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth=0);
 std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name="", int depth=0);

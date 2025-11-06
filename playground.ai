@@ -85,6 +85,8 @@ class Dataset
         return x, y
 
 
+
+
 class RNN
     Embedding embedding
     Linear w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, cls
@@ -133,9 +135,7 @@ class RNN
 
 def float train_it(RNN rnn, Dataset dataset)
 
-    
     float lr = 0.001
-
     int max_steps = 300
 
     finish
@@ -154,61 +154,15 @@ def float train_it(RNN rnn, Dataset dataset)
             
             AdamW(lr, 0.9, 0.999, 0.0001, 5.0)
             
-
-
         dataset.terminate_workers()
 
 
 
-main
-    RNN rnn(32768,256,2)
-    # RNN rnn(32768,256,256,2)
-
-    build_vocab("/mnt/d/datasets/acl_IMDB/vocab.txt", 32768)
-
+def float eval_it(RNN rnn)
     int batch_size = 32
     int seq_len = 200
-    float lr = 0.001
-
-    # int max_steps = 10
-    # int max_steps = 25000//batch_size*4
-    # int max_steps = 2000
-    int max_steps = 300
-    # int max_steps = 80
-    # int max_steps = 10
-
-    Dataset dataset(batch_size, seq_len, 8, "/mnt/d/datasets/IMDB/train/*/*.txt")
-    dataset.len()
-
-    train_it(rnn, dataset)
-
-    # finish
-    #     asyncs 8 dataset.worker()
-
-    #     for i=0, i<max_steps
-    #         tensor[0] x, y
-    #         print("i " + i)
-
-    #         x, y = dataset.attr_w(x, y)
-
-    #         x = rnn.forward(x)
-
-    #         # cross_entropy_idx(x, y, 1/(batch_size*seq_len))
-    #         cross_entropy_idx(x, y, 1/1000)
-    #         backprop()
-            
-    #         AdamW(lr, 0.9, 0.999, 0.0001, 5.0)
-            
-
-
-    #     dataset.terminate_workers()
-
-
 
     infer_mode(rnn)
-
-
-
 
     Dataset val_dataset(batch_size, seq_len, 10, "/mnt/d/datasets/IMDB/test/*/*.txt")
 
@@ -251,5 +205,35 @@ main
 
     print("Accuracy ")
     acc.print()
+
+
+
+
+main
+    RNN rnn(32768,256,2)
+    # RNN rnn(32768,256,256,2)
+
+    build_vocab("/mnt/d/datasets/acl_IMDB/vocab.txt", 32768)
+
+    int batch_size = 32
+    int seq_len = 200
+    float lr = 0.001
+
+    # int max_steps = 10
+    # int max_steps = 25000//batch_size*4
+    # int max_steps = 2000
+    int max_steps = 300
+    # int max_steps = 80
+    # int max_steps = 10
+
+    Dataset dataset(batch_size, seq_len, 8, "/mnt/d/datasets/IMDB/train/*/*.txt")
+    dataset.len()
+
+    train_it(rnn, dataset)
+
+
+
+
+    eval_it(rnn)
 
     end_timer()

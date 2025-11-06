@@ -27,6 +27,7 @@ extern "C" void *allocate_void(Scope_Struct *scope_struct, int size, char *type)
 
     Scope_Struct *inner_most_scope = get_inner_most_scope(scope_struct);
     inner_most_scope->gc.size_occupied += size;
+    inner_most_scope->gc.allocations++;
     
     return ptr;
 }

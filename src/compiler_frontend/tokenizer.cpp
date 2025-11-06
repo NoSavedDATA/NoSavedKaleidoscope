@@ -191,10 +191,13 @@ std::map<int, std::string> token_to_string = {
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
 std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class, tok_eof};
 
+
+extern std::vector<std::string> LLVM_IR_Functions = {"pow", "sqrt"};
+
 std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "bool", "str", "str_vec", "float_vec", "MHSA", "LSTM", "Linear", "tuple", "list", "dict",
                                         "Embedding", "EmbeddingLn", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
 std::vector<std::string> compound_tokens = {"tuple", "list", "dict"};
-std::vector<std::string> primary_data_tokens = {"int", "float", "bool"};
+std::vector<std::string> primary_data_tokens = {"int", "float", "bool", "foreach_control_var"};
 
 
 std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},

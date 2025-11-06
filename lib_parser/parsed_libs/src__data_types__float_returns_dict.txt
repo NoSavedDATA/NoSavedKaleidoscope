@@ -1,1 +1,1 @@
-{"read_float", "float"}, {"float_to_str", "str"}, 
+{"read_float", "float"}, {"float_to_str", "str"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 

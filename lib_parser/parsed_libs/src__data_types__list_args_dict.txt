@@ -92,6 +92,17 @@
 	Function_Arg_Names["list_size"].push_back("0");
 	Function_Arg_Names["list_size"].push_back("1");
 	
+	Function_Arg_Types["list_as_float_vec"]["0"] = "Scope_Struct";
+	Function_Arg_Types["list_as_float_vec"]["1"] = "list";
+	
+	Function_Arg_DataTypes["list_as_float_vec"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree list_as_float_vec_1 = Data_Tree("list");
+	list_as_float_vec_1.Nested_Data.push_back(Data_Tree("any"));
+	Function_Arg_DataTypes["list_as_float_vec"]["1"] = list_as_float_vec_1;
+	
+	Function_Arg_Names["list_as_float_vec"].push_back("0");
+	Function_Arg_Names["list_as_float_vec"].push_back("1");
+	
 	Function_Arg_Types["to_int"]["0"] = "Scope_Struct";
 	Function_Arg_Types["to_int"]["1"] = "void";
 	

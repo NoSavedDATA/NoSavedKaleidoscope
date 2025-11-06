@@ -13,13 +13,13 @@ namespace fs = std::filesystem;
 struct LibFunction {
   std::string ReturnType;
   std::string Name;
-  bool IsPointer;
+  bool IsPointer, IsVarArg;
   std::vector<std::string> ArgTypes;
   std::vector<std::string> ArgNames;
   std::vector<int> ArgIsPointer;
 
   LibFunction(std::string ReturnType, bool IsPointer, std::string Name,
-              std::vector<std::string>, std::vector<std::string>, std::vector<int> ArgIsPointer);
+              std::vector<std::string>, std::vector<std::string>, std::vector<int> ArgIsPointer, bool);
 
   void Link_to_LLVM(void *);
   void Add_to_Nsk_Dicts(void *, std::string, bool);

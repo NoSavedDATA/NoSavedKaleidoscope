@@ -324,6 +324,13 @@ extern "C" float str_to_float(Scope_Struct *scope_struct, char *in_str)
 
 
 
+extern "C" bool str_str_different(Scope_Struct scope_struct, char *l, char *r) {
+  return strcmp(l, r);
+}
+extern "C" bool str_str_equal(Scope_Struct scope_struct, char *l, char *r) {
+  return !strcmp(l, r);
+}
+
 
 
 extern "C" void str_Delete(char *in_str) {

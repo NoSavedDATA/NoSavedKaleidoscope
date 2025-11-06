@@ -34,12 +34,12 @@ Scope_Struct::Scope_Struct() {
 Scope_Struct *get_inner_most_scope(Scope_Struct *scope_struct) {
     Scope_Struct *inner_most = scope_struct;
 
-    while(inner_most->previous_scope!=nullptr)
-    {
+    while(inner_most->previous_scope!=nullptr) {
         if (inner_most->thread_id!=inner_most->previous_scope->thread_id)
             break;
         inner_most = inner_most->previous_scope;
     }
+
     return inner_most;
 }
 
@@ -79,9 +79,6 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     previous_scope = scope_to_copy;
 }
 
-void Scope_Struct::Alloc_MarkSweepMap() {
-    // mark_sweep_map = new MarkSweep();
-}
 
 
 void Scope_Struct::Print() {
@@ -253,9 +250,6 @@ extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thr
 
 
 
-extern "C" void scope_struct_Alloc_MarkSweepMap(Scope_Struct *scope_struct) {
-    scope_struct->Alloc_MarkSweepMap();
-}
 
 extern "C" void scope_struct_Copy_MarkSweepMap(Scope_Struct *in_scope, Scope_Struct *out_scope) {
     // in_scope->mark_sweep_map = out_scope->mark_sweep_map;
@@ -270,9 +264,6 @@ extern "C" void scope_struct_Add_GC_Root(Scope_Struct *scope_struct, void *root_
     scope_struct->gc.root_nodes.push_back(GC_Node(root_pointer, type));
 }
 
-extern "C" void scope_struct_Add_Pointer(Scope_Struct *scope_struct, void * root_pointer, char *type) {
-    scope_struct->gc.root_nodes.push_back(GC_Node(root_pointer, type));
-}
 
 
 
@@ -289,12 +280,34 @@ inline void delete_scope(Scope_Struct *scope_struct) {
     delete scope_struct;
 }
 
+
+void alloc_gc_vspace(Scope_Struct *scope_struct, int size) {
+    GarbageCollector &gc = get_inner_most_scope(scope_struct)->gc;
+    gc.size_occupied += size;
+}
+
 extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
-    // scope_struct->gc.sweep(scope_struct);
-}  
+    GarbageCollector &gc = get_inner_most_scope(scope_struct)->gc;
+
+    if (gc.allocations>1000||gc.size_occupied>1000000) {
+        // std::cout << "sweep" << ".\n";
+        scope_struct->gc.sweep(scope_struct);
+    }
+}
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
-    // scope_struct->gc.sweep(scope_struct);
+    Scope_Struct *inner_most_scope = get_inner_most_scope(scope_struct);
+    GarbageCollector &gc = inner_most_scope->gc;
+    
+    if (gc.allocations>1000||gc.size_occupied>1000000) {
+        scope_struct->gc.sweep(scope_struct);
+    }
+    else {
+        if (inner_most_scope!=scope_struct) {
+            for (const auto &node : scope_struct->gc.pointer_nodes)
+                inner_most_scope->gc.pointer_nodes.push_back(GC_Node(node.ptr, node.type));
+        }
+    }
     delete_scope(scope_struct);
 }
 

@@ -6,6 +6,7 @@
 
 
 // #include "../compiler_frontend/tokenizer.h"
+#include "../compiler_frontend/logging_v.h"
 #include "../compiler_frontend/include.h"
 #include "../common/extension_functions.h"
 #include "data_tree.h"
@@ -88,10 +89,12 @@ int Data_Tree::Compare(Data_Tree other_tree) {
         return comparisons;
 
     if(Nested_Data.size()!=other_tree.Nested_Data.size()){
-        std::cout << "nested data has different size: " << Nested_Data.size() << "/" << other_tree.Nested_Data.size() << ".\n";
+        if ((Type=="list"&&other_tree.Type=="list")&&(Nested_Data.size()>0&&other_tree.Nested_Data.size()==0))
+            return comparisons;
+
+        LogErrorC(-1, "Nested data has different size: " + std::to_string(Nested_Data.size()) + "/" + std::to_string(other_tree.Nested_Data.size()) + ".\n");
         comparisons++;
-    }
-    else {
+    } else {
         for(int i=0; i<Nested_Data.size(); ++i)
             comparisons += Nested_Data[i].Compare(other_tree.Nested_Data[i]);
     }

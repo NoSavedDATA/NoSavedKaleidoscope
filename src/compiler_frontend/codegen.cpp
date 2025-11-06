@@ -93,21 +93,22 @@ Value *IndexExprAST::codegen(Value *scope_struct) {
 }
 
 
-inline Value *Idx_Calc_Codegen(std::string type, Value *vec, const std::unique_ptr<IndexExprAST> &idxs, Value *scope_struct)
+Value *Idx_Calc_Codegen(std::string type, Value *vec, std::unique_ptr<IndexExprAST> &idxs, Value *scope_struct)
 {
   std::vector<Value *> idxs_values;
 
   idxs_values.push_back(vec); // e.g, tensor uses its dims as a support to calculcate the index
 
-  for (int i=0; i<idxs->size(); i++)
-  {
+  for (int i=0; i<idxs->size(); i++) {
     Value *idx = idxs->Idxs[i]->codegen(scope_struct);
-
-    if (i==0 && (idxs->Idxs[i]->GetType()=="str")) // dict query
-      return idx;
     
+    if (i==0 && (idxs->Idxs[i]->GetDataTree().Type=="str"))  {// dict query 
+      idxs->idx_slice_or_query = "query";
+      return idx;
+    }
     idxs_values.push_back(idxs->Idxs[i]->codegen(scope_struct));
   }
+  // Has Terminate_Vararg inserted from the parser.
 
 
   if (!idxs->IsSlice)
@@ -350,16 +351,8 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
 
 
 
+    
 
-
-
-
-
-
-
-
-
-      
 
     if(is_self)
     {
@@ -1103,8 +1096,6 @@ Value *VariableExprAST::codegen(Value *scope_struct) {
     return var_name;
 
 
-  // if (type=="tensor" && !seen_var_attr)
-  //   call("PrintTensor", {scope_struct, loaded_tensor});
   
 
   
@@ -1265,14 +1256,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
       for (int i=0; i<VarList->ExprList.size(); ++i)
       {
-        Nameable *LHSE = static_cast<Nameable *>(VarList->ExprList[i].get());
-        
+        Nameable *LHSE = static_cast<Nameable *>(VarList->ExprList[i].get()); 
 
         std::string Lname = LHSE->Name;
         std::string LType = LHSE->GetDataTree().Type;
-
-
         
+
         std::string store_trigger = LType + "_StoreTrigger";
         Value *Val_indexed = callret("assign_wise_list_Idx", {Val, const_int(i)});
         
@@ -1329,7 +1318,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       Data_Tree dt = LHSV->GetDataTree(true);
       std::string type = UnmangleVec(dt);
 
-      Value *idx = Idx_Calc_Codegen(type, vec, LHSV->Idx, scope_struct);
+      Value *idx = Idx_Calc_Codegen(type, vec, LHSV->Idx, scope_struct); //StoreIdx
 
       if(type=="list"||type=="dict") {
         std::string nested_type = dt.Nested_Data[0].Type;
@@ -1456,14 +1445,11 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   if (!L || !R)
     return nullptr;
 
-  if (cast_L_to=="int_to_float") {
+  if (cast_L_to=="int_to_float")
     L = Builder->CreateSIToFP(L, Type::getFloatTy(*TheContext), "lfp");
-  }
-  if (cast_R_to=="int_to_float") {
+  if (cast_R_to=="int_to_float")
     R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
-  }
-  if (Operation=="tensor_int_div")
-  {
+  if (Operation=="tensor_int_div") {
     Operation = "tensor_float_div";
     R = Builder->CreateSIToFP(R, Type::getFloatTy(*TheContext), "lfp");
   }
@@ -1633,13 +1619,6 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
   if (Opcode=='-')
   {
 
-    if (operand_type=="tensor")
-    {
-      // Value *tensor_name = global_str(Operand->GetName());
-      // Value *tensorPtr = callret("tensor_Load", {scope_struct, tensor_name});
-      // Value *R = ConstantFP::get(Type::getFloatTy(*TheContext), -1);
-      // return callret("CudaScalarMult", {tensorPtr, R, callret("get_scope_thread_id", {scope_struct})});
-    }
     
     if (Operand->GetType()=="int")
       return Builder->CreateMul(ConstantInt::get(Type::getInt32Ty(*TheContext), -1), OperandV, "multmp");
@@ -2111,7 +2090,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     Value *ret = Vars[0]->codegen(scope_struct);
     std::string type = Vars[0]->GetDataTree().Type;
 
-    call("scope_struct_Add_GC_Root", {scope_struct, ret, global_str(type)});
+    if(!in_str(type, primary_data_tokens))
+      call("scope_struct_Add_GC_Root", {scope_struct, ret, global_str(type)});
 
     seen_var_attr=false;
     call("scope_struct_Clean_Scope", {scope_struct}); 
@@ -2125,7 +2105,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     Value *value = Vars[i]->codegen(scope_struct); 
     std::string type = Vars[i]->GetType();
 
-    call("scope_struct_Add_GC_Root", {scope_struct, value, global_str(type)});
+    if(!in_str(type, primary_data_tokens))
+      call("scope_struct_Add_GC_Root", {scope_struct, value, global_str(type)});
 
     values.push_back(global_str(type));
     values.push_back(value);
@@ -2317,9 +2298,11 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
   for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     Value *arg; 
 
+
     arg = Args[i]->codegen(scope_struct);
     Data_Tree data_type = Args[i]->GetDataTree();
     std::string type = data_type.Type;
+
 
     if (fn_name=="print" && i==0 && type!="str")
     {
@@ -2328,14 +2311,12 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
     }
     
 
+    int tgt_arg = i + arg_offset;
+    Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
     if (!in_str(fn_name, {"to_int", "to_float", "print"}))
     { 
       if (Function_Arg_Types.count(fn_name)>0)
-      {
-        int tgt_arg = i + arg_offset;
-
-        std::string expected_type = Function_Arg_Types[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
-        Data_Tree expected_data_type = Function_Arg_DataTypes[fn_name][Function_Arg_Names[fn_name][tgt_arg]];
+      {    
         int differences = expected_data_type.Compare(data_type);
         if (differences>0) { 
           LogError(parser_struct.line, "Got an incorrect type for argument " + Function_Arg_Names[fn_name][tgt_arg] + " of function " + fn_name);
@@ -2345,8 +2326,13 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
           data_type.Print();
           std::cout << "\n\n";
         } 
-      }  
+      }
     }
+
+
+    if(type=="int"&&expected_data_type.Type=="float")
+      arg = Builder->CreateSIToFP(arg, Type::getFloatTy(*TheContext), "lfp");
+
 
     std::string copy_fn = type+"_CopyArg";
     Function *F = TheModule->getFunction(copy_fn);
@@ -2367,8 +2353,15 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
       LogError(parser_struct.line, "Failed to codegen argument of function " + fn_name);
       return {};
     }
+
   }
 
+
+  if (fn_name=="list_append") {
+    std::string appended_type = UnmangleVec(Args[Args.size()-1]->GetDataTree());
+    LogBlue("Add type " + appended_type + " to list_append on line " + std::to_string(parser_struct.line));
+    ArgsV.push_back(global_str(appended_type));
+  }
 
   return std::move(ArgsV);
 }
@@ -2405,7 +2398,6 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
       if (Init==nullptr) {
         ptr = callret("allocate_void", {scope_struct, const_int(Size), global_str(ClassName)});
         call("scope_struct_Add_GC_Root", {scope_struct, ptr, global_str(ClassName)});
-        // ptr = callret("malloc", {const_int64(Size)});
       }
       else
         ptr = Init->codegen(scope_struct);
@@ -2709,6 +2701,63 @@ Value *NestedVariableExprAST::codegen(Value *scope_struct) {
 
 
 
+Value *NameableLLVMIRCall::codegen(Value *scope_struct) {  
+  int arg_type_check_offset=1, target_args_size=Args.size();
+  bool is_nsk_fn = in_str(Callee, native_methods);
+
+  
+  // std::vector<Value*> ArgsV = {scope_struct};
+
+
+
+  if (Callee=="pow"&&target_args_size!=2) {
+    LogError(parser_struct.line, "Function pow expected 2 arguments, but got " + std::to_string(target_args_size));
+    return const_float(0);
+  }
+  if (Callee=="sqrt"&&target_args_size!=1) {
+    LogError(parser_struct.line, "Function sqrt expected 1 argument, but got " + std::to_string(target_args_size));
+    return const_float(0);
+  }
+
+
+  if (ReturnType=="")
+    GetDataTree();
+
+  // ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
+
+
+  
+  
+  Value *ret;
+  if(Callee=="pow") { // pow
+    Value *x_value = Args[0]->codegen(scope_struct);
+    if (Args[0]->GetDataTree().Type=="int")
+      x_value = Builder->CreateSIToFP(x_value, Type::getFloatTy(*TheContext), "lfp");
+
+    Value *exponent_value = Args[1]->codegen(scope_struct);
+    if (Args[1]->GetDataTree().Type=="int")
+      exponent_value = Builder->CreateSIToFP(exponent_value, Type::getFloatTy(*TheContext), "lfp");
+      
+    ret = Builder->CreateBinaryIntrinsic(Intrinsic::pow, x_value, exponent_value);
+  } else if (Callee=="sqrt") { // sqrt
+    Value *x_value = Args[0]->codegen(scope_struct);
+    if (Args[0]->GetDataTree().Type=="int")
+      x_value = Builder->CreateSIToFP(x_value, Type::getFloatTy(*TheContext), "lfp");
+
+    ret = Builder->CreateUnaryIntrinsic(Intrinsic::sqrt, x_value);
+  } else
+    LogError(-1, "LLVM IR Function " + Callee + " not implemented");
+
+
+
+  if(ReturnType=="void_ptr")
+    LogError(-1, "return " + Callee);  
+
+  return ret;
+}
+
+
+
 Value *NestedCallExprAST::codegen(Value *scope_struct) {
   return const_float(0);
 }
@@ -2764,6 +2813,9 @@ Value *Nameable::codegen(Value *scope_struct) {
 Value *NameableIdx::codegen(Value *scope_struct) {
   Data_Tree inner_dt = Inner->GetDataTree();
 
+  // std::cout << "Nameable idx inner data tree" << ".\n";
+  // inner_dt.Print();
+
   std::string compound_type = UnmangleVec(inner_dt);
   std::string type;
   if (compound_type=="tuple") {
@@ -2771,23 +2823,30 @@ Value *NameableIdx::codegen(Value *scope_struct) {
       int idx = expr->Val;
       type = inner_dt.Nested_Data[idx].Type;
     }
-  }
+  }  
   else if(in_str(compound_type, compound_tokens)||ends_with(compound_type, "_vec"))
     type = inner_dt.Nested_Data[0].Type;
   else
     type = compound_type;
 
 
+  // std::cout << "\nNameable idx inner type is: " << type << ".\n";
+
 
   Value *loaded_var = Inner->codegen(scope_struct);
   Value *idx = Idx_Calc_Codegen(compound_type, loaded_var, Idx, scope_struct);
-
+  
 
 
   if (compound_type == "dict") {
     Value *ret_val = callret("dict_Query", {scope_struct, loaded_var, idx});
     if(type=="float"||type=="int")
       ret_val = callret("to_"+type, {scope_struct, ret_val});
+    return ret_val;
+  }
+
+  if(Idx->idx_slice_or_query=="query") {
+    Value *ret_val = callret(compound_type+"_Query", {scope_struct, loaded_var, idx});
     return ret_val;
   }
   
@@ -2809,9 +2868,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     }
 
     if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"||type=="bool"))
-    {
       ret_val = callret("to_"+type, {scope_struct, ret_val});
-    }
     
     return ret_val;
   } else {
@@ -2825,6 +2882,9 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 inline bool Check_Args_Count(const std::string &Callee, int target_args_size, Parser_Struct parser_struct) {
   Function *CalleeF;
   CalleeF = getFunction(Callee);
+  
+  if (Callee=="list_append")
+    target_args_size++;
   if (!CalleeF)
   {
     std::string _error = "The referenced function "+ Callee +" was not yet declared.";
@@ -2853,14 +2913,13 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   if(!is_nsk_fn) { // collect roots for gc
 
-
     call("scope_struct_Clear_GC_Root", {scope_struct});
-
 
     for (const auto &pair : function_allocas[parser_struct.function_name]) {
       std::string type = typeVars[parser_struct.function_name][pair.first];
       if (!in_str(type, primary_data_tokens)) {
         Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
+        // LogBlue("Add alloca " + parser_struct.function_name + "/" + pair.first + " of type " + type);
         call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
       }
     }
@@ -2889,12 +2948,13 @@ Value *NameableCall::codegen(Value *scope_struct) {
     {
       if(ends_with(Callee, "__init__")&&isSelf) // mallocs an object inside another
       {
-        std::string obj_class = Inner->Inner->GetDataTree().Type;
+        std::string obj_class = Inner->GetDataTree().Type;
         
         int size = ClassSize[obj_class];
 
 
         Value *new_ptr = callret("allocate_void", {scope_struct, const_int(size), global_str(obj_class)});
+        LogBlue("Add " + obj_class + " as root.");
         call("scope_struct_Add_GC_Root", {scope_struct, new_ptr, global_str(obj_class)});
 
 
@@ -2920,13 +2980,13 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   if (ReturnType=="")
     GetDataTree();
+
   ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
+
   
-
-
-
-  // LogBlue("call " + Callee);
+  
   Value *ret = callret(Callee, ArgsV);
+
 
   if(!is_nsk_fn)
     call("scope_struct_Delete", {scope_struct_copy});    

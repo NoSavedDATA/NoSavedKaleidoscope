@@ -1,1 +1,1 @@
-"read_float", "float_to_str", 
+"read_float", "float_to_str", "nsk_pow", "nsk_sqrt", 

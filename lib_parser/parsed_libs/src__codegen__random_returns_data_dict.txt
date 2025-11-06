@@ -1,1 +1,2 @@
-{"print_randoms", Data_Tree("float")}, {"randint", Data_Tree("int")}, 
+	functions_return_data_type["print_randoms"] = Data_Tree("float");
+	functions_return_data_type["randint"] = Data_Tree("int");

@@ -1,4 +1,4 @@
-1821-10-16 16:09:44
+1821-11-05 21:35:06
 
 	FunctionType *scope_struct_specTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -168,13 +168,6 @@
 	);
 	TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_Async_ScopeTy);
 
-	FunctionType *scope_struct_Alloc_MarkSweepMapTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Alloc_MarkSweepMap", scope_struct_Alloc_MarkSweepMapTy);
-
 	FunctionType *scope_struct_Copy_MarkSweepMapTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -195,13 +188,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Add_GC_Root", scope_struct_Add_GC_RootTy);
-
-	FunctionType *scope_struct_Add_PointerTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Add_Pointer", scope_struct_Add_PointerTy);
 
 	FunctionType *scope_struct_SweepTy= FunctionType::get(
 		int8PtrTy,

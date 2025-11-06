@@ -9,6 +9,7 @@ class Nsk_Vector {
         int size;
         std::vector<int> dims;
     
+        Nsk_Vector();
         Nsk_Vector(int);
         Nsk_Vector(int, std::vector<int>);
 };
@@ -18,6 +19,8 @@ class DT_int_vec : public Nsk_Vector {
         int *vec;
 
     DT_int_vec(int size);
+    DT_int_vec();
+    void New(int size);
     ~DT_int_vec();
 };
 

@@ -49,13 +49,13 @@ struct MarkSweep_Node {
 struct GC_Node{
     void *ptr;
     std::string type;
-
+    
     GC_Node(void *, std::string);
 };
 
 
 struct GarbageCollector {
-    int size_occupied=0;
+    int size_occupied=0, allocations=0;
     std::vector<GC_Node> root_nodes;
     std::vector<GC_Node> pointer_nodes;
 

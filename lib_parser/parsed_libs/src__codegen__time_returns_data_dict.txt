@@ -1,1 +1,3 @@
-{"silent_sleep", Data_Tree("float")}, {"start_timer", Data_Tree("float")}, {"end_timer", Data_Tree("float")}, 
+	functions_return_data_type["silent_sleep"] = Data_Tree("float");
+	functions_return_data_type["start_timer"] = Data_Tree("float");
+	functions_return_data_type["end_timer"] = Data_Tree("float");

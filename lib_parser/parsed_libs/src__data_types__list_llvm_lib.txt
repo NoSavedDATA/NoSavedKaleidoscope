@@ -1,4 +1,4 @@
-1821-09-28 20:21:30
+1821-11-04 19:48:35
 
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,
@@ -63,6 +63,13 @@
 	);
 	TheModule->getOrInsertFunction("list_size", list_sizeTy);
 
+	FunctionType *list_as_float_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_as_float_vec", list_as_float_vecTy);
+
 	FunctionType *list_CalculateIdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -118,6 +125,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("float_list_Store_Idx", float_list_Store_IdxTy);
+
+	FunctionType *list_Store_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Store_Idx", list_Store_IdxTy);
 
 	FunctionType *zipTy= FunctionType::get(
 		int8PtrTy,

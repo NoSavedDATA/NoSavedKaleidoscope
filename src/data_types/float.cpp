@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -38,4 +39,13 @@ extern "C" char *float_to_str(Scope_Struct *scope_struct, float x) {
 
     std::memcpy(result, buffer, len + 1); // copy with '\0'
     return result;
+}
+
+
+extern "C" float nsk_pow(Scope_Struct *scope_struct, float x, float exponent) {
+    std::cout << "pow with " << x  << " & " << exponent<< ".\n";
+    return std::pow(x, exponent);
+}
+extern "C" float nsk_sqrt(Scope_Struct *scope_struct, float x) {
+    return std::sqrt(x);
 }

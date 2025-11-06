@@ -83,6 +83,8 @@ class IndexExprAST : public ExprAST {
     std::vector<std::unique_ptr<ExprAST>> Second_Idxs;
     bool IsSlice=false;
 
+    std::string idx_slice_or_query = "idx";
+
     IndexExprAST(std::vector<std::unique_ptr<ExprAST>>, std::vector<std::unique_ptr<ExprAST>>, bool);
 
     Value *codegen(Value *scope_struct) override;
@@ -425,6 +427,19 @@ class NameableRoot : public Nameable {
   Value *codegen(Value *scope_struct) override;
 };
 
+
+class NameableLLVMIRCall : public Nameable {
+  public:
+  bool FromLib=false;
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  std::string Callee, ReturnType="";
+
+  NameableLLVMIRCall(Parser_Struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args);
+
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
 
 
 class NameableCall : public Nameable {

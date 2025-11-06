@@ -30,6 +30,9 @@ extern std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_Data
 extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
 
 
+extern std::map<std::string, Data_Tree> Idx_Fn_Return;
+
+
 extern std::vector<std::string> Sys_Arguments;
  
 extern std::map<std::string, std::vector<std::string>> Equivalent_Types;

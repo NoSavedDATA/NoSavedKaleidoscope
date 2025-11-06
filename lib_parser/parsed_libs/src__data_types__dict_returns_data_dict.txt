@@ -1,1 +1,3 @@
-{"dict_Create", Data_Tree("dict")}, {"dict_New", Data_Tree("dict")}, {"dict_print", Data_Tree("float")}, 
+	functions_return_data_type["dict_Create"] = Data_Tree("dict");
+	functions_return_data_type["dict_New"] = Data_Tree("dict");
+	functions_return_data_type["dict_print"] = Data_Tree("float");

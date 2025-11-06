@@ -1,0 +1,24 @@
+
+
+def list foo(int x, int y)
+    return x, y
+
+
+main
+
+    list<list<int>> m
+
+    list<int> r1 = [1,2,3]
+    list<int> r2 = [4,5,6]
+
+    m = [r1,r2]
+
+
+    m.print()
+    
+    # int x, y
+
+    # x, y = foo(2,3)
+
+    # print("x: " + x)
+    # print("y: " + y)

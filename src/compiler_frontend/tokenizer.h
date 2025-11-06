@@ -133,6 +133,8 @@ static int get_token();
 extern Tokenizer tokenizer;
 extern std::string cur_line;
 
+
+extern std::vector<std::string> LLVM_IR_Functions;
 extern std::map<int, std::string> token_to_string;
 
 extern std::vector<char> ops;

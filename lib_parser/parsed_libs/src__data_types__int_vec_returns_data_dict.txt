@@ -1,1 +1,36 @@
-{"int_vec_Store_Idx", Data_Tree("int")}, {"arange_int", Data_Tree("int_vec")}, {"zeros_int", Data_Tree("int_vec")}, {"rand_int_vec", Data_Tree("int_vec")}, {"ones_int", Data_Tree("int_vec")}, {"int_vec_Idx", Data_Tree("int")}, {"int_vec_Idx_num", Data_Tree("int")}, {"int_vec_CalculateIdx", Data_Tree("int")}, {"int_vec_CalculateSliceIdx", Data_Tree("")}, {"int_vec_Slice", Data_Tree("int_vec")}, {"int_vec_first_nonzero", Data_Tree("int")}, {"int_vec_print", Data_Tree("int")}, {"int_vec_Split_Parallel", Data_Tree("int_vec")}, {"int_vec_Split_Strided_Parallel", Data_Tree("int_vec")}, {"int_vec_size", Data_Tree("int")}, 
+	functions_return_data_type["int_vec_Store_Idx"] = Data_Tree("int");
+
+	Data_Tree arange_int_vec = Data_Tree("vec");
+	arange_int_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["arange_int"] = arange_int_vec;
+
+	Data_Tree zeros_int_vec = Data_Tree("vec");
+	zeros_int_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["zeros_int"] = zeros_int_vec;
+
+	Data_Tree rand_int_vec_vec = Data_Tree("vec");
+	rand_int_vec_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["rand_int_vec"] = rand_int_vec_vec;
+
+	Data_Tree ones_int_vec = Data_Tree("vec");
+	ones_int_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["ones_int"] = ones_int_vec;
+	functions_return_data_type["int_vec_Idx_num"] = Data_Tree("int");
+	functions_return_data_type["int_vec_Idx"] = Data_Tree("int");
+	functions_return_data_type["int_vec_CalculateIdx"] = Data_Tree("int");
+	functions_return_data_type["int_vec_CalculateSliceIdx"] = Data_Tree("");
+
+	Data_Tree int_vec_Slice_vec = Data_Tree("vec");
+	int_vec_Slice_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["int_vec_Slice"] = int_vec_Slice_vec;
+	functions_return_data_type["int_vec_first_nonzero"] = Data_Tree("int");
+	functions_return_data_type["int_vec_print"] = Data_Tree("int");
+
+	Data_Tree int_vec_Split_Parallel_vec = Data_Tree("vec");
+	int_vec_Split_Parallel_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["int_vec_Split_Parallel"] = int_vec_Split_Parallel_vec;
+
+	Data_Tree int_vec_Split_Strided_Parallel_vec = Data_Tree("vec");
+	int_vec_Split_Strided_Parallel_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["int_vec_Split_Strided_Parallel"] = int_vec_Split_Strided_Parallel_vec;
+	functions_return_data_type["int_vec_size"] = Data_Tree("int");

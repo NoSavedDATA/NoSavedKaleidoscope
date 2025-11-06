@@ -22,29 +22,30 @@ T *allocate(Scope_Struct *scope_struct, int size, std::string type) {
     {
         Scope_Struct *inner_most_scope = get_inner_most_scope(scope_struct);
         inner_most_scope->gc.size_occupied += alloc_size;
+        inner_most_scope->gc.allocations++;
 
         scope_struct->gc.pointer_nodes.push_back(GC_Node(v_ptr, type));
     }
-
-
+    
     return static_cast<T*>(v_ptr);
 }
 
 
 
 template<typename T>
-T *newT(Scope_Struct *scope_struct, std::string type) {
- 
+T *newT(Scope_Struct *scope_struct, std::string type) { 
+    
     T *ptr = new T();
 
     if(scope_struct!=nullptr)
     {
         Scope_Struct *inner_most_scope = get_inner_most_scope(scope_struct);
-        inner_most_scope->gc.size_occupied += sizeof(T);
+        int size = sizeof(T);
+        inner_most_scope->gc.size_occupied += size;
+        inner_most_scope->gc.allocations++;
 
         scope_struct->gc.pointer_nodes.push_back(GC_Node(static_cast<void *>(ptr), type));
     }
-
 
     return ptr;
 }

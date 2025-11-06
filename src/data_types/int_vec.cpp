@@ -5,26 +5,37 @@
 #include "../codegen/random.h"
 #include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging_execution.h"
+#include "../compiler_frontend/logging_v.h"
 #include "../mangler/scope_struct.h"
+#include "../pool/include.h"
 #include "include.h"
 
 
 
-extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
+extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_int_vec *init_val, DT_list *notes_vector)
 {
-  // std::cout << "int_vec_Create" << ".\n";
-
   if (init_val!=nullptr)
-    DT_int_vec *vec = static_cast<DT_int_vec *>(init_val);
+    return init_val;
+  if(notes_vector==nullptr)  
+    return nullptr;
 
+  if(notes_vector->size!=1) {
+    LogErrorC(-1, "int_vec requires size argument");
+    return nullptr;
+  }
+  DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
+  vec->New(notes_vector->get<int>(0));
 
-  return init_val;
+  return vec;
 }
 
  
 void int_vec_Clean_Up(void *data_ptr) {
+  std::cout << "delete int_vec" << ".\n";
+  // DT_int_vec *vec = static_cast<DT_int_vec*>(data_ptr);
+  // free(vec->vec);
+  // delete vec;
 }
-
 
 extern "C" int int_vec_Store_Idx(DT_int_vec *vec, int idx, int value, Scope_Struct *scope_struct){
   vec->vec[idx] = value;
@@ -47,17 +58,19 @@ extern "C" DT_int_vec *arange_int(Scope_Struct *scope_struct, int begin, int end
 
 extern "C" DT_int_vec *zeros_int(Scope_Struct *scope_struct, int size) {
   // TODO: turn into python like expression [0]*size
+    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
+    vec->New(size);
 
-  DT_int_vec *vec = new DT_int_vec(size);
-  for(int i=0; i<size; ++i)
-    vec->vec[i] = 0;
+    for(int i=0; i<size; ++i)
+      vec->vec[i] = 0;
 
-  return vec;
+    return vec;
 }
 
 
 extern "C" DT_int_vec *rand_int_vec(Scope_Struct *scope_struct, int size, int min_val, int max_val) {
-    DT_int_vec *vec = new DT_int_vec(size);
+    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
+    vec->New(size);
 
     std::uniform_int_distribution<int> dist(min_val, max_val);
 
@@ -75,21 +88,17 @@ extern "C" DT_int_vec *rand_int_vec(Scope_Struct *scope_struct, int size, int mi
 
 
 extern "C" DT_int_vec *ones_int(Scope_Struct *scope_struct, int size) {
-  DT_int_vec *vec = new DT_int_vec(size);
-  for(int i=0; i<size; ++i)
-    vec->vec[i] = 1;
+    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
+    vec->New(size);
 
-  return vec;
+    for(int i=0; i<size; ++i)
+      vec->vec[i] = 1;
+
+    return vec;
 }
 
 
-extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
-{
-  if (idx>vec->size)
-    LogErrorEE(scope_struct->code_line, "Index " + std::to_string(idx) + " is out of bounds for a vector of size: " + std::to_string(vec->size) + ".");
 
-  return vec->vec[idx];
-}
 
 extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int _idx)
 {
@@ -102,6 +111,14 @@ extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int 
 }
 
 
+
+extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
+{
+  if (idx>vec->size)
+    LogErrorEE(scope_struct->code_line, "Index " + std::to_string(idx) + " is out of bounds for a vector of size: " + std::to_string(vec->size) + ".");
+
+  return vec->vec[idx];
+}
 
 extern "C" int int_vec_CalculateIdx(DT_int_vec *vec, int first_idx, ...) {
   if (first_idx<0)
@@ -150,20 +167,21 @@ extern "C" Vec_Slices *int_vec_CalculateSliceIdx(DT_int_vec *vec, int first_idx,
 
 extern "C" DT_int_vec *int_vec_Slice(Scope_Struct *scope_struct, DT_int_vec *vec, Vec_Slices *slices) {
 
-  int start=slices->slices[0].vec[0], end=slices->slices[0].vec[1];
+    int start=slices->slices[0].vec[0], end=slices->slices[0].vec[1];
 
-  if (end==COPY_TO_END_INST)
-    end = vec->size;
+    if (end==COPY_TO_END_INST)
+      end = vec->size;
 
 
-  int size = end-start;
+    int size = end-start;
 
-  DT_int_vec *out_vec = new DT_int_vec(size);
+    DT_int_vec *out_vec = newT<DT_int_vec>(scope_struct, "int_vec");
+    out_vec->New(size);
 
-  for (int i=0; i<size; ++i)
-    out_vec->vec[i] = vec->vec[start+i];
+    for (int i=0; i<size; ++i)
+      out_vec->vec[i] = vec->vec[start+i];
 
-  return out_vec;
+    return out_vec;
 }
 
 
@@ -185,7 +203,8 @@ extern "C" int int_vec_first_nonzero(Scope_Struct *scope_struct, DT_int_vec *vec
 
 
 extern "C" int int_vec_print(Scope_Struct *scope_struct, DT_int_vec *vec) {
-  // std::cout << "int_vec_print" << ".\n";
+
+  // std::cout << "print vec of size " << vec->size << ".\n";
   std::cout << "[";
   for (int i=0; i<vec->size-1; i++)
     std::cout << vec->vec[i] << ", ";
@@ -222,7 +241,8 @@ extern "C" DT_int_vec *int_vec_Split_Parallel(Scope_Struct *scope_struct, DT_int
       size = vec_size - segment_size*thread_id;
       
 
-    DT_int_vec *out_vector = new DT_int_vec(size);
+    DT_int_vec *out_vector = newT<DT_int_vec>(scope_struct, "int_vec");
+    out_vector->New(size);
 
 
     // std::cout << "Splitting from " << std::to_string(segment_size*thread_id) << " to " << std::to_string(segment_size*(thread_id+1)) << ".\n";
@@ -258,7 +278,8 @@ extern "C" DT_int_vec *int_vec_Split_Strided_Parallel(Scope_Struct *scope_struct
       size = vec_size - segment_size*thread_id;
       
 
-    DT_int_vec *out_vector = new DT_int_vec(size);
+    DT_int_vec *out_vector = newT<DT_int_vec>(scope_struct, "int_vec");
+    out_vector->New(size);
 
 
     int c=0;

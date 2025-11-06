@@ -273,9 +273,9 @@ bin/nsk: toy.cpp /usr/lib/llvm-19/include/llvm/ADT/APFloat.h \
   src/compiler_frontend/../data_types/../common/extension_functions.h \
   src/compiler_frontend/../data_types/../mangler/scope_struct.h \
   src/compiler_frontend/../data_types/float_vec.h \
+  src/compiler_frontend/../data_types/nsk_vector.h \
   src/compiler_frontend/../data_types/int.h \
   src/compiler_frontend/../data_types/int_vec.h \
-  src/compiler_frontend/../data_types/nsk_vector.h \
   src/compiler_frontend/../data_types/list.h \
   src/compiler_frontend/../data_types/nullptr.h \
   src/compiler_frontend/../data_types/str.h \
@@ -590,9 +590,9 @@ src/compiler_frontend/../data_types/float.h:
 src/compiler_frontend/../data_types/../common/extension_functions.h:
 src/compiler_frontend/../data_types/../mangler/scope_struct.h:
 src/compiler_frontend/../data_types/float_vec.h:
+src/compiler_frontend/../data_types/nsk_vector.h:
 src/compiler_frontend/../data_types/int.h:
 src/compiler_frontend/../data_types/int_vec.h:
-src/compiler_frontend/../data_types/nsk_vector.h:
 src/compiler_frontend/../data_types/list.h:
 src/compiler_frontend/../data_types/nullptr.h:
 src/compiler_frontend/../data_types/str.h:

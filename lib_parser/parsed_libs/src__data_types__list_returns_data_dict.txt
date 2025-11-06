@@ -1,1 +1,19 @@
-{"list_New", Data_Tree("list")}, {"list_append", Data_Tree("float")}, {"list_print", Data_Tree("float")}, {"tuple_print", Data_Tree("float")}, {"list_Create", Data_Tree("list")}, {"list_size", Data_Tree("int")}, {"list_CalculateIdx", Data_Tree("int")}, {"to_int", Data_Tree("int")}, {"to_float", Data_Tree("float")}, {"list_CalculateSliceIdx", Data_Tree("")}, {"list_Slice", Data_Tree("list")}, {"int_list_Store_Idx", Data_Tree("float")}, {"float_list_Store_Idx", Data_Tree("float")}, {"zip", Data_Tree("list")}, 
+	functions_return_data_type["list_New"] = Data_Tree("list");
+	functions_return_data_type["list_append"] = Data_Tree("float");
+	functions_return_data_type["list_print"] = Data_Tree("float");
+	functions_return_data_type["tuple_print"] = Data_Tree("float");
+	functions_return_data_type["list_Create"] = Data_Tree("list");
+	functions_return_data_type["list_size"] = Data_Tree("int");
+
+	Data_Tree list_as_float_vec_vec = Data_Tree("vec");
+	list_as_float_vec_vec.Nested_Data.push_back(Data_Tree("float"));
+	functions_return_data_type["list_as_float_vec"] = list_as_float_vec_vec;
+	functions_return_data_type["list_CalculateIdx"] = Data_Tree("int");
+	functions_return_data_type["to_int"] = Data_Tree("int");
+	functions_return_data_type["to_float"] = Data_Tree("float");
+	functions_return_data_type["list_CalculateSliceIdx"] = Data_Tree("");
+	functions_return_data_type["list_Slice"] = Data_Tree("list");
+	functions_return_data_type["int_list_Store_Idx"] = Data_Tree("float");
+	functions_return_data_type["float_list_Store_Idx"] = Data_Tree("float");
+	functions_return_data_type["list_Store_Idx"] = Data_Tree("float");
+	functions_return_data_type["zip"] = Data_Tree("list");

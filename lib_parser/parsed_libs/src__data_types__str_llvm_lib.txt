@@ -1,4 +1,4 @@
-1821-09-25 21:10:10
+1821-10-21 15:18:41
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -104,6 +104,20 @@
 		false
 	);
 	TheModule->getOrInsertFunction("str_to_float", str_to_floatTy);
+
+	FunctionType *str_str_differentTy= FunctionType::get(
+		Type::getInt1Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_str_different", str_str_differentTy);
+
+	FunctionType *str_str_equalTy= FunctionType::get(
+		Type::getInt1Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_str_equal", str_str_equalTy);
 
 	FunctionType *str_DeleteTy= FunctionType::get(
 		int8PtrTy,

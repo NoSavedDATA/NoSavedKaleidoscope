@@ -1,4 +1,4 @@
-1821-09-07 21:23:13
+1821-11-05 11:25:51
 
 	FunctionType *int_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -42,19 +42,19 @@
 	);
 	TheModule->getOrInsertFunction("ones_int", ones_intTy);
 
-	FunctionType *int_vec_IdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Idx", int_vec_IdxTy);
-
 	FunctionType *int_vec_Idx_numTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("int_vec_Idx_num", int_vec_Idx_numTy);
+
+	FunctionType *int_vec_IdxTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("int_vec_Idx", int_vec_IdxTy);
 
 	FunctionType *int_vec_CalculateIdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

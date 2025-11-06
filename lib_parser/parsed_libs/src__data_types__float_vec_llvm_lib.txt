@@ -1,4 +1,4 @@
-1821-09-03 09:39:44
+1821-11-05 12:08:21
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -42,13 +42,6 @@
 	);
 	TheModule->getOrInsertFunction("float_vec_Idx", float_vec_IdxTy);
 
-	FunctionType *float_vec_Idx_numTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Idx_num", float_vec_Idx_numTy);
-
 	FunctionType *float_vec_CalculateIdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -70,6 +63,48 @@
 	);
 	TheModule->getOrInsertFunction("float_vec_print", float_vec_printTy);
 
+	FunctionType *float_vec_powTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_pow", float_vec_powTy);
+
+	FunctionType *float_vec_sumTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_sum", float_vec_sumTy);
+
+	FunctionType *float_vec_int_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_int_add", float_vec_int_addTy);
+
+	FunctionType *float_vec_int_divTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_int_div", float_vec_int_divTy);
+
+	FunctionType *float_vec_float_vec_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_float_vec_add", float_vec_float_vec_addTy);
+
+	FunctionType *float_vec_float_vec_subTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_float_vec_sub", float_vec_float_vec_subTy);
+
 	FunctionType *float_vec_Split_ParallelTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -85,7 +120,7 @@
 	TheModule->getOrInsertFunction("float_vec_Split_Strided_Parallel", float_vec_Split_Strided_ParallelTy);
 
 	FunctionType *float_vec_sizeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy},
 		false
 	);

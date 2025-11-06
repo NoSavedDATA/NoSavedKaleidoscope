@@ -1,1 +1,2 @@
-{"read_int", Data_Tree("int")}, {"int_to_str", Data_Tree("str")}, 
+	functions_return_data_type["read_int"] = Data_Tree("int");
+	functions_return_data_type["int_to_str"] = Data_Tree("str");

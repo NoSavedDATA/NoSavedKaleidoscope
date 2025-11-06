@@ -131,6 +131,7 @@ void DT_list::print() {
 extern "C" DT_list *CreateNotesVector() {
     // std::cout << "Creating vector\n";
     DT_list *notes_vector = new DT_list();
+    notes_vector->size=0;
     // std::cout << "Notes Vector created.\n";
 
     return notes_vector;

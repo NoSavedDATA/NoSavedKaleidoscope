@@ -584,13 +584,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_Async_ScopeTy);
 
-	FunctionType *scope_struct_Alloc_MarkSweepMapTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Alloc_MarkSweepMap", scope_struct_Alloc_MarkSweepMapTy);
-
 	FunctionType *scope_struct_Copy_MarkSweepMapTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -611,13 +604,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Add_GC_Root", scope_struct_Add_GC_RootTy);
-
-	FunctionType *scope_struct_Add_PointerTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Add_Pointer", scope_struct_Add_PointerTy);
 
 	FunctionType *scope_struct_SweepTy= FunctionType::get(
 		int8PtrTy,
@@ -681,6 +667,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_to_str", float_to_strTy);
+
+	FunctionType *nsk_powTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("nsk_pow", nsk_powTy);
+
+	FunctionType *nsk_sqrtTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("nsk_sqrt", nsk_sqrtTy);
 
 	FunctionType *nullptr_getTy= FunctionType::get(
 		int8PtrTy,
@@ -815,6 +815,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("list_size", list_sizeTy);
 
+	FunctionType *list_as_float_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_as_float_vec", list_as_float_vecTy);
+
 	FunctionType *list_CalculateIdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -870,6 +877,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("float_list_Store_Idx", float_list_Store_IdxTy);
+
+	FunctionType *list_Store_IdxTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_Store_Idx", list_Store_IdxTy);
 
 	FunctionType *zipTy= FunctionType::get(
 		int8PtrTy,
@@ -990,13 +1004,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_Idx", float_vec_IdxTy);
 
-	FunctionType *float_vec_Idx_numTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Idx_num", float_vec_Idx_numTy);
-
 	FunctionType *float_vec_CalculateIdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -1018,6 +1025,48 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_print", float_vec_printTy);
 
+	FunctionType *float_vec_powTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_pow", float_vec_powTy);
+
+	FunctionType *float_vec_sumTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_sum", float_vec_sumTy);
+
+	FunctionType *float_vec_int_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_int_add", float_vec_int_addTy);
+
+	FunctionType *float_vec_int_divTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_int_div", float_vec_int_divTy);
+
+	FunctionType *float_vec_float_vec_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_float_vec_add", float_vec_float_vec_addTy);
+
+	FunctionType *float_vec_float_vec_subTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("float_vec_float_vec_sub", float_vec_float_vec_subTy);
+
 	FunctionType *float_vec_Split_ParallelTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -1033,7 +1082,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("float_vec_Split_Strided_Parallel", float_vec_Split_Strided_ParallelTy);
 
 	FunctionType *float_vec_sizeTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy},
 		false
 	);
@@ -1151,19 +1200,19 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("ones_int", ones_intTy);
 
-	FunctionType *int_vec_IdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Idx", int_vec_IdxTy);
-
 	FunctionType *int_vec_Idx_numTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("int_vec_Idx_num", int_vec_Idx_numTy);
+
+	FunctionType *int_vec_IdxTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("int_vec_Idx", int_vec_IdxTy);
 
 	FunctionType *int_vec_CalculateIdxTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
@@ -1325,6 +1374,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_to_float", str_to_floatTy);
+
+	FunctionType *str_str_differentTy= FunctionType::get(
+		Type::getInt1Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_str_different", str_str_differentTy);
+
+	FunctionType *str_str_equalTy= FunctionType::get(
+		Type::getInt1Ty(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("str_str_equal", str_str_equalTy);
 
 	FunctionType *str_DeleteTy= FunctionType::get(
 		int8PtrTy,

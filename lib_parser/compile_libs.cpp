@@ -134,18 +134,18 @@ int main() {
         file.close();
     }
     
-    all_return_dicts = all_return_dicts + "\n\t};\n\n\tfunctions_return_data_type = {";
+    all_return_dicts = all_return_dicts + "\n\t};\n\n";
 
     for (auto &parsed_file : return_data_files)
     {
         file.open(parsed_file);
 
         while(std::getline(file, line))
-            all_return_dicts = all_return_dicts + "\t\t\t\t\t\t" + line + "\n";
+            all_return_dicts = all_return_dicts + line + "\n";
         file.close();
     }
 
-    all_return_dicts = all_return_dicts + "\n\t};\n}";
+    all_return_dicts = all_return_dicts + "\n}";
 
 
 

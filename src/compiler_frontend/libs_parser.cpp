@@ -26,6 +26,7 @@
 
 
 std::map<std::string, std::string> lib_function_remaps;
+std::map<std::string, Data_Tree> Idx_Fn_Return;
 
 
 
@@ -59,8 +60,8 @@ inline std::vector<fs::path> get_lib_files(std::string lib_dir)
 
 
 
-LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgTypes, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer)
-    : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgTypes(ArgTypes), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer) {}
+LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgTypes, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer, bool IsVarArg)
+    : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgTypes(ArgTypes), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer), IsVarArg(IsVarArg) {}
 
 void LibFunction::Print() {
     std::cout << "extern \"C\" " << ReturnType << " ";
@@ -116,6 +117,9 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         fn_return_type = int8PtrTy;
         fn_return_type_str = "void_ptr";
     }
+
+    
+
 
 
     
@@ -178,6 +182,15 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
     }
 
 
+    // if(Name=="tensor_CalculateIdx"||Name=="tensor_Idx")
+    //     LogBlue(Name + " has return " + fn_return_type_str + " is_var_arg " + std::to_string(IsVarArg));
+    // if(Name=="tensor_Idx"||Name=="tensor_CalculateIdx") {
+    //     std::cout << "ret: " << fn_return_type_str << ".\n";
+    //     for (const auto &arg : arg_types_str)
+    //         std::cout << "\targ: " << arg << ".\n";
+    //     std::cout << ".\n";
+    // }
+
 
     if (Name=="_glob_b_")
         fn_return_type_str = "str_vec";
@@ -200,7 +213,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
     FunctionType *llvm_function = FunctionType::get(
         fn_return_type,
         arg_types,
-        false
+        IsVarArg
     );
 
     Function* funcDecl = cast<Function>(
@@ -230,7 +243,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
     // Check if it is a data-type
     if(ReturnType!="float"||IsPointer)
     {
-        std::string nsk_data_type = ReturnType;        
+        std::string nsk_data_type = ReturnType;
         if(begins_with(ReturnType, "DT_"))
         { 
             nsk_data_type.erase(0, 3);
@@ -241,7 +254,32 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
         if (Name=="_glob_b_")
             nsk_data_type = "str_vec";
 
+        if(ends_with(nsk_data_type, "_vec")) {
+            Data_Tree vec_type = Data_Tree("vec");
+            vec_type.Nested_Data.push_back(Data_Tree(remove_substring(nsk_data_type, "_vec")));
+            functions_return_data_type[Name] = vec_type;
+        }
+        else
+            functions_return_data_type[Name] = Data_Tree(nsk_data_type);
         functions_return_type[Name] = nsk_data_type;
+    }
+
+
+    if (ends_with(Name, "_Idx")||ends_with(Name, "_Query")) {
+        // LogBlue(Name + " is _Idx with return " + ReturnType + " and is pointer " + std::to_string(IsPointer));
+        if(ReturnType=="char"&&IsPointer)
+            Idx_Fn_Return[Name] = Data_Tree("str");
+        else {
+            std::string nsk_data_type = ReturnType;
+            if(begins_with(ReturnType, "DT_"))
+                nsk_data_type.erase(0, 3);
+            if(ends_with(nsk_data_type, "_vec")) {
+                Data_Tree vec_tree = Data_Tree("vec");
+                vec_tree.Nested_Data.push_back(remove_substring(nsk_data_type, "_vec"));
+                Idx_Fn_Return[Name] = vec_tree; 
+            } else
+                Idx_Fn_Return[Name] = Data_Tree(nsk_data_type);
+        }
     }
 
 
@@ -452,6 +490,7 @@ void LibParser::ParseExtern() {
     std::vector<std::string> arg_types, arg_names;
     std::vector<int> arg_is_pointer;
     std::string last_type, last_name;
+    int last_is_pointer;
 
     if(token!='(')
       return;
@@ -476,14 +515,18 @@ void LibParser::ParseExtern() {
         
         arg_types.push_back(running_string);      
         last_type = running_string;
+        
         _getToken(); // eat arg type
 
         if (token=='*')
         {
             _getToken();
+            last_is_pointer = 1;
             arg_is_pointer.push_back(1);
-        } else
+        } else {
+            last_is_pointer = 0;
             arg_is_pointer.push_back(0);
+        }
 
         
         arg_names.push_back(running_string);
@@ -501,11 +544,12 @@ void LibParser::ParseExtern() {
         {
             arg_types.push_back(last_type);
             arg_names.push_back(last_name);
+            arg_is_pointer.push_back(last_is_pointer);
         }
     }
 
     
-    LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_names, arg_is_pointer);
+    LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_names, arg_is_pointer, is_var_arg);
     Functions[file_name].push_back(lib_fn);
 
     // std::cout << "\n\n";
@@ -573,6 +617,7 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
                 InitFuncType initialize_fn = reinterpret_cast<InitFuncType>(func_ptr);
                 initialize_fn();
             }
+            
 
             fn->Link_to_LLVM(func_ptr);
             fn->Add_to_Nsk_Dicts(func_ptr, lib_name, is_default);
