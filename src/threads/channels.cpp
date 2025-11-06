@@ -280,3 +280,7 @@ extern "C" bool int_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
 }
 
 
+void channel_Clean_Up(void *ptr) {
+    Channel *dptr = static_cast<Channel *>(ptr);
+    free(dptr);
+}

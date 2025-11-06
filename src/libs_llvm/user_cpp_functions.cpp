@@ -58,6 +58,8 @@ void set_user_functions() {
 
 	clean_up_functions["float_vec"] = float_vec_Clean_Up;
 
+	clean_up_functions["channel"] = channel_Clean_Up;
+
 	clean_up_functions["str"] = str_Clean_Up;
 
 	clean_up_functions["str_vec"] = str_vec_Clean_Up;

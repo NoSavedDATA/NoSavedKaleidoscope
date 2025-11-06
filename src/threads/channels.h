@@ -27,3 +27,5 @@ struct Channel {
 
     Channel(int);
 };
+
+void channel_Clean_Up(void *ptr);

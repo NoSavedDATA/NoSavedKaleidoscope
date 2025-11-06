@@ -1,0 +1,1 @@
+	clean_up_functions["channel"] = channel_Clean_Up;

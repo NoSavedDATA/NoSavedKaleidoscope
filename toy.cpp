@@ -1226,7 +1226,7 @@ int main(int argc, char* argv[]) {
                       "LenStrVec", "zeros_vec", "ones_vec", "start_timer", "end_timer",
                       "_glob_b_", "print", "cross_entropy", "backprop", "AdamW", "SGD",
                       "load_preprocess_img", "max", "min", "unbug",
-                      "cpu_idx", "eval", "train", "OneCycleLR", "CosineLR", "wload_img_resize",
+                      "cpu_idx", "OneCycleLR", "CosineLR", "wload_img_resize",
                       "build_vocab", "tokenize", "wtokenize", "write_zerosw",
                       "wtokenize_pad_left", "print_randoms", "wtokenize_pad_left_batch_first",
                       "wtokenize_pad_left_idx", "print_scope", "load_bin", "wload_bin", "randint",

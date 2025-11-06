@@ -300,6 +300,7 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     GarbageCollector &gc = inner_most_scope->gc;
     
     if (gc.allocations>1000||gc.size_occupied>1000000) {
+        // std::cout << "CLEAN UP" << ".\n";
         scope_struct->gc.sweep(scope_struct);
     }
     else {
