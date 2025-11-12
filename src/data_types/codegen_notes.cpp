@@ -79,6 +79,9 @@ DT_list::DT_list() : Nsk_Vector(0) {
     data_types = new std::vector<std::string>();
 }
 
+
+
+
 DT_list::~DT_list() {
     delete data;  // Free memory
     delete data_types;

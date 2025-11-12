@@ -1,11 +1,14 @@
 #pragma once
 
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <string>
 #include <unordered_map>
 
 #include "../compiler_frontend/global_vars.h"
+#include "../compiler_frontend/logging_v.h"
 #include "../compiler_frontend/logging.h"
 #include "../clean_up/clean_up.h"
 #include "../data_types/list.h"
@@ -15,157 +18,194 @@
 
 
 
-MarkSweepAtom::MarkSweepAtom(std::string data_type) : data_type(data_type) {
+
+int gc_sizes[GC_obj_sizes];
+uint16_t GC_size_to_class[GC_N+1];
+
+
+int bin_search_gc_size(int size, int idx, int half) { 
+    if(idx==0||idx==GC_obj_sizes-1)
+        return gc_sizes[idx];
+
+    if(half<1)
+        half=1;
+
+    if(size<gc_sizes[idx])
+        return bin_search_gc_size(size, idx-half, half/2);
+
+    if(size>gc_sizes[idx+1])
+        return bin_search_gc_size(size, idx+half, half/2);
+  
+
+    return gc_sizes[idx+1];
 }
 
-void MarkSweepAtom::inc_scopeful() {
-    this->scope_refs+=1;
-}
-void MarkSweepAtom::inc_scopeless() {
-    this->scopeless_refs+=1;
-}
-
-void MarkSweepAtom::dec_scopeful() {
-    if(this->scope_refs>0)
-        this->scope_refs-=1;
-}
-void MarkSweepAtom::dec_scopeless() {
-    if(this->scopeless_refs>0)
-        this->scopeless_refs-=1;
-}
-
-void MarkSweepAtom::dec() {
-    if(this->scopeless_refs>0)
-        this->scopeless_refs-=1;
-    if(this->scope_refs>0)
-        this->scope_refs-=1;
-}
-
-
-
-void MarkSweep::append(void *data_ptr, std::string data_type) {
-
-    auto it = mark_sweep_map.find(data_ptr);
-    if (it!=mark_sweep_map.end())
-    {}
-    else
-        mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type);
+inline int search_gc_size(int size) {
+    return bin_search_gc_size(size, 8, 4);
 }
 
 
-void MarkSweep::mark_scopeful(void *data_ptr, std::string data_type) {
+GC_Span::GC_Span(GC_Arena *arena, int obj_size) : arena(arena), obj_size(obj_size) {
+    N=0;
+    pages=0;
 
-    auto it = mark_sweep_map.find(data_ptr);
-    if (it!=mark_sweep_map.end())
-    {
-        it->second->dec_scopeful();
-        // mark_sweep_map[data_ptr] = it->second;
-        if(it->second->scope_refs+it->second->scope_refs&&data_type=="tensor")
-            clean_up_functions[data_type](data_ptr);
+    while (N<32&&pages<4) {
+        pages++;
+        N = size / (obj_size*pages);
     }
-    // else
-    //     mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
+    N = N*pages;
+
+    // std::cout << "\nAllocate span with\n\tObj size " << obj_size << "\n\tN: " << N << "\n\tPages: " << pages << "\n\n\n";
+
+    
+
+    // Get Span address
+    span_address = static_cast<char*>(arena->arena) + arena->size_allocated;
+    arena->size_allocated += obj_size*pages;
+
+    // Get & initialize mark-bits
+    words = (N + word_bits-1) / word_bits;
+    mark_bits = (uint64_t*)malloc(words*sizeof(uint64_t));
+    for (int i=0; i<words; ++i)
+       mark_bits[i] = 0ULL; 
 }
 
 
-void MarkSweep::mark_scopeless(void *data_ptr, std::string data_type) {
-
-    auto it = mark_sweep_map.find(data_ptr);
-    if (it!=mark_sweep_map.end())
-    {
-        it->second->dec_scopeless();
-        // mark_sweep_map[data_ptr] = it->second;
-
-    }
-    // else
-    //     mark_sweep_map[data_ptr] = new MarkSweepAtom(data_type, true);
-
-}
-
-
-void MarkSweep::unmark_scopeful(void *data_ptr) {
-
-    auto it = mark_sweep_map.find(data_ptr);
-
-    if (it!=mark_sweep_map.end())
-    {
-        it->second->inc_scopeful();
-    } else {
-        // std::cout << "UNMARK NOT FOUND" << ".\n";
-    }
-}
-
-void MarkSweep::unmark_scopeless(void *data_ptr) {
-
-    auto it = mark_sweep_map.find(data_ptr);
-
-    if (it!=mark_sweep_map.end())
-    {
-        it->second->inc_scopeless();
-    } else {
-        // std::cout << "UNMARK NOT FOUND" << ".\n";
-    }
-}
-
-
-void MarkSweep::clean_up(bool clean_scopeful) {
-    for (auto it = mark_sweep_map.begin(); it != mark_sweep_map.end(); ) {
-        MarkSweepAtom *atom = it->second;
-
-        
-        if ((atom->scope_refs==0||clean_scopeful) && atom->scopeless_refs==0) {
-            
-            // clean_up_functions[atom->data_type](it->first);
-            // free(atom);
-            // it = mark_sweep_map.erase(it); // erase returns the next valid iterator
-        } else {
-            ++it;
+inline int find_free(uint64_t *mark_bits, const int words) {
+    for (size_t w = 0; w < words; ++w) {
+        if (~mark_bits[w]) { // if any bit is 0
+            for (size_t b = 0; b < 64; ++b) {
+                if (!(mark_bits[w] & (1ULL << b)))
+                    return w * 64 + b;
+            }
         }
     }
+    return -1; // no free slot
+}
+
+inline void mark_bits_alloc(uint64_t *mark_bits, const int idx) {
+    size_t w = idx / 64;
+    size_t b = idx % 64;
+    mark_bits[w] |= (1ULL << b);
+}
+
+// Unmark (free) a slot
+inline void mark_bits_free(uint64_t *mark_bits, const int idx) {
+    size_t w = idx / 64;
+    size_t b = idx % 64;
+    mark_bits[w] &= ~(1ULL << b);
 }
 
 
+void *GC_Span::Allocate() {
 
+    int free_idx = find_free(mark_bits, words);
+    // std::cout << "Found free idx: " << free_idx << ".\n";
 
+    if (free_idx==-1)
+        return nullptr;
 
-extern "C" void MarkToSweep_Mark(Scope_Struct *scope_struct, void *value, char *data_type) {
-    // std::cout << "MARK OF " << data_type << ".\n";
-    if (value==nullptr)
-        return;
-    // std::cout << "Mark to sweep of " << data_type << ".\n";
-    scope_struct->mark_sweep_map->append(value, data_type);
-}
+    mark_bits_alloc(mark_bits, free_idx);
+    
 
-extern "C" void MarkToSweep_Mark_Scopeful(Scope_Struct *scope_struct, void *value, char *data_type) {
-    // std::cout << "MARK OF " << data_type << ".\n";
-    if (value==nullptr)
-        return;
-    // std::cout << "Mark to sweep of " << data_type << ".\n";
-    scope_struct->mark_sweep_map->mark_scopeful(value, data_type);
-}
-
-extern "C" void MarkToSweep_Mark_Scopeless(Scope_Struct *scope_struct, void *value, char *data_type) {
-    // std::cout << "MARK OF " << data_type << ".\n";
-    if (value==nullptr)
-        return;
-    // std::cout << "Mark to sweep of " << data_type << ".\n";
-    scope_struct->mark_sweep_map->mark_scopeless(value, data_type);
+    return static_cast<char*>(span_address) + obj_size*free_idx;
 }
 
 
-extern "C" void MarkToSweep_Unmark_Scopeful(Scope_Struct *scope_struct, void *value) {
-    if (value==nullptr)
-        return;
-    // std::cout << "Unmark " << value << ".\n";
-    scope_struct->mark_sweep_map->unmark_scopeful(value);
+GC_Arena::GC_Arena() {
+    std::cout << "init arena size " << arena_size << ".\n";
+    // arena = calloc(arena_size, 1);
+    arena = malloc(arena_size);
 }
 
-extern "C" void MarkToSweep_Unmark_Scopeless(Scope_Struct *scope_struct, void *value) {
-    if (value==nullptr)
-        return;
-    // std::cout << "Unmark " << value << ".\n";
-    scope_struct->mark_sweep_map->unmark_scopeless(value);
+inline bool Check_Arena_Size_Ok(const int size_allocated) {
+    if(size_allocated>65536) {
+        // LogErrorC(1, "Arena overflow");
+        return false;
+    }
+    return true;
 }
+
+void *GC_Arena::Allocate(int size) {
+    GC_Span *span;
+    if (Spans.count(size)==0) {
+        span = new GC_Span(this, size);
+        if (!Check_Arena_Size_Ok(size_allocated)) {
+            free(span);
+            return nullptr;
+        }
+        Spans.emplace(size, std::vector<GC_Span*>{span});
+        return span->Allocate();
+    }
+
+    int spans_count = Spans[size].size();
+
+    void *ptr=nullptr;
+    int i=0;
+    while(ptr==nullptr) {
+        if(i<spans_count) {
+            span = Spans[size][i];
+        } else {
+            span = new GC_Span(this, size);
+            if (!Check_Arena_Size_Ok(size_allocated)) {
+                free(span);
+                return nullptr;
+            }
+            Spans[size].push_back(span);
+        }
+        ptr = span->Allocate();
+        ++i;
+    }
+    
+    return ptr;
+}
+
+
+void *GC::Allocate(int size) {
+    int obj_size = GC_size_to_class[(size+7)/8];
+    // std::cout << "Allocate size: " << size << "/" << obj_size << ".\n";
+
+    if(size>GC_max_object_size) {
+        LogErrorC(-1, "Allocated object of size " + std::to_string(size) + ", but the maximum supported object size is " + std::to_string(GC_max_object_size) + ".");
+        return nullptr;
+    }
+
+
+    void *address=nullptr;
+    for (const auto &arena : arenas) {
+        address = arena->Allocate(obj_size);
+        std::cout << "Arena: " << arena->arena << ".\n";
+        if (address!=nullptr)
+            break;
+    }
+
+
+
+    if (address==nullptr) {
+        LogErrorC(-1, "Failed, acquire new arena.");
+        GC_Arena *new_arena = new GC_Arena();
+
+        arenas.push_back(new_arena);
+        address = new_arena->Allocate(obj_size);
+    }
+
+    // std::cout << "got addr " << address << ".\n";
+    
+    // address = arenas[0]->Allocate(48);
+    // address = arenas[0]->Allocate(8);
+
+    return address;
+}
+
+
+extern "C" void scope_struct_Alloc_GC(Scope_Struct *scope_struct) {
+    scope_struct->_gc = new GC();
+}
+
+GC::GC() {
+    arenas.push_back( new GC_Arena() );
+}
+
 
 
 

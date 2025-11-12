@@ -6,35 +6,57 @@
 #include <vector>
 
 
+const int word_bits=64;
+
+const int GC_obj_sizes=15;
+const int GC_max_object_size = 16384;
+extern int gc_sizes[GC_obj_sizes];
+
+
+constexpr size_t GC_ALIGN = 8; // 8-byte granularity
+constexpr size_t GC_N = GC_max_object_size / GC_ALIGN;
+
+extern uint16_t GC_size_to_class[GC_N+1];
+
 
 struct Scope_Struct;
-
-struct MarkSweepAtom {
-    std::string data_type;
-    int scope_refs=0;
-    int scopeless_refs=0;
-
-    MarkSweepAtom(std::string);
-
-    void inc_scopeful();
-    void inc_scopeless();
-    void dec();
-    void dec_scopeful();
-    void dec_scopeless();
-};
+struct GC_Arena;
 
 
-struct MarkSweep {
+struct GC_Span {
+    GC_Arena *arena;
+    void *span_address;
+    const int size=8192;
+    int obj_size, pages, N;
+
+    int words;
+
+    uint64_t *mark_bits;
     
-    std::unordered_map<void *, MarkSweepAtom *> mark_sweep_map;
-
-    void append(void *, std::string);
-    void mark_scopeful(void *, std::string);
-    void mark_scopeless(void *, std::string);
-    void unmark_scopeful(void *);
-    void unmark_scopeless(void *);
-    void clean_up(bool);
+    GC_Span(GC_Arena *, int);
+    void *Allocate();
 };
+
+
+struct GC_Arena {
+    // Get an arena of 64MB, and set pages size to 8 KB
+    // const int arena_size=67108864, page=8192;
+    const int arena_size=65536, page=8192;
+    int size_allocated;
+    void *arena, *metadata;
+    std::unordered_map<int, std::vector<GC_Span*>> Spans;
+
+    GC_Arena();
+    void *Allocate(int);
+};
+
+struct GC {
+    std::vector<GC_Arena*> arenas;
+    
+    GC();
+    void *Allocate(int);
+};
+
 
 
 //---------------------------------------------------------//

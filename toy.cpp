@@ -259,9 +259,13 @@ Function *FunctionAST::codegen() {
 
   NamedValues.clear();
 
+  LogBlue(function_name);
   
+  if(function_name=="__anon_expr")
+    call("scope_struct_Alloc_GC", {scope_struct});
   
 
+  
 
 
 
@@ -321,14 +325,14 @@ Function *FunctionAST::codegen() {
     // Finish off the function.
     if(!expr_is_return)
     {
-        call("scope_struct_Clear_GC_Root", {scope_struct});
-        for (const auto &pair : function_allocas[current_codegen_function]) {
-            std::string type = typeVars[current_codegen_function][pair.first];
-            if (!in_str(type, primary_data_tokens)) {
-                Value *loaded_var = load_alloca(pair.first, type, current_codegen_function);
-                call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-            }
-        }
+        // call("scope_struct_Clear_GC_Root", {scope_struct});
+        // for (const auto &pair : function_allocas[current_codegen_function]) {
+        //     std::string type = typeVars[current_codegen_function][pair.first];
+        //     if (!in_str(type, primary_data_tokens)) {
+        //         Value *loaded_var = load_alloca(pair.first, type, current_codegen_function);
+        //         call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
+        //     }
+        // }
         call("scope_struct_Clean_Scope", {scope_struct}); 
         Builder->CreateRet(RetVal); 
     }
@@ -1186,8 +1190,33 @@ int main(int argc, char* argv[]) {
   floatFunctions["round"] = "roundE";
   floatFunctions["floor"] = "floorE";
 
+    gc_sizes[0] = 8;
+    gc_sizes[1] = 16;
+    gc_sizes[2] = 24;
+    gc_sizes[3] = 48;
+    gc_sizes[4] = 64;
+    gc_sizes[5] = 128;
+    gc_sizes[6] = 256;
+    gc_sizes[7] = 384;
+    gc_sizes[8] = 512;
+    gc_sizes[9] = 768;
+    gc_sizes[10] = 1024;
+    gc_sizes[11] = 2048;
+    gc_sizes[12] = 4096;
+    gc_sizes[13] = 8192;
+    gc_sizes[14] = GC_max_object_size;
 
 
+    for (int i=0, c=0; i<=GC_N; i++) {
+        int size = i * GC_ALIGN;
+        while (c<GC_obj_sizes-1 && gc_sizes[c]<size)
+            c++;
+        GC_size_to_class[i] = gc_sizes[c];
+    }
+
+
+
+    
 
 
   set_functions_return_type();

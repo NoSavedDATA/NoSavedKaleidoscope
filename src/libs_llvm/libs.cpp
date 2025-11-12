@@ -381,40 +381,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("ConcatNumToStrFree", ConcatNumToStrFreeTy);
 
-	FunctionType *MarkToSweep_MarkTy= FunctionType::get(
+	FunctionType *scope_struct_Alloc_GCTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("MarkToSweep_Mark", MarkToSweep_MarkTy);
-
-	FunctionType *MarkToSweep_Mark_ScopefulTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("MarkToSweep_Mark_Scopeful", MarkToSweep_Mark_ScopefulTy);
-
-	FunctionType *MarkToSweep_Mark_ScopelessTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("MarkToSweep_Mark_Scopeless", MarkToSweep_Mark_ScopelessTy);
-
-	FunctionType *MarkToSweep_Unmark_ScopefulTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("MarkToSweep_Unmark_Scopeful", MarkToSweep_Unmark_ScopefulTy);
-
-	FunctionType *MarkToSweep_Unmark_ScopelessTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("MarkToSweep_Unmark_Scopeless", MarkToSweep_Unmark_ScopelessTy);
+	TheModule->getOrInsertFunction("scope_struct_Alloc_GC", scope_struct_Alloc_GCTy);
 
 	FunctionType *scope_struct_specTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

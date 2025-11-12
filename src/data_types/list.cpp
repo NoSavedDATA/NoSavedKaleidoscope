@@ -28,7 +28,8 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
   va_list args;
   va_start(args, type);
 
-  DT_list *notes_vector = new DT_list();  
+  // DT_list *notes_vector = new DT_list();  
+  DT_list *notes_vector = newT<DT_list>(scope_struct, "list");
 
   bool is_type = false;
   for (int i=0; i<1000; i++)
@@ -112,7 +113,8 @@ extern "C" float tuple_print(Scope_Struct *scope_struct, DT_list *list) {
 extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector)
 {
   if (init_val==nullptr)
-    init_val = new DT_list();
+    init_val = newT<DT_list>(scope_struct, "list");
+
 
   return init_val;
 }

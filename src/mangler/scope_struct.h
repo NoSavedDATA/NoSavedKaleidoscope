@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <map>
 #include <string>
 #include <vector>
@@ -8,6 +9,10 @@
 
 
 struct Scope_Struct { 
+    int code_line=0;
+    int thread_id=0;
+    GC *_gc=nullptr;
+
     Scope_Struct *previous_scope=nullptr;
     void *object_ptr = nullptr;
 
@@ -15,15 +20,12 @@ struct Scope_Struct {
     char *scope = nullptr;
     char *function_name = nullptr;
 
-    // MarkSweep *mark_sweep_map = nullptr;
-    MarkSweep *mark_sweep_map = nullptr;
+    Scope_Struct *inner_most = nullptr;
 
     GarbageCollector gc;
     
-    int thread_id=0;
     int has_grad=1;
 
-    int code_line = 0;
     int asyncs_count = 0;
 
     bool is_at_return = false;
@@ -45,6 +47,11 @@ struct Scope_Struct {
 
     void Print();
 
+    void *Allocate(int);
+    // inline void *Allocate(int size) {
+    //     // std::cout << "Allcoate " << size << " on " << _gc << ".\n";
+    //     return nullptr;
+    // }
 };
 
 Scope_Struct *get_inner_most_scope(Scope_Struct *);

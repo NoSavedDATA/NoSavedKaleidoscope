@@ -25,21 +25,54 @@ bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
 }
 
 
+bool CompareListRecursive(Data_Tree L, Data_Tree R) {
+
+    
+    std::string list_type = L.Nested_Data[0].Type;
+
+    if (in_str(list_type,{"list", "tuple", "dict"})) {
+        if (!in_str(R.Type,{"list","tuple","dict"}))
+            return false;
+        return CompareListRecursive(L.Nested_Data[0], R.Nested_Data[0]);
+    }
+
+    
+
+    if(R.Type=="list")
+        return list_type==R.Nested_Data[0].Type;
+    
+    if(R.Type=="tuple") {
+        for (auto data_tree : R.Nested_Data)
+        {
+            if(list_type!=data_tree.Type)
+                return false;
+        }    
+    }
+    
+    
+    return true;
+}
+
+
+
 bool CompareListTuple(Data_Tree *L, Data_Tree R) {
 
     if(L->Type!="list"||R.Type!="tuple")
         return true;
 
 
-    std::string list_type = L->Nested_Data[0].Type;
 
+    
+    CompareListRecursive(*L, R);
+    
 
-
-    for (auto data_tree : R.Nested_Data)
-    {
-        if(list_type!=data_tree.Type)
-            return false;
-    }
+    // for (auto data_tree : R.Nested_Data)
+    // {
+    //     if(list_type!=data_tree.Type) {
+    //         std::cout << "FALSE FROM LIST TUPLE" << ".\n";
+    //         return false;
+    //     }
+    // }
 
 
     return true;
@@ -76,7 +109,6 @@ int Data_Tree::Compare(Data_Tree other_tree) {
 
     if(Type=="any"||other_tree.Type=="any")
         return 0;
-
  
     if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_tree.Type))
         return comparisons+1;

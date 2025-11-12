@@ -21,6 +21,7 @@ bool check_initialized_field(void *ptr) {
 
 extern "C" void *allocate_void(Scope_Struct *scope_struct, int size, char *type) {
     void *ptr = malloc(size);
+    // void *ptr = scope_struct->Allocate(size);
     memset(ptr, SENTINEL_BYTE, size);
 
     scope_struct->gc.pointer_nodes.push_back(GC_Node(ptr, type));

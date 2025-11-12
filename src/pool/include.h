@@ -17,6 +17,7 @@ T *allocate(Scope_Struct *scope_struct, int size, std::string type) {
 
     int alloc_size = size*sizeof(T);
     void *v_ptr = malloc(alloc_size);
+    // void *v_ptr = scope_struct->Allocate(alloc_size);
     
     if(scope_struct!=nullptr)
     {
@@ -33,8 +34,12 @@ T *allocate(Scope_Struct *scope_struct, int size, std::string type) {
 
 
 template<typename T>
-T *newT(Scope_Struct *scope_struct, std::string type) { 
-    
+T *newT(Scope_Struct *scope_struct, std::string type) {
+
+    // std::cout << "new of " << type << ".\n";
+    // void *v_ptr = scope_struct->Allocate(sizeof(T));
+    // T *ptr = new (v_ptr) T();
+
     T *ptr = new T();
 
     if(scope_struct!=nullptr)

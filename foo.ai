@@ -1,24 +1,16 @@
+start_timer()
 
+def int is_prime(i n)
+	# print("n="+n)
+	for i=2, i<(n//2+1)
+		if n%i==0
+			return 0
+	return 1
 
-def list foo(int x, int y)
-    return x, y
+int num_primes = 0
+for i=2, i<250001
+	num_primes = num_primes + is_prime(i)
 
+print("Found " + num_primes + " primes.")
 
-main
-
-    list<list<int>> m
-
-    list<int> r1 = [1,2,3]
-    list<int> r2 = [4,5,6]
-
-    m = [r1,r2]
-
-
-    m.print()
-    
-    # int x, y
-
-    # x, y = foo(2,3)
-
-    # print("x: " + x)
-    # print("y: " + y)
+end_timer()

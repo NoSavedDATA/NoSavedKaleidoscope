@@ -1,0 +1,16 @@
+Starting program: /home/nosaveddata/compiler/bin/nsk 
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGINT, Interrupt.
+0x00007ffff7914852 in __GI___libc_read (fd=0, buf=0x555557fbbcb0, nbytes=1024) at ../sysdeps/unix/sysv/linux/read.c:26
+26	../sysdeps/unix/sysv/linux/read.c: No such file or directory.
++r samples/primes.ai 
+Starting program: /home/nosaveddata/compiler/bin/nsk samples/primes.ai
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGINT, Interrupt.
+0x0000555555d054cb in get_inner_most_scope (scope_struct=0x555559cf12d0) at src/mangler/scope_struct.cpp:37
+37	        return scope_struct->inner_most;
++exit

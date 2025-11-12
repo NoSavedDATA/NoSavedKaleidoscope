@@ -2073,8 +2073,6 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 Value *RetExprAST::codegen(Value *scope_struct) {
   seen_var_attr=true;
 
-  
-
   call("scope_struct_Clear_GC_Root", {scope_struct});
   for (const auto &pair : typeVars[parser_struct.function_name]) {
     std::string type = typeVars[parser_struct.function_name][pair.first];
@@ -2083,6 +2081,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
       call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
     }
   }
+  
 
   if(Vars.size()==1)
   { 
@@ -2096,6 +2095,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     seen_var_attr=false;
     call("scope_struct_Clean_Scope", {scope_struct}); 
     Builder->CreateRet(ret);
+
     return const_float(0);
   }
   
@@ -2103,7 +2103,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   for (int i=0; i<Vars.size(); i++)
   {
     Value *value = Vars[i]->codegen(scope_struct); 
-    std::string type = Vars[i]->GetType();
+    std::string type = Vars[i]->GetDataTree().Type;
 
     if(!in_str(type, primary_data_tokens))
       call("scope_struct_Add_GC_Root", {scope_struct, value, global_str(type)});
@@ -2117,9 +2117,8 @@ Value *RetExprAST::codegen(Value *scope_struct) {
   Value *ret = callret("list_New", values);
   call("scope_struct_Clean_Scope", {scope_struct}); 
   Builder->CreateRet(ret);
-  return ret;
 
- 
+  return ret;
 }
 
 
@@ -2189,10 +2188,10 @@ Data_Tree NewVecExprAST::GetDataTree(bool from_assignment) {
     return data_type;
 
   data_type.Type = "tuple";
-  for (int i=1; i<Values.size(); i=i+2)
-  {
-    std::string type = Values[i]->GetDataTree().Type;
-    data_type.Nested_Data.push_back(Data_Tree(type));
+  for (int i=1; i<Values.size(); i=i+2) {
+    // std::string type = Values[i]->GetDataTree().Type;
+    Data_Tree type = Values[i]->GetDataTree();
+    data_type.Nested_Data.push_back(type);
   }
   data_type.empty=false;
 

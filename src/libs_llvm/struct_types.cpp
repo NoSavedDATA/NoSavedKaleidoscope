@@ -11,6 +11,7 @@
 std::map<std::string, StructType*> struct_types;
 
 void Generate_Struct_Types() {
+    // Get llvm types
     llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     llvm::Type *boolTy = Type::getInt1Ty(*TheContext);
     llvm::Type *floatTy = Type::getFloatTy(*TheContext);
@@ -18,6 +19,8 @@ void Generate_Struct_Types() {
     llvm::Type *intTy = Type::getInt32Ty(*TheContext);
     llvm::Type *intPtrTy = Type::getInt32Ty(*TheContext)->getPointerTo();
 
+
+    // DT_int_vecs
     // std::vector<int>
     StructType *vecIntTy = StructType::create(
         *TheContext,
@@ -29,6 +32,11 @@ void Generate_Struct_Types() {
         {intTy, vecIntTy, intPtrTy},
         "DT_int_vec"
     );
-
     struct_types["int_vec"] = int_vecTy;
+    
+    // StructType *GC_Struct_Type = StructType::create(
+    //     *TheContext,
+    //     {},
+    //     "GC"
+    // );
 }
