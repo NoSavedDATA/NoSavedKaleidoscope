@@ -20,13 +20,22 @@ void Generate_Struct_Types() {
     llvm::Type *intPtrTy = Type::getInt32Ty(*TheContext)->getPointerTo();
 
 
-    // DT_int_vecs
+    // std::vector<void*>
+    StructType *void_vecTy = StructType::create(
+        *TheContext,
+        {int8PtrTy, longTy, longTy},
+        "std.vector.int"
+    );
+
+
+    // --- DT_int_vecs ---
     // std::vector<int>
     StructType *vecIntTy = StructType::create(
         *TheContext,
         {intPtrTy, longTy, longTy},
         "std.vector.int"
-    );    
+    );
+    // DT_int_vecs
     StructType *int_vecTy  = StructType::create(
         *TheContext,
         {intTy, vecIntTy, intPtrTy},
@@ -34,9 +43,20 @@ void Generate_Struct_Types() {
     );
     struct_types["int_vec"] = int_vecTy;
     
-    // StructType *GC_Struct_Type = StructType::create(
-    //     *TheContext,
-    //     {},
-    //     "GC"
-    // );
+    // --- Scope_Struct --- 
+
+    // GC
+    StructType *GC_Struct_Type = StructType::create(
+        *TheContext,
+        {intTy, longTy, void_vecTy},
+        "GC"
+    );
+    // Scope_Struct
+    StructType *Scope_Struct_Type = StructType::create(
+        *TheContext,
+        {intTy, intTy, GC_Struct_Type},
+        "GC"
+    );
+    struct_types["GC"] = GC_Struct_Type;
+    struct_types["scope_struct"] = Scope_Struct_Type;
 }

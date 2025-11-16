@@ -81,6 +81,17 @@
 	Function_Arg_Names["tuple_print"].push_back("0");
 	Function_Arg_Names["tuple_print"].push_back("1");
 	
+	Function_Arg_Types["list_shuffle"]["0"] = "Scope_Struct";
+	Function_Arg_Types["list_shuffle"]["1"] = "list";
+	
+	Function_Arg_DataTypes["list_shuffle"]["0"] = Data_Tree("Scope_Struct");
+	Data_Tree list_shuffle_1 = Data_Tree("list");
+	list_shuffle_1.Nested_Data.push_back(Data_Tree("any"));
+	Function_Arg_DataTypes["list_shuffle"]["1"] = list_shuffle_1;
+	
+	Function_Arg_Names["list_shuffle"].push_back("0");
+	Function_Arg_Names["list_shuffle"].push_back("1");
+	
 	Function_Arg_Types["list_size"]["0"] = "Scope_Struct";
 	Function_Arg_Types["list_size"]["1"] = "list";
 	

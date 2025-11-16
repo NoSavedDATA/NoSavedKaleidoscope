@@ -8,14 +8,19 @@
 
 
 
-Channel::Channel(int buffer_size) : buffer_size(buffer_size) {
+Channel::Channel() {
+}
 
+void Channel::New(int buffer_size) {
+    this->buffer_size = buffer_size;
+    
     data_list = new DT_list();
 }
 
 
 extern "C" void *channel_Create(Scope_Struct *scope_struct, int buffer_size) {
-    Channel *ch = new Channel(buffer_size);
+    Channel *ch = newT<Channel>(scope_struct, "channel");
+    ch->New(buffer_size);
     // ch->name = "4ch";
     return ch;
 }
@@ -281,6 +286,4 @@ extern "C" bool int_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
 
 
 void channel_Clean_Up(void *ptr) {
-    Channel *dptr = static_cast<Channel *>(ptr);
-    free(dptr);
 }

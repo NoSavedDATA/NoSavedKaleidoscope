@@ -25,7 +25,8 @@ struct Channel {
     std::mutex mtx;
     std::condition_variable cv;
 
-    Channel(int);
+    Channel();
+    void New(int);
 };
 
 void channel_Clean_Up(void *ptr);

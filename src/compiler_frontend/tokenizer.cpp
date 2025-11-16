@@ -1,5 +1,6 @@
 
 #include <ctype.h>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -198,6 +199,17 @@ std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "bool"
                                         "Embedding", "EmbeddingLn", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
 std::vector<std::string> compound_tokens = {"tuple", "list", "dict"};
 std::vector<std::string> primary_data_tokens = {"int", "float", "bool", "foreach_control_var"};
+
+
+
+std::unordered_map<std::string, uint16_t> data_name_to_type = {{"int", 2}, {"float", 3}, {"bool", 4}, {"str", 5}, {"list", 6},
+                                                               {"tuple", 7}, {"dict", 8}, {"channel", 9}, {"int_vec", 10},
+                                                               {"float_vec", 11}};
+std::unordered_map<uint16_t, std::string> data_type_to_name = {{2, "int"}, {3, "float"}, {4, "bool"}, {5, "str"}, {6, "list"},
+                                                               {7, "tuple"}, {8, "dict"}, {9, "channel"}, {10, "int_vec"},
+                                                               {11, "float_vec"}};
+
+uint16_t data_type_count=12;
 
 
 std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},

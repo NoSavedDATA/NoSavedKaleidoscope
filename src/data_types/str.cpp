@@ -50,7 +50,6 @@ extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) 
 
 void str_Clean_Up(void *data_ptr)
 {
-  // std::cout << "str_Clean_Up" << ".\n\n";
   char *char_ptr = static_cast<char *>(data_ptr);
   move_to_char_pool(strlen(char_ptr)+1, char_ptr, "Mark sweep of str");
 }

@@ -672,6 +672,53 @@ Value *IfExprAST::codegen(Value *scope_struct) {
 //   br endcond, loop, endloop
 // outloop:
 
+void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const Parser_Struct &parser_struct) {
+  Value *GC_ptr = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 2, "GC_ptr_element");
+  Value *GC = Builder->CreateLoad(struct_types["GC"]->getPointerTo(), GC_ptr, "GC");
+
+  Value *GC_allocations_ptr = Builder->CreateStructGEP(struct_types["GC"], GC, 0, "GC_allocations_ptr");
+  Value *GC_allocations = Builder->CreateLoad(Type::getInt32Ty(*TheContext), GC_allocations_ptr, "GC_allocations");
+
+  Value *GC_size_alloc_ptr = Builder->CreateStructGEP(struct_types["GC"], GC, 1, "GC_allocations_ptr");
+  Value *GC_size_alloc = Builder->CreateLoad(Type::getInt64Ty(*TheContext), GC_size_alloc_ptr, "GC_allocations");
+
+  // // Compare GC_allocations > 1000
+  // Value *cmp_alloc = Builder->CreateICmpSGT(
+  //     GC_allocations,
+  //     ConstantInt::get(Type::getInt32Ty(*TheContext), 1000),
+  //     "cmp_alloc"
+  // );
+  // Compare GC_size_alloc > 10000
+  Value *cmp_size = Builder->CreateICmpUGT(  // unsigned since uint64_t
+      GC_size_alloc,
+      ConstantInt::get(Type::getInt64Ty(*TheContext), sweep_after_alloc),
+      "cmp_size"
+  );
+  // Value *sweep_cond = Builder->CreateOr(cmp_alloc, cmp_size);
+  Value *sweep_cond = cmp_size;
+
+  BasicBlock *SweepThenBB = BasicBlock::Create(*TheContext, "sweep_then", TheFunction);
+  BasicBlock *SweepContinueBB = BasicBlock::Create(*TheContext, "sweep_continue", TheFunction);
+
+  Builder->CreateCondBr(sweep_cond, SweepThenBB, SweepContinueBB);
+
+  Builder->SetInsertPoint(SweepThenBB);
+  call("scope_struct_Clear_GC_Root", {scope_struct});
+  for (const auto &pair : function_allocas[parser_struct.function_name]) {
+    std::string type = typeVars[parser_struct.function_name][pair.first];
+    if (!in_str(type, primary_data_tokens)) {
+      Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
+      call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
+    }
+  }
+
+  call("scope_struct_Sweep", {scope_struct});
+  Builder->CreateBr(SweepContinueBB);
+
+  Builder->SetInsertPoint(SweepContinueBB);
+}
+
+
 Value *ForExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return const_float(0);
@@ -692,10 +739,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
 
   if (!StartVal)
     return nullptr;
-
-
-
-
 
 
   Builder->CreateStore(StartVal, control_var_alloca);
@@ -767,16 +810,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   int j=0;
   for (auto &body : Body)
     body->codegen(scope_struct);
-
-  call("scope_struct_Clear_GC_Root", {scope_struct});
-  for (const auto &pair : function_allocas[parser_struct.function_name]) {
-    std::string type = typeVars[parser_struct.function_name][pair.first];
-    if (!in_str(type, primary_data_tokens)) {
-      Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
-      call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-    }
-  }
-  call("scope_struct_Sweep", {scope_struct});
+  check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
 
 
   // Reload, increment, and restore the alloca.  This handles the case where
@@ -896,16 +930,7 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
   int j=0;
   for (auto &body : Body)
     body->codegen(scope_struct);
-
-  call("scope_struct_Clear_GC_Root", {scope_struct});
-  for (const auto &pair : function_allocas[parser_struct.function_name]) {
-    std::string type = typeVars[parser_struct.function_name][pair.first];
-    if (!in_str(type, primary_data_tokens)) {
-      Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
-      call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-    }
-  }
-  call("scope_struct_Sweep", {scope_struct});
+  check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
 
 
   // Reload, increment, and restore the alloca.  This handles the case where
@@ -966,17 +991,8 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
   // Generate the loop body code
   for (auto &body : Body)
     body->codegen(scope_struct);
+  check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
 
-
-  call("scope_struct_Clear_GC_Root", {scope_struct});
-  for (const auto &pair : function_allocas[parser_struct.function_name]) {
-    std::string type = typeVars[parser_struct.function_name][pair.first];
-    if (!in_str(type, primary_data_tokens)) {
-      Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
-      call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-    }
-  }
-  call("scope_struct_Sweep", {scope_struct});
 
   // After the loop body, go back to the condition check
   Builder->CreateBr(CondBB);
@@ -2081,7 +2097,7 @@ Value *RetExprAST::codegen(Value *scope_struct) {
       call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
     }
   }
-  
+    
 
   if(Vars.size()==1)
   { 
@@ -2144,7 +2160,6 @@ Value *NewTupleExprAST::codegen(Value *scope_struct) {
 
   std::vector<Value *> values;
 
-  LogBlue("new tuple codegen");
   GetDataTree();
 
   values.push_back(scope_struct);
@@ -2358,7 +2373,7 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
 
   if (fn_name=="list_append") {
     std::string appended_type = UnmangleVec(Args[Args.size()-1]->GetDataTree());
-    LogBlue("Add type " + appended_type + " to list_append on line " + std::to_string(parser_struct.line));
+    // LogBlue("Add type " + appended_type + " to list_append on line " + std::to_string(parser_struct.line));
     ArgsV.push_back(global_str(appended_type));
   }
 
@@ -2953,7 +2968,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
 
         Value *new_ptr = callret("allocate_void", {scope_struct, const_int(size), global_str(obj_class)});
-        LogBlue("Add " + obj_class + " as root.");
+        // LogBlue("Add " + obj_class + " as root.");
         call("scope_struct_Add_GC_Root", {scope_struct, new_ptr, global_str(obj_class)});
 
 

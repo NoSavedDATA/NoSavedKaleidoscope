@@ -8,5 +8,3 @@
 #include "../mangler/scope_struct.h"
 #include "include.h"
 
-
-void float_Clean_Up(void *data_ptr);

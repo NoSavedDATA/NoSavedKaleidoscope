@@ -1,8 +1,8 @@
-1821-11-12 15:17:35
+1821-11-14 15:15:56
 
 	FunctionType *allocate_voidTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("allocate_void", allocate_voidTy);

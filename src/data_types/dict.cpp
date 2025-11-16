@@ -142,12 +142,9 @@ extern "C" void *dict_Query(Scope_Struct *scope_struct, DT_dict *dict, char *que
 }
 
 void dict_Clean_Up(void *data_ptr) {
-
     if (data_ptr==nullptr)
         return;
 
     // DT_dict *dict = static_cast<DT_dict *>(data_ptr);
-
     // delete dict;
-
 }

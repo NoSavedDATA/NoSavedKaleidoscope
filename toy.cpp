@@ -254,12 +254,11 @@ Function *FunctionAST::codegen() {
 
 
 
+  //   LogBlue("Execute function: " + function_name);
 
-//   std::cout << "\033[32mExecuting function: " << function_name << " \033[0m\n";
 
   NamedValues.clear();
 
-  LogBlue(function_name);
   
   if(function_name=="__anon_expr")
     call("scope_struct_Alloc_GC", {scope_struct});
@@ -1190,6 +1189,7 @@ int main(int argc, char* argv[]) {
   floatFunctions["round"] = "roundE";
   floatFunctions["floor"] = "floorE";
 
+
     gc_sizes[0] = 8;
     gc_sizes[1] = 16;
     gc_sizes[2] = 24;
@@ -1213,10 +1213,9 @@ int main(int argc, char* argv[]) {
             c++;
         GC_size_to_class[i] = gc_sizes[c];
     }
-
-
-
-    
+    for (int i=0; i<GC_obj_sizes; ++i)
+        GC_span_traits_vec.emplace(gc_sizes[i], new GC_span_traits(gc_sizes[i]));
+        
 
 
   set_functions_return_type();

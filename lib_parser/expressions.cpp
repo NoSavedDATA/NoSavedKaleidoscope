@@ -73,6 +73,10 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
         return_type = "str";
     else if (in_return_type=="int")
         return_type = "int";
+    else if (in_return_type=="uint64_t")
+        return_type = "uint64_t";
+    else if (in_return_type=="int64_t")
+        return_type = "int64_t";
     else if (in_return_type=="float")
         return_type = "float";
     else if (in_return_type=="bool")
@@ -208,6 +212,10 @@ Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_inf
             line2="\t\tType::getFloatTy(*TheContext),\n";
         else if (ReturnType=="int")
             line2="\t\tType::getInt32Ty(*TheContext),\n";
+        else if (ReturnType=="uint64_t")
+            line2="\t\tType::getInt64Ty(*TheContext),\n";
+        else if (ReturnType=="int64_t")
+            line2="\t\tType::getInt64Ty(*TheContext),\n";
         else if (ReturnType=="bool")
             line2="\t\tType::getInt1Ty(*TheContext),\n";
         else
@@ -224,6 +232,10 @@ Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_inf
                     line3 = line3 + "Type::getFloatTy(*TheContext)";
                 else if (ArgTypes[i]=="int")
                     line3 = line3 + "Type::getInt32Ty(*TheContext)";
+                else if (ArgTypes[i]=="uint64_t")
+                    line3 = line3 + "Type::getInt64Ty(*TheContext)";
+                else if (ArgTypes[i]=="int64_t")
+                    line3 = line3 + "Type::getInt64Ty(*TheContext)";
                 else if (ArgTypes[i]=="bool")
                     line3 = line3 + "Type::getInt1Ty(*TheContext)";
                 else

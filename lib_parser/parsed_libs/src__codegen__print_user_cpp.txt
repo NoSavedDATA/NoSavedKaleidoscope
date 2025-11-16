@@ -1,1 +1,1 @@
-"print", 
+"print", "print_void_ptr", "print_int", "print_uint64", 

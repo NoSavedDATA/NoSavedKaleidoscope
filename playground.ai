@@ -11,7 +11,7 @@ start_timer()
 class Dataset
     int batch_size, seq_len, num_workers, _len, yield_ptr
     int channel load_ch
-    str_vec files
+    list<str> files
     pinned_tensor p_x, p_y
     def float __init__(i batch_size, i seq_len, i num_workers, s path)
         self.batch_size = batch_size
@@ -31,8 +31,8 @@ class Dataset
 
 
     def int len()
-        self._len  = LenStrVec(self.files)
-        self.files = ShuffleStrVec(self.files)
+        self._len  = self.files.size()
+        self.files.shuffle()
         self.yield_ptr = 0
         self._len
 

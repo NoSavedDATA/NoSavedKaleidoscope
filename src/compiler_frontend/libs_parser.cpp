@@ -112,6 +112,11 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
     else if(begins_with(ReturnType, "DT_")) {
         fn_return_type = int8PtrTy;
         fn_return_type_str = remove_substring(ReturnType, "DT_");
+
+        if (data_name_to_type.count(fn_return_type_str)==0) {
+            data_name_to_type[fn_return_type_str] = data_type_count;
+            data_type_to_name[data_type_count++] = fn_return_type_str;
+        }
     }
     else {
         fn_return_type = int8PtrTy;
@@ -132,8 +137,13 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
         if (begins_with(return_type, "DT_"))
             return_type = remove_substring(return_type, "DT_");
 
-        if (create_type!=return_type)
+        if (create_type!=return_type) {
             Equivalent_Types[create_type].push_back(return_type);
+
+            int type_id = data_name_to_type[return_type];
+            data_name_to_type[create_type] = type_id;
+            // data_type_to_name[type_id] = equivalent_type;
+        }
     }
 
 

@@ -83,26 +83,17 @@ extern "C" char * shuffle_str(char *string_list)
 
 extern "C" char *IndexStrVec(std::vector<char*> vec, float _idx)
 {
-
   int idx = (int) _idx;
-
-  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n";
-  
-  
+  //std::cout << "Str vec indexed at [" << idx << "]: " << vec[idx] << "\n"; 
   return vec[idx];
 }
 
 
 extern "C" char * str_vec_Idx(Scope_Struct *scope_struct, std::vector<char*> vec, int idx)
 {
-
   // std::cout << "str_vec_Idx: " << vec_name << ".\n"; 
   // std::cout << "idx: " << _idx << ".\n";
-
-
-
   // std::cout << "Str Vec " << vec_name << "indexed at [" << idx << "]: " << vec[idx] << "\n";
-
   return CopyString(scope_struct, vec[idx]);
 }
 

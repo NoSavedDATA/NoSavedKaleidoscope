@@ -1414,7 +1414,7 @@ std::unique_ptr<ExprAST> ParseTupleExpr(Parser_Struct parser_struct, std::string
 
 std::unique_ptr<ExprAST> ParseChannelExpr(Parser_Struct parser_struct, std::string class_name, Data_Tree inner_data_tree) {
 
-  LogBlue("Parse channel");
+  // LogBlue("Parse channel");
 
   Data_Tree data_tree = Data_Tree("channel");
   data_tree.Nested_Data.push_back(inner_data_tree);
@@ -2309,6 +2309,10 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
   std::string Name = IdentifierStr;
 
   Classes.push_back(Name);
+
+  data_name_to_type[Name] = data_type_count;
+  data_type_to_name[data_type_count++] = Name;
+
 
   getNextToken(); // eat name
 

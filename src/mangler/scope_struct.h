@@ -11,7 +11,9 @@
 struct Scope_Struct { 
     int code_line=0;
     int thread_id=0;
-    GC *_gc=nullptr;
+    GC *gc=nullptr;
+    std::vector<GC_Node> root_nodes;
+
 
     Scope_Struct *previous_scope=nullptr;
     void *object_ptr = nullptr;
@@ -22,7 +24,7 @@ struct Scope_Struct {
 
     Scope_Struct *inner_most = nullptr;
 
-    GarbageCollector gc;
+    // GarbageCollector gc;
     
     int has_grad=1;
 
@@ -47,7 +49,7 @@ struct Scope_Struct {
 
     void Print();
 
-    void *Allocate(int);
+    void *Allocate(int, int);
     // inline void *Allocate(int size) {
     //     // std::cout << "Allcoate " << size << " on " << _gc << ".\n";
     //     return nullptr;

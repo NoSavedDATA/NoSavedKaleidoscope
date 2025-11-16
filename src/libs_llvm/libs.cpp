@@ -675,6 +675,27 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("print", printTy);
 
+	FunctionType *print_void_ptrTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_void_ptr", print_void_ptrTy);
+
+	FunctionType *print_intTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("print_int", print_intTy);
+
+	FunctionType *print_uint64Ty= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt64Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("print_uint64", print_uint64Ty);
+
 	FunctionType *dict_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
@@ -779,6 +800,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
+
+	FunctionType *list_shuffleTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("list_shuffle", list_shuffleTy);
 
 	FunctionType *list_sizeTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
@@ -1062,7 +1090,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *allocate_voidTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("allocate_void", allocate_voidTy);

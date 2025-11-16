@@ -8,10 +8,11 @@
 
 #include "../char_pool/include.h"
 #include "../common/extension_functions.h"
-// #include "../codegen/random.h"
+#include "../codegen/random.h"
 // #include "../codegen/string.h"
 #include "../compiler_frontend/global_vars.h"
 #include "../compiler_frontend/logging.h"
+#include "../compiler_frontend/logging_v.h"
 #include "../mangler/scope_struct.h"
 #include "../pool/include.h"
 
@@ -42,12 +43,14 @@ extern "C" DT_list *list_New(Scope_Struct *scope_struct, char *type, ...)
       if (!strcmp(type, "TERMINATE_VARARG"))
         break;
     } else {   
-      if (!strcmp(type, "float"))
-      {
+      if (!strcmp(type, "float")) {
         float value = va_arg(args, float);
         notes_vector->append(value, type);
       } else if (!strcmp(type, "int")) {
         int value = va_arg(args, int);
+        notes_vector->append(value, type);
+      } else if (!strcmp(type, "str")) {
+        char *value = va_arg(args, char *);
         notes_vector->append(value, type);
       } else if (!strcmp(type, "bool")) {
         bool value = va_arg(args, bool);
@@ -92,7 +95,7 @@ extern "C" float list_append(Scope_Struct *scope_struct, DT_list *list, void *x,
 
 
 extern "C" float list_print(Scope_Struct *scope_struct, DT_list *list) {
-  // std::cout << "\n";
+  std::cout << "print list " << list << "\n";
   list->print();
   return 0;
 }
@@ -119,6 +122,35 @@ extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *sc
   return init_val;
 }
 
+
+void DT_list_shuffle_pair(std::vector<std::any>& a,
+                  std::vector<std::string>& b)
+{
+    const size_t n = a.size();
+    if (b.size() != n) return; // or throw
+
+    std::vector<size_t> idx(n);
+    for (size_t i = 0; i < n; ++i) idx[i] = i;
+
+    
+    std::shuffle(idx.begin(), idx.end(), MAIN_PRNG);
+
+    std::vector<std::any> a2(n);
+    std::vector<std::string> b2(n);
+
+    for (size_t i = 0; i < n; ++i) {
+        a2[i] = std::move(a[idx[i]]);
+        b2[i] = std::move(b[idx[i]]);
+    }
+
+    a = std::move(a2);
+    b = std::move(b2);
+}
+
+extern "C" float list_shuffle(Scope_Struct *scope_struct, DT_list *list) {
+  DT_list_shuffle_pair(*list->data, *list->data_types);
+  return 0;
+}
 
 extern "C" int list_size(Scope_Struct *scope_struct, DT_list *list) {
   return list->size;
@@ -341,7 +373,7 @@ extern "C" DT_list *zip(Scope_Struct *scope_struct, DT_list *list, ...) {
 extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
 {
   std::string type = vec->data_types->at(idx);
-  // std::cout << "list_Idx on index " << idx << " for data type " << type << ".\n";
+  // std::cout << "list_Idx on index " << idx << " & recover data type " << type << ".\n";
 
   if (type=="float") {
     float* float_ptr = new float(vec->get<float>(idx));
@@ -353,12 +385,21 @@ extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
     bool* ptr = new bool(vec->get<bool>(idx));
     return static_cast<void*>(ptr); 
   } else if (type=="str") {
-    // std::cout << "Get as string" << ".\n";
+    char *c = vec->get<char*>(idx);
+    int len = strlen(c);
+    char *c_copy = allocate<char>(scope_struct, len+1, "str");
+    c_copy[len] = '\0';
+    memcpy(c_copy, c, len);
     // std::cout << "get str " << vec->get<char*>(idx) << ".\n";
     // return static_cast<char*>(ptr);
-    return vec->get<char*>(idx);
-  } else
+    return c_copy;
+  } else {
+    if (idx >= (*vec->data).size()) {
+      LogErrorC(scope_struct->code_line, "list index out of range.");
+      return nullptr;
+    }
     return std::any_cast<void *>((*vec->data)[idx]);
+  }
 }
 
 

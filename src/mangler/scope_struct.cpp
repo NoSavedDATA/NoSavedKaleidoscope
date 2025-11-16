@@ -31,7 +31,7 @@ Scope_Struct::Scope_Struct() {
     function_name[0] = '\0';
 }
 
-Scope_Struct *get_inner_most_scope(Scope_Struct *scope_struct) {    
+inline Scope_Struct *get_inner_most_scope(Scope_Struct *scope_struct) {    
     // Get the inner most scope that belongs to the same thread.
     if(scope_struct->inner_most!=nullptr)
         return scope_struct->inner_most;
@@ -81,12 +81,12 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     
     previous_scope = scope_to_copy;
     get_inner_most_scope(this);
-    _gc = inner_most->_gc;
+    gc = inner_most->gc;
 }
 
 
-void *Scope_Struct::Allocate(int size) {
-    return _gc->Allocate(size);
+void *Scope_Struct::Allocate(int size, int type_id) {
+    return gc->Allocate(size, type_id);
 }
 
 void Scope_Struct::Print() {
@@ -199,6 +199,7 @@ extern "C" float scope_struct_Increment_Thread(Scope_Struct *scope_struct) {
     }
     
     scope_struct->thread_id = thread_id;
+    scope_struct->gc = new GC(thread_id);
     return 0;
 }
 
@@ -229,16 +230,13 @@ extern "C" void *scope_struct_Load_for_Async(char *fn_name) {
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
     // std::cout << "Threaded scope is: " << scope_struct_copy << "/" << scope_struct << ".\n";
-
-    scope_struct_copy->_gc = new GC();
+    
     return scope_struct_copy;
 }
 
 extern "C" void scope_struct_Store_Asyncs_Count(Scope_Struct *scope_struct, int asyncs_count) {
     scope_struct->asyncs_count = asyncs_count;
 }
-
-
 
 
 extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thread_id, int has_grad) {
@@ -248,9 +246,6 @@ extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thr
 }
 
 
-
-
-
 extern "C" void scope_struct_Copy_MarkSweepMap(Scope_Struct *in_scope, Scope_Struct *out_scope) {
     // in_scope->mark_sweep_map = out_scope->mark_sweep_map;
 }
@@ -258,59 +253,57 @@ extern "C" void scope_struct_Copy_MarkSweepMap(Scope_Struct *in_scope, Scope_Str
 
 
 extern "C" void scope_struct_Clear_GC_Root(Scope_Struct *scope_struct) {
-    // std::cout << "clearing " << scope_struct->gc.root_nodes.size() << ".\n";
-    scope_struct->gc.root_nodes.clear();
+    // std::cout << "----->clearing " << scope_struct->root_nodes.size() << ".\n";
+    scope_struct->root_nodes.clear();
 }
 
 extern "C" void scope_struct_Add_GC_Root(Scope_Struct *scope_struct, void *root_pointer, char *type) {
-    scope_struct->gc.root_nodes.push_back(GC_Node(root_pointer, type));
+    scope_struct->root_nodes.push_back(GC_Node(root_pointer, type));
 }
 
 
 
 
 inline void delete_scope(Scope_Struct *scope_struct) {
-
     free(scope_struct->first_arg);
     free(scope_struct->scope);
     free(scope_struct->function_name);
-
     // if (scope_struct->mark_sweep_map!=nullptr)
     //     delete scope_struct->mark_sweep_map;
-
-
     delete scope_struct;
 }
 
 
 void alloc_gc_vspace(Scope_Struct *scope_struct, int size) {
-    GarbageCollector &gc = get_inner_most_scope(scope_struct)->gc;
-    gc.size_occupied += size;
+    // std::cout << "alloc vspace of " << size << ".\n";
+    scope_struct->gc->size_occupied += size;
 }
 
-extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
-    GarbageCollector &gc = get_inner_most_scope(scope_struct)->gc;
 
-    if (gc.allocations>1000||gc.size_occupied>1000000) {
-        // std::cout << "sweep" << ".\n";
-        scope_struct->gc.sweep(scope_struct);
-    }
+
+extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
+    GC *gc = scope_struct->gc;
+    // std::cout << "sweep: " << gc << ".\n";
+    // std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
+    gc->Sweep(scope_struct);
 }
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
-    Scope_Struct *inner_most_scope = get_inner_most_scope(scope_struct);
-    GarbageCollector &gc = inner_most_scope->gc;
+    GC *gc = scope_struct->gc;
     
-    if (gc.allocations>1000||gc.size_occupied>1000000) {
+    // if (gc->allocations>1000||gc->size_occupied>1000000) {
+    if (gc->size_occupied>sweep_after_alloc) {
+        // std::cout << "clean check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
+        // std::cout << "" << gc->size_occupied << ".\n";
         // std::cout << "CLEAN UP" << ".\n";
-        scope_struct->gc.sweep(scope_struct);
+        gc->Sweep(scope_struct);
     }
-    else {
-        if (inner_most_scope!=scope_struct) {
-            for (const auto &node : scope_struct->gc.pointer_nodes)
-                inner_most_scope->gc.pointer_nodes.push_back(GC_Node(node.ptr, node.type));
-        }
-    }
+    // else {
+    //     if (inner_most_scope!=scope_struct) {
+    //         for (const auto &node : scope_struct->gc.pointer_nodes)
+    //             inner_most_scope->gc.pointer_nodes.push_back(GC_Node(node.ptr, node.type));
+    //     }
+    // }
     delete_scope(scope_struct);
 }
 

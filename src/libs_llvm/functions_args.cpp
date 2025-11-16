@@ -320,15 +320,51 @@ void set_functions_args_type() {
 		
 		Function_Arg_Types["allocate_void"]["0"] = "Scope_Struct";
 		Function_Arg_Types["allocate_void"]["1"] = "int";
-		Function_Arg_Types["allocate_void"]["2"] = "str";
+		Function_Arg_Types["allocate_void"]["2"] = "const";
+		Function_Arg_Types["allocate_void"]["3"] = "type";
+		Function_Arg_Types["allocate_void"]["4"] = "type";
+		Function_Arg_Types["allocate_void"]["5"] = "";
+		Function_Arg_Types["allocate_void"]["6"] = "auto";
+		Function_Arg_Types["allocate_void"]["7"] = "it";
+		Function_Arg_Types["allocate_void"]["8"] = "data_name_to_type";
+		Function_Arg_Types["allocate_void"]["9"] = "type";
+		Function_Arg_Types["allocate_void"]["10"] = "type";
+		Function_Arg_Types["allocate_void"]["11"] = "if";
+		Function_Arg_Types["allocate_void"]["12"] = "it";
+		Function_Arg_Types["allocate_void"]["13"] = "it";
+		Function_Arg_Types["allocate_void"]["14"] = "data_name_to_type";
 		
 		Function_Arg_DataTypes["allocate_void"]["0"] = Data_Tree("Scope_Struct");
 		Function_Arg_DataTypes["allocate_void"]["1"] = Data_Tree("int");
-		Function_Arg_DataTypes["allocate_void"]["2"] = Data_Tree("str");
+		Function_Arg_DataTypes["allocate_void"]["2"] = Data_Tree("const");
+		Function_Arg_DataTypes["allocate_void"]["3"] = Data_Tree("type");
+		Function_Arg_DataTypes["allocate_void"]["4"] = Data_Tree("type");
+		Function_Arg_DataTypes["allocate_void"]["5"] = Data_Tree("");
+		Function_Arg_DataTypes["allocate_void"]["6"] = Data_Tree("auto");
+		Function_Arg_DataTypes["allocate_void"]["7"] = Data_Tree("it");
+		Function_Arg_DataTypes["allocate_void"]["8"] = Data_Tree("data_name_to_type");
+		Function_Arg_DataTypes["allocate_void"]["9"] = Data_Tree("type");
+		Function_Arg_DataTypes["allocate_void"]["10"] = Data_Tree("type");
+		Function_Arg_DataTypes["allocate_void"]["11"] = Data_Tree("if");
+		Function_Arg_DataTypes["allocate_void"]["12"] = Data_Tree("it");
+		Function_Arg_DataTypes["allocate_void"]["13"] = Data_Tree("it");
+		Function_Arg_DataTypes["allocate_void"]["14"] = Data_Tree("data_name_to_type");
 		
 		Function_Arg_Names["allocate_void"].push_back("0");
 		Function_Arg_Names["allocate_void"].push_back("1");
 		Function_Arg_Names["allocate_void"].push_back("2");
+		Function_Arg_Names["allocate_void"].push_back("3");
+		Function_Arg_Names["allocate_void"].push_back("4");
+		Function_Arg_Names["allocate_void"].push_back("5");
+		Function_Arg_Names["allocate_void"].push_back("6");
+		Function_Arg_Names["allocate_void"].push_back("7");
+		Function_Arg_Names["allocate_void"].push_back("8");
+		Function_Arg_Names["allocate_void"].push_back("9");
+		Function_Arg_Names["allocate_void"].push_back("10");
+		Function_Arg_Names["allocate_void"].push_back("11");
+		Function_Arg_Names["allocate_void"].push_back("12");
+		Function_Arg_Names["allocate_void"].push_back("13");
+		Function_Arg_Names["allocate_void"].push_back("14");
 	
 		
 		Function_Arg_Types["nsk_vec_size"]["0"] = "Scope_Struct";
@@ -769,6 +805,17 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["tuple_print"].push_back("0");
 		Function_Arg_Names["tuple_print"].push_back("1");
+		
+		Function_Arg_Types["list_shuffle"]["0"] = "Scope_Struct";
+		Function_Arg_Types["list_shuffle"]["1"] = "list";
+		
+		Function_Arg_DataTypes["list_shuffle"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree list_shuffle_1 = Data_Tree("list");
+		list_shuffle_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["list_shuffle"]["1"] = list_shuffle_1;
+		
+		Function_Arg_Names["list_shuffle"].push_back("0");
+		Function_Arg_Names["list_shuffle"].push_back("1");
 		
 		Function_Arg_Types["list_size"]["0"] = "Scope_Struct";
 		Function_Arg_Types["list_size"]["1"] = "list";

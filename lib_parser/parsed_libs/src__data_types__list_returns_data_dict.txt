@@ -3,6 +3,7 @@
 	functions_return_data_type["list_print"] = Data_Tree("float");
 	functions_return_data_type["tuple_print"] = Data_Tree("float");
 	functions_return_data_type["list_Create"] = Data_Tree("list");
+	functions_return_data_type["list_shuffle"] = Data_Tree("float");
 	functions_return_data_type["list_size"] = Data_Tree("int");
 
 	Data_Tree list_as_float_vec_vec = Data_Tree("vec");

@@ -32,8 +32,8 @@ extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *sc
  
 void int_vec_Clean_Up(void *data_ptr) {
   std::cout << "delete int_vec" << ".\n";
-  // DT_int_vec *vec = static_cast<DT_int_vec*>(data_ptr);
-  // free(vec->vec);
+  DT_int_vec *vec = static_cast<DT_int_vec*>(data_ptr);
+  free(vec->vec);
   // delete vec;
 }
 
