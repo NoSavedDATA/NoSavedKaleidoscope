@@ -16,10 +16,10 @@ void DT_float_vec::New(int size) {
   vec = (float*)malloc(size*sizeof(float)); 
 }
 
-DT_float_vec::DT_float_vec() : Nsk_Vector() {
+DT_float_vec::DT_float_vec() {
 }
 
-DT_float_vec::DT_float_vec(int size) : Nsk_Vector(size) {
+DT_float_vec::DT_float_vec(int size) {
   vec = (float*)malloc(size*sizeof(float));
 }
 
@@ -55,10 +55,6 @@ void float_vec_Clean_Up(void *data_ptr) {
 }
 
 
-extern "C" float float_vec_Store_Idx(DT_float_vec *vec, float idx, float value, Scope_Struct *scope_struct){
-  vec->vec[(int)idx] = value;
-  return 0;
-}
 
 
 
@@ -66,55 +62,6 @@ extern "C" float float_vec_Store_Idx(DT_float_vec *vec, float idx, float value, 
 
 
 
-extern "C" DT_float_vec *arange_float(Scope_Struct *scope_struct, int begin, int end) {
-  // TODO: turn into python like expression [0]*size
-
-  DT_float_vec *vec = new DT_float_vec(end-begin);
-  int c=0;
-  for(int i=begin; i<end; ++i)
-  {
-    vec->vec[c] = i;
-    c++;
-  }
-  return vec; 
-}
-
-
-extern "C" DT_float_vec *zeros_float(Scope_Struct *scope_struct, int size) {
-  DT_float_vec *vec = newT<DT_float_vec>(scope_struct, "float_vec");
-  vec->New(size);
-  for(int i=0; i<size; ++i)
-    vec->vec[i] = 0;
-  return vec;
-}
-
-
-extern "C" DT_float_vec *ones_float(Scope_Struct *scope_struct, int size) {
-  DT_float_vec *vec = newT<DT_float_vec>(scope_struct, "float_vec");
-  vec->New(size);
-  for(int i=0; i<size; ++i)
-    vec->vec[i] = 1;
-  return vec;
-}
-
-
-extern "C" float float_vec_Idx(Scope_Struct *scope_struct, DT_float_vec *vec, int idx)
-{
-  // std::cout << "Load vec on idx " << idx << ".\n";
-  float ret = vec->vec[idx];
-  // std::cout << "got: " << ret << ".\n";
-  // std::cout << "returning" << ".\n"; 
-  return ret;
-}
-
-
-
-
-extern "C" int float_vec_CalculateIdx(DT_float_vec *vec, int first_idx, ...) {
-  if (first_idx<0)
-    first_idx = vec->size+first_idx;
-  return first_idx;
-}
 
 
 

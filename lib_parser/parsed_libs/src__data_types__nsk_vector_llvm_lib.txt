@@ -1,11 +1,4 @@
-1821-10-28 14:31:56
-
-	FunctionType *nsk_vec_sizeTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("nsk_vec_size", nsk_vec_sizeTy);
+1821-12-09 11:09:34
 
 	FunctionType *__idx__Ty= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

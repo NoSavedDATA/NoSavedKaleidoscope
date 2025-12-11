@@ -22,44 +22,12 @@ void check_exit() {
 }
 
 Scope_Struct::Scope_Struct() {
-    first_arg = (char*)malloc(1);
-    scope = (char*)malloc(1);
-    function_name = (char*)malloc(1);
-
-    first_arg[0] = '\0';
-    scope[0] = '\0';
-    function_name[0] = '\0';
 }
 
-inline Scope_Struct *get_inner_most_scope(Scope_Struct *scope_struct) {    
-    // Get the inner most scope that belongs to the same thread.
-    if(scope_struct->inner_most!=nullptr)
-        return scope_struct->inner_most;
-
-    Scope_Struct *inner_most = scope_struct;
-    while(inner_most->previous_scope!=nullptr) {
-        if (inner_most->thread_id!=inner_most->previous_scope->thread_id)
-            break;
-        inner_most = inner_most->previous_scope;
-    } 
-    scope_struct->inner_most = inner_most;
-    return inner_most;
-}
 
 std::map<std::string, Scope_Struct *> NamedScopeStructs;
 
-void Scope_Struct::Set_First_Arg(char *first_arg) {
-    free(this->first_arg);
-    this->first_arg = first_arg;
-}
-void Scope_Struct::Set_Scope(char *scope) {
-    free(this->scope);
-    this->scope = scope;
-}
-void Scope_Struct::Set_Function_Name(char *function_name) {
-    free(this->function_name);
-    this->function_name = CopyString(this, function_name);
-}
+
 void Scope_Struct::Set_Thread_Id(int thread_id) {
     this->thread_id = thread_id;
 }
@@ -69,9 +37,6 @@ void Scope_Struct::Set_Has_Grad(int has_grad) {
 void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 {
     object_ptr = scope_to_copy->object_ptr;
-    first_arg = CopyString(scope_to_copy, scope_to_copy->first_arg);
-    scope = CopyString(scope_to_copy, scope_to_copy->scope);
-    function_name = CopyString(scope_to_copy, scope_to_copy->function_name);
 
     thread_id = scope_to_copy->thread_id;
     has_grad = scope_to_copy->has_grad;
@@ -80,7 +45,8 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
     asyncs_count = scope_to_copy->asyncs_count;
     
     previous_scope = scope_to_copy;
-    get_inner_most_scope(this);
+    inner_most = scope_to_copy->inner_most;
+    
     gc = inner_most->gc;
 }
 
@@ -90,7 +56,7 @@ void *Scope_Struct::Allocate(int size, int type_id) {
 }
 
 void Scope_Struct::Print() {
-    std::cout << "Scope struct:\n\tFirst arg: " << first_arg << "\n\tScope: " << scope << "\n\tThread id: " << thread_id << "\n\tHas grad: " << has_grad << ".\n\n";
+    std::cout << "Scope struct:" << "\n\tThread id: " << thread_id << ".\n\n";
 }
 
 
@@ -104,6 +70,12 @@ extern "C" void set_scope_line(Scope_Struct *scope_struct, int line) {
     scope_struct->code_line = line;
 }
 
+
+extern "C" Scope_Struct *scope_struct_CreateFirst() {
+    Scope_Struct *scope_struct = new Scope_Struct();
+    scope_struct->inner_most = scope_struct;
+    return scope_struct;
+}
 extern "C" Scope_Struct *scope_struct_Create() {
     // check_exit();
     Scope_Struct *scope_struct = new Scope_Struct();
@@ -122,52 +94,20 @@ extern "C" Scope_Struct *scope_struct_Overwrite(Scope_Struct *scope_struct, Scop
 }
 
 
-extern "C" Scope_Struct *scope_struct_Dive(Scope_Struct *scope_struct) {
-    return scope_struct;
-}
 
 
 
 
-extern "C" void set_scope_first_arg(Scope_Struct *scope_struct, char *first_arg) {
-    // std::cout << "set_scope_first_arg: " << first_arg << ".\n";
-    scope_struct->Set_First_Arg(first_arg);
-}
-extern "C" void set_scope_scope(Scope_Struct *scope_struct, char *scope) {
-    // std::cout << "set_scope_scope: " << scope << ".\n";
-    scope_struct->Set_Scope(scope);
-}
 extern "C" void set_scope_thread_id(Scope_Struct *scope_struct, int thread_id) {
     // std::cout << "set_scope_thread_id: " << thread_id << ".\n";
     scope_struct->Set_Thread_Id(thread_id);
 }
-extern "C" void set_scope_has_grad(Scope_Struct *scope_struct, int has_grad) {
-    // std::cout << "set_scope_has_grad: " << has_grad << ".\n";
-    scope_struct->Set_Has_Grad(has_grad);
-}
-
-extern "C" void set_scope_function_name(Scope_Struct *scope_struct, char *function_name) {
-    // std::cout << "set_scope_has_grad: " << has_grad << ".\n";
-    scope_struct->Set_Function_Name(function_name);
-}
 
 
-extern "C" char *get_scope_first_arg(Scope_Struct *scope_struct) {
-    // std::cout << "get_scope_first_arg: " << scope_struct->first_arg << ".\n";
-    return scope_struct->first_arg;
-}
-extern "C" char *get_scope_scope(Scope_Struct *scope_struct) {
-    // std::cout << "get scope scope" << ".\n";
-    // std::cout << "get_scope_scope: " << scope_struct->scope << ".\n";
-    return scope_struct->scope;
-}
+
 extern "C" int get_scope_thread_id(Scope_Struct *scope_struct) {
     // std::cout << "get_scope_thread_id " << scope_struct->thread_id << ".\n";
     return scope_struct->thread_id;
-}
-extern "C" int get_scope_has_grad(Scope_Struct *scope_struct) {
-    // std::cout << "get_scope_has_grad" << ".\n";
-    return scope_struct->has_grad;
 }
 
 
@@ -229,6 +169,7 @@ extern "C" void *scope_struct_Load_for_Async(char *fn_name) {
 
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
+    scope_struct_copy->inner_most = scope_struct_copy;
     // std::cout << "Threaded scope is: " << scope_struct_copy << "/" << scope_struct << ".\n";
     
     return scope_struct_copy;
@@ -240,9 +181,7 @@ extern "C" void scope_struct_Store_Asyncs_Count(Scope_Struct *scope_struct, int 
 
 
 extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thread_id, int has_grad) {
-    scope_struct->scope = GetEmptyChar(scope_struct);
     scope_struct->thread_id = thread_id;
-    scope_struct->has_grad = has_grad;
 }
 
 
@@ -265,9 +204,7 @@ extern "C" void scope_struct_Add_GC_Root(Scope_Struct *scope_struct, void *root_
 
 
 inline void delete_scope(Scope_Struct *scope_struct) {
-    free(scope_struct->first_arg);
-    free(scope_struct->scope);
-    free(scope_struct->function_name);
+    // std::cout << "delete scope" << ".\n";
     // if (scope_struct->mark_sweep_map!=nullptr)
     //     delete scope_struct->mark_sweep_map;
     delete scope_struct;

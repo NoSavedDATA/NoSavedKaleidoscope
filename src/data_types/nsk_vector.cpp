@@ -21,26 +21,6 @@ Nsk_Vector::Nsk_Vector(int size, std::vector<int> dims) : size(size), dims(std::
 
 
 
-DT_int_vec::DT_int_vec() {}
-DT_int_vec::DT_int_vec(int size) : Nsk_Vector(size) {
-  vec = (int*)malloc(size*sizeof(int));
-}
-
-void DT_int_vec::New(int size)  {
-    this->size = size;
-    vec = (int*)malloc(size*sizeof(int));
-}
-
-DT_int_vec::~DT_int_vec() {
-    // free(vec);
-}
-
-
-
-
-extern "C" int nsk_vec_size(Scope_Struct *scope_struct, Nsk_Vector *vec) {
-    return vec->size;
-}
 
 bool is_first_idx_call = true;
 

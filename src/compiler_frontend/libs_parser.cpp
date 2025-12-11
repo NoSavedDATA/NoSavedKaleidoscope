@@ -83,6 +83,8 @@ void LibFunction::Print() {
 }
 
 void LibFunction::Link_to_LLVM(void *func_ptr) {
+    if(!has_main)
+        return;
 
     llvm::Type *int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     llvm::Type *floatTy = Type::getFloatTy(*TheContext);
@@ -320,7 +322,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
     
 
     // Check if it is a _Clean_Up or _backward function    
-    if(ends_with(Name, "_Clean_Up"))
+    if(ends_with(Name, "_Clean_Up")&&has_main)
     {
         // std::cout << "FOUND CLEAN UP FUNCTION " << Name << ".\n";
 
@@ -589,13 +591,25 @@ void LibParser::PrintFunctions() {
 
 void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool is_default) {
 
+    if (!has_main) {
 
+        for (auto pair : Functions) {  // std::map<std::string, std::vector<LibFunction*>>
+            for (auto fn : pair.second) // std::vector<LibFunction*>> 
+            {
+                // std::cout << "Importing function:" << "\n";
+                // fn->Print();
+                fn->Add_to_Nsk_Dicts(nullptr, lib_name, is_default);
+            }
+        }
+
+        return;
+    }
 
     void *handle = dlopen(so_lib_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
 
     if (!handle) {
         std::string err = dlerror();
-        LogError(-1, "Failed to load library: " + err);
+        LogError(-1, "Failed to load library"+so_lib_path+":\n\tError:" + err);
         std::exit(0);
     }
 

@@ -13,6 +13,7 @@
 
 
 
+#include "../../lsp/json.hpp"
 #include "../codegen/string.h"
 #include "../common/include.h"
 #include "../data_types/data_tree.h"
@@ -299,7 +300,10 @@ std::unique_ptr<ExprAST> ParseObjectInstantiationExpr(Parser_Struct parser_struc
     
     if(CurTok=='(') {
       has_init.push_back(true);
-      Args.push_back(Parse_Arguments(parser_struct, class_name));
+      auto args = Parse_Arguments(parser_struct, class_name);
+      if (!args)
+        return nullptr;
+      Args.push_back(std::move(*args));
     }
     else {
       has_init.push_back(false);
@@ -445,8 +449,11 @@ void PrintNameable(const std::unique_ptr<Nameable> &name) {
 
 
 std::unique_ptr<ExprAST> ParseLLVM_IR_CallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name) {
-  std::vector<std::unique_ptr<ExprAST>> Args = Parse_Arguments(parser_struct, class_name);
-  std::unique_ptr<NameableLLVMIRCall> call_expr = std::make_unique<NameableLLVMIRCall>(parser_struct, std::move(inner), std::move(Args));
+  auto Args = Parse_Arguments(parser_struct, class_name);
+  if (!Args)
+    return nullptr;
+
+  std::unique_ptr<NameableLLVMIRCall> call_expr = std::make_unique<NameableLLVMIRCall>(parser_struct, std::move(inner), std::move(*Args));
 
   // if (CurTok=='.')
   // {
@@ -495,9 +502,11 @@ std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_p
 
 std::unique_ptr<ExprAST> ParseCallExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth) {
 
-  std::vector<std::unique_ptr<ExprAST>> Args = Parse_Arguments(parser_struct, class_name);
+  auto Args = Parse_Arguments(parser_struct, class_name);
+  if (!Args)
+    return nullptr;
 
-  std::unique_ptr<NameableCall> call_expr = std::make_unique<NameableCall>(parser_struct, std::move(inner), std::move(Args));
+  std::unique_ptr<NameableCall> call_expr = std::make_unique<NameableCall>(parser_struct, std::move(inner), std::move(*Args));
 
   if (CurTok=='.')
   {
@@ -1162,7 +1171,7 @@ inline std::vector<std::unique_ptr<ExprAST>> Parse_Argument_List(Parser_Struct p
         break;
       if (CurTok != ',')
       {
-        LogError(parser_struct.line, "Expected ')' or ',' on the Function Call arguments list.");
+        LogErrorBreakLine(parser_struct.line, "Expected ')' or ',' on the Function Call arguments list.");
         return std::move(Args);
       }
       getNextToken();
@@ -1177,7 +1186,7 @@ inline std::vector<std::unique_ptr<ExprAST>> Parse_Argument_List(Parser_Struct p
 
 
 
-std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struct, std::string class_name)
+std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Struct parser_struct, std::string class_name)
 {
   getNextToken(); // eat (
   std::vector<std::unique_ptr<ExprAST>> Args;
@@ -1211,9 +1220,8 @@ std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struc
 
       if (CurTok != ',')
       {
-
-        LogError(parser_struct.line, "Expected ')' or ',' on the call arguments list.");
-        return {};
+        LogErrorBreakLine(parser_struct.line, "Expected ')' or ',' on the call arguments list.");
+        return std::nullopt;
       }
       getNextToken();
     }
@@ -1970,7 +1978,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   method = "";
   _class = parser_struct.class_name;
 
-
+  
+  
 
   std::string return_type;
 
@@ -2002,7 +2011,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   case tok_unary:
     getNextToken();
     if (!isascii(CurTok))
-      return LogErrorP(parser_struct.line, "Esperado operador unário");
+      return LogErrorP(parser_struct.line, "Expected valid ascii prototype unary operator");
     FnName += "unary";
     FnName += (char)CurTok;
     Kind = 1;
@@ -2011,7 +2020,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   case tok_binary:
     getNextToken();
     if (!isascii(CurTok))
-      return LogErrorP(parser_struct.line, "Esperado operador binário");
+      return LogErrorP(parser_struct.line, "Expected valid ascii prototype binary operator");
     FnName += "binary";
     FnName += (char)CurTok;
     Kind = 2;
@@ -2020,7 +2029,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
     // Read the precedence if present.
     if (CurTok == tok_number) {
       if (NumVal < 1 || NumVal > 100)
-        return LogErrorP(parser_struct.line, "Precedência inválida: deve ser entre 1 e 100");
+        return LogErrorP(parser_struct.line, "Unexpected operator precedence: must be between [1, 100]");
       BinaryPrecedence = (unsigned)NumVal;
       getNextToken();
     }
@@ -2035,6 +2044,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
   std::string type;
   std::vector<std::string> ArgNames, Types;
+  std::vector<Data_Tree> TypeTrees;
 
   
 
@@ -2071,14 +2081,20 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
       std::string IdName = IdentifierStr;
 
-      if(CurTok==tok_identifier)
+      if(CurTok==tok_identifier) { 
+        if(!has_main)
+          TypeTrees.push_back(data_tree);
         getNextToken(); // get arg name;
+      }
       else if(CurTok==tok_channel)
       {
         Data_Tree channel_data_tree = Data_Tree("channel");
         channel_data_tree.Nested_Data.push_back(data_tree);
         data_tree = channel_data_tree;
         data_type = data_type + "_channel";
+
+        if(!has_main)
+          TypeTrees.push_back(data_tree);
 
         int channel_direction = ch_both;
 
@@ -2102,8 +2118,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
           getNextToken(); // ch <-
         }
         ChannelDirections[FnName][IdName] = channel_direction;
-      } else 
-        LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
+      } else
+          LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
+      
        
 
       Types.push_back(data_type);
@@ -2129,9 +2146,9 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
         break;
       
     if (CurTok != ',')
-    {
       return LogErrorP(parser_struct.line, "Expected ')' or ',' at prototype arguments list.");
-    }
+      
+    
     getNextToken();
   }
 
@@ -2152,13 +2169,12 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   functions_return_data_type[FnName] = return_data_type;
 
 
-  return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, Kind != 0,
+  return std::make_unique<PrototypeAST>(FnName, return_type, _class, method, ArgNames, Types, TypeTrees, Kind != 0,
                                          BinaryPrecedence);
 }
 
 
 std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
-
   getNextToken(); // eat import
 
   if(CurTok!=tok_identifier)
@@ -2204,10 +2220,9 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     tokenizer.importFile(full_path_lib, dots);
 
     return nullptr;
-  } else
+  } else {
     return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);
-  
-
+  }
 }
 
 
@@ -2284,7 +2299,8 @@ std::unique_ptr<FunctionAST> ParseTopLevelExpr(Parser_Struct parser_struct) {
   // Make an anonymous proto.
   auto Proto = std::make_unique<PrototypeAST>("__anon_expr", "float", "", "",
                                                 std::vector<std::string>(),
-                                                std::vector<std::string>());
+                                                std::vector<std::string>(),
+                                                std::vector<Data_Tree>());
     
   return std::make_unique<FunctionAST>(std::move(Proto), std::move(Body));
   
@@ -2411,7 +2427,11 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
 
   int i=0;
 
+
   parser_struct.class_name = Name;
+  std::vector<std::string> methods;
+
+  std::vector<fn_descriptor> Functions;
 
   while(CurTok==tok_def)
   {
@@ -2428,12 +2448,24 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     //std::cout << "THE FUNCTION WAS CREATED AS: " << Func->getProto().getName() << "\n";
 
 
-    std::string proto_name = Func->getProto().getName();    
+    PrototypeAST proto = Func->getProto();
+    std::string proto_name = proto.getName();
+
+    if(!has_main) { // LSP info
+      fn_descriptor fn_d = fn_descriptor(remove_substring(proto_name, Name+"_"), proto.Return_Type); 
+      for (int i=1; i<proto.Types.size(); ++i) {
+        fn_d.ArgTypes.push_back(proto.TypeTrees[i-1].toString());
+        fn_d.ArgNames.push_back(proto.Args[i]);
+      }
+      Functions.push_back(fn_d);
+    }
 
 
     FunctionProtos[proto_name] =
       std::make_unique<PrototypeAST>(Func->getProto());
-    ExitOnErr(TheJIT->addAST(std::move(Func)));
+
+    if(has_main)
+      ExitOnErr(TheJIT->addAST(std::move(Func)));
 
     if(CurTok==';')
       getNextToken();
@@ -2446,5 +2478,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     i+=1;
   }
   
-  return nullptr;
+  std::unique_ptr<ClassExprAST> class_expr = std::make_unique<ClassExprAST>(parser_struct, Name, Functions);
+  
+  return std::move(class_expr);
 }

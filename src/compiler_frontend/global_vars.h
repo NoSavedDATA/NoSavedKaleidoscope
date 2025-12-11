@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <limits>
@@ -14,6 +13,7 @@ constexpr int32_t COPY_TO_END_INST = 0x7FADBEEF;
 
 extern bool Shall_Exit;
 
+extern bool has_main;
 
 
 extern std::unordered_map<uint16_t, std::string> data_type_to_name;
@@ -25,3 +25,10 @@ extern std::map<std::string, std::string> functions_return_type, reverse_ops;
 extern std::unordered_map<std::string, std::vector<int>> ClassPointers;
 extern std::unordered_map<std::string, std::vector<std::string>> ClassPointersType;
 extern std::map<std::string, int> ClassSize;
+
+
+
+
+
+
+

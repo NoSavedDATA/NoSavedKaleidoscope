@@ -1,18 +1,3 @@
-	functions_return_data_type["float_vec_Store_Idx"] = Data_Tree("float");
-
-	Data_Tree arange_float_vec = Data_Tree("vec");
-	arange_float_vec.Nested_Data.push_back(Data_Tree("float"));
-	functions_return_data_type["arange_float"] = arange_float_vec;
-
-	Data_Tree zeros_float_vec = Data_Tree("vec");
-	zeros_float_vec.Nested_Data.push_back(Data_Tree("float"));
-	functions_return_data_type["zeros_float"] = zeros_float_vec;
-
-	Data_Tree ones_float_vec = Data_Tree("vec");
-	ones_float_vec.Nested_Data.push_back(Data_Tree("float"));
-	functions_return_data_type["ones_float"] = ones_float_vec;
-	functions_return_data_type["float_vec_Idx"] = Data_Tree("float");
-	functions_return_data_type["float_vec_CalculateIdx"] = Data_Tree("int");
 	functions_return_data_type["float_vec_first_nonzero"] = Data_Tree("float");
 	functions_return_data_type["float_vec_print"] = Data_Tree("float");
 

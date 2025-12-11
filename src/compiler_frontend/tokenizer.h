@@ -100,6 +100,7 @@ enum Token {
     tok_var = -45,
     tok_tuple = -46,
     tok_list = -47,
+	tok_array = -64,
     tok_dict = -48,
 };
 

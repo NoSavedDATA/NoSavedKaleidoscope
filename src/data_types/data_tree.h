@@ -17,6 +17,7 @@ struct Data_Tree {
 
     int Compare(Data_Tree);
     void Print();
+    std::string toString();
 };
 
 

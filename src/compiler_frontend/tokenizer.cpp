@@ -79,6 +79,7 @@ std::map<int, std::string> token_to_string = {
   { tok_return, "tok return"},
   { tok_tuple, "tok tuple"},
   { tok_list, "tok list"},
+  { tok_array, "tok array"},
   { tok_dict, "tok dict"},
   { tok_as, "tok as"},
   { tok_in, "tok in"},
@@ -195,29 +196,31 @@ std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class, tok_eo
 
 extern std::vector<std::string> LLVM_IR_Functions = {"pow", "sqrt"};
 
-std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "bool", "str", "str_vec", "float_vec", "MHSA", "LSTM", "Linear", "tuple", "list", "dict",
+std::vector<std::string> data_tokens = {"tensor", "pinned_tensor", "int", "bool", "str", "str_vec", "float_vec", "MHSA", "LSTM", "Linear", "tuple",
+										"list", "dict", "array",
                                         "Embedding", "EmbeddingLn", "Conv2d", "Pool2d", "BatchNorm2d", "float", "int_vec"};
-std::vector<std::string> compound_tokens = {"tuple", "list", "dict"};
+std::vector<std::string> compound_tokens = {"tuple", "list", "array", "dict"};
 std::vector<std::string> primary_data_tokens = {"int", "float", "bool", "foreach_control_var"};
 
 
 
 std::unordered_map<std::string, uint16_t> data_name_to_type = {{"int", 2}, {"float", 3}, {"bool", 4}, {"str", 5}, {"list", 6},
                                                                {"tuple", 7}, {"dict", 8}, {"channel", 9}, {"int_vec", 10},
-                                                               {"float_vec", 11}};
+                                                               {"float_vec", 11}, {"array", 12}};
 std::unordered_map<uint16_t, std::string> data_type_to_name = {{2, "int"}, {3, "float"}, {4, "bool"}, {5, "str"}, {6, "list"},
                                                                {7, "tuple"}, {8, "dict"}, {9, "channel"}, {10, "int_vec"},
-                                                               {11, "float_vec"}};
+                                                               {11, "float_vec"}, {12, "array"}};
 
 uint16_t data_type_count=12;
 
 
 std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},
-                                             {"import", tok_import}, {"if", tok_if}, {"then", tok_then}, {"else", tok_else}, {"for", tok_for}, {"while", tok_while},
-                                             {"async", tok_async}, {"asyncs", tok_asyncs}, {"finish", tok_async_finish}, {"in", tok_in}, {"global", tok_global},
-                                             {"no_grad", tok_no_grad}, {"lock", tok_lock}, {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary},
-                                             {"return", tok_ret}, {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel}, {"main", tok_main},
-                                             {"and", tok_and}, {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}};
+                                             {"import", tok_import}, {"if", tok_if}, {"then", tok_then}, {"else", tok_else}, {"for", tok_for},
+										     {"while", tok_while}, {"async", tok_async}, {"asyncs", tok_asyncs}, {"finish", tok_async_finish},
+											 {"in", tok_in}, {"global", tok_global}, {"no_grad", tok_no_grad}, {"lock", tok_lock},
+											 {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary}, {"return", tok_ret},
+											 {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel}, {"main", tok_main}, {"and", tok_and},
+										     {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}};
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number
@@ -257,8 +260,7 @@ std::string cur_line = "";
 char Tokenizer::get() {
     while (true) {
         if (!current) return tok_eof;
-
-        
+ 
         char c = current->get();
         if (c != EOF) {
           cur_line += c;
@@ -286,11 +288,12 @@ char Tokenizer::get() {
             
             
             // Don't return EOF here - immediately try reading from the new source
-        } else if (current != &std::cin) {
+        } else if (has_main && current!=&std::cin) {
             current = &std::cin;
             // Don't return EOF here - immediately try reading from std::cin
         } else {
             // We're already at std::cin and got EOF - this is a real EOF
+            current = nullptr;
             return tok_eof;
         }
     }

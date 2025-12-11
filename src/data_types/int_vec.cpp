@@ -11,6 +11,16 @@
 #include "include.h"
 
 
+DT_int_vec::DT_int_vec() {}
+DT_int_vec::DT_int_vec(int size) {
+  vec = (int*)malloc(size*sizeof(int));
+}
+
+void DT_int_vec::New(int size)  {
+    this->size = size;
+    vec = (int*)malloc(size*sizeof(int));
+}
+
 
 extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_int_vec *init_val, DT_list *notes_vector)
 {
@@ -29,6 +39,18 @@ extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *sc
   return vec;
 }
 
+
+DT_int_vec::~DT_int_vec() {
+    // free(vec);
+}
+
+
+
+
+extern "C" int nsk_vec_size(Scope_Struct *scope_struct, Nsk_Vector *vec) {
+    return vec->size;
+}
+
  
 void int_vec_Clean_Up(void *data_ptr) {
   std::cout << "delete int_vec" << ".\n";
@@ -37,97 +59,6 @@ void int_vec_Clean_Up(void *data_ptr) {
   // delete vec;
 }
 
-extern "C" int int_vec_Store_Idx(DT_int_vec *vec, int idx, int value, Scope_Struct *scope_struct){
-  vec->vec[idx] = value;
-  return 0;
-}
-
-
-extern "C" DT_int_vec *arange_int(Scope_Struct *scope_struct, int begin, int end) {
-  DT_int_vec *vec = new DT_int_vec(end-begin);
-  int c=0;
-  for(int i=begin; i<end; ++i)
-  {
-    vec->vec[c] = i;
-    c++;
-  }
-
-  return vec; 
-}
-
-
-extern "C" DT_int_vec *zeros_int(Scope_Struct *scope_struct, int size) {
-  // TODO: turn into python like expression [0]*size
-    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
-    vec->New(size);
-
-    for(int i=0; i<size; ++i)
-      vec->vec[i] = 0;
-
-    return vec;
-}
-
-
-extern "C" DT_int_vec *rand_int_vec(Scope_Struct *scope_struct, int size, int min_val, int max_val) {
-    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
-    vec->New(size);
-
-    std::uniform_int_distribution<int> dist(min_val, max_val);
-
-    for (int i = 0; i < size; ++i) {
-        int r;
-        {
-            std::lock_guard<std::mutex> lock(MAIN_PRNG_MUTEX);
-            r = dist(MAIN_PRNG);
-        }
-        vec->vec[i] = r;
-    }
-
-    return vec;
-}
-
-
-extern "C" DT_int_vec *ones_int(Scope_Struct *scope_struct, int size) {
-    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
-    vec->New(size);
-
-    for(int i=0; i<size; ++i)
-      vec->vec[i] = 1;
-
-    return vec;
-}
-
-
-
-
-extern "C" int int_vec_Idx_num(Scope_Struct *scope_struct, DT_int_vec *vec, int _idx)
-{
-  int idx = (int) _idx;
-  // std::cout << "int_vec_Idx_num on idx " << idx << ".\n";
-  // std::cout << "vec idx " << idx << " got: " << vec->vec[idx] << ".\n";
-
-
-  return vec->vec[idx];
-}
-
-
-
-extern "C" int int_vec_Idx(Scope_Struct *scope_struct, DT_int_vec *vec, int idx)
-{
-  if (idx>vec->size)
-    LogErrorEE(scope_struct->code_line, "Index " + std::to_string(idx) + " is out of bounds for a vector of size: " + std::to_string(vec->size) + ".");
-
-  return vec->vec[idx];
-}
-
-extern "C" int int_vec_CalculateIdx(DT_int_vec *vec, int first_idx, ...) {
-  if (first_idx<0)
-    first_idx = vec->size+first_idx;
-  if (first_idx>vec->size)
-    LogErrorEE(-1, "Vector out of bounds. Index: " + std::to_string(first_idx) + " vs size " + std::to_string(vec->size));
-
-  return first_idx;
-}
 
 
 

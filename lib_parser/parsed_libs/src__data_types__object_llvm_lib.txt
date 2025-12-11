@@ -1,39 +1,4 @@
-1821-09-25 14:08:41
-
-	FunctionType *objAttr_var_from_varTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_var_from_var", objAttr_var_from_varTy);
-
-	FunctionType *objAttr_var_from_vecTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_var_from_vec", objAttr_var_from_vecTy);
-
-	FunctionType *objAttr_vec_from_varTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_vec_from_var", objAttr_vec_from_varTy);
-
-	FunctionType *objAttr_vec_from_vecTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_vec_from_vec", objAttr_vec_from_vecTy);
-
-	FunctionType *appendTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("append", appendTy);
+1821-11-17 16:07:24
 
 	FunctionType *offset_object_ptrTy= FunctionType::get(
 		int8PtrTy,

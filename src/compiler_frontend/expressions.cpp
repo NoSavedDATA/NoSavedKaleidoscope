@@ -113,6 +113,11 @@ bool ExprAST::GetIsList() {
   return isList;
 }
 
+
+nlohmann::json ExprAST::toJSON() {
+  nlohmann::json j;
+  return j;
+}
  
   
 NameSolverAST::NameSolverAST(std::vector<std::tuple<std::string, int, std::vector<std::unique_ptr<ExprAST>>>> Names)
@@ -558,6 +563,51 @@ RetExprAST::RetExprAST(std::vector<std::unique_ptr<ExprAST>> Vars, Parser_Struct
     : Vars(std::move(Vars)), parser_struct(parser_struct) {}
     
   
+fn_descriptor::fn_descriptor(const std::string &Name, const std::string &Return) : Name(Name), Return(Return) {}
+
+ClassExprAST::ClassExprAST(Parser_Struct parser_struct, const std::string &Name, const std::vector<fn_descriptor> &Functions)
+  : Name(Name), parser_struct(parser_struct), Functions(Functions) {}
+
+nlohmann::json ClassExprAST::toJSON() {
+  std::cout << "class to json" << ".\n";
+  nlohmann::json j;
+  j["type"] = "class";
+  j["name"] = Name;
+
+  j["fields"] = nlohmann::json::array();
+  for (const auto &pair : typeVars[Name]) {
+    nlohmann::json type_j;
+    type_j["name"] = pair.first;
+    type_j["type"] = pair.second;
+    j["fields"].push_back(type_j);
+  }
+
+
+  j["fields"] = nlohmann::json::array();
+  for (const auto &pair : typeVars[Name]) {
+    nlohmann::json type_j;
+    type_j["name"] = pair.first;
+    type_j["type"] = pair.second;
+    j["fields"].push_back(type_j);
+  }
+
+  j["methods"] = nlohmann::json::array();
+  for (const auto &fn : Functions) {
+    nlohmann::json method_j;
+    method_j["args"] = nlohmann::json::array();
+    for (int i=0; i<fn.ArgNames.size(); ++i) {
+      nlohmann::json arg_j;
+      arg_j["name"] = fn.ArgNames[i];
+      arg_j["type"] = fn.ArgTypes[i];
+      method_j["args"].push_back(arg_j);
+    }
+    method_j["name"] = fn.Name;
+    method_j["return"] = fn.Return;
+    j["methods"].push_back(method_j);
+  }
+
+  return j;
+}
   
   
   
@@ -667,8 +717,10 @@ MainExprAST::MainExprAST(std::vector<std::unique_ptr<ExprAST>> Bodies)
 PrototypeAST::PrototypeAST(const std::string &Name, const std::string &Return_Type, const std::string &Class, const std::string &Method,
               std::vector<std::string> Args,
               std::vector<std::string> Types,
+              std::vector<Data_Tree> TypeTrees,
               bool IsOperator, unsigned Prec)
       : Name(Name), Return_Type(Return_Type), Class(Class), Method(Method), Args(std::move(Args)), Types(std::move(Types)),
+        TypeTrees(std::move(TypeTrees)),
         IsOperator(IsOperator), Precedence(Prec) {}
 
 const std::string &PrototypeAST::getName() const { return Name; }
@@ -721,7 +773,7 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
   }
   
 
-  if (from_assignment || !in_str(compound_type, {"vec", "list", "dict", "tuple"}))
+  if (from_assignment || !in_str(compound_type, {"vec", "list", "dict", "tuple", "array"}))
     return inner_dt; //e.g: for list_Store_Idx
 
   if(compound_type=="tuple") {
@@ -771,12 +823,12 @@ NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct parser_struct, std::unique_
 
 
 Data_Tree NameableCall::GetDataTree(bool from_assignment) {
+
   if (data_type.Type!="")
     return data_type;
 
   Data_Tree ret = functions_return_data_type[Callee];
-
-  
+   
 
   std::string ret_type = ret.Type;
   if (ends_with(ret_type, "_vec")) {
@@ -886,6 +938,10 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
     
     // LogBlue("Callee is " + Callee);
   }
+
+
+  if(Callee=="array_print")
+    Callee = Callee + "_" + this->Inner->GetDataTree().Nested_Data[0].Type; 
 
   if(Callee=="list_append" && this->Args[0]->GetDataTree().Type=="int")
     Callee = "list_append_int";

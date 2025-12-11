@@ -87,6 +87,11 @@ Function *getFunction(std::string Name) {
   return nullptr;
 }
 
+Value *ClassExprAST::codegen(Value *scope_struct) {
+
+  return const_float(0);
+}
+
 Value *IndexExprAST::codegen(Value *scope_struct) {
   
   return const_float(0);
@@ -114,12 +119,11 @@ Value *Idx_Calc_Codegen(std::string type, Value *vec, std::unique_ptr<IndexExprA
   if (!idxs->IsSlice)
   {
     std::string fn = type+"_CalculateIdx";
-
     Function *F = TheModule->getFunction(fn);
     if (F)
       return callret(fn, idxs_values);
     else
-      return callret("__idx__", idxs_values);
+      return idxs_values[1];
   } else {
 
     for (int i=0; i<idxs->size(); i++)
@@ -475,19 +479,15 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       {
         ExprAST *note = Notes[j].get();
         
-        if (NumberExprAST* numExpr = dynamic_cast<NumberExprAST*>(note)) {
-          
+        if (NumberExprAST* numExpr = dynamic_cast<NumberExprAST*>(note)) 
           notes_vector = callret("Add_To_NotesVector_float", {notes_vector, note->codegen(scope_struct)});
-        }
-        else if (IntExprAST* numExpr = dynamic_cast<IntExprAST*>(note)) {
+        else if (IntExprAST* numExpr = dynamic_cast<IntExprAST*>(note))
           notes_vector = callret("Add_To_NotesVector_int", {notes_vector, note->codegen(scope_struct)});
-        }
         else if (StringExprAST* expr = dynamic_cast<StringExprAST*>(note)) {
           Value *str_val = callret("CopyString", {scope_struct, note->codegen(scope_struct)});
           notes_vector = callret("Add_To_NotesVector_str", {notes_vector, str_val});
         }
-        else if (Nameable* expr = dynamic_cast<Nameable*>(note)) {
-          
+        else if (Nameable* expr = dynamic_cast<Nameable*>(note)) {   
           
           if(expr->Depth==1&&data_typeVars[parser_struct.function_name].count(expr->Name)==0)
           { 
@@ -919,7 +919,21 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
 
 
   std::string vec_type = UnmangleVec(data_type);
-  Value *vec_value = callret(vec_type+"_Idx", {scope_struct, vec, CurIdx});
+  Value *vec_value;
+  if (vec_type=="array") {
+    StructType *st = struct_types["vec"];
+    llvm::Type *elem_type = get_type_from_str(Type); 
+
+    Value *elem_size_gep = Builder->CreateStructGEP(st, vec, 1); 
+    Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
+
+    Value *vec_gep = Builder->CreateStructGEP(st, vec, 2);
+    Value *vec = Builder->CreateLoad(int8PtrTy, vec_gep);
+
+    Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), vec, Builder->CreateMul(CurIdx, elem_size));
+    vec_value = Builder->CreateLoad(elem_type, element, "elem");  
+  } else
+      vec_value = callret(vec_type+"_Idx", {scope_struct, vec, CurIdx});
   if((vec_type=="list"||vec_type=="tuple")&&(Type=="float"||Type=="int"))
     vec_value = callret("to_"+Type, {scope_struct, vec_value});
 
@@ -1342,12 +1356,12 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
           type = nested_type + "_" + type;
       }
       // LogBlue("New type is: " + type);
+      std::string RType = RHS->GetDataTree().Type;
       
       if(ends_with(type, "dict"))
       {
         store_op = type+"_Store_Key";
         
-        std::string RType = RHS->GetDataTree().Type;
         if (RType=="int" || RType=="float")
         {
           store_op = store_op + "_" + RType;
@@ -1360,8 +1374,25 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         return const_float(0);
       }
 
-      
-      call(type+"_Store_Idx", {vec, idx, Val, scope_struct});
+      if (type=="array") {
+          StructType *st = struct_types["vec"];
+
+          if (dt.Nested_Data[0].Type=="float"&&RType=="int")
+              Val = Builder->CreateSIToFP(Val, Type::getFloatTy(*TheContext));
+
+          Value *elem_size_gep = Builder->CreateStructGEP(st, vec, 1); 
+          Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
+
+          Value *vec_gep = Builder->CreateStructGEP(st, vec, 2);
+          Value *vec = Builder->CreateLoad(int8PtrTy, vec_gep);
+
+          Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), vec, Builder->CreateMul(idx, elem_size));
+          // ret_val = Builder->CreateLoad(elem_type, element, "elem");  
+          Builder->CreateStore(Val, element);  
+              
+      } else
+          call(type+"_Store_Idx", {vec, idx, Val, scope_struct});
+
       return const_float(0);
     } 
 
@@ -2305,7 +2336,9 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
 
 
 
-inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV, std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name, bool is_nsk_fn, int arg_offset=1)
+inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV,
+                                                  std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name,
+                                                  bool is_nsk_fn, int arg_offset=1)
 {
 
   // Get Arguments
@@ -2869,19 +2902,27 @@ Value *NameableIdx::codegen(Value *scope_struct) {
   
     
     Value *ret_val;
-    if (compound_type!="int_vec")
+    if (TheModule->getFunction(idx_fn))
       ret_val = callret(idx_fn, {scope_struct, loaded_var, idx});
     else {
-      StructType *st = struct_types[compound_type];
-      
-      Value *vecPtr_element = Builder->CreateStructGEP(st, loaded_var, 2, "vec_ptr_ptr");      
-      Value *vecPtr = Builder->CreateLoad(Type::getInt32Ty(*TheContext)->getPointerTo(), vecPtr_element, "vec_ptr");
+      StructType *st = struct_types["vec"];
+      llvm::Type *elem_type;
+      if(compound_type=="array") 
+          elem_type = get_type_from_str(Inner->GetDataTree().Nested_Data[0].Type); 
+      else
+          get_type_from_str(remove_suffix(compound_type, "_vec")); 
 
-      Value *element = Builder->CreateGEP(Type::getInt32Ty(*TheContext), vecPtr, idx, "elem_ptr");
-      ret_val = Builder->CreateLoad(Type::getInt32Ty(*TheContext), element, "elem");  
+      Value *elem_size_gep = Builder->CreateStructGEP(st, loaded_var, 1); 
+      Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
+
+      Value *vec_gep = Builder->CreateStructGEP(st, loaded_var, 2);
+      Value *vec = Builder->CreateLoad(int8PtrTy, vec_gep);
+
+      Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), vec, Builder->CreateMul(idx, elem_size));
+      ret_val = Builder->CreateLoad(elem_type, element, "elem"); 
     }
 
-    if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"||type=="bool"))
+    if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"||type=="bool") && compound_type!="array")
       ret_val = callret("to_"+type, {scope_struct, ret_val});
     
     return ret_val;
@@ -3017,7 +3058,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   return ret;
 }
-
 
 
 

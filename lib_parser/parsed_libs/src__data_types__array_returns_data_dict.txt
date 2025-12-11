@@ -1,0 +1,16 @@
+	functions_return_data_type["array_Create"] = Data_Tree("array");
+	functions_return_data_type["array_size"] = Data_Tree("int");
+	functions_return_data_type["array_print_int"] = Data_Tree("float");
+	functions_return_data_type["arange_int"] = Data_Tree("array");
+	functions_return_data_type["rand_int_vec"] = Data_Tree("array");
+
+	Data_Tree ones_int_vec = Data_Tree("vec");
+	ones_int_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["ones_int"] = ones_int_vec;
+	functions_return_data_type["array_print_float"] = Data_Tree("float");
+	functions_return_data_type["arange_float"] = Data_Tree("array");
+
+	Data_Tree ones_float_vec = Data_Tree("vec");
+	ones_float_vec.Nested_Data.push_back(Data_Tree("float"));
+	functions_return_data_type["ones_float"] = ones_float_vec;
+	functions_return_data_type["array_Split_Parallel"] = Data_Tree("array");

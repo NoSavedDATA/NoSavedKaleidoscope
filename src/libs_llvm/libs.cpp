@@ -17,41 +17,6 @@ void Generate_LLVM_Functions() {
     int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
     
 
-	FunctionType *objAttr_var_from_varTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_var_from_var", objAttr_var_from_varTy);
-
-	FunctionType *objAttr_var_from_vecTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_var_from_vec", objAttr_var_from_vecTy);
-
-	FunctionType *objAttr_vec_from_varTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_vec_from_var", objAttr_vec_from_varTy);
-
-	FunctionType *objAttr_vec_from_vecTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("objAttr_vec_from_vec", objAttr_vec_from_vecTy);
-
-	FunctionType *appendTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("append", appendTy);
-
 	FunctionType *offset_object_ptrTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
@@ -156,6 +121,76 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("object_ptr_Attribute_object", object_ptr_Attribute_objectTy);
+
+	FunctionType *array_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_Create", array_CreateTy);
+
+	FunctionType *array_sizeTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_size", array_sizeTy);
+
+	FunctionType *array_print_intTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_print_int", array_print_intTy);
+
+	FunctionType *arange_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("arange_int", arange_intTy);
+
+	FunctionType *rand_int_vecTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("rand_int_vec", rand_int_vecTy);
+
+	FunctionType *ones_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("ones_int", ones_intTy);
+
+	FunctionType *array_print_floatTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_print_float", array_print_floatTy);
+
+	FunctionType *arange_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
+
+	FunctionType *ones_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("ones_float", ones_floatTy);
+
+	FunctionType *array_Split_ParallelTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_Split_Parallel", array_Split_ParallelTy);
 
 	FunctionType *read_intTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
@@ -318,13 +353,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("Delete_Ptr", Delete_PtrTy);
 
-	FunctionType *RandomStrOnDemandTy= FunctionType::get(
-		int8PtrTy,
-		{},
-		false
-	);
-	TheModule->getOrInsertFunction("RandomStrOnDemand", RandomStrOnDemandTy);
-
 	FunctionType *GetEmptyCharTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
@@ -402,6 +430,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("set_scope_line", set_scope_lineTy);
 
+	FunctionType *scope_struct_CreateFirstTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_CreateFirst", scope_struct_CreateFirstTy);
+
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{},
@@ -423,27 +458,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Overwrite", scope_struct_OverwriteTy);
 
-	FunctionType *scope_struct_DiveTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
-
-	FunctionType *set_scope_first_argTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_first_arg", set_scope_first_argTy);
-
-	FunctionType *set_scope_scopeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_scope", set_scope_scopeTy);
-
 	FunctionType *set_scope_thread_idTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
@@ -451,47 +465,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("set_scope_thread_id", set_scope_thread_idTy);
 
-	FunctionType *set_scope_has_gradTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_has_grad", set_scope_has_gradTy);
-
-	FunctionType *set_scope_function_nameTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_function_name", set_scope_function_nameTy);
-
-	FunctionType *get_scope_first_argTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_first_arg", get_scope_first_argTy);
-
-	FunctionType *get_scope_scopeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_scope", get_scope_scopeTy);
-
 	FunctionType *get_scope_thread_idTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("get_scope_thread_id", get_scope_thread_idTy);
-
-	FunctionType *get_scope_has_gradTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
 
 	FunctionType *scope_struct_Reset_ThreadsTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -597,13 +576,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Delete", scope_struct_DeleteTy);
-
-	FunctionType *nsk_vec_sizeTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("nsk_vec_size", nsk_vec_sizeTy);
 
 	FunctionType *__idx__Ty= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
@@ -969,48 +941,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("float_vec_Create", float_vec_CreateTy);
 
-	FunctionType *float_vec_Store_IdxTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
-
-	FunctionType *arange_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
-
-	FunctionType *zeros_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("zeros_float", zeros_floatTy);
-
-	FunctionType *ones_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("ones_float", ones_floatTy);
-
-	FunctionType *float_vec_IdxTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Idx", float_vec_IdxTy);
-
-	FunctionType *float_vec_CalculateIdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("float_vec_CalculateIdx", float_vec_CalculateIdxTy);
-
 	FunctionType *float_vec_first_nonzeroTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
 		{int8PtrTy, int8PtrTy},
@@ -1165,61 +1095,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("int_vec_Create", int_vec_CreateTy);
 
-	FunctionType *int_vec_Store_IdxTy= FunctionType::get(
+	FunctionType *nsk_vec_sizeTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("int_vec_Store_Idx", int_vec_Store_IdxTy);
-
-	FunctionType *arange_intTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("arange_int", arange_intTy);
-
-	FunctionType *zeros_intTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("zeros_int", zeros_intTy);
-
-	FunctionType *rand_int_vecTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("rand_int_vec", rand_int_vecTy);
-
-	FunctionType *ones_intTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("ones_int", ones_intTy);
-
-	FunctionType *int_vec_Idx_numTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Idx_num", int_vec_Idx_numTy);
-
-	FunctionType *int_vec_IdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Idx", int_vec_IdxTy);
-
-	FunctionType *int_vec_CalculateIdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("int_vec_CalculateIdx", int_vec_CalculateIdxTy);
+	TheModule->getOrInsertFunction("nsk_vec_size", nsk_vec_sizeTy);
 
 	FunctionType *int_vec_CalculateSliceIdxTy= FunctionType::get(
 		int8PtrTy,
@@ -1276,13 +1157,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("str_Create", str_CreateTy);
-
-	FunctionType *str_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Store", str_StoreTy);
 
 	FunctionType *str_CopyTy= FunctionType::get(
 		int8PtrTy,
@@ -1581,12 +1455,5 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("end_timer", end_timerTy);
-
-	FunctionType *FirstArgOnDemandTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);
 
 }

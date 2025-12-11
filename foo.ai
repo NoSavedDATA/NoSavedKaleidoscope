@@ -1,23 +1,12 @@
-import glob
-import nsk_cuda
-
-
-class Dataset
-	list<str> data
-	def float __init__(str path)
-		self.data = glob(path)
-		self.data.shuffle()
-
-	def float print_data()
-		self.data.print()
-
-
 main
+	
+	array<int> a = arange_int(2,10)
 
-	Dataset dataset("/mnt/d/datasets/IMDB/test/*/*.txt")
+	a[2] = 8
 
-	# dataset.print_data()	
+	a.print()
+	
+	for i=0, i<a.size()
+		print(a[i])
 
-	var aux = dataset.data[2]
-	print("aux is " + aux)
-
+	

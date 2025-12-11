@@ -1,4 +1,4 @@
-1821-11-16 10:37:02
+1821-12-09 15:55:38
 
 	FunctionType *int_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -7,61 +7,12 @@
 	);
 	TheModule->getOrInsertFunction("int_vec_Create", int_vec_CreateTy);
 
-	FunctionType *int_vec_Store_IdxTy= FunctionType::get(
+	FunctionType *nsk_vec_sizeTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), int8PtrTy},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("int_vec_Store_Idx", int_vec_Store_IdxTy);
-
-	FunctionType *arange_intTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("arange_int", arange_intTy);
-
-	FunctionType *zeros_intTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("zeros_int", zeros_intTy);
-
-	FunctionType *rand_int_vecTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("rand_int_vec", rand_int_vecTy);
-
-	FunctionType *ones_intTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("ones_int", ones_intTy);
-
-	FunctionType *int_vec_Idx_numTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Idx_num", int_vec_Idx_numTy);
-
-	FunctionType *int_vec_IdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_Idx", int_vec_IdxTy);
-
-	FunctionType *int_vec_CalculateIdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("int_vec_CalculateIdx", int_vec_CalculateIdxTy);
+	TheModule->getOrInsertFunction("nsk_vec_size", nsk_vec_sizeTy);
 
 	FunctionType *int_vec_CalculateSliceIdxTy= FunctionType::get(
 		int8PtrTy,

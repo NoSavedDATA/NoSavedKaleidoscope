@@ -1,4 +1,3 @@
-	functions_return_data_type["append"] = Data_Tree("float");
 	functions_return_data_type["object_Load_float"] = Data_Tree("float");
 	functions_return_data_type["object_Load_int"] = Data_Tree("int");
 	functions_return_data_type["object_Load_on_Offset_float"] = Data_Tree("float");

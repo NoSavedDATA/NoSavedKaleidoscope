@@ -42,7 +42,6 @@ T *allocate(Scope_Struct *scope_struct, int size, std::string type) {
 
 template<typename T>
 T *newT(Scope_Struct *scope_struct, std::string type) {
-    
     T *ptr;
 
     if(scope_struct!=nullptr)

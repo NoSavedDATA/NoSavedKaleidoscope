@@ -1,4 +1,4 @@
-1821-11-16 10:37:56
+1821-11-17 16:09:36
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -6,13 +6,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("str_Create", str_CreateTy);
-
-	FunctionType *str_StoreTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("str_Store", str_StoreTy);
 
 	FunctionType *str_CopyTy= FunctionType::get(
 		int8PtrTy,

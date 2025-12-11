@@ -1,4 +1,4 @@
-1821-11-16 10:36:50
+1821-12-09 15:57:08
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -6,48 +6,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_Create", float_vec_CreateTy);
-
-	FunctionType *float_vec_Store_IdxTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext), int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Store_Idx", float_vec_Store_IdxTy);
-
-	FunctionType *arange_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
-
-	FunctionType *zeros_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("zeros_float", zeros_floatTy);
-
-	FunctionType *ones_floatTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("ones_float", ones_floatTy);
-
-	FunctionType *float_vec_IdxTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("float_vec_Idx", float_vec_IdxTy);
-
-	FunctionType *float_vec_CalculateIdxTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		true //vararg
-	);
-	TheModule->getOrInsertFunction("float_vec_CalculateIdx", float_vec_CalculateIdxTy);
 
 	FunctionType *float_vec_first_nonzeroTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

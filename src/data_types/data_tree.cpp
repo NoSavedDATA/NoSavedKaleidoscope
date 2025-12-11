@@ -26,17 +26,14 @@ bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
 
 
 bool CompareListRecursive(Data_Tree L, Data_Tree R) {
-
     
     std::string list_type = L.Nested_Data[0].Type;
 
-    if (in_str(list_type,{"list", "tuple", "dict"})) {
-        if (!in_str(R.Type,{"list","tuple","dict"}))
+    if (in_str(list_type,{"list", "tuple", "dict", "array"})) {
+        if (!in_str(R.Type,{"list","tuple","dict","array"}))
             return false;
         return CompareListRecursive(L.Nested_Data[0], R.Nested_Data[0]);
     }
-
-    
 
     if(R.Type=="list")
         return list_type==R.Nested_Data[0].Type;
@@ -60,21 +57,7 @@ bool CompareListTuple(Data_Tree *L, Data_Tree R) {
     if(L->Type!="list"||R.Type!="tuple")
         return true;
 
-
-
-    
     CompareListRecursive(*L, R);
-    
-
-    // for (auto data_tree : R.Nested_Data)
-    // {
-    //     if(list_type!=data_tree.Type) {
-    //         std::cout << "FALSE FROM LIST TUPLE" << ".\n";
-    //         return false;
-    //     }
-    // }
-
-
     return true;
 }
 
@@ -106,8 +89,10 @@ int Data_Tree::Compare(Data_Tree other_tree) {
     if(!in_str(Type, primary_data_tokens) && other_tree.Type=="nullptr")
         return 0;
 
-
     if(Type=="any"||other_tree.Type=="any")
+        return 0;
+
+    if(Type=="array"&&other_tree.Type=="array")
         return 0;
  
     if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_tree.Type))
@@ -116,15 +101,15 @@ int Data_Tree::Compare(Data_Tree other_tree) {
     if(!CompareListTuple(this, other_tree))
         return comparisons+1;
 
-
-    if (Type=="list"&&other_tree.Type=="tuple"||CheckChannel(this, other_tree))
+    if ((Type=="list"||Type=="array")&&other_tree.Type=="tuple"||CheckChannel(this, other_tree))
         return comparisons;
 
     if(Nested_Data.size()!=other_tree.Nested_Data.size()){
         if ((Type=="list"&&other_tree.Type=="list")&&(Nested_Data.size()>0&&other_tree.Nested_Data.size()==0))
             return comparisons;
 
-        LogErrorC(-1, "Nested data has different size: " + std::to_string(Nested_Data.size()) + "/" + std::to_string(other_tree.Nested_Data.size()) + ".\n");
+        LogErrorC(-1, "Nested data has different size: " + std::to_string(Nested_Data.size()) + \
+				      "/" + std::to_string(other_tree.Nested_Data.size()) + ".\n");
         comparisons++;
     } else {
         for(int i=0; i<Nested_Data.size(); ++i)
@@ -135,21 +120,22 @@ int Data_Tree::Compare(Data_Tree other_tree) {
 }
 
 void Data_Tree::Print() {
-    std::cout << "" << Type;
-    if (Nested_Data.size()>0)
-    {
-        std::cout << "<";
-        Nested_Data[0].Print();
-        for(int i=1; i<Nested_Data.size(); ++i)
-        {
-            std::cout << ",";
-            Nested_Data[i].Print();
-        }
-        std::cout << ">";
-    }
+    std::string str = toString();
+    std::cout << str << "\n";
 }
 
 
+std::string Data_Tree::toString() {
+    std::string str = Type; 
+    if (Nested_Data.size()>0)
+    {
+        str += "<" + Nested_Data[0].Type;
+        for(int i=1; i<Nested_Data.size(); ++i)
+            str +=  "," + Nested_Data[i].Type;
+        str +=  ">";
+    }
+    return str;
+}
 
 
 

@@ -4,12 +4,6 @@
 #include "../mangler/scope_struct.h"
 
 
-
-char *RandomString(size_t length); 
-
-extern "C" char * RandomStrOnDemand();
-
-
 extern "C" char *GetEmptyChar(Scope_Struct *scope_struct);
 
 

@@ -42,6 +42,14 @@ void Generate_Struct_Types() {
         "DT_int_vec"
     );
     struct_types["int_vec"] = int_vecTy;
+
+    // DT_vecs
+    StructType *vecTy  = StructType::create(
+        *TheContext,
+        {intTy, intTy, int8PtrTy},
+        "DT_vec"
+    );
+    struct_types["vec"] = vecTy;
     
     // --- Scope_Struct --- 
 

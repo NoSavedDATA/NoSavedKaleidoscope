@@ -8,6 +8,8 @@
 #include<cstring>
 #include<sstream>
 
+bool ShallCodegen = true;
+
 // Cuda
 #include "include.h"
 

@@ -1,23 +1,4 @@
-	functions_return_data_type["int_vec_Store_Idx"] = Data_Tree("int");
-
-	Data_Tree arange_int_vec = Data_Tree("vec");
-	arange_int_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["arange_int"] = arange_int_vec;
-
-	Data_Tree zeros_int_vec = Data_Tree("vec");
-	zeros_int_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["zeros_int"] = zeros_int_vec;
-
-	Data_Tree rand_int_vec_vec = Data_Tree("vec");
-	rand_int_vec_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["rand_int_vec"] = rand_int_vec_vec;
-
-	Data_Tree ones_int_vec = Data_Tree("vec");
-	ones_int_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["ones_int"] = ones_int_vec;
-	functions_return_data_type["int_vec_Idx_num"] = Data_Tree("int");
-	functions_return_data_type["int_vec_Idx"] = Data_Tree("int");
-	functions_return_data_type["int_vec_CalculateIdx"] = Data_Tree("int");
+	functions_return_data_type["nsk_vec_size"] = Data_Tree("int");
 	functions_return_data_type["int_vec_CalculateSliceIdx"] = Data_Tree("");
 
 	Data_Tree int_vec_Slice_vec = Data_Tree("vec");

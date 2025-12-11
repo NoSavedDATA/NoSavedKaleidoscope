@@ -7,6 +7,7 @@
 
 #include "codegen.h"
 #include "expressions.h"
+#include "function_ast.h"
 #include "global_vars.h"
 #include "libs_parser.h"
 #include "logging.h"

@@ -1,0 +1,26 @@
+import glob
+import nsk_cuda
+
+
+
+class Dataset
+	list<str> data
+	def float __init__(str path, list<float> beta)
+		self.data = glob(path)
+		self.data.shuffle()
+
+	def float print_data()
+		self.data.print()
+
+
+def int boo(int x, list<int> d)
+	return 0
+
+main
+	Dataset dataset("/mnt/d/datasets/IMDB/test/*/*.txt")
+    
+	tensor[2,2] x
+	
+		
+	var aux = dataset.data[2]
+	print("got data: " + aux)

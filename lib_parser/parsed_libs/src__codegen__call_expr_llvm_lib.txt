@@ -1,8 +1,0 @@
-1821-09-03 09:39:44
-
-	FunctionType *FirstArgOnDemandTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("FirstArgOnDemand", FirstArgOnDemandTy);

@@ -1,4 +1,4 @@
-1821-11-16 10:46:51
+1821-12-10 20:53:38
 
 	FunctionType *scope_struct_specTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -13,6 +13,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("set_scope_line", set_scope_lineTy);
+
+	FunctionType *scope_struct_CreateFirstTy= FunctionType::get(
+		int8PtrTy,
+		{},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_CreateFirst", scope_struct_CreateFirstTy);
 
 	FunctionType *scope_struct_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -35,27 +42,6 @@
 	);
 	TheModule->getOrInsertFunction("scope_struct_Overwrite", scope_struct_OverwriteTy);
 
-	FunctionType *scope_struct_DiveTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Dive", scope_struct_DiveTy);
-
-	FunctionType *set_scope_first_argTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_first_arg", set_scope_first_argTy);
-
-	FunctionType *set_scope_scopeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_scope", set_scope_scopeTy);
-
 	FunctionType *set_scope_thread_idTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext)},
@@ -63,47 +49,12 @@
 	);
 	TheModule->getOrInsertFunction("set_scope_thread_id", set_scope_thread_idTy);
 
-	FunctionType *set_scope_has_gradTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext)},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_has_grad", set_scope_has_gradTy);
-
-	FunctionType *set_scope_function_nameTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_function_name", set_scope_function_nameTy);
-
-	FunctionType *get_scope_first_argTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_first_arg", get_scope_first_argTy);
-
-	FunctionType *get_scope_scopeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_scope", get_scope_scopeTy);
-
 	FunctionType *get_scope_thread_idTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("get_scope_thread_id", get_scope_thread_idTy);
-
-	FunctionType *get_scope_has_gradTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_has_grad", get_scope_has_gradTy);
 
 	FunctionType *scope_struct_Reset_ThreadsTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

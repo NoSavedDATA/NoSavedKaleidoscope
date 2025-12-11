@@ -56,7 +56,6 @@ struct Scope_Struct {
     // }
 };
 
-Scope_Struct *get_inner_most_scope(Scope_Struct *);
 
 void alloc_gc_vspace(Scope_Struct *scope_struct, int size);
 

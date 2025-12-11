@@ -34,20 +34,6 @@ extern "C" char *str_Create(Scope_Struct *scope_struct, char *name, char *scopel
 
 
 
-extern "C" float str_Store(char *name, char *value, Scope_Struct *scope_struct) {
-  
-  //NamedStrs[name] = CopyString(scope_struct, value); //TODO: Break?
-  
-  
-  NamedStrs[name] = value;
-  //std::cout << "Store " << value << " at " << name << "\n";
-  
-  // std::cout << "STORING STRING " << value << " AT " << name << ".\n";
-  
-  return 0;
-}
-
-
 void str_Clean_Up(void *data_ptr)
 {
   char *char_ptr = static_cast<char *>(data_ptr);

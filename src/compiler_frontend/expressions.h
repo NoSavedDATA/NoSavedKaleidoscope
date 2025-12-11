@@ -5,6 +5,7 @@
 #include "llvm/IR/Value.h"
 
 #include "../data_types/data_tree.h"
+#include "../../lsp/json.hpp"
 #include "parser_struct.h"
 
 using namespace llvm;
@@ -73,7 +74,8 @@ class ExprAST {
     virtual void SetIsMsg(bool); 
     virtual bool GetIsMsg(); 
 
-  };
+    virtual nlohmann::json toJSON();
+};
   
 class IndexExprAST : public ExprAST {
   
@@ -628,6 +630,28 @@ class RetExprAST : public ExprAST {
 };
 
 
+struct fn_descriptor {
+  std::string Name, Return;
+  std::vector<std::string> ArgTypes, ArgNames;
+  fn_descriptor(const std::string &, const std::string &);
+};
+
+class ClassExprAST : public ExprAST {
+  public:
+    std::string Name;
+    Parser_Struct parser_struct;
+    std::vector<fn_descriptor> Functions;
+
+    ClassExprAST(Parser_Struct, const std::string &, const std::vector<fn_descriptor> &);
+
+    Value *codegen(Value *scope_struct) override;
+    
+    nlohmann::json toJSON() override;
+
+    // std::string GetType(bool from_assignment=false) override; 
+    // Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
 
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
@@ -834,17 +858,20 @@ class NoGradExprAST : public ExprAST {
   /// of arguments the function takes), as well as if it is an operator.
   class PrototypeAST {
   
-    std::string Name, Return_Type, Class, Method;
+    std::string Name, Class, Method;
   
-    std::vector<std::string> Args;
-    std::vector<std::string> Types;
     bool IsOperator;
     unsigned Precedence; // Precedence if a binary op.
   
     public:
+      std::string Return_Type;
+      std::vector<std::string> Args;
+      std::vector<std::string> Types;
+      std::vector<Data_Tree> TypeTrees;
       PrototypeAST(const std::string &Name, const std::string &Return_Type, const std::string &Class, const std::string &Method,
                   std::vector<std::string> Args,
                   std::vector<std::string> Types,
+                  std::vector<Data_Tree> TypeTrees,
                   bool IsOperator = false, unsigned Prec = 0);
   
     Function *codegen();

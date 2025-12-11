@@ -5,11 +5,11 @@
 
 
 #include "../mangler/scope_struct.h"
-#include "nsk_vector.h"
 
 
-struct DT_float_vec : public Nsk_Vector {
+struct DT_float_vec {
     public:
+		int size, elem_size=4;
         float *vec;
 
     DT_float_vec();

@@ -1,11 +1,4 @@
-1821-10-16 14:20:11
-
-	FunctionType *RandomStrOnDemandTy= FunctionType::get(
-		int8PtrTy,
-		{},
-		false
-	);
-	TheModule->getOrInsertFunction("RandomStrOnDemand", RandomStrOnDemandTy);
+1821-11-17 16:10:56
 
 	FunctionType *GetEmptyCharTy= FunctionType::get(
 		int8PtrTy,

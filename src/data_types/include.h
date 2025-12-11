@@ -6,6 +6,7 @@
 #include <map>
 
 #include "any_map.h"
+#include "array.h"
 #include "bool.h"
 #include "codegen_notes.h"
 #include "data_tree.h"
@@ -22,8 +23,6 @@
 
 using namespace llvm;
 
-extern std::map<std::string, Value *> NamedValues;
-extern std::map<std::string, char *> NamedStrs;
 extern std::map<std::string, std::vector<char *>> ClassStrVecs;
 extern std::map<std::string, DT_float_vec *> ClassFloatVecs;
 extern std::map<std::string, float> NamedClassValues;

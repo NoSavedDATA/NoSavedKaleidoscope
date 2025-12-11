@@ -1,0 +1,1 @@
+{"array_Create", "array"}, {"array_size", "int"}, {"array_print_int", "float"}, {"arange_int", "array"}, {"rand_int_vec", "array"}, {"ones_int", "int_vec"}, {"array_print_float", "float"}, {"arange_float", "array"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 

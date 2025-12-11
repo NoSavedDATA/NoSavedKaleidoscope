@@ -5,8 +5,6 @@
 
 
 
-std::map<std::string, std::string> objectVecs;
-std::map<std::string, int> objectVecsLastId;
 
 
 
@@ -17,84 +15,6 @@ std::map<std::string, int> objectVecsLastId;
 
 
 
-extern "C" void objAttr_var_from_var(char *LName, char *RName)
-{
-  //std::cout << "objAttr_var_from_var of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
-  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
-
-  NamedObjects[LName] = NamedObjects[RName];
-  
-  
-}
-
-extern "C" void objAttr_var_from_vec(char *LName, char *RName)
-{
-  //std::cout << "objAttr_var_from_vec of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << objectVecs[RName] << "\n";
-  //std::cout << "Replacing: " << NamedObjects[LName] << "\n";
-
-  NamedObjects[LName] = objectVecs[RName];
-
-  
-}
-
-extern "C" void objAttr_vec_from_var(char *LName, char *RName)
-{
-  //std::cout << "objAttr_vec_from_var of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << NamedObjects[RName] << "\n";
-  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
-
-  objectVecs[LName] = NamedObjects[RName];
-
-  
-}
-
-
-extern "C" void objAttr_vec_from_vec(char *LName, char *RName)
-{
-  //std::cout << "objAttr_vec_from_vec of " << LName << " from " << RName << "\n";
-
-  //std::cout << "Loading: " << objectVecs[RName] << "\n";
-  //std::cout << "Replacing: " << objectVecs[LName] << "\n";
-
-  objectVecs[LName] = objectVecs[RName];
-
-  
-}
-
-extern "C" float append(char *self, char *obj_name)
-{
-  //char* copied = (char*)malloc(strlen(in_str) + 1);
-  //strcpy(copied, in_str);
-
-  std::cout << "\n\nAPPEND OF " << obj_name << " into: " << self << "\n";
-  
-  std::string obj_name_str = obj_name;
-
-
-  
-
-
-  int obj_vec_last_id = 0;
-  if (objectVecsLastId.count(self)>0)
-  {
-    obj_vec_last_id = objectVecsLastId[self];
-    obj_vec_last_id+=1;
-  }
-  objectVecsLastId[self] = obj_vec_last_id;
-
-  std::string indexed_self = self + std::to_string(obj_vec_last_id);
-  objectVecs[indexed_self] = NamedObjects[obj_name];
-
-  
-  
-
-  return 0;
-}
 
 
 

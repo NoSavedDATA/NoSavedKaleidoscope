@@ -32,6 +32,7 @@
 #include "llvm/Transforms/Scalar/GVN.h"
 #include <memory>
 
+#include "../lsp/json.hpp"
 
 class PrototypeAST;
 class ExprAST;
@@ -54,6 +55,7 @@ class FunctionAST {
   const PrototypeAST& getProto() const;
   const std::string& getName() const;
   llvm::Function *codegen();
+  nlohmann::json toJSON();
 };
 
 

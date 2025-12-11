@@ -76,7 +76,7 @@ std::unique_ptr<IndexExprAST> ParseIdx(Parser_Struct parser_struct, std::string 
 
 
 
-std::vector<std::unique_ptr<ExprAST>> Parse_Arguments(Parser_Struct parser_struct, std::string class_name);
+std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Struct parser_struct, std::string class_name);
 
 
 

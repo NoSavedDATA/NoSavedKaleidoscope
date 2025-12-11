@@ -22,26 +22,26 @@ void set_functions_return_type() {
                            {"mean_tensor", "tensor"},
                            {"BatchNorm2d", "tensor"}, {"Pool2d", "tensor"}, {"LSTM", "tensor"}, {"MHSA", "tensor"}, {"Embedding", "tensor"},
 						{"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"ShuffleStrVec", "str_vec"},
-						{"nsk_vec_size", "int"}, {"__idx__", "int"}, {"__sliced_idx__", "int"}, 
+						{"__idx__", "int"}, {"__sliced_idx__", "int"}, 
 						{"_quit_", "float"}, 
 						{"dict_Create", "dict"}, {"dict_New", "dict"}, {"dict_print", "float"}, 
 						{"emerge_int", "int"}, {"emerge_float", "float"}, {"_tid", "float"}, {"tid", "int"}, 
-						{"str_Create", "str"}, {"str_Store", "float"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, 
+						{"array_Create", "array"}, {"array_size", "int"}, {"array_print_int", "float"}, {"arange_int", "array"}, {"rand_int_vec", "array"}, {"ones_int", "int_vec"}, {"array_print_float", "float"}, {"arange_float", "array"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 
+						{"str_Create", "str"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, 
 						{"bool_to_str", "str"}, 
-						{"RandomStrOnDemand", "str"}, {"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
+						{"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
 						{"silent_sleep", "float"}, {"start_timer", "float"}, {"end_timer", "float"}, 
 						{"print", "float"}, 
-						{"float_vec_Store_Idx", "float"}, {"arange_float", "float_vec"}, {"zeros_float", "float_vec"}, {"ones_float", "float_vec"}, {"float_vec_Idx", "float"}, {"float_vec_CalculateIdx", "int"}, {"float_vec_first_nonzero", "float"}, {"float_vec_print", "float"}, {"float_vec_pow", "float_vec"}, {"float_vec_sum", "float"}, {"float_vec_int_add", "float_vec"}, {"float_vec_int_div", "float_vec"}, {"float_vec_float_vec_add", "float_vec"}, {"float_vec_float_vec_sub", "float_vec"}, {"float_vec_Split_Parallel", "float_vec"}, {"float_vec_Split_Strided_Parallel", "float_vec"}, {"float_vec_size", "int"}, 
+						{"float_vec_first_nonzero", "float"}, {"float_vec_print", "float"}, {"float_vec_pow", "float_vec"}, {"float_vec_sum", "float"}, {"float_vec_int_add", "float_vec"}, {"float_vec_int_div", "float_vec"}, {"float_vec_float_vec_add", "float_vec"}, {"float_vec_float_vec_sub", "float_vec"}, {"float_vec_Split_Parallel", "float_vec"}, {"float_vec_Split_Strided_Parallel", "float_vec"}, {"float_vec_size", "int"}, 
 						{"is_null", "bool"}, 
-						{"int_vec_Store_Idx", "int"}, {"arange_int", "int_vec"}, {"zeros_int", "int_vec"}, {"rand_int_vec", "int_vec"}, {"ones_int", "int_vec"}, {"int_vec_Idx_num", "int"}, {"int_vec_Idx", "int"}, {"int_vec_CalculateIdx", "int"}, {"int_vec_CalculateSliceIdx", ""}, {"int_vec_Slice", "int_vec"}, {"int_vec_first_nonzero", "int"}, {"int_vec_print", "int"}, {"int_vec_Split_Parallel", "int_vec"}, {"int_vec_Split_Strided_Parallel", "int_vec"}, {"int_vec_size", "int"}, 
-						{"scope_struct_spec", "float"}, {"scope_struct_Create", ""}, {"scope_struct_Copy", ""}, {"scope_struct_Overwrite", ""}, {"scope_struct_Dive", ""}, {"get_scope_first_arg", "str"}, {"get_scope_scope", "str"}, {"get_scope_thread_id", "int"}, {"get_scope_has_grad", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, 
+						{"nsk_vec_size", "int"}, {"int_vec_CalculateSliceIdx", ""}, {"int_vec_Slice", "int_vec"}, {"int_vec_first_nonzero", "int"}, {"int_vec_print", "int"}, {"int_vec_Split_Parallel", "int_vec"}, {"int_vec_Split_Strided_Parallel", "int_vec"}, {"int_vec_size", "int"}, 
+						{"scope_struct_spec", "float"}, {"scope_struct_CreateFirst", ""}, {"scope_struct_Create", ""}, {"scope_struct_Copy", ""}, {"scope_struct_Overwrite", ""}, {"get_scope_thread_id", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, 
 						{"dir_exists", "float"}, {"path_exists", "float"}, 
 						{"read_float", "float"}, {"float_to_str", "str"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 
 						{"min", "float"}, {"max", "float"}, {"logE2f", "float"}, {"roundE", "float"}, {"floorE", "float"}, {"logical_not", "float"}, 
-						{"FirstArgOnDemand", "str"}, 
 						{"LenStrVec", "int"}, {"ShuffleStrVec", "str_vec"}, {"shuffle_str", "str"}, {"IndexStrVec", "str"}, {"str_vec_Idx", "str"}, {"str_vec_CalculateIdx", "int"}, {"str_vec_print", "float"}, 
 						{"read_int", "int"}, {"int_to_str", "str"}, 
-						{"append", "float"}, {"object_Load_float", "float"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_float", "float"}, {"object_Load_on_Offset_int", "int"}, 
+						{"object_Load_float", "float"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_float", "float"}, {"object_Load_on_Offset_int", "int"}, 
 						{"print_randoms", "float"}, {"randint", "int"}, 
 						{"CreateNotesVector", "list"}, {"Dispose_NotesVector", "float"}, {"Add_To_NotesVector_float", "list"}, {"Add_To_NotesVector_int", "list"}, {"Add_To_NotesVector_str", "list"}, 
 						{"channel_str_message", "float"}, {"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_message", "float"}, {"channel_float_message", "float"}, {"float_channel_Idx", "float"}, {"float_channel_sum", "float"}, {"float_channel_mean", "float"}, {"float_channel_terminate", "float"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"channel_int_message", "float"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_mean", "float"}, {"int_channel_terminate", "float"}, {"int_channel_alive", "bool"}, 
@@ -53,7 +53,6 @@ void set_functions_return_type() {
 	functions_return_data_type["float_to_str"] = Data_Tree("str");
 	functions_return_data_type["nsk_pow"] = Data_Tree("float");
 	functions_return_data_type["nsk_sqrt"] = Data_Tree("float");
-	functions_return_data_type["RandomStrOnDemand"] = Data_Tree("str");
 	functions_return_data_type["GetEmptyChar"] = Data_Tree("str");
 	functions_return_data_type["CopyString"] = Data_Tree("str");
 	functions_return_data_type["ConcatStr"] = Data_Tree("str");
@@ -68,26 +67,7 @@ void set_functions_return_type() {
 	functions_return_data_type["print_randoms"] = Data_Tree("float");
 	functions_return_data_type["randint"] = Data_Tree("int");
 	functions_return_data_type["bool_to_str"] = Data_Tree("str");
-	functions_return_data_type["int_vec_Store_Idx"] = Data_Tree("int");
-
-	Data_Tree arange_int_vec = Data_Tree("vec");
-	arange_int_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["arange_int"] = arange_int_vec;
-
-	Data_Tree zeros_int_vec = Data_Tree("vec");
-	zeros_int_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["zeros_int"] = zeros_int_vec;
-
-	Data_Tree rand_int_vec_vec = Data_Tree("vec");
-	rand_int_vec_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["rand_int_vec"] = rand_int_vec_vec;
-
-	Data_Tree ones_int_vec = Data_Tree("vec");
-	ones_int_vec.Nested_Data.push_back(Data_Tree("int"));
-	functions_return_data_type["ones_int"] = ones_int_vec;
-	functions_return_data_type["int_vec_Idx_num"] = Data_Tree("int");
-	functions_return_data_type["int_vec_Idx"] = Data_Tree("int");
-	functions_return_data_type["int_vec_CalculateIdx"] = Data_Tree("int");
+	functions_return_data_type["nsk_vec_size"] = Data_Tree("int");
 	functions_return_data_type["int_vec_CalculateSliceIdx"] = Data_Tree("");
 
 	Data_Tree int_vec_Slice_vec = Data_Tree("vec");
@@ -114,11 +94,26 @@ void set_functions_return_type() {
 	functions_return_data_type["str_vec_Idx"] = Data_Tree("str");
 	functions_return_data_type["str_vec_CalculateIdx"] = Data_Tree("int");
 	functions_return_data_type["str_vec_print"] = Data_Tree("float");
-	functions_return_data_type["FirstArgOnDemand"] = Data_Tree("str");
 	functions_return_data_type["is_null"] = Data_Tree("bool");
 	functions_return_data_type["dict_Create"] = Data_Tree("dict");
 	functions_return_data_type["dict_New"] = Data_Tree("dict");
 	functions_return_data_type["dict_print"] = Data_Tree("float");
+	functions_return_data_type["array_Create"] = Data_Tree("array");
+	functions_return_data_type["array_size"] = Data_Tree("int");
+	functions_return_data_type["array_print_int"] = Data_Tree("float");
+	functions_return_data_type["arange_int"] = Data_Tree("array");
+	functions_return_data_type["rand_int_vec"] = Data_Tree("array");
+
+	Data_Tree ones_int_vec = Data_Tree("vec");
+	ones_int_vec.Nested_Data.push_back(Data_Tree("int"));
+	functions_return_data_type["ones_int"] = ones_int_vec;
+	functions_return_data_type["array_print_float"] = Data_Tree("float");
+	functions_return_data_type["arange_float"] = Data_Tree("array");
+
+	Data_Tree ones_float_vec = Data_Tree("vec");
+	ones_float_vec.Nested_Data.push_back(Data_Tree("float"));
+	functions_return_data_type["ones_float"] = ones_float_vec;
+	functions_return_data_type["array_Split_Parallel"] = Data_Tree("array");
 	functions_return_data_type["read_int"] = Data_Tree("int");
 	functions_return_data_type["int_to_str"] = Data_Tree("str");
 	functions_return_data_type["_quit_"] = Data_Tree("float");
@@ -127,21 +122,6 @@ void set_functions_return_type() {
 	functions_return_data_type["Add_To_NotesVector_float"] = Data_Tree("list");
 	functions_return_data_type["Add_To_NotesVector_int"] = Data_Tree("list");
 	functions_return_data_type["Add_To_NotesVector_str"] = Data_Tree("list");
-	functions_return_data_type["float_vec_Store_Idx"] = Data_Tree("float");
-
-	Data_Tree arange_float_vec = Data_Tree("vec");
-	arange_float_vec.Nested_Data.push_back(Data_Tree("float"));
-	functions_return_data_type["arange_float"] = arange_float_vec;
-
-	Data_Tree zeros_float_vec = Data_Tree("vec");
-	zeros_float_vec.Nested_Data.push_back(Data_Tree("float"));
-	functions_return_data_type["zeros_float"] = zeros_float_vec;
-
-	Data_Tree ones_float_vec = Data_Tree("vec");
-	ones_float_vec.Nested_Data.push_back(Data_Tree("float"));
-	functions_return_data_type["ones_float"] = ones_float_vec;
-	functions_return_data_type["float_vec_Idx"] = Data_Tree("float");
-	functions_return_data_type["float_vec_CalculateIdx"] = Data_Tree("int");
 	functions_return_data_type["float_vec_first_nonzero"] = Data_Tree("float");
 	functions_return_data_type["float_vec_print"] = Data_Tree("float");
 
@@ -175,7 +155,6 @@ void set_functions_return_type() {
 	functions_return_data_type["float_vec_Split_Strided_Parallel"] = float_vec_Split_Strided_Parallel_vec;
 	functions_return_data_type["float_vec_size"] = Data_Tree("int");
 	functions_return_data_type["str_Create"] = Data_Tree("str");
-	functions_return_data_type["str_Store"] = Data_Tree("float");
 	functions_return_data_type["str_Copy"] = Data_Tree("str");
 	functions_return_data_type["str_CopyArg"] = Data_Tree("str");
 	functions_return_data_type["str_str_add"] = Data_Tree("str");
@@ -197,17 +176,13 @@ void set_functions_return_type() {
 	functions_return_data_type["_tid"] = Data_Tree("float");
 	functions_return_data_type["tid"] = Data_Tree("int");
 	functions_return_data_type["scope_struct_spec"] = Data_Tree("float");
+	functions_return_data_type["scope_struct_CreateFirst"] = Data_Tree("");
 	functions_return_data_type["scope_struct_Create"] = Data_Tree("");
 	functions_return_data_type["scope_struct_Copy"] = Data_Tree("");
 	functions_return_data_type["scope_struct_Overwrite"] = Data_Tree("");
-	functions_return_data_type["scope_struct_Dive"] = Data_Tree("");
-	functions_return_data_type["get_scope_first_arg"] = Data_Tree("str");
-	functions_return_data_type["get_scope_scope"] = Data_Tree("str");
 	functions_return_data_type["get_scope_thread_id"] = Data_Tree("int");
-	functions_return_data_type["get_scope_has_grad"] = Data_Tree("int");
 	functions_return_data_type["scope_struct_Reset_Threads"] = Data_Tree("float");
 	functions_return_data_type["scope_struct_Increment_Thread"] = Data_Tree("float");
-	functions_return_data_type["nsk_vec_size"] = Data_Tree("int");
 	functions_return_data_type["__idx__"] = Data_Tree("int");
 	functions_return_data_type["__sliced_idx__"] = Data_Tree("int");
 	functions_return_data_type["print"] = Data_Tree("float");
@@ -217,7 +192,6 @@ void set_functions_return_type() {
 	functions_return_data_type["roundE"] = Data_Tree("float");
 	functions_return_data_type["floorE"] = Data_Tree("float");
 	functions_return_data_type["logical_not"] = Data_Tree("float");
-	functions_return_data_type["append"] = Data_Tree("float");
 	functions_return_data_type["object_Load_float"] = Data_Tree("float");
 	functions_return_data_type["object_Load_int"] = Data_Tree("int");
 	functions_return_data_type["object_Load_on_Offset_float"] = Data_Tree("float");

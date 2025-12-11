@@ -148,7 +148,7 @@ void GC::Sweep(Scope_Struct *scope_struct) {
     }
 
 
-    CleanUp_Unused(); 
+    CleanUp_Unused(); // Trigger clean_up functions
     allocations=0;
     size_occupied=0;
 
