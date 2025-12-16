@@ -1,1 +1,1 @@
-"array_Create", "array_size", "array_print_int", "arange_int", "rand_int_vec", "ones_int", "array_print_float", "arange_float", "ones_float", "array_Split_Parallel", 
+"array_Create", "array_size", "array_print_int", "arange_int", "zeros_int", "rand_int_vec", "ones_int", "array_print_float", "arange_float", "zeros_float", "ones_float", "array_Split_Parallel", 

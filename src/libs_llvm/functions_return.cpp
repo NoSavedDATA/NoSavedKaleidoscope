@@ -26,7 +26,7 @@ void set_functions_return_type() {
 						{"_quit_", "float"}, 
 						{"dict_Create", "dict"}, {"dict_New", "dict"}, {"dict_print", "float"}, 
 						{"emerge_int", "int"}, {"emerge_float", "float"}, {"_tid", "float"}, {"tid", "int"}, 
-						{"array_Create", "array"}, {"array_size", "int"}, {"array_print_int", "float"}, {"arange_int", "array"}, {"rand_int_vec", "array"}, {"ones_int", "int_vec"}, {"array_print_float", "float"}, {"arange_float", "array"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 
+						{"array_Create", "array"}, {"array_size", "int"}, {"array_print_int", "float"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"rand_int_vec", "array"}, {"ones_int", "int_vec"}, {"array_print_float", "float"}, {"arange_float", "array"}, {"zeros_float", "float_vec"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 
 						{"str_Create", "str"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, 
 						{"bool_to_str", "str"}, 
 						{"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
@@ -34,7 +34,7 @@ void set_functions_return_type() {
 						{"print", "float"}, 
 						{"float_vec_first_nonzero", "float"}, {"float_vec_print", "float"}, {"float_vec_pow", "float_vec"}, {"float_vec_sum", "float"}, {"float_vec_int_add", "float_vec"}, {"float_vec_int_div", "float_vec"}, {"float_vec_float_vec_add", "float_vec"}, {"float_vec_float_vec_sub", "float_vec"}, {"float_vec_Split_Parallel", "float_vec"}, {"float_vec_Split_Strided_Parallel", "float_vec"}, {"float_vec_size", "int"}, 
 						{"is_null", "bool"}, 
-						{"nsk_vec_size", "int"}, {"int_vec_CalculateSliceIdx", ""}, {"int_vec_Slice", "int_vec"}, {"int_vec_first_nonzero", "int"}, {"int_vec_print", "int"}, {"int_vec_Split_Parallel", "int_vec"}, {"int_vec_Split_Strided_Parallel", "int_vec"}, {"int_vec_size", "int"}, 
+						{"nsk_vec_size", "int"}, {"int_vec_CalculateSliceIdx", ""}, {"int_vec_Slice", "int_vec"}, {"int_vec_print", "int"}, {"int_vec_Split_Parallel", "int_vec"}, {"int_vec_Split_Strided_Parallel", "int_vec"}, {"int_vec_size", "int"}, 
 						{"scope_struct_spec", "float"}, {"scope_struct_CreateFirst", ""}, {"scope_struct_Create", ""}, {"scope_struct_Copy", ""}, {"scope_struct_Overwrite", ""}, {"get_scope_thread_id", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, 
 						{"dir_exists", "float"}, {"path_exists", "float"}, 
 						{"read_float", "float"}, {"float_to_str", "str"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 
@@ -73,7 +73,6 @@ void set_functions_return_type() {
 	Data_Tree int_vec_Slice_vec = Data_Tree("vec");
 	int_vec_Slice_vec.Nested_Data.push_back(Data_Tree("int"));
 	functions_return_data_type["int_vec_Slice"] = int_vec_Slice_vec;
-	functions_return_data_type["int_vec_first_nonzero"] = Data_Tree("int");
 	functions_return_data_type["int_vec_print"] = Data_Tree("int");
 
 	Data_Tree int_vec_Split_Parallel_vec = Data_Tree("vec");
@@ -102,6 +101,7 @@ void set_functions_return_type() {
 	functions_return_data_type["array_size"] = Data_Tree("int");
 	functions_return_data_type["array_print_int"] = Data_Tree("float");
 	functions_return_data_type["arange_int"] = Data_Tree("array");
+	functions_return_data_type["zeros_int"] = Data_Tree("array");
 	functions_return_data_type["rand_int_vec"] = Data_Tree("array");
 
 	Data_Tree ones_int_vec = Data_Tree("vec");
@@ -109,6 +109,10 @@ void set_functions_return_type() {
 	functions_return_data_type["ones_int"] = ones_int_vec;
 	functions_return_data_type["array_print_float"] = Data_Tree("float");
 	functions_return_data_type["arange_float"] = Data_Tree("array");
+
+	Data_Tree zeros_float_vec = Data_Tree("vec");
+	zeros_float_vec.Nested_Data.push_back(Data_Tree("float"));
+	functions_return_data_type["zeros_float"] = zeros_float_vec;
 
 	Data_Tree ones_float_vec = Data_Tree("vec");
 	ones_float_vec.Nested_Data.push_back(Data_Tree("float"));

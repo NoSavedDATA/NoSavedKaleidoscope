@@ -162,6 +162,12 @@ int tokenize() {
       LastChar = get_file_char();
     return tok_commentary;
   }
+  if (LastChar=='}') {
+    begin_with_space=false;
+    while(LastChar!=tok_space&&LastChar!=tok_eof&&LastChar!=tok_finish)
+      LastChar = get_file_char();
+    return tok_commentary;
+  }
  
 
   if (isalpha(LastChar) || LastChar=='_' || LastChar=='\"') { // identifier: [a-zA-Z][a-zA-Z0-9]*

@@ -200,13 +200,6 @@ void InitializeModule() {
 
 
 
-  //
-  FunctionType *zeros_vecTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
-      false
-  );
-  TheModule->getOrInsertFunction("zeros_vec", zeros_vecTy);
 
 
   //
@@ -227,13 +220,6 @@ void InitializeModule() {
   TheModule->getOrInsertFunction("cat_str_float", cat_str_floatTy);
 
 
-  //
-  FunctionType *ones_vecTy = FunctionType::get(
-      int8PtrTy,
-      {int8PtrTy, Type::getFloatTy(*TheContext)},
-      false
-  );
-  TheModule->getOrInsertFunction("ones_vec", ones_vecTy);
   
 
   FunctionType *PrintFloatTy = FunctionType::get(
@@ -640,8 +626,11 @@ Function *FunctionAST::codegen() {
   if(function_name=="__anon_expr") {
     scope_struct = callret("scope_struct_CreateFirst", {}); 
     call("scope_struct_Alloc_GC", {scope_struct});
-  } else
-    scope_struct = callret("scope_struct_Create", {});
+    stack_top_value = const_int(0);
+    function_stack_top = const_int(0);
+  }
+  // else
+  //   scope_struct = callret("scope_struct_Create", {});
   
 
   
@@ -662,68 +651,54 @@ Function *FunctionAST::codegen() {
     // Default args
     if (arg_name == "scope_struct")
     {
-        scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
+        // scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
+        scope_struct = &Arg;
+        Value *stack_top_value_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 3); 
+        function_stack_top = Builder->CreateLoad(Type::getInt32Ty(*TheContext), stack_top_value_gep);
+        stack_top_value = Builder->CreateLoad(Type::getInt32Ty(*TheContext), stack_top_value_gep);
     } else { 
         std::string type = "";
-
         if (data_typeVars[function_name].find(arg_name) != data_typeVars[function_name].end())
             type = UnmangleVec(data_typeVars[function_name][arg_name]);
         else
             LogError(-1, "error at argument " + arg_name + " of function " + function_name);
 
-            
-        llvm::Type *alloca_type = get_type_from_str(type);
-        AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
-        // std::string copy_fn = type+"_CopyArg";
-        // Function *F = TheModule->getFunction(copy_fn);
-        // if (F)
-        // {
-        //     Value *copied_value = callret(copy_fn,
-        //                     {scope_struct,
-        //                     &Arg,
-        //                     global_str("-")});
-        //     Builder->CreateStore(copied_value, arg_alloca);
-        // } else
-        Builder->CreateStore(&Arg, arg_alloca);
-
-        function_allocas[current_codegen_function][arg_name] = arg_alloca;
+        // if (!in_str(type, primary_data_tokens))
+        //     Allocate_On_Pointer_Stack(scope_struct, current_codegen_function, arg_name, &Arg); 
+        // else {
+        if(!in_str(type, primary_data_tokens)) {
+            llvm::Type *alloca_type = get_type_from_str(type);
+            AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
+            Builder->CreateStore(&Arg, arg_alloca);
+            function_allocas[current_codegen_function][arg_name] = arg_alloca;      
+        } else {
+            // LogBlue("Value * arg for " + current_codegen_function + "/" + arg_name);
+            function_values[current_codegen_function][arg_name] = &Arg;   
+        }
+        // }
     }
   }
 
-
   
-  bool expr_is_return = false;
   Value *RetVal;
   for (auto &body : Body)
-  {
-    expr_is_return = ends_with(typeid(*body).name(), "RetExprAST");
     RetVal = body->codegen(scope_struct);
-  }
+
 
   if (RetVal) {
     // Finish off the function.
-    if(!expr_is_return)
-    {
-        // call("scope_struct_Clear_GC_Root", {scope_struct});
-        // for (const auto &pair : function_allocas[current_codegen_function]) {
-        //     std::string type = typeVars[current_codegen_function][pair.first];
-        //     if (!in_str(type, primary_data_tokens)) {
-        //         Value *loaded_var = load_alloca(pair.first, type, current_codegen_function);
-        //         call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-        //     }
-        // }
-        call("scope_struct_Clean_Scope", {scope_struct}); 
+    if(!Builder->GetInsertBlock()->getTerminator()) {
+        // call("scope_struct_Clean_Scope", {scope_struct}); 
         Builder->CreateRet(RetVal); 
     }
 
+    
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
-
     // TheModule->print(llvm::errs(), nullptr);
-    // Validate the generated code, checking for consistency.
 
     return TheFunction;
-  }
+  } 
 
 
   // Error reading body, remove function.

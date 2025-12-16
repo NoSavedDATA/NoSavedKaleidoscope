@@ -1,4 +1,4 @@
-1821-12-09 15:55:38
+1821-12-15 17:50:04
 
 	FunctionType *int_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -27,13 +27,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("int_vec_Slice", int_vec_SliceTy);
-
-	FunctionType *int_vec_first_nonzeroTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_first_nonzero", int_vec_first_nonzeroTy);
 
 	FunctionType *int_vec_printTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

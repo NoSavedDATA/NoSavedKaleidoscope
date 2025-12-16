@@ -68,24 +68,18 @@ std::string current_file_name = "";
 
 
 char get_file_char() {
-
     if(!has_started)
     {
         // std::cout << "Reading first file" << ".\n";
-        // std::string folder = "src/data_types";
         std::string folder = "src";
         get_cpp_files(folder);
         if(files.size()==0)
             return tok_finish;
-        // std::cout << "Got files. Reading" << ".\n";
         current_file_name = files[0].string();
         // std::cout << "Reading file: " << current_file_name << ".\n";
         file.open(current_file_name);
         file_counter+=1;
     }
-
-
-
 
     char ch;
     if(file.get(ch))

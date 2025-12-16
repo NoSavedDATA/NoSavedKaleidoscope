@@ -1,4 +1,4 @@
-1821-12-09 17:29:02
+1821-12-15 20:35:17
 
 	FunctionType *array_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -28,6 +28,13 @@
 	);
 	TheModule->getOrInsertFunction("arange_int", arange_intTy);
 
+	FunctionType *zeros_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("zeros_int", zeros_intTy);
+
 	FunctionType *rand_int_vecTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -55,6 +62,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
+
+	FunctionType *zeros_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("zeros_float", zeros_floatTy);
 
 	FunctionType *ones_floatTy= FunctionType::get(
 		int8PtrTy,

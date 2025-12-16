@@ -8,9 +8,13 @@
 #include "../mark_sweep/include.h" 
 
 
+constexpr int ContextStackSize = 4096;
+
 struct Scope_Struct { 
     int code_line=0;
     int thread_id=0;
+    void *pointers_stack[ContextStackSize];
+    int stack_top=0;
     GC *gc=nullptr;
     std::vector<GC_Node> root_nodes;
 

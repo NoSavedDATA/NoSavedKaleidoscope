@@ -43,7 +43,7 @@ void Generate_Struct_Types() {
     );
     struct_types["int_vec"] = int_vecTy;
 
-    // DT_vecs
+    // array
     StructType *vecTy  = StructType::create(
         *TheContext,
         {intTy, intTy, int8PtrTy},
@@ -52,7 +52,6 @@ void Generate_Struct_Types() {
     struct_types["vec"] = vecTy;
     
     // --- Scope_Struct --- 
-
     // GC
     StructType *GC_Struct_Type = StructType::create(
         *TheContext,
@@ -62,7 +61,8 @@ void Generate_Struct_Types() {
     // Scope_Struct
     StructType *Scope_Struct_Type = StructType::create(
         *TheContext,
-        {intTy, intTy, GC_Struct_Type},
+        // {intTy, intTy, GC_Struct_Type},
+        {intTy, intTy, ArrayType::get(int8PtrTy, ContextStackSize), intTy, GC_Struct_Type},
         "GC"
     );
     struct_types["GC"] = GC_Struct_Type;

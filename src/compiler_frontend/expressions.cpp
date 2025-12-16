@@ -612,10 +612,11 @@ nlohmann::json ClassExprAST::toJSON() {
   
   
   /// IfExprAST - Expression class for if/then/else.
-IfExprAST::IfExprAST(std::unique_ptr<ExprAST> Cond,
+IfExprAST::IfExprAST(Parser_Struct parser_struct,
+          std::unique_ptr<ExprAST> Cond,
           std::vector<std::unique_ptr<ExprAST>> Then,
           std::vector<std::unique_ptr<ExprAST>> Else)
-    : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+    : parser_struct(parser_struct), Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
   
   
 /// ForExprAST - Expression class for for.

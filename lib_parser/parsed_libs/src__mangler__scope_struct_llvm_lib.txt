@@ -1,4 +1,18 @@
-1821-12-10 20:53:38
+1821-12-15 15:58:02
+
+	FunctionType *print_stack1Ty= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_stack1", print_stack1Ty);
+
+	FunctionType *print_stackTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_stack", print_stackTy);
 
 	FunctionType *scope_struct_specTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

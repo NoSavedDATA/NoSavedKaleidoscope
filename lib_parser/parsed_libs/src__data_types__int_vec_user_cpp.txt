@@ -1,1 +1,1 @@
-"int_vec_Create", "nsk_vec_size", "int_vec_CalculateSliceIdx", "int_vec_Slice", "int_vec_first_nonzero", "int_vec_print", "int_vec_Split_Parallel", "int_vec_Split_Strided_Parallel", "int_vec_size", 
+"int_vec_Create", "nsk_vec_size", "int_vec_CalculateSliceIdx", "int_vec_Slice", "int_vec_print", "int_vec_Split_Parallel", "int_vec_Split_Strided_Parallel", "int_vec_size", 

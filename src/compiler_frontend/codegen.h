@@ -22,6 +22,9 @@ using namespace llvm;
 
 extern std::vector<Value *> thread_pointers;
 extern std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
+extern std::map<std::string, std::map<std::string, Value *>> function_values;
+extern std::map<std::string, std::map<std::string, PHINode *>> function_phi_values;
+extern std::map<std::string, std::map<std::string, Value *>> function_pointers;
 extern std::string current_codegen_function;
 
 
@@ -56,3 +59,9 @@ bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Stru
 
 
 bool CheckIsEquivalent(std::string LType, std::string RType);
+
+void Allocate_On_Pointer_Stack(Value *, std::string, std::string, Value *);
+void Set_Stack_Top(Value *);
+Value *Load_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name);
+void Set_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name, Value *val);
+Value *Load_Stack(Value *scope_struct, const std::string &function_name, const std::string &var_name, const std::string &type);

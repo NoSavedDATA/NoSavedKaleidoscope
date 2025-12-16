@@ -9,7 +9,10 @@
 struct Parser_Struct {
   std::string class_name="";
   std::string function_name="";
+  std::string prev_function_name="";
   bool can_be_string=false;
   bool can_be_list=false;
   int line=0;
+  int loop_block=0;
+  int if_block=0;
 };

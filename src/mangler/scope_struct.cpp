@@ -16,6 +16,20 @@
 #include "scope_struct.h"
 
 
+extern "C" void print_stack1(Scope_Struct *scope_struct) {
+    std::cout << "stack[0]: " << scope_struct->pointers_stack[0] << ".\n";
+    std::cout << "stack[1]: " << scope_struct->pointers_stack[1] << ".\n";
+}
+
+extern "C" void print_stack(Scope_Struct *scope_struct, void *stack) {
+    std::cout << "stack[0]: " << scope_struct->pointers_stack[0] << ".\n";
+    std::cout << "stack[1]: " << scope_struct->pointers_stack[1] << ".\n";
+    std::cout << "stack top: " << stack << ".\n";
+}
+
+
+
+
 void check_exit() {
     if (Shall_Exit)
         std::exit(0);
@@ -36,6 +50,7 @@ void Scope_Struct::Set_Has_Grad(int has_grad) {
 }
 void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 {
+    std::cout << "copy scope" << ".\n";
     object_ptr = scope_to_copy->object_ptr;
 
     thread_id = scope_to_copy->thread_id;
@@ -227,6 +242,7 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
 
 extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
     GC *gc = scope_struct->gc;
+    // std::cout << "Clean scope from 0 to " << scope_struct->stack_top << ".\n";
     
     // if (gc->allocations>1000||gc->size_occupied>1000000) {
     if (gc->size_occupied>sweep_after_alloc) {
@@ -235,13 +251,7 @@ extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
         // std::cout << "CLEAN UP" << ".\n";
         gc->Sweep(scope_struct);
     }
-    // else {
-    //     if (inner_most_scope!=scope_struct) {
-    //         for (const auto &node : scope_struct->gc.pointer_nodes)
-    //             inner_most_scope->gc.pointer_nodes.push_back(GC_Node(node.ptr, node.type));
-    //     }
-    // }
-    delete_scope(scope_struct);
+    // delete_scope(scope_struct);
 }
 
 extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {

@@ -1,4 +1,3 @@
-
 #include "../codegen/random.h"
 
 #include "../mangler/scope_struct.h"
@@ -22,15 +21,7 @@ extern "C" DT_array *array_Create(Scope_Struct *scope_struct, char *name, char *
 {
   if (init_val!=nullptr)
     return init_val;
-  // if(notes_vector==nullptr)  
-  //   return nullptr;
-
-  // if(notes_vector->size!=1) {
-  //   LogErrorC(-1, "int_vec requires size argument");
-  //   return nullptr;
-  // }
   DT_array *vec = newT<DT_array>(scope_struct, "array");
-  // vec->New(notes_vector->get<int>(0));
 
   return vec;
 }
@@ -53,7 +44,7 @@ extern "C" float array_print_int(Scope_Struct *scope_struct, DT_array *vec) {
 
 
 extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) {
-    DT_array *vec = newT<DT_array>(scope_struct, "int_vec");
+    DT_array *vec = newT<DT_array>(scope_struct, "array");
     vec->New(end-begin, 4);
 
     int *ptr = static_cast<int*>(vec->data);
@@ -69,17 +60,22 @@ extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) 
 } 
 
 
+extern "C" DT_array *zeros_int(Scope_Struct *scope_struct, int N) {
+    DT_array *vec = newT<DT_array>(scope_struct, "array");
+    vec->New(N, 4);
 
-extern "C" DT_int_vec *zeros_int(Scope_Struct *scope_struct, int size) {
-  // TODO: turn into python like expression [0]*size
-    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
-    vec->New(size);
+    int *ptr = static_cast<int*>(vec->data);
+    
+    int c=0;
+    for(int i=0; i<N; ++i)
+    {
+        ptr[c] = i;
+        c++;
+    }
 
-    for(int i=0; i<size; ++i)
-      vec->vec[i] = 0;
+    return vec; 
+} 
 
-    return vec;
-}
 
 
 extern "C" DT_array *rand_int_vec(Scope_Struct *scope_struct, int size, int min_val, int max_val) {

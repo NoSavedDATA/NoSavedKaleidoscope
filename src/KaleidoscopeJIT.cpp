@@ -151,6 +151,8 @@ Expected<std::unique_ptr<KaleidoscopeJIT>> KaleidoscopeJIT::Create() {
   JITTargetMachineBuilder JTMB(
       ES->getExecutorProcessControl().getTargetTriple());
 
+  JTMB.setCodeGenOptLevel(llvm::CodeGenOptLevel::Aggressive);
+
   auto DL = JTMB.getDefaultDataLayoutForTarget();
   if (!DL)
     return DL.takeError();

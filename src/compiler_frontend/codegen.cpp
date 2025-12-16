@@ -19,11 +19,15 @@
 
 
 
+
 using namespace llvm;
 namespace fs = std::filesystem;
 
 
 std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
+std::map<std::string, std::map<std::string, Value *>> function_values;
+std::map<std::string, std::map<std::string, PHINode *>> function_phi_values;
+std::map<std::string, std::map<std::string, Value *>> function_pointers;
 std::unordered_map<std::string, Function *> async_fn;
 std::string current_codegen_function;
 
@@ -31,6 +35,7 @@ std::string current_codegen_function;
 std::vector<Value *> thread_pointers;
 
 PointerType *floatPtrTy, *int8PtrTy;
+Value *stack_top_value, *function_stack_top;
 
 
 
@@ -65,7 +70,6 @@ Value *load_alloca(std::string name, std::string type, std::string from_function
     else
       load_type = int8PtrTy;
 
-    // std::cout << "ALLOCA LOAD OF " << from_function << "/" << name << " type " << type << ".\n";
     AllocaInst *alloca = function_allocas[from_function][name];
 
     return Builder->CreateLoad(load_type, alloca, name.c_str());
@@ -100,6 +104,11 @@ Value *IndexExprAST::codegen(Value *scope_struct) {
 
 Value *Idx_Calc_Codegen(std::string type, Value *vec, std::unique_ptr<IndexExprAST> &idxs, Value *scope_struct)
 {
+  if (!idxs->IsSlice)
+  {
+    if (!TheModule->getFunction(type+"_CalculateIdx"))
+        return idxs->Idxs[0]->codegen(scope_struct); 
+  }
   std::vector<Value *> idxs_values;
 
   idxs_values.push_back(vec); // e.g, tensor uses its dims as a support to calculcate the index
@@ -122,8 +131,6 @@ Value *Idx_Calc_Codegen(std::string type, Value *vec, std::unique_ptr<IndexExprA
     Function *F = TheModule->getFunction(fn);
     if (F)
       return callret(fn, idxs_values);
-    else
-      return idxs_values[1];
   } else {
 
     for (int i=0; i<idxs->size(); i++)
@@ -147,9 +154,6 @@ AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
                    TheFunction->getEntryBlock().begin());
 
   AllocaInst *alloca = TmpB.CreateAlloca(alloca_type, nullptr, VarName);
-
-  // if (alloca_type==int8PtrTy)
-  //   Builder->CreateStore(callret("nullptr_get", {}), alloca);
 
   return alloca;
 }
@@ -419,6 +423,50 @@ Value *TupleExprAST::codegen(Value *scope_struct) {
   return ConstantFP::get(*TheContext, APFloat(0.0));
 }
 
+void Set_Stack_Top(Value *scope_struct) {
+    Value *stack_top_value_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 3);
+    Builder->CreateStore(stack_top_value, stack_top_value_gep);
+}
+
+void Allocate_On_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name, Value *val) {
+    // pointer to [N x i8*]
+    Value *stack_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 2);
+
+    // element pointer: &pointers_stack[i]
+    // {0, i} first index the array object, then the element
+    Value *void_ptr_gep = Builder->CreateGEP(ArrayType::get(int8PtrTy, ContextStackSize), stack_gep, { const_int(0), stack_top_value });
+    Builder->CreateStore(val, void_ptr_gep);
+    
+    // callret("print_stack1", {scope_struct});
+    function_pointers[function_name][var_name] = stack_top_value;
+
+    stack_top_value = Builder->CreateAdd(stack_top_value, const_int(1));
+}
+
+Value *Load_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name) {
+    Value *stack_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 2);
+    Value *stack_idx = function_pointers[function_name][var_name];
+
+    Value *void_ptr_gep = Builder->CreateGEP(ArrayType::get(int8PtrTy, ContextStackSize), stack_gep, { const_int(0), stack_idx });
+    return Builder->CreateLoad(int8PtrTy, void_ptr_gep);
+}
+
+void Set_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name, Value *val) {
+    Value *stack_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 2);
+    Value *stack_idx = function_pointers[function_name][var_name];
+
+    Value *void_ptr_gep = Builder->CreateGEP(ArrayType::get(int8PtrTy, ContextStackSize), stack_gep, { const_int(0), stack_idx });
+    Builder->CreateStore(val, void_ptr_gep);
+}
+
+Value *Load_Stack_Var(Value *scope_struct, const std::string &function_name, const std::string &var_name, const std::string &type) {
+    if (!in_str(type, primary_data_tokens)) {
+        return Load_Pointer_Stack(scope_struct, function_name, var_name);
+    } else
+        return load_alloca(var_name, type, function_name); 
+}
+
+
 Value *DataExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
     return ConstantFP::get(*TheContext, APFloat(0.0f));
@@ -453,11 +501,15 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     if(in_str(Type, primary_data_tokens)&&!(is_self||is_attr))
     { 
       if (Type=="float"&&Init->GetType()=="int")
-        initial_value = Builder->CreateUIToFP(initial_value, Type::getFloatTy(*TheContext), "floattmp");
-      llvm::Type *alloca_type = get_type_from_str(Type);
-      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
-      Builder->CreateStore(initial_value, alloca);
-      function_allocas[parser_struct.function_name][VarName] = alloca;
+        initial_value = Builder->CreateUIToFP(initial_value, Type::getFloatTy(*TheContext), "int_to_float");
+
+      // if (VarName=="i") {
+      //     llvm::Type *alloca_type = get_type_from_str(Type);
+      //     AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
+      //     Builder->CreateStore(initial_value, alloca);
+      //     function_allocas[parser_struct.function_name][VarName] = alloca;
+      // } else
+      function_values[parser_struct.function_name][VarName] = initial_value;
       continue;
     }
 
@@ -488,18 +540,15 @@ Value *DataExprAST::codegen(Value *scope_struct) {
           notes_vector = callret("Add_To_NotesVector_str", {notes_vector, str_val});
         }
         else if (Nameable* expr = dynamic_cast<Nameable*>(note)) {   
-          
           if(expr->Depth==1&&data_typeVars[parser_struct.function_name].count(expr->Name)==0)
           { 
             Value *_str = callret("CopyString", {scope_struct, global_str(expr->Name)});
-
             Value *str_val = callret("CopyString", {scope_struct, _str});
             notes_vector = callret("Add_To_NotesVector_str", {notes_vector, str_val});
           } else {
             std::string type = expr->GetDataTree().Type;
             notes_vector = callret("Add_To_NotesVector_"+type, {notes_vector, note->codegen(scope_struct)});
-          }
-          
+          }   
         }
         else {
           std::cout << "Could not find the data type of a note in DataExpr of " << VarName << " \n";
@@ -519,29 +568,27 @@ Value *DataExprAST::codegen(Value *scope_struct) {
       initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector});
     }
 
-
-
-
-
       
 
     if(is_self)
     {
       int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
-  
       Value *obj = callret("get_scope_object", {scope_struct});
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
     } else if (is_attr) {
       LogError(parser_struct.line, "Creating attribute in a data expression is not supported.");
     }
-    else {
-      llvm::Type *alloca_type = get_type_from_str(Type);
-      AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
-      Builder->CreateStore(initial_value, alloca);
-
-      function_allocas[parser_struct.function_name][VarName] = alloca;
-    }
-      
+    else {      
+        // if(!in_str(Type, primary_data_tokens))
+        //     Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, initial_value);         
+        // else {
+            llvm::Type *alloca_type = get_type_from_str(Type);
+            AllocaInst *alloca = CreateEntryBlockAlloca(TheFunction, Name, alloca_type);
+            Builder->CreateStore(initial_value, alloca);
+            function_allocas[parser_struct.function_name][VarName] = alloca;
+        // }
+        // function_values[parser_struct.function_name][VarName] = initial_value;
+    }      
 
     if(HasNotes)
       call("Dispose_NotesVector", {notes_vector, scopeless_name});
@@ -571,7 +618,7 @@ Value *LibImportExprAST::codegen(Value *scope_struct) {
 
 Value *IfExprAST::codegen(Value *scope_struct) {
   if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
+    return const_float(0.0f);
 
 
   Value *CondV = Cond->codegen(scope_struct);
@@ -593,48 +640,62 @@ Value *IfExprAST::codegen(Value *scope_struct) {
 
   // Create blocks for the then and else cases.  Insert the 'then' block at the
   // end of the function.
-  BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "then", TheFunction);
-  BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "else");
-  BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "ifcont");
+  BasicBlock *ThenBB  = BasicBlock::Create(*TheContext, "if_then", TheFunction);
+  BasicBlock *ElseBB  = BasicBlock::Create(*TheContext, "if_else");
+  BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "if_cont");
   
 
   Builder->CreateCondBr(CondV, ThenBB, ElseBB);
-
-  // Emit then value.
   Builder->SetInsertPoint(ThenBB);
 
-  
+  auto old_values = function_values[parser_struct.function_name];
+ 
   
   Value *ThenV;
   for (auto &then_body : Then)
     ThenV = then_body->codegen(scope_struct);
-  
+  auto then_values = function_values[parser_struct.function_name];
 
+
+  bool ThenTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
   if (!ThenV)
     return nullptr;
-
-
-  Builder->CreateBr(MergeBB);
-  // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
-  ThenBB = Builder->GetInsertBlock();
+  if (!ThenTerminated) {
+      Builder->CreateBr(MergeBB);
+      // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
+      ThenBB = Builder->GetInsertBlock();
+  }
 
   // Emit else block.
   TheFunction->insert(TheFunction->end(), ElseBB);
   Builder->SetInsertPoint(ElseBB);
 
 
+
+  function_values[parser_struct.function_name] = old_values;
   Value *ElseV;
   for (auto &else_body : Else)
     ElseV = else_body->codegen(scope_struct);
 
+  std::map<std::string, Value *> else_values;
+  if(Else.size()>0)
+      else_values = function_values[parser_struct.function_name];
+  else {
+      ElseV = const_int(0);
+      else_values = old_values;
+  }
+
+  bool ElseTerminated = Builder->GetInsertBlock()->getTerminator() != nullptr;
   if (!ElseV)
     return nullptr;
+  if (!ElseTerminated) {
+      Builder->CreateBr(MergeBB);
+      // Codegen of 'Else' can change the current block, update ElseBB for the PHI.
+      ElseBB = Builder->GetInsertBlock();
+  }
 
-    
-
-  Builder->CreateBr(MergeBB);
-  // Codegen of 'Else' can change the current block, update ElseBB for the PHI.
-  ElseBB = Builder->GetInsertBlock();
+  if (ThenTerminated && ElseTerminated)
+      return nullptr;
 
   // Emit merge block.
   TheFunction->insert(TheFunction->end(), MergeBB);
@@ -648,9 +709,24 @@ Value *IfExprAST::codegen(Value *scope_struct) {
   PHINode *PN = Builder->CreatePHI(Type::getFloatTy(*TheContext), 2, "iftmp");
   PN->addIncoming(ThenV, ThenBB);
   PN->addIncoming(ElseV, ElseBB);
+
+
+  for (auto &[name, value] : old_values) {
+    if (then_values[name]!=value || else_values[name]!=value) {
+        if (then_values[name]==else_values[name]) {
+            LogBlue(name + " has the same value for then and else");
+        }
+        PHINode *phi = Builder->CreatePHI(value->getType(), 2);
+        phi->addIncoming(then_values[name], ThenBB);
+        phi->addIncoming(else_values[name], ElseBB);
+        function_values[parser_struct.function_name][name] = phi;
+    }
+  }
+
   
   return PN;
 }
+
 
 // Output for-loop as:
 //   var = alloca float
@@ -673,7 +749,8 @@ Value *IfExprAST::codegen(Value *scope_struct) {
 // outloop:
 
 void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const Parser_Struct &parser_struct) {
-  Value *GC_ptr = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 2, "GC_ptr_element");
+    return;
+  Value *GC_ptr = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 4, "GC_ptr_element");
   Value *GC = Builder->CreateLoad(struct_types["GC"]->getPointerTo(), GC_ptr, "GC");
 
   Value *GC_allocations_ptr = Builder->CreateStructGEP(struct_types["GC"], GC, 0, "GC_allocations_ptr");
@@ -703,14 +780,14 @@ void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const 
   Builder->CreateCondBr(sweep_cond, SweepThenBB, SweepContinueBB);
 
   Builder->SetInsertPoint(SweepThenBB);
-  call("scope_struct_Clear_GC_Root", {scope_struct});
-  for (const auto &pair : function_allocas[parser_struct.function_name]) {
-    std::string type = typeVars[parser_struct.function_name][pair.first];
-    if (!in_str(type, primary_data_tokens)) {
-      Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
-      call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-    }
-  }
+  // call("scope_struct_Clear_GC_Root", {scope_struct});
+  // for (const auto &pair : function_allocas[parser_struct.function_name]) {
+  //   std::string type = typeVars[parser_struct.function_name][pair.first];
+  //   if (!in_str(type, primary_data_tokens)) {
+  //     Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
+  //     call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
+  //   }
+  // }
 
   call("scope_struct_Sweep", {scope_struct});
   Builder->CreateBr(SweepContinueBB);
@@ -727,13 +804,10 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   std::string start_type = Start->GetDataTree().Type;
   llvm::Type *llvm_type = get_type_from_str(start_type);
   
+ 
+  // AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName, llvm_type);
+  // function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
 
-  // Create an alloca for the variable in the entry block.
-  AllocaInst *control_var_alloca = CreateEntryBlockAlloca(TheFunction, VarName, llvm_type);
-
-  function_allocas[parser_struct.function_name][VarName] = control_var_alloca;
-
-  // Emit the start code first, without 'variable' in scope.
   Value *StartVal = Start->codegen(scope_struct);
 
 
@@ -741,7 +815,7 @@ Value *ForExprAST::codegen(Value *scope_struct) {
     return nullptr;
 
 
-  Builder->CreateStore(StartVal, control_var_alloca);
+  // Builder->CreateStore(StartVal, control_var_alloca);
 
 
 
@@ -751,26 +825,27 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   BasicBlock *CondBB = BasicBlock::Create(*TheContext, "for expr cond", TheFunction);
   BasicBlock *LoopBB  = BasicBlock::Create(*TheContext, "for expr loop");
   BasicBlock *AfterBB  = BasicBlock::Create(*TheContext, "for expr after");
+  BasicBlock *PreheaderBB = Builder->GetInsertBlock();
 
 
-
-  // Insert an explicit fall through from the current block to the LoopBB.
   Builder->CreateBr(CondBB);
-
-  
   Builder->SetInsertPoint(CondBB);
 
 
 
-  // Within the loop, the variable is defined equal to the PHI node.  If it
-  // shadows an existing variable, we have to restore it outside this scope
 
+  for (const auto &pair : function_values[parser_struct.function_name]) {
+    PHINode *phi_val = Builder->CreatePHI(pair.second->getType(), 2, pair.first.c_str());
+    phi_val->addIncoming(pair.second, PreheaderBB);
+    function_phi_values[parser_struct.function_name][pair.first] = phi_val;
+    function_values[parser_struct.function_name][pair.first] = phi_val;
+  }
 
+  PHINode *LoopVar = Builder->CreatePHI(StartVal->getType(), 2, VarName.c_str());
+  LoopVar->addIncoming(StartVal, PreheaderBB);
+  function_values[parser_struct.function_name][VarName] = LoopVar;
 
-  // Emit the body of the loop.  This, like any other expr, can change the
-  // current BB.  Note that we ignore the value computed by the body, but don't
-  // allow an error.
-  
+ 
   
 
   // Emit the step value.
@@ -787,12 +862,6 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   Value *EndCond = End->codegen(scope_struct);
   if (!EndCond)
     return nullptr;
-
-  // Convert condition to a bool by comparing equal to 0.0.
-
-
-
-
 
 
 
@@ -813,29 +882,40 @@ Value *ForExprAST::codegen(Value *scope_struct) {
   check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
 
 
-  // Reload, increment, and restore the alloca.  This handles the case where
-  // the body of the loop mutates the variable.
-  Value *CurVal = Builder->CreateLoad(llvm_type, control_var_alloca, VarName.c_str());
+  BasicBlock *CurBB = Builder->GetInsertBlock(); // Catch branching scenarios
+  // Value *LoopVar = Builder->CreateLoad(llvm_type, control_var_alloca, VarName.c_str());
   Value *NextVal;
   if (start_type=="int")
-    NextVal = Builder->CreateAdd(CurVal, StepVal, "nextvar"); // Increment  
+    NextVal = Builder->CreateAdd(LoopVar, StepVal, "nextvar"); // Increment  
   if (start_type=="float")
-    NextVal = Builder->CreateFAdd(CurVal, StepVal, "nextvar"); // Increment 
-  Builder->CreateStore(NextVal, control_var_alloca);
+    NextVal = Builder->CreateFAdd(LoopVar, StepVal, "nextvar"); // Increment 
+  // function_values[parser_struct.function_name][VarName] = NextVal;                                                              
+  // Builder->CreateStore(NextVal, control_var_alloca);
 
-  
   
   Builder->CreateBr(CondBB);
+  LoopVar->addIncoming(NextVal, CurBB);
+  for (const auto &pair : function_values[parser_struct.function_name]) {
+      if(pair.first==VarName)
+          continue;
+    
+    if (function_phi_values[parser_struct.function_name].count(pair.first)>0)
+        function_phi_values[parser_struct.function_name][pair.first]->addIncoming(function_values[parser_struct.function_name][pair.first], CurBB);
+  }
+
+   
 
 
 
 
-  // when the loop body is done, return the insertion point to outside the for loop
   TheFunction->insert(TheFunction->end(), AfterBB);
   Builder->SetInsertPoint(AfterBB);
 
+  
+    // verifyFunction(*TheFunction);
+    // TheModule->print(llvm::errs(), nullptr);
 
-  // for expr always returns 0.0.
+
   return Constant::getNullValue(Type::getInt32Ty(*TheContext));
 }
 
@@ -928,9 +1008,9 @@ Value *ForEachExprAST::codegen(Value *scope_struct) {
     Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
 
     Value *vec_gep = Builder->CreateStructGEP(st, vec, 2);
-    Value *vec = Builder->CreateLoad(int8PtrTy, vec_gep);
+    Value *array = Builder->CreateLoad(int8PtrTy, vec_gep);
 
-    Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), vec, Builder->CreateMul(CurIdx, elem_size));
+    Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), array, Builder->CreateMul(CurIdx, elem_size));
     vec_value = Builder->CreateLoad(elem_type, element, "elem");  
   } else
       vec_value = callret(vec_type+"_Idx", {scope_struct, vec, CurIdx});
@@ -1376,20 +1456,30 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
       if (type=="array") {
           StructType *st = struct_types["vec"];
+          std::string elem_type = dt.Nested_Data[0].Type;
 
-          if (dt.Nested_Data[0].Type=="float"&&RType=="int")
+          if (elem_type=="float"&&RType=="int")
               Val = Builder->CreateSIToFP(Val, Type::getFloatTy(*TheContext));
-
-          Value *elem_size_gep = Builder->CreateStructGEP(st, vec, 1); 
-          Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
 
           Value *vec_gep = Builder->CreateStructGEP(st, vec, 2);
           Value *vec = Builder->CreateLoad(int8PtrTy, vec_gep);
 
-          Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), vec, Builder->CreateMul(idx, elem_size));
-          // ret_val = Builder->CreateLoad(elem_type, element, "elem");  
-          Builder->CreateStore(Val, element);  
-              
+          llvm::Type *idx_type;
+          if (elem_type=="int") {
+            idx_type = Type::getInt32Ty(*TheContext);
+          } else if (elem_type=="float") {
+            idx_type = Type::getFloatTy(*TheContext);
+          } else if (elem_type=="bool") {
+            idx_type = Type::getInt1Ty(*TheContext);
+          } else {
+            idx_type = Type::getInt8Ty(*TheContext);
+            Value *elem_size_gep = Builder->CreateStructGEP(st, vec, 1);
+            Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
+            idx = Builder->CreateMul(idx, elem_size);
+          }
+
+          Value *element = Builder->CreateGEP(idx_type, vec, idx);
+          Builder->CreateStore(Val, element);
       } else
           call(type+"_Store_Idx", {vec, idx, Val, scope_struct});
 
@@ -1412,7 +1502,6 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       std::string copy_fn = LType + "_Copy";
 
 
-      AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
 
       
 
@@ -1428,25 +1517,35 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
 
 
-
-
       Function *F = TheModule->getFunction(store_trigger);
       if (F)
       {
+        AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
         Value *old_val = Builder->CreateLoad(int8PtrTy, alloca);
+        // Value *old_val = function_values[parser_struct.function_name][Lname];
         Value *Lvar_name = callret("CopyString", {scope_struct, global_str(Lname)});
         Val = callret(store_trigger, {Lvar_name, old_val, Val, scope_struct});
       }
 
-      if (LType=="float"&&RHS->GetType()=="int")
+      if (LType=="float" && RHS->GetType()=="int")
         Val = Builder->CreateUIToFP(Val, Type::getFloatTy(*TheContext), "floattmp");
 
 
+      // if(!in_str(LType, primary_data_tokens))
+      //     Set_Pointer_Stack(scope_struct, parser_struct.function_name, Lname, Val);
+      // else
+          // Builder->CreateStore(Val, alloca);
+      if (function_values[parser_struct.function_name].count(Lname)>0)
+          function_values[parser_struct.function_name][Lname] = Val;
+      else {
+          AllocaInst *alloca = function_allocas[parser_struct.function_name][Lname];
+          Builder->CreateStore(Val, alloca);
+      }
 
 
-      Builder->CreateStore(Val, alloca);
-    } else
-    {
+      
+
+    } else {
       if(auto *LHSV = dynamic_cast<Nameable *>(LHS.get())) {
         Data_Tree L_dt = LHSV->GetDataTree();
 
@@ -1459,7 +1558,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
         Value *obj_ptr = LHSV->codegen(scope_struct);
         
-        if(LType=="float"||LType=="int")
+        if(in_str(LType, primary_data_tokens))
           call("object_Attr_"+LType, {obj_ptr, Val});
         else
           call("tie_object_to_object", {obj_ptr, Val});
@@ -2084,6 +2183,7 @@ Value *MainExprAST::codegen(Value *scope_struct) {
   std::string functionName = TheFunction->getName().str();
 
 
+
   for (const auto &body : Bodies) {
 
     body->codegen(scope_struct);
@@ -2120,30 +2220,28 @@ Value *VariableListExprAST::codegen(Value *scope_struct) {
 Value *RetExprAST::codegen(Value *scope_struct) {
   seen_var_attr=true;
 
-  call("scope_struct_Clear_GC_Root", {scope_struct});
-  for (const auto &pair : typeVars[parser_struct.function_name]) {
-    std::string type = typeVars[parser_struct.function_name][pair.first];
-    if (!in_str(type, primary_data_tokens)) {
-      Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
-      call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-    }
-  }
+  // call("scope_struct_Clear_GC_Root", {scope_struct});
+  // for (const auto &pair : typeVars[parser_struct.function_name]) {
+  //   std::string type = typeVars[parser_struct.function_name][pair.first];
+  //   if (!in_str(type, primary_data_tokens)) {
+  //     Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
+  //     call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
+  //   }
+  // }
     
-
   if(Vars.size()==1)
   { 
     // p2t("Reached if");
     Value *ret = Vars[0]->codegen(scope_struct);
     std::string type = Vars[0]->GetDataTree().Type;
 
-    if(!in_str(type, primary_data_tokens))
-      call("scope_struct_Add_GC_Root", {scope_struct, ret, global_str(type)});
-
+    // call("scope_struct_Clean_Scope", {scope_struct}); 
     seen_var_attr=false;
-    call("scope_struct_Clean_Scope", {scope_struct}); 
     Builder->CreateRet(ret);
-
-    return const_float(0);
+    // Function *TheFunction = Builder->GetInsertBlock()->getParent();
+    // verifyFunction(*TheFunction);
+    // TheModule->print(llvm::errs(), nullptr);
+    return ret;
   }
   
   std::vector<Value *> values = {scope_struct};
@@ -2152,17 +2250,15 @@ Value *RetExprAST::codegen(Value *scope_struct) {
     Value *value = Vars[i]->codegen(scope_struct); 
     std::string type = Vars[i]->GetDataTree().Type;
 
-    if(!in_str(type, primary_data_tokens))
-      call("scope_struct_Add_GC_Root", {scope_struct, value, global_str(type)});
 
     values.push_back(global_str(type));
     values.push_back(value);
   }
   values.push_back(global_str("TERMINATE_VARARG"));
 
+
   seen_var_attr=false;
   Value *ret = callret("list_New", values);
-  call("scope_struct_Clean_Scope", {scope_struct}); 
   Builder->CreateRet(ret);
 
   return ret;
@@ -2336,7 +2432,7 @@ Value *NewDictExprAST::codegen(Value *scope_struct) {
 
 
 
-inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV,
+inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, std::vector<Value *> ArgsV,
                                                   std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name,
                                                   bool is_nsk_fn, int arg_offset=1)
 {
@@ -2349,7 +2445,7 @@ inline std::vector<Value *> codegen_Argument_List(Parser_Struct parser_struct, s
     arg = Args[i]->codegen(scope_struct);
     Data_Tree data_type = Args[i]->GetDataTree();
     std::string type = data_type.Type;
-
+    
 
     if (fn_name=="print" && i==0 && type!="str")
     {
@@ -2465,14 +2561,13 @@ Value *ObjectExprAST::codegen(Value *scope_struct) {
         std::vector<Value *> ArgsV = {scope_struct_copy};
 
         std::string Callee = ClassName + "___init__";
-        ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args[i]), scope_struct, Callee, false, arg_type_check_offset);
+        ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args[i]), scope_struct, Callee, false, arg_type_check_offset);
         
         call(Callee, ArgsV);
 
 
 
         
-        call("scope_struct_Delete", {scope_struct_copy});
       }
     }      
   }
@@ -2770,7 +2865,7 @@ Value *NameableLLVMIRCall::codegen(Value *scope_struct) {
   if (ReturnType=="")
     GetDataTree();
 
-  // ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
+  // ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
 
 
   
@@ -2818,8 +2913,6 @@ Value *NameableRoot::codegen(Value *scope_struct) {
 
 
 
-
-
 Value *Nameable::codegen(Value *scope_struct) {
   Data_Tree dt = GetDataTree();
   std::string type = dt.Type;
@@ -2828,6 +2921,12 @@ Value *Nameable::codegen(Value *scope_struct) {
   {
     if(Name=="self")
       return callret("get_scope_object", {scope_struct}); 
+
+    if (function_values[parser_struct.function_name].count(Name)>0)
+        return function_values[parser_struct.function_name][Name];
+    // return Load_Stack_Var(scope_struct, parser_struct.function_name, Name, type); 
+    if(in_str(type, primary_data_tokens))
+        LogBlue("Load alloca for " + parser_struct.function_name + "/" + Name);
     return load_alloca(Name, type, parser_struct.function_name); 
   }
 
@@ -2905,21 +3004,39 @@ Value *NameableIdx::codegen(Value *scope_struct) {
     if (TheModule->getFunction(idx_fn))
       ret_val = callret(idx_fn, {scope_struct, loaded_var, idx});
     else {
-      StructType *st = struct_types["vec"];
-      llvm::Type *elem_type;
-      if(compound_type=="array") 
-          elem_type = get_type_from_str(Inner->GetDataTree().Nested_Data[0].Type); 
-      else
-          get_type_from_str(remove_suffix(compound_type, "_vec")); 
+        StructType *st = struct_types["vec"];
+        llvm::Type *elem_llvm_type;
+        std::string elem_type;
+        if(compound_type=="array")  {
+          elem_type = Inner->GetDataTree().Nested_Data[0].Type;
+          elem_llvm_type = get_type_from_str(elem_type); 
+        }
+        else {
+            elem_type = remove_suffix(compound_type, "_vec");
+            elem_llvm_type = get_type_from_str(elem_type); 
+        }
 
-      Value *elem_size_gep = Builder->CreateStructGEP(st, loaded_var, 1); 
-      Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
+        Value *vec_gep = Builder->CreateStructGEP(st, loaded_var, 2);
+        Value *vec = Builder->CreateLoad(int8PtrTy, vec_gep);
 
-      Value *vec_gep = Builder->CreateStructGEP(st, loaded_var, 2);
-      Value *vec = Builder->CreateLoad(int8PtrTy, vec_gep);
+        llvm::Type *idx_type;
+        if (elem_type=="int") {
+            idx_type = Type::getInt32Ty(*TheContext);
+        } else if (elem_type=="float") {
+            idx_type = Type::getFloatTy(*TheContext);
 
-      Value *element = Builder->CreateGEP(Type::getInt8Ty(*TheContext), vec, Builder->CreateMul(idx, elem_size));
-      ret_val = Builder->CreateLoad(elem_type, element, "elem"); 
+        } else if (elem_type=="bool") {
+            idx_type = Type::getInt1Ty(*TheContext);
+
+        } else {
+            idx_type = Type::getInt8Ty(*TheContext);
+            Value *elem_size_gep = Builder->CreateStructGEP(st, loaded_var, 1);
+            Value *elem_size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), elem_size_gep);
+            idx = Builder->CreateMul(idx, elem_size);
+        }
+
+        Value *element = Builder->CreateGEP(idx_type, vec, idx);
+        ret_val = Builder->CreateLoad(elem_llvm_type, element, "elem"); 
     }
 
     if(!(ends_with(compound_type,"_vec"))&&(type=="float"||type=="int"||type=="bool") && compound_type!="array")
@@ -2964,29 +3081,27 @@ Value *NameableCall::codegen(Value *scope_struct) {
   int arg_type_check_offset=1, target_args_size=Args.size()+1;
   bool is_nsk_fn = in_str(Callee, native_methods);
 
+
   Value *scope_struct_copy;
 
   if(!is_nsk_fn) { // collect roots for gc
 
-    call("scope_struct_Clear_GC_Root", {scope_struct});
+    // call("scope_struct_Clear_GC_Root", {scope_struct});
 
-    for (const auto &pair : function_allocas[parser_struct.function_name]) {
-      std::string type = typeVars[parser_struct.function_name][pair.first];
-      if (!in_str(type, primary_data_tokens)) {
-        Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
-        // LogBlue("Add alloca " + parser_struct.function_name + "/" + pair.first + " of type " + type);
-        call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
-      }
-    }
+    // for (const auto &pair : function_allocas[parser_struct.function_name]) {
+    //   std::string type = typeVars[parser_struct.function_name][pair.first];
+    //   if (!in_str(type, primary_data_tokens)) {
+    //     Value *loaded_var = load_alloca(pair.first, type, parser_struct.function_name);
+    //     // LogBlue("Add alloca " + parser_struct.function_name + "/" + pair.first + " of type " + type);
+    //     call("scope_struct_Add_GC_Root", {scope_struct, loaded_var, global_str(type)});
+    //   }
+    // }
 
-    scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
-    // call("set_scope_function_name", {scope_struct_copy, global_str(Callee)});
+    // scope_struct_copy = callret("scope_struct_Copy", {scope_struct});
   } else 
     scope_struct_copy = scope_struct;
 
   
-
-
   std::vector<Value*> ArgsV = {scope_struct_copy};
 
 
@@ -3001,30 +3116,30 @@ Value *NameableCall::codegen(Value *scope_struct) {
    
     if(!is_nsk_fn)
     {
-      if(ends_with(Callee, "__init__")&&isSelf) // mallocs an object inside another
-      {
-        std::string obj_class = Inner->GetDataTree().Type;
-        
-        int size = ClassSize[obj_class];
+        if(ends_with(Callee, "__init__")&&isSelf) // mallocs an object inside another
+        {
+            std::string obj_class = Inner->GetDataTree().Type;
+
+            int size = ClassSize[obj_class];
 
 
-        Value *new_ptr = callret("allocate_void", {scope_struct, const_int(size), global_str(obj_class)});
-        // LogBlue("Add " + obj_class + " as root.");
-        call("scope_struct_Add_GC_Root", {scope_struct, new_ptr, global_str(obj_class)});
+            Value *new_ptr = callret("allocate_void", {scope_struct, const_int(size), global_str(obj_class)});
+            // LogBlue("Add " + obj_class + " as root.");
+            call("scope_struct_Add_GC_Root", {scope_struct, new_ptr, global_str(obj_class)});
 
 
+            call("tie_object_to_object", {obj_ptr, new_ptr});
 
-        call("tie_object_to_object", {obj_ptr, new_ptr});
-        
-        obj_ptr = new_ptr;
+            obj_ptr = new_ptr;
 
-      }
-      call("set_scope_object", {scope_struct_copy, obj_ptr});
+        }
+        call("set_scope_object", {scope_struct_copy, obj_ptr});
+
     }
     else{
-      ArgsV.push_back(obj_ptr);
-      arg_type_check_offset++;
-      target_args_size++;
+        ArgsV.push_back(obj_ptr);
+        arg_type_check_offset++;
+        target_args_size++;
     }
   }
   
@@ -3036,16 +3151,11 @@ Value *NameableCall::codegen(Value *scope_struct) {
   if (ReturnType=="")
     GetDataTree();
 
-  ArgsV = codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
+  ArgsV = Codegen_Argument_List(parser_struct, std::move(ArgsV), std::move(Args), scope_struct, Callee, is_nsk_fn, arg_type_check_offset);
 
   
-  
+  Set_Stack_Top(scope_struct);
   Value *ret = callret(Callee, ArgsV);
-
-
-  if(!is_nsk_fn)
-    call("scope_struct_Delete", {scope_struct_copy});    
-
 
 
   // if(ReturnType=="")
@@ -3054,7 +3164,6 @@ Value *NameableCall::codegen(Value *scope_struct) {
   if(ReturnType=="void_ptr")
     LogError(-1, "return " + Callee);
 
-  
 
   return ret;
 }

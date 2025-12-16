@@ -150,6 +150,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("arange_int", arange_intTy);
 
+	FunctionType *zeros_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("zeros_int", zeros_intTy);
+
 	FunctionType *rand_int_vecTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -177,6 +184,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("arange_float", arange_floatTy);
+
+	FunctionType *zeros_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("zeros_float", zeros_floatTy);
 
 	FunctionType *ones_floatTy= FunctionType::get(
 		int8PtrTy,
@@ -415,6 +429,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Alloc_GC", scope_struct_Alloc_GCTy);
+
+	FunctionType *print_stack1Ty= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_stack1", print_stack1Ty);
+
+	FunctionType *print_stackTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_stack", print_stackTy);
 
 	FunctionType *scope_struct_specTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -1115,13 +1143,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("int_vec_Slice", int_vec_SliceTy);
-
-	FunctionType *int_vec_first_nonzeroTy= FunctionType::get(
-		Type::getInt32Ty(*TheContext),
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("int_vec_first_nonzero", int_vec_first_nonzeroTy);
 
 	FunctionType *int_vec_printTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

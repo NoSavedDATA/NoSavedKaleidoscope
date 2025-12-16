@@ -657,9 +657,11 @@ class ClassExprAST : public ExprAST {
 class IfExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
   std::vector<std::unique_ptr<ExprAST>> Then, Else;
+  Parser_Struct parser_struct;
 
   public:
-    IfExprAST(std::unique_ptr<ExprAST> Cond,
+    IfExprAST(Parser_Struct,
+              std::unique_ptr<ExprAST> Cond,
               std::vector<std::unique_ptr<ExprAST>> Then,
               std::vector<std::unique_ptr<ExprAST>> Else);
 

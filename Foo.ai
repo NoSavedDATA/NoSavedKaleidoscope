@@ -1,0 +1,56 @@
+
+
+def int particionar(array<int> arr, int baixo, int alto)
+    int pivo = arr[alto]
+    int i = baixo - 1
+
+	print("pre")
+	arr.print()
+    for j = baixo, j < alto
+        if arr[j] <= pivo
+			print("i: "+i)
+            i = i + 1
+			print("arr[i] " + arr[j])
+            int tmp = arr[i]
+            arr[i] = arr[j]
+            arr[j] = tmp
+			print("arr[i] post " + arr[j])
+
+	print("final i+1: " + i)
+
+	arr.print()
+
+	print("arr[i+1] " + arr[i+1])
+
+    int tmp2 = arr[i+1]
+    arr[i+1] = arr[alto]
+    arr[alto] = tmp2
+
+	print("arr[i+1] post " + arr[i+1])
+
+	print("post")
+	arr.print()
+
+	_quit_()
+    return i+1
+
+
+def float quick_sort_rec(array<int> arr, int baixo, int alto)
+	#arr.print()
+    if baixo < alto
+        int p = particionar(arr, baixo, alto)
+        quick_sort_rec(arr, baixo, p-1)
+        quick_sort_rec(arr, p+1, alto)
+
+
+
+def array<int> quick_sort(array<int> arr)	
+    quick_sort_rec(arr, 0, arr.size()-1)
+    return arr
+
+
+main
+    array<int> array_teste = rand_int_vec(10,1,100)
+    array<int> array_ordenado = quick_sort(array_teste)
+
+	array_ordenado.print()

@@ -1,12 +1,18 @@
+
+
+
+
 main
-	
-	array<int> a = arange_int(2,10)
 
-	a[2] = 8
+	int w = -1
+	int i = -1
+	for j=0, j<10
+		if j>3
+			print("i: " + i)
+			i = i + 1
+		else
+			w = w + 1
 
-	a.print()
-	
-	for i=0, i<a.size()
-		print(a[i])
+	print("i post: " + i)
+	print("w post: " + w)
 
-	

@@ -92,9 +92,7 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
     }
     else {}
 
-
-    // std::cout << in_return_type << " --> " << return_type << ".\n";
-
+    
 
     if (in_return_type!="void"&&in_return_type!="void*") {
         if (ends_with(return_type, "_vec")) {
@@ -106,12 +104,12 @@ Lib_Info *Generate_Function_Dict(Lib_Info *lib_info, std::string in_return_type,
             lib_info->return_data_string = lib_info->return_data_string + data_str; 
         }
         else
-            lib_info->return_data_string = lib_info->return_data_string + "\tfunctions_return_data_type[\"" + function_name + "\"] = Data_Tree(\"" + return_type + "\");\n";
+            lib_info->return_data_string = lib_info->return_data_string + "\tfunctions_return_data_type[\"" + function_name \
+                                                                        + "\"] = Data_Tree(\"" + return_type + "\");\n";
         lib_info->dict_string = lib_info->dict_string + "{\"" + function_name + "\", \"" + return_type + "\"}, "; // {"tensor_tensor_add", "tensor"}
     }
     lib_info->functions_string = lib_info->functions_string + "\"" +  function_name + "\", "; // user_cpp_functions
 
-    
 
     return lib_info;
 }
@@ -123,15 +121,14 @@ Lib_Info *CppFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {}
 Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
 
     // Handle Arg Types
-
-    if (ends_with(FunctionName, "_Create")||ends_with(FunctionName, "_Load")||ends_with(FunctionName, "_Copy")\
-        ||ends_with(FunctionName, "_New")||ends_with(FunctionName, "_CopyArg")||ends_with(FunctionName, "_Idx")\
-        ||ends_with(FunctionName, "_Idx_num")||ends_with(FunctionName, "_Slice")||ends_with(FunctionName, "_Split_Parallel")\
-        ||ends_with(FunctionName, "_Split_Strided_Parallel")||ends_with(FunctionName, "_CalculateSliceIdx")\
-        ||ends_with(FunctionName, "_CalculateIdx")||ends_with(FunctionName, "_Store_Idx")||begins_with(FunctionName, "scope_struct")\
-        ||contains_str(FunctionName, "Attr_on_Offset")||contains_str(FunctionName, "Load_on_Offset")||begins_with(FunctionName, "set_scope")\
-        ||begins_with(FunctionName, "get_scope")||FunctionName=="FirstArgOnDemand"||begins_with(FunctionName, "MarkToSweep"))
-        return lib_info;
+    // if (ends_with(FunctionName, "_Create")||ends_with(FunctionName, "_Load")||ends_with(FunctionName, "_Copy")\
+    //     ||ends_with(FunctionName, "_New")||ends_with(FunctionName, "_CopyArg")||ends_with(FunctionName, "_Idx")\
+    //     ||ends_with(FunctionName, "_Idx_num")||ends_with(FunctionName, "_Slice")||ends_with(FunctionName, "_Split_Parallel")\
+    //     ||ends_with(FunctionName, "_Split_Strided_Parallel")||ends_with(FunctionName, "_CalculateSliceIdx")\
+    //     ||ends_with(FunctionName, "_CalculateIdx")||ends_with(FunctionName, "_Store_Idx")||begins_with(FunctionName, "scope_struct")\
+    //     ||contains_str(FunctionName, "Attr_on_Offset")||contains_str(FunctionName, "Load_on_Offset")||begins_with(FunctionName, "set_scope")\
+    //     ||begins_with(FunctionName, "get_scope")||FunctionName=="FirstArgOnDemand"||begins_with(FunctionName, "MarkToSweep"))
+    //     return lib_info;
 
 
     std::string arg_names_line = "\n\t";
@@ -170,15 +167,21 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
             if(ends_with(arg_type, "vec")) {
                 std::string data_tree_type = FunctionName+"_"+arg_name;
                 arg_data_types_line = arg_data_types_line + "\n\tData_Tree " + data_tree_type + " = Data_Tree(\"vec\");";
-                arg_data_types_line = arg_data_types_line + "\n\t"+ data_tree_type + ".Nested_Data.push_back(Data_Tree(\"" +remove_suffix(arg_type,"_vec")+ "\"));";
-                arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = " + data_tree_type + ";";
+                arg_data_types_line = arg_data_types_line + "\n\t"+ data_tree_type \
+                                                          + ".Nested_Data.push_back(Data_Tree(\"" +remove_suffix(arg_type,"_vec")+ "\"));";
+                arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName \
+                                                          + "\"][\"" + arg_name + "\"] = " + data_tree_type + ";";
             } else if (arg_type=="list") {
                 std::string data_tree_type = FunctionName+"_"+arg_name;
                 arg_data_types_line = arg_data_types_line + "\n\tData_Tree " + data_tree_type + " = Data_Tree(\"list\");";
                 arg_data_types_line = arg_data_types_line + "\n\t"+ data_tree_type + ".Nested_Data.push_back(Data_Tree(\"any\"));";
-                arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = " + data_tree_type + ";";
+                arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" \
+                                                          + arg_name + "\"] = " + data_tree_type + ";";
             } else if (arg_type=="array") {
                 std::string data_tree_type = FunctionName+"_"+arg_name;
+                // std::cout << arg_data_types_line << "\n\tData_Tree " << data_tree_type << " = Data_Tree(\"array\");";
+                // std::cout << arg_data_types_line << "\n\t"<<  data_tree_type << ".Nested_Data.push_back(Data_Tree(\"any\"));";
+
                 arg_data_types_line = arg_data_types_line + "\n\tData_Tree " + data_tree_type + " = Data_Tree(\"array\");";
                 arg_data_types_line = arg_data_types_line + "\n\t"+ data_tree_type + ".Nested_Data.push_back(Data_Tree(\"any\"));";
                 arg_data_types_line = arg_data_types_line + "\n\tFunction_Arg_DataTypes[\"" + FunctionName + "\"][\"" + arg_name + "\"] = " + data_tree_type + ";";
@@ -200,6 +203,7 @@ Lib_Info *ExternFunctionExpr::Generate_Args_Dict(Lib_Info *lib_info) {
 Lib_Info *ExternFunctionExpr::Generate_LLVM(std::string fname, Lib_Info *lib_info) {
     
 
+    // std::cout << "generate function dict for " << FunctionName << ".\n";
     lib_info = Generate_Function_Dict(lib_info, ReturnType, FunctionName); 
 
     if (!(FunctionName=="pthread_create_aux"||FunctionName=="pthread_join_aux"))

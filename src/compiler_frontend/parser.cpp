@@ -638,9 +638,9 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
   //std::cout << "\n\nIf else token: " << ReverseToken(CurTok) <<  "\n\n\n";
 
   if (CurTok != tok_else) {
-    Else.push_back(std::make_unique<IntExprAST>(0));
+    // Else.push_back(std::make_unique<IntExprAST>(0));
 
-    return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
+    return std::make_unique<IfExprAST>(parser_struct, std::move(Cond), std::move(Then),
                                       std::move(Else));
   }
   else {
@@ -671,7 +671,7 @@ std::unique_ptr<ExprAST> ParseIfExpr(Parser_Struct parser_struct, std::string cl
     if (CurTok==tok_space)
       getNextToken();
 
-    return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
+    return std::make_unique<IfExprAST>(parser_struct, std::move(Cond), std::move(Then),
                                       std::move(Else));
   }
 }
@@ -2121,7 +2121,6 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
       } else
           LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
       
-       
 
       Types.push_back(data_type);
       ArgNames.push_back(IdName);
@@ -2134,10 +2133,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
       data_typeVars[FnName][IdName] = data_tree;
 
 
-
       if(in_str(data_type, Classes))
-        Object_toClass[FnName][IdName] = Data_Tree(data_type);
-      
+        Object_toClass[FnName][IdName] = Data_Tree(data_type); 
     }
     
 

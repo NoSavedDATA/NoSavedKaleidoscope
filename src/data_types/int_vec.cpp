@@ -118,18 +118,6 @@ extern "C" DT_int_vec *int_vec_Slice(Scope_Struct *scope_struct, DT_int_vec *vec
 
 
 
-extern "C" int int_vec_first_nonzero(Scope_Struct *scope_struct, DT_int_vec *vec) { 
-  // std::cout << "First non zero" << ".\n";
-  int idx = -1;
-  for (int i=0; i<vec->size; i++)
-    if (vec->vec[i]!=0)
-    {
-      idx = i;
-      break;
-    }
-
-  return idx;
-}
 
 
 

@@ -98,8 +98,7 @@ void ParseToNextLine() {
 std::unique_ptr<Expr> Parse_CPP_Function() {
 
 
-    // std::cout << "parsing cpp function"  << ".\n";
-    // std::cout << Line << ".\n";
+    bool log = contains_str(file_name, "array");
 
     getNextToken();
 
@@ -109,24 +108,19 @@ std::unique_ptr<Expr> Parse_CPP_Function() {
         return expr;
     }
     getNextToken();
+
+    // if (log) {
+    //     std::cout << "------" << Line << ".\n";
+    // }
     
-    // std::cout << FileRead;
-    // std::cout << "CurTok " << ReverseToken(CurTok) << ".\n";
     if (CurTok!='(') {
-        // ParseToNextLine();
         auto expr = std::make_unique<PlaceholderExpr>();
         return expr;
     }
 
     std::string function_name = IdentifierStr;
-    // std::cout << "Found non extern function: " << IdentifierStr << ".\n";
     getNextToken();
 
-    // std::cout << FileRead;
-
-
-
-    // std::exit(0);
 
     auto expr = std::make_unique<CppFunctionExpr>(function_name);
     return expr;
@@ -134,6 +128,8 @@ std::unique_ptr<Expr> Parse_CPP_Function() {
 
 
 std::unique_ptr<Expr> Parse_Extern_Function() {
+
+    bool log = contains_str(file_name, "array");
 
     std::string return_type;
     std::string function_name;
@@ -158,7 +154,7 @@ std::unique_ptr<Expr> Parse_Extern_Function() {
     return_type=IdentifierStr;
 
 
-    getNextToken(); // eat function reurn
+    getNextToken(); // eat function return
 
 
 
@@ -179,6 +175,8 @@ std::unique_ptr<Expr> Parse_Extern_Function() {
     }
     function_name = IdentifierStr;
 
+    // if (log)
+    //     std::cout << "Parsing: " << function_name << ".\n";
     
 
 
@@ -251,7 +249,14 @@ std::vector<std::unique_ptr<Expr>> Parse_Primary(std::vector<std::unique_ptr<Exp
 
     getNextToken();
 
-    // std::cout << "Parser got token " << ReverseToken(CurTok) << ".\n";
+
+
+    // bool log = contains_str(file_name, "array");
+    // if (log) {
+    //     // std::cout << "Parser got token " << ReverseToken(CurTok) << ".\n";
+    //     // std::cout << "" << FileRead << "\n";
+    // }
+
 
     switch (CurTok) {
         case tok_extern:
