@@ -37,6 +37,9 @@ void InitializeModule() {
 
   floatPtrTy = Type::getFloatTy(*TheContext)->getPointerTo();
   int8PtrTy = Type::getInt8Ty(*TheContext)->getPointerTo();
+  intTy = Type::getInt32Ty(*TheContext);
+  floatTy = Type::getFloatTy(*TheContext);
+  boolTy = Type::getInt1Ty(*TheContext);
   ShallCodegen = true;
   seen_var_attr = false;
 
@@ -641,13 +644,9 @@ Function *FunctionAST::codegen() {
   int i = 0;
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
-    
-    
     std::string arg_name = Arg.getName().str();
     //std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
-
-
-
+    //
     // Default args
     if (arg_name == "scope_struct")
     {
@@ -662,28 +661,17 @@ Function *FunctionAST::codegen() {
             type = UnmangleVec(data_typeVars[function_name][arg_name]);
         else
             LogError(-1, "error at argument " + arg_name + " of function " + function_name);
-
         // if (!in_str(type, primary_data_tokens))
         //     Allocate_On_Pointer_Stack(scope_struct, current_codegen_function, arg_name, &Arg); 
-        // else {
-        if(!in_str(type, primary_data_tokens)) {
-            llvm::Type *alloca_type = get_type_from_str(type);
-            AllocaInst *arg_alloca = CreateEntryBlockAlloca(TheFunction, arg_name, alloca_type);
-            Builder->CreateStore(&Arg, arg_alloca);
-            function_allocas[current_codegen_function][arg_name] = arg_alloca;      
-        } else {
-            // LogBlue("Value * arg for " + current_codegen_function + "/" + arg_name);
-            function_values[current_codegen_function][arg_name] = &Arg;   
-        }
-        // }
+        function_values[current_codegen_function][arg_name] = &Arg;
+        if(type=="array")
+            Cache_Array(current_codegen_function, &Arg);
     }
   }
-
   
   Value *RetVal;
   for (auto &body : Body)
     RetVal = body->codegen(scope_struct);
-
 
   if (RetVal) {
     // Finish off the function.
@@ -692,14 +680,12 @@ Function *FunctionAST::codegen() {
         Builder->CreateRet(RetVal); 
     }
 
-    
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
     // TheModule->print(llvm::errs(), nullptr);
 
     return TheFunction;
   } 
-
 
   // Error reading body, remove function.
   TheFunction->eraseFromParent();

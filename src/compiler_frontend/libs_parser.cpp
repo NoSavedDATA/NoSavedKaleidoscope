@@ -82,7 +82,7 @@ void LibFunction::Print() {
     std::cout << ")\n\n";
 }
 
-void LibFunction::Link_to_LLVM(void *func_ptr) {
+void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
     if(!has_main)
         return;
 
@@ -119,6 +119,13 @@ void LibFunction::Link_to_LLVM(void *func_ptr) {
             data_name_to_type[fn_return_type_str] = data_type_count;
             data_type_to_name[data_type_count++] = fn_return_type_str;
         }
+        // if (data_name_to_size.count(ReturnType)==0) {
+        //     using size_fn = int (*)();
+        //     std::string size_fn_str = ReturnType+"_size";
+        //     auto fn = reinterpret_cast<size_fn>(dlsym(handle, size_fn_str.c_str()));
+        //     int data_size = fn();
+        //     data_name_to_size[fn_return_type_str] = data_size;
+        // }
     }
     else {
         fn_return_type = int8PtrTy;
@@ -643,7 +650,7 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
             }
             
 
-            fn->Link_to_LLVM(func_ptr);
+            fn->Link_to_LLVM(func_ptr, handle);
             fn->Add_to_Nsk_Dicts(func_ptr, lib_name, is_default);
         }
     }

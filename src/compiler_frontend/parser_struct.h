@@ -13,6 +13,6 @@ struct Parser_Struct {
   bool can_be_string=false;
   bool can_be_list=false;
   int line=0;
-  int loop_block=0;
-  int if_block=0;
+  int loop_depth=0;
+  int control_flow_depth=0;
 };

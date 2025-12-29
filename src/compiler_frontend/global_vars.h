@@ -18,6 +18,7 @@ extern bool has_main;
 
 extern std::unordered_map<uint16_t, std::string> data_type_to_name;
 extern std::unordered_map<std::string, uint16_t> data_name_to_type;
+extern std::unordered_map<std::string, int> data_name_to_size;
 extern uint16_t data_type_count;
 
 extern std::map<std::string, std::string> functions_return_type, reverse_ops;

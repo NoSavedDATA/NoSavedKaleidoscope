@@ -23,7 +23,7 @@ using namespace llvm;
 extern std::vector<Value *> thread_pointers;
 extern std::map<std::string, std::map<std::string, AllocaInst *>> function_allocas;
 extern std::map<std::string, std::map<std::string, Value *>> function_values;
-extern std::map<std::string, std::map<std::string, PHINode *>> function_phi_values;
+extern std::map<std::string, std::map<Value *, Value *>> function_vecs;
 extern std::map<std::string, std::map<std::string, Value *>> function_pointers;
 extern std::string current_codegen_function;
 
@@ -65,3 +65,6 @@ void Set_Stack_Top(Value *);
 Value *Load_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name);
 void Set_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name, Value *val);
 Value *Load_Stack(Value *scope_struct, const std::string &function_name, const std::string &var_name, const std::string &type);
+
+
+void Cache_Array(std::string &fn, Value *var);

@@ -1,18 +1,29 @@
+import nsk_cuda
+
+class T
+	int c
+	array<int> v
+	def float __init__(int c, array<int> v)
+		self.c=c
+		self.v=v
 
 
-
+def float foo(array<int> V)
+	V.print()
 
 main
+	# array<int> v
+	array<tensor> v
 
-	int w = -1
-	int i = -1
-	for j=0, j<10
-		if j>3
-			print("i: " + i)
-			i = i + 1
-		else
-			w = w + 1
+	tensor[2,2] a
+	tensor[3,3] b
+	tensor[4,3] c
+	tensor[0] z
 
-	print("i post: " + i)
-	print("w post: " + w)
+	v.append(a)
+	v.append(b)
+	v.append(c)
 
+	z = v[2]
+
+	z.print()

@@ -373,13 +373,13 @@ public:
   
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST {
-  char Op;
-  std::unique_ptr<ExprAST> LHS, RHS;
   std::string Elements, Operation;
   Parser_Struct parser_struct;
   std::string cast_L_to="", cast_R_to="";
 
 public:
+  std::unique_ptr<ExprAST> LHS, RHS;
+  char Op;
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS, Parser_Struct);
 
@@ -468,6 +468,28 @@ class NameableIdx : public Nameable {
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
 };
+
+
+
+
+class NameableAppend : public Nameable {
+  Data_Tree inner_dt;
+  public:
+  bool FromLib=false;
+  std::vector<std::unique_ptr<ExprAST>> Args;
+  std::string Callee, ReturnType="";
+
+  NameableAppend(Parser_Struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args);
+
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+
+
+
 
 
 
@@ -656,10 +678,10 @@ class ClassExprAST : public ExprAST {
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
-  std::vector<std::unique_ptr<ExprAST>> Then, Else;
   Parser_Struct parser_struct;
 
   public:
+    std::vector<std::unique_ptr<ExprAST>> Then, Else;
     IfExprAST(Parser_Struct,
               std::unique_ptr<ExprAST> Cond,
               std::vector<std::unique_ptr<ExprAST>> Then,

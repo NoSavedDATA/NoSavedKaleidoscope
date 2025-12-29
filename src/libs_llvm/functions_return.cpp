@@ -26,7 +26,7 @@ void set_functions_return_type() {
 						{"_quit_", "float"}, 
 						{"dict_Create", "dict"}, {"dict_New", "dict"}, {"dict_print", "float"}, 
 						{"emerge_int", "int"}, {"emerge_float", "float"}, {"_tid", "float"}, {"tid", "int"}, 
-						{"array_Create", "array"}, {"array_size", "int"}, {"array_print_int", "float"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"rand_int_vec", "array"}, {"ones_int", "int_vec"}, {"array_print_float", "float"}, {"arange_float", "array"}, {"zeros_float", "float_vec"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 
+						{"array_Create", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"array_print_int", "float"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "int_vec"}, {"randfloat_array", "array"}, {"array_print_float", "float"}, {"arange_float", "array"}, {"zeros_float", "float_vec"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 
 						{"str_Create", "str"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, 
 						{"bool_to_str", "str"}, 
 						{"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
@@ -99,14 +99,16 @@ void set_functions_return_type() {
 	functions_return_data_type["dict_print"] = Data_Tree("float");
 	functions_return_data_type["array_Create"] = Data_Tree("array");
 	functions_return_data_type["array_size"] = Data_Tree("int");
+	functions_return_data_type["array_bad_idx"] = Data_Tree("int");
 	functions_return_data_type["array_print_int"] = Data_Tree("float");
 	functions_return_data_type["arange_int"] = Data_Tree("array");
 	functions_return_data_type["zeros_int"] = Data_Tree("array");
-	functions_return_data_type["rand_int_vec"] = Data_Tree("array");
+	functions_return_data_type["randint_array"] = Data_Tree("array");
 
 	Data_Tree ones_int_vec = Data_Tree("vec");
 	ones_int_vec.Nested_Data.push_back(Data_Tree("int"));
 	functions_return_data_type["ones_int"] = ones_int_vec;
+	functions_return_data_type["randfloat_array"] = Data_Tree("array");
 	functions_return_data_type["array_print_float"] = Data_Tree("float");
 	functions_return_data_type["arange_float"] = Data_Tree("array");
 

@@ -467,6 +467,14 @@ std::unique_ptr<ExprAST> ParseLLVM_IR_CallExpr(Parser_Struct parser_struct, std:
 }
 
 
+std::unique_ptr<ExprAST> Parse_Append_Expr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name) {
+    auto Args = Parse_Arguments(parser_struct, class_name);
+    if (!Args)
+        return nullptr;
+
+    return std::make_unique<NameableAppend>(parser_struct, std::move(inner), std::move(*Args));
+}
+
 std::unique_ptr<ExprAST> ParseIdxExpr(Parser_Struct parser_struct, std::unique_ptr<Nameable> inner, std::string class_name, int depth) {
   
   getNextToken(); // eat [
@@ -552,6 +560,8 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
   } 
 
 
+  if (IdName=="append" && CurTok=='(' && depth>1)
+      return Parse_Append_Expr(parser_struct, std::move(nameable), class_name);
   
   if(in_str(IdName,LLVM_IR_Functions) && CurTok=='(' && depth==1)
     return ParseLLVM_IR_CallExpr(parser_struct, std::move(nameable), class_name);
@@ -751,7 +761,9 @@ std::unique_ptr<ExprAST> ParseStandardForExpr(Parser_Struct parser_struct, std::
   
   std::vector<std::unique_ptr<ExprAST>> Body;
 
-  Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
+  Parser_Struct loop_parser_struct = parser_struct;
+  loop_parser_struct.loop_depth++;
+  Body = ParseIndentedBodies(loop_parser_struct, cur_level_tabs, class_name);
 
   return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body), parser_struct);
@@ -779,7 +791,9 @@ std::unique_ptr<ExprAST> ParseForEachExpr(Parser_Struct parser_struct, std::stri
   data_typeVars[parser_struct.function_name][IdName] = data_type.Nested_Data[0];
 
   std::vector<std::unique_ptr<ExprAST>> Body;
-  Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
+  Parser_Struct loop_parser_struct = parser_struct;
+  loop_parser_struct.loop_depth++;
+  Body = ParseIndentedBodies(loop_parser_struct, cur_level_tabs, class_name);
 
 
   return std::make_unique<ForEachExprAST>(IdName, std::move(Vec), std::move(Body), parser_struct, data_type);
@@ -836,7 +850,9 @@ std::unique_ptr<ExprAST> ParseWhileExpr(Parser_Struct parser_struct, std::string
   if (!Cond)
     return nullptr;
   
-  std::vector<std::unique_ptr<ExprAST>> Body = ParseIndentedBodies(parser_struct, cur_level_tabs, class_name);
+  Parser_Struct loop_parser_struct = parser_struct;
+  loop_parser_struct.loop_depth++;
+  std::vector<std::unique_ptr<ExprAST>> Body = ParseIndentedBodies(loop_parser_struct, cur_level_tabs, class_name);
 
   return std::make_unique<WhileExprAST>(std::move(Cond), std::move(Body), parser_struct);
 }
@@ -1287,6 +1303,8 @@ std::unique_ptr<ExprAST> ParseVarExpr(Parser_Struct parser_struct, std::string s
     getNextToken(); // eat identifier.
 
     
+    if (Object_toClass[parser_struct.function_name].count(IdentifierStr)>0||data_typeVars[parser_struct.function_name].count(IdentifierStr)>0)
+        LogError(parser_struct.line, "Redefinition of " + IdentifierStr);
 
 
     std::unique_ptr<ExprAST> Init;
@@ -1539,6 +1557,9 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
 
 
     std::string prefix_datatype = Extract_List_Prefix(data_type);
+
+    if (Object_toClass[parser_struct.function_name].count(IdentifierStr)>0||data_typeVars[parser_struct.function_name].count(IdentifierStr)>0)
+        LogError(parser_struct.line, "Redefinition of " + IdentifierStr);
     if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_str(prefix_datatype, data_tokens) )
       Object_toClass[parser_struct.function_name][IdentifierStr] = Data_Tree(prefix_datatype);
     typeVars[parser_struct.function_name][IdentifierStr] = data_type;

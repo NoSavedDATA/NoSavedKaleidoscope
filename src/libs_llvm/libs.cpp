@@ -124,7 +124,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *array_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("array_Create", array_CreateTy);
@@ -135,6 +135,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("array_size", array_sizeTy);
+
+	FunctionType *array_bad_idxTy= FunctionType::get(
+		Type::getInt32Ty(*TheContext),
+		{Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("array_bad_idx", array_bad_idxTy);
+
+	FunctionType *array_double_sizeTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("array_double_size", array_double_sizeTy);
 
 	FunctionType *array_print_intTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),
@@ -157,12 +171,12 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("zeros_int", zeros_intTy);
 
-	FunctionType *rand_int_vecTy= FunctionType::get(
+	FunctionType *randint_arrayTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
 		false
 	);
-	TheModule->getOrInsertFunction("rand_int_vec", rand_int_vecTy);
+	TheModule->getOrInsertFunction("randint_array", randint_arrayTy);
 
 	FunctionType *ones_intTy= FunctionType::get(
 		int8PtrTy,
@@ -170,6 +184,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("ones_int", ones_intTy);
+
+	FunctionType *randfloat_arrayTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("randfloat_array", randfloat_arrayTy);
 
 	FunctionType *array_print_floatTy= FunctionType::get(
 		Type::getFloatTy(*TheContext),

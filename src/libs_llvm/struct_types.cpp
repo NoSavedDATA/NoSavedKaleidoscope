@@ -46,8 +46,8 @@ void Generate_Struct_Types() {
     // array
     StructType *vecTy  = StructType::create(
         *TheContext,
-        {intTy, intTy, int8PtrTy},
-        "DT_vec"
+        {intTy, intTy, intTy, int8PtrTy},
+        "DT_array"
     );
     struct_types["vec"] = vecTy;
     

@@ -821,6 +821,40 @@ NameableLLVMIRCall::NameableLLVMIRCall(Parser_Struct parser_struct, std::unique_
   // }
 }
 
+Data_Tree NameableAppend::GetDataTree(bool from_assignment) {  
+  if (data_type.Type!="")
+    return data_type;
+
+  Data_Tree ret = functions_return_data_type[Callee];
+   
+
+  std::string ret_type = ret.Type;
+  if (ends_with(ret_type, "_vec")) {
+    Data_Tree return_dt = Data_Tree("vec");
+    return_dt.Nested_Data.push_back(remove_suffix(ret_type, "_vec"));
+    ret = return_dt;
+  }
+
+  if(Callee=="zip") {
+
+    Data_Tree return_dt = Data_Tree("list");
+    return_dt.Nested_Data.push_back(Data_Tree("list"));
+
+    for(int i=0; i<Args.size(); ++i) {
+
+      std::string type = Args[i]->GetDataTree().Nested_Data[0].Type;
+      return_dt.Nested_Data[0].Nested_Data.push_back(Data_Tree(type));
+    }
+
+    ret = return_dt;
+  }
+
+  data_type = ret;
+  ReturnType = ret.Type;
+
+  return ret;
+}
+
 
 
 Data_Tree NameableCall::GetDataTree(bool from_assignment) {
@@ -899,6 +933,18 @@ NameableRoot::NameableRoot(Parser_Struct parser_struct) : Nameable(parser_struct
   Name = "";
 }
 
+
+NameableAppend::NameableAppend(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args)
+                                : Nameable(parser_struct), Args(std::move(Args))
+{
+    AddNested(std::move(Inner));
+
+    this->inner_dt = this->Inner->Inner->GetDataTree();
+    Callee = this->inner_dt.Type + "_" + this->Inner->Name;
+    
+    this->Inner = std::move(this->Inner->Inner);
+}
+
 NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::vector<std::unique_ptr<ExprAST>> Args) : Nameable(parser_struct), Args(std::move(Args)) {
   this->Inner = std::move(Inner);
   this->Inner->IsLeaf = false;
@@ -926,7 +972,6 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
       Callee = this->Inner->GetLibCallee();
     }
     else {  
-
       Data_Tree inner_dt = this->Inner->Inner->GetDataTree();
       if(data_typeVars[inner_dt.Type].find(Callee)!=data_typeVars[inner_dt.Type].end()) // self.linear1(x)    
         Callee = UnmangleVec(data_typeVars[inner_dt.Type][Callee]);

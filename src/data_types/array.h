@@ -2,7 +2,7 @@
 
 class DT_array {
     public:
-		int size, elem_size;
+		int virtual_size, size, elem_size;
 		void *data;
 
     DT_array();

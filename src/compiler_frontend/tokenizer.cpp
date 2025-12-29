@@ -203,6 +203,7 @@ std::vector<std::string> compound_tokens = {"tuple", "list", "array", "dict"};
 std::vector<std::string> primary_data_tokens = {"int", "float", "bool", "foreach_control_var"};
 
 
+std::unordered_map<std::string, uint16_t> data_name_to_size = {{"int", 4}, {"float", 4}, {"bool", 1}, {"double", 8}};
 
 std::unordered_map<std::string, uint16_t> data_name_to_type = {{"int", 2}, {"float", 3}, {"bool", 4}, {"str", 5}, {"list", 6},
                                                                {"tuple", 7}, {"dict", 8}, {"channel", 9}, {"int_vec", 10},

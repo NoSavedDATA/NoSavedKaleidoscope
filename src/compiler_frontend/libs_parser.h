@@ -21,7 +21,7 @@ struct LibFunction {
   LibFunction(std::string ReturnType, bool IsPointer, std::string Name,
               std::vector<std::string>, std::vector<std::string>, std::vector<int> ArgIsPointer, bool);
 
-  void Link_to_LLVM(void *);
+  void Link_to_LLVM(void *, void *);
   void Add_to_Nsk_Dicts(void *, std::string, bool);
 
   void Print(); 
