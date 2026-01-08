@@ -15,12 +15,12 @@ struct Scope_Struct {
     int thread_id=0;
     void *pointers_stack[ContextStackSize];
     int stack_top=0;
+    void *object_ptr = nullptr;
     GC *gc=nullptr;
     std::vector<GC_Node> root_nodes;
 
 
     Scope_Struct *previous_scope=nullptr;
-    void *object_ptr = nullptr;
 
     char *first_arg = nullptr;
     char *scope = nullptr;
@@ -52,6 +52,7 @@ struct Scope_Struct {
     void Copy(Scope_Struct *);
 
     void Print();
+    void Print_Stack();
 
     void *Allocate(int, int);
     // inline void *Allocate(int size) {

@@ -212,7 +212,7 @@ std::unordered_map<uint16_t, std::string> data_type_to_name = {{2, "int"}, {3, "
                                                                {7, "tuple"}, {8, "dict"}, {9, "channel"}, {10, "int_vec"},
                                                                {11, "float_vec"}, {12, "array"}};
 
-uint16_t data_type_count=12;
+uint16_t data_type_count=13;
 
 
 std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},

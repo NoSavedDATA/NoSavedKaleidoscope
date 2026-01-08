@@ -39,6 +39,7 @@ void print_caller() {
 std::map<std::string, std::map<std::string, Data_Tree>> Object_toClass;
 std::map<std::string, std::vector<std::string>> Equivalent_Types = {{"float", {"int"}}, {"int", {"float"}}};
 
+std::map<std::string, int> Function_Arg_Count;
 std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 std::map<std::string, std::vector<std::string>> Function_Arg_Names;
@@ -2078,6 +2079,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   Function_Arg_DataTypes[FnName]["0"] = Data_Tree("Scope_Struct");
 
 
+  int args_count=0;
   while (CurTok != ')')
   {
     if (IdentifierStr=="s"||IdentifierStr=="str")
@@ -2145,6 +2147,11 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
       Types.push_back(data_type);
       ArgNames.push_back(IdName);
+      args_count++;
+      // if(!in_str(data_type, primary_data_tokens)) {
+      //     Types.push_back("bool");
+      //     ArgNames.push_back(IdName+"_shall_stack");
+      // }
 
       Function_Arg_Names[FnName].push_back(IdName);
       Function_Arg_Types[FnName][IdName] = data_type;
@@ -2158,6 +2165,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
         Object_toClass[FnName][IdName] = Data_Tree(data_type); 
     }
     
+    Function_Arg_Count[FnName] = args_count;
 
 
     if (CurTok == ')')

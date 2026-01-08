@@ -1,0 +1,1 @@
+	clean_up_functions["array"] = array_Clean_Up;

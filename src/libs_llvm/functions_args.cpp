@@ -541,21 +541,6 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["scope_struct_Print"].push_back("0");
 		
-		Function_Arg_Types["set_scope_object"]["0"] = "Scope_Struct";
-		Function_Arg_Types["set_scope_object"]["1"] = "void";
-		
-		Function_Arg_DataTypes["set_scope_object"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["set_scope_object"]["1"] = Data_Tree("void");
-		
-		Function_Arg_Names["set_scope_object"].push_back("0");
-		Function_Arg_Names["set_scope_object"].push_back("1");
-		
-		Function_Arg_Types["get_scope_object"]["0"] = "Scope_Struct";
-		
-		Function_Arg_DataTypes["get_scope_object"]["0"] = Data_Tree("Scope_Struct");
-		
-		Function_Arg_Names["get_scope_object"].push_back("0");
-		
 		Function_Arg_Types["scope_struct_Save_for_Async"]["0"] = "Scope_Struct";
 		Function_Arg_Types["scope_struct_Save_for_Async"]["1"] = "str";
 		
@@ -641,32 +626,30 @@ void set_functions_args_type() {
 		Function_Arg_Types["allocate_void"]["2"] = "const";
 		Function_Arg_Types["allocate_void"]["3"] = "type";
 		Function_Arg_Types["allocate_void"]["4"] = "type";
-		Function_Arg_Types["allocate_void"]["5"] = "";
-		Function_Arg_Types["allocate_void"]["6"] = "auto";
-		Function_Arg_Types["allocate_void"]["7"] = "it";
-		Function_Arg_Types["allocate_void"]["8"] = "data_name_to_type";
+		Function_Arg_Types["allocate_void"]["5"] = "auto";
+		Function_Arg_Types["allocate_void"]["6"] = "it";
+		Function_Arg_Types["allocate_void"]["7"] = "data_name_to_type";
+		Function_Arg_Types["allocate_void"]["8"] = "type";
 		Function_Arg_Types["allocate_void"]["9"] = "type";
-		Function_Arg_Types["allocate_void"]["10"] = "type";
-		Function_Arg_Types["allocate_void"]["11"] = "if";
+		Function_Arg_Types["allocate_void"]["10"] = "if";
+		Function_Arg_Types["allocate_void"]["11"] = "it";
 		Function_Arg_Types["allocate_void"]["12"] = "it";
-		Function_Arg_Types["allocate_void"]["13"] = "it";
-		Function_Arg_Types["allocate_void"]["14"] = "data_name_to_type";
+		Function_Arg_Types["allocate_void"]["13"] = "data_name_to_type";
 		
 		Function_Arg_DataTypes["allocate_void"]["0"] = Data_Tree("Scope_Struct");
 		Function_Arg_DataTypes["allocate_void"]["1"] = Data_Tree("int");
 		Function_Arg_DataTypes["allocate_void"]["2"] = Data_Tree("const");
 		Function_Arg_DataTypes["allocate_void"]["3"] = Data_Tree("type");
 		Function_Arg_DataTypes["allocate_void"]["4"] = Data_Tree("type");
-		Function_Arg_DataTypes["allocate_void"]["5"] = Data_Tree("");
-		Function_Arg_DataTypes["allocate_void"]["6"] = Data_Tree("auto");
-		Function_Arg_DataTypes["allocate_void"]["7"] = Data_Tree("it");
-		Function_Arg_DataTypes["allocate_void"]["8"] = Data_Tree("data_name_to_type");
+		Function_Arg_DataTypes["allocate_void"]["5"] = Data_Tree("auto");
+		Function_Arg_DataTypes["allocate_void"]["6"] = Data_Tree("it");
+		Function_Arg_DataTypes["allocate_void"]["7"] = Data_Tree("data_name_to_type");
+		Function_Arg_DataTypes["allocate_void"]["8"] = Data_Tree("type");
 		Function_Arg_DataTypes["allocate_void"]["9"] = Data_Tree("type");
-		Function_Arg_DataTypes["allocate_void"]["10"] = Data_Tree("type");
-		Function_Arg_DataTypes["allocate_void"]["11"] = Data_Tree("if");
+		Function_Arg_DataTypes["allocate_void"]["10"] = Data_Tree("if");
+		Function_Arg_DataTypes["allocate_void"]["11"] = Data_Tree("it");
 		Function_Arg_DataTypes["allocate_void"]["12"] = Data_Tree("it");
-		Function_Arg_DataTypes["allocate_void"]["13"] = Data_Tree("it");
-		Function_Arg_DataTypes["allocate_void"]["14"] = Data_Tree("data_name_to_type");
+		Function_Arg_DataTypes["allocate_void"]["13"] = Data_Tree("data_name_to_type");
 		
 		Function_Arg_Names["allocate_void"].push_back("0");
 		Function_Arg_Names["allocate_void"].push_back("1");
@@ -682,7 +665,6 @@ void set_functions_args_type() {
 		Function_Arg_Names["allocate_void"].push_back("11");
 		Function_Arg_Names["allocate_void"].push_back("12");
 		Function_Arg_Names["allocate_void"].push_back("13");
-		Function_Arg_Names["allocate_void"].push_back("14");
 	
 		
 		Function_Arg_Types["channel_Create"]["0"] = "Scope_Struct";
@@ -1094,6 +1076,20 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["ones_int"].push_back("0");
 		Function_Arg_Names["ones_int"].push_back("1");
+		
+		Function_Arg_Types["array_int_add"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_int_add"]["1"] = "array";
+		Function_Arg_Types["array_int_add"]["2"] = "int";
+		
+		Function_Arg_DataTypes["array_int_add"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_int_add_1 = Data_Tree("array");
+		array_int_add_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_int_add"]["1"] = array_int_add_1;
+		Function_Arg_DataTypes["array_int_add"]["2"] = Data_Tree("int");
+		
+		Function_Arg_Names["array_int_add"].push_back("0");
+		Function_Arg_Names["array_int_add"].push_back("1");
+		Function_Arg_Names["array_int_add"].push_back("2");
 		
 		Function_Arg_Types["randfloat_array"]["0"] = "Scope_Struct";
 		Function_Arg_Types["randfloat_array"]["1"] = "int";

@@ -1,29 +1,23 @@
-import nsk_cuda
-
-class T
-	int c
-	array<int> v
-	def float __init__(int c, array<int> v)
-		self.c=c
-		self.v=v
 
 
-def float foo(array<int> V)
-	V.print()
+
+
+
+
+def float opa()
+	print("opa")
+
+
+def float foo(array<int> v)	
+	opa()
+	v = array_int_add(v, 1)
+	v.print()
+
 
 main
-	# array<int> v
-	array<tensor> v
+	
+	array<int> v = arange_int(2,8)
+	
+	foo(array_int_add(v, 1))
 
-	tensor[2,2] a
-	tensor[3,3] b
-	tensor[4,3] c
-	tensor[0] z
-
-	v.append(a)
-	v.append(b)
-	v.append(c)
-
-	z = v[2]
-
-	z.print()
+	v.print()

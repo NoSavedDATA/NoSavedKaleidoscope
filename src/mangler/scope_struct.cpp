@@ -74,6 +74,13 @@ void Scope_Struct::Print() {
     std::cout << "Scope struct:" << "\n\tThread id: " << thread_id << ".\n\n";
 }
 
+void Scope_Struct::Print_Stack() {
+    std::cout << "has " << stack_top << " stack items.\n";
+    for (int i=0; i<stack_top; ++i) {
+        std::cout << i << ": " << pointers_stack[i] << "\n";        
+    }
+}
+
 
 
 extern "C" float scope_struct_spec(Scope_Struct *scope_struct) {
@@ -163,12 +170,6 @@ extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
     scope_struct->Print();
 }
 
-extern "C" void set_scope_object(Scope_Struct *scope_struct, void *object_ptr) {
-    scope_struct->object_ptr = object_ptr;
-}
-extern "C" void *get_scope_object(Scope_Struct *scope_struct) {
-    return scope_struct->object_ptr;
-}
 
 
 
@@ -235,7 +236,8 @@ void alloc_gc_vspace(Scope_Struct *scope_struct, int size) {
 
 extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
     GC *gc = scope_struct->gc;
-    // std::cout << "sweep: " << gc << ".\n";
+    // std::cout << "sweep: " << scope_struct << " - / - " << gc << ".\n";
+    // scope_struct->Print_Stack();
     // std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
     gc->Sweep(scope_struct);
 }

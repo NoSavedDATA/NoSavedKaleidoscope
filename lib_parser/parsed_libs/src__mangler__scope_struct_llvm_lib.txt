@@ -1,4 +1,4 @@
-1821-12-15 15:58:02
+1822-01-08 18:18:05
 
 	FunctionType *print_stack1Ty= FunctionType::get(
 		int8PtrTy,
@@ -90,20 +90,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Print", scope_struct_PrintTy);
-
-	FunctionType *set_scope_objectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_object", set_scope_objectTy);
-
-	FunctionType *get_scope_objectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_object", get_scope_objectTy);
 
 	FunctionType *scope_struct_Save_for_AsyncTy= FunctionType::get(
 		int8PtrTy,

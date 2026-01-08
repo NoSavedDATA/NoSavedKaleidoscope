@@ -62,7 +62,7 @@ void Generate_Struct_Types() {
     StructType *Scope_Struct_Type = StructType::create(
         *TheContext,
         // {intTy, intTy, GC_Struct_Type},
-        {intTy, intTy, ArrayType::get(int8PtrTy, ContextStackSize), intTy, GC_Struct_Type},
+        {intTy, intTy, ArrayType::get(int8PtrTy, ContextStackSize), intTy, int8PtrTy, GC_Struct_Type},
         "GC"
     );
     struct_types["GC"] = GC_Struct_Type;

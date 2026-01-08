@@ -28,12 +28,8 @@ T *allocate(Scope_Struct *scope_struct, int size, std::string type) {
     // void *v_ptr = malloc(alloc_size);
     void *v_ptr = scope_struct->Allocate(alloc_size, type_id);
     
-    if(scope_struct!=nullptr)
-    {
-        scope_struct->gc->size_occupied += alloc_size;
-        scope_struct->gc->allocations++;
-        // scope_struct->gc.pointer_nodes.push_back(GC_Node(v_ptr, type));
-    }
+    scope_struct->gc->size_occupied += alloc_size;
+    scope_struct->gc->allocations++;
     
     return static_cast<T*>(v_ptr);
 }
@@ -54,6 +50,8 @@ T *newT(Scope_Struct *scope_struct, std::string type) {
         void *v_ptr = scope_struct->Allocate(sizeof(T), type_id);
         ptr = new (v_ptr) T();
 
+        // std::cout << " -- newT of --> " << type << "/" << type_id << " - / - " << ptr << ".\n";
+
         int size = sizeof(T);
         scope_struct->gc->size_occupied += size;
         scope_struct->gc->allocations++;
@@ -61,7 +59,7 @@ T *newT(Scope_Struct *scope_struct, std::string type) {
         // scope_struct->gc.pointer_nodes.push_back(GC_Node(static_cast<void *>(ptr), type));
    } else {
         std::cout << "allocate non-pool for " << type << ".\n";
-       ptr = new T();
+        ptr = new T();
    }
 
     return ptr;

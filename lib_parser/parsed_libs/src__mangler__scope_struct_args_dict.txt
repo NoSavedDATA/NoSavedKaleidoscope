@@ -84,21 +84,6 @@
 	
 	Function_Arg_Names["scope_struct_Print"].push_back("0");
 	
-	Function_Arg_Types["set_scope_object"]["0"] = "Scope_Struct";
-	Function_Arg_Types["set_scope_object"]["1"] = "void";
-	
-	Function_Arg_DataTypes["set_scope_object"]["0"] = Data_Tree("Scope_Struct");
-	Function_Arg_DataTypes["set_scope_object"]["1"] = Data_Tree("void");
-	
-	Function_Arg_Names["set_scope_object"].push_back("0");
-	Function_Arg_Names["set_scope_object"].push_back("1");
-	
-	Function_Arg_Types["get_scope_object"]["0"] = "Scope_Struct";
-	
-	Function_Arg_DataTypes["get_scope_object"]["0"] = Data_Tree("Scope_Struct");
-	
-	Function_Arg_Names["get_scope_object"].push_back("0");
-	
 	Function_Arg_Types["scope_struct_Save_for_Async"]["0"] = "Scope_Struct";
 	Function_Arg_Types["scope_struct_Save_for_Async"]["1"] = "str";
 	

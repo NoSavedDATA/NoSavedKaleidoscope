@@ -20,9 +20,7 @@ bool check_initialized_field(void *ptr) {
 }
 
 
-extern "C" void *allocate_void(Scope_Struct *scope_struct, int size, const char *type) {
-
-     
+extern "C" void *allocate_void(Scope_Struct *scope_struct, int size, const char *type) { 
     auto it = data_name_to_type.find(type);
     if (it==data_name_to_type.end())
         LogErrorC(-1, std::string("Type ") + type + " not implemented.");

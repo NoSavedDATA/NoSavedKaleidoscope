@@ -630,7 +630,6 @@ Function *FunctionAST::codegen() {
     scope_struct = callret("scope_struct_CreateFirst", {}); 
     call("scope_struct_Alloc_GC", {scope_struct});
     stack_top_value = const_int(0);
-    function_stack_top = const_int(0);
   }
   // else
   //   scope_struct = callret("scope_struct_Create", {});
@@ -642,18 +641,20 @@ Function *FunctionAST::codegen() {
 
   float val;
   int i = 0;
-  for (auto &Arg : TheFunction->args()) {
-    // Create an alloca for this variable.
+  int args_count = P.Args.size();
+  auto it = TheFunction->arg_begin();
+  for (int i=0; i<args_count; ++i, ++it) {
+    llvm::Argument &Arg = *it;
+
     std::string arg_name = Arg.getName().str();
-    //std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
-    //
+    // std::cout << "FUNCTION ARG IS: " << arg_name  << "\n";
+
     // Default args
     if (arg_name == "scope_struct")
     {
         // scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
         scope_struct = &Arg;
         Value *stack_top_value_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 3); 
-        function_stack_top = Builder->CreateLoad(Type::getInt32Ty(*TheContext), stack_top_value_gep);
         stack_top_value = Builder->CreateLoad(Type::getInt32Ty(*TheContext), stack_top_value_gep);
     } else { 
         std::string type = "";
@@ -661,12 +662,11 @@ Function *FunctionAST::codegen() {
             type = UnmangleVec(data_typeVars[function_name][arg_name]);
         else
             LogError(-1, "error at argument " + arg_name + " of function " + function_name);
-        // if (!in_str(type, primary_data_tokens))
-        //     Allocate_On_Pointer_Stack(scope_struct, current_codegen_function, arg_name, &Arg); 
+
         function_values[current_codegen_function][arg_name] = &Arg;
         if(type=="array")
             Cache_Array(current_codegen_function, &Arg);
-    }
+   }
   }
   
   Value *RetVal;
@@ -676,7 +676,6 @@ Function *FunctionAST::codegen() {
   if (RetVal) {
     // Finish off the function.
     if(!Builder->GetInsertBlock()->getTerminator()) {
-        // call("scope_struct_Clean_Scope", {scope_struct}); 
         Builder->CreateRet(RetVal); 
     }
 

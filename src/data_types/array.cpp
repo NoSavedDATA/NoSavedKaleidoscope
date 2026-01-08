@@ -9,15 +9,13 @@
 
 DT_array::DT_array() {}
 
-void DT_array::New(int size, int elem_size) {
+void DT_array::New(int size, int elem_size, std::string type) {
     this->virtual_size = size;
+    this->elem_size = elem_size;
+    this->type = type;
 
     size = ((size + 7) / 8)*8;
-
     this->size = size;
-    this->elem_size = elem_size;
-
-    std::cout << "vsize " << virtual_size << " to size: " << size << ".\n";
     
     data = (void*)malloc(size*elem_size);
 }
@@ -36,13 +34,19 @@ extern "C" DT_array *array_Create(Scope_Struct *scope_struct, char *name, char *
   else
       elem_size = 8;
 
-  std::cout << "Elem size: " << elem_size << ".\n";
 
   DT_array *vec = newT<DT_array>(scope_struct, "array");
-  vec->New(8, elem_size);
+  vec->New(8, elem_size, elem_type);
   vec->virtual_size = 0;
 
   return vec;
+}
+
+void array_Clean_Up(void *data_ptr) {
+    DT_array *array = static_cast<DT_array *>(data_ptr);
+    std::cout << "clean array " << array << ".\n";
+    
+    free(array->data);
 }
 
 extern "C" int array_size(Scope_Struct *scope_struct, DT_array *vec) {
@@ -69,7 +73,7 @@ extern "C" void array_double_size(DT_array *vec, int new_size) {
     vec->size = new_size;
 }
 
-extern "C" float array_print_int(Scope_Struct *scope_struct, DT_array *vec) {
+extern "C" void array_print_int(Scope_Struct *scope_struct, DT_array *vec) {
     int *ptr = static_cast<int*>(vec->data);
     int size = vec->virtual_size;
 
@@ -77,13 +81,12 @@ extern "C" float array_print_int(Scope_Struct *scope_struct, DT_array *vec) {
     for (int i=0; i<size-1; ++i)
         std::cout << ptr[i] << ",";
     std::cout << ptr[size-1] << "]\n";
-    return 0;
 }
 
 
 extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) {
     DT_array *vec = newT<DT_array>(scope_struct, "array");
-    vec->New(end-begin, 4);
+    vec->New(end-begin, 4, "int");
 
     int *ptr = static_cast<int*>(vec->data);
     
@@ -100,7 +103,7 @@ extern "C" DT_array *arange_int(Scope_Struct *scope_struct, int begin, int end) 
 
 extern "C" DT_array *zeros_int(Scope_Struct *scope_struct, int N) {
     DT_array *vec = newT<DT_array>(scope_struct, "array");
-    vec->New(N, 4);
+    vec->New(N, 4, "int");
 
     int *ptr = static_cast<int*>(vec->data);
     
@@ -118,7 +121,7 @@ extern "C" DT_array *zeros_int(Scope_Struct *scope_struct, int N) {
 
 extern "C" DT_array *randint_array(Scope_Struct *scope_struct, int size, int min_val, int max_val) {
     DT_array *vec = newT<DT_array>(scope_struct, "array");
-    vec->New(size,4);
+    vec->New(size,4, "int");
 
     std::uniform_int_distribution<int> dist(min_val, max_val);
 
@@ -136,21 +139,40 @@ extern "C" DT_array *randint_array(Scope_Struct *scope_struct, int size, int min
 }
 
 
-extern "C" DT_int_vec *ones_int(Scope_Struct *scope_struct, int size) {
-    DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
-    vec->New(size);
+extern "C" DT_array *ones_int(Scope_Struct *scope_struct, int N) {
+    DT_array *vec = newT<DT_array>(scope_struct, "array");
+    vec->New(N, 4, "int");
 
-    for(int i=0; i<size; ++i)
-      vec->vec[i] = 1;
+    int *ptr = static_cast<int*>(vec->data);
+    
+    int c=0;
+    for(int i=0; i<N; ++i)
+    {
+        ptr[c] = 1;
+        c++;
+    }
 
     return vec;
+}
+
+extern "C" DT_array *array_int_add(Scope_Struct *scope_struct, DT_array *array, int x) {
+    DT_array *new_array = newT<DT_array>(scope_struct, "array");
+    new_array->New(array->virtual_size, 4, "int");
+    
+    int *data = static_cast<int *>(array->data);
+    int *new_data = static_cast<int *>(new_array->data);
+    for (int i=0; i<array->virtual_size; ++i) {
+        new_data[i] = data[i] + x;
+    }
+
+    return new_array;
 }
 
 
 
 extern "C" DT_array *randfloat_array(Scope_Struct *scope_struct, int size, float min_val, float max_val) {
     DT_array *vec = newT<DT_array>(scope_struct, "array");
-    vec->New(size,4);
+    vec->New(size,4,"float");
 
     std::uniform_real_distribution<float> dist(min_val, max_val);
 
@@ -167,7 +189,7 @@ extern "C" DT_array *randfloat_array(Scope_Struct *scope_struct, int size, float
     return vec;
 }
 
-extern "C" float array_print_float(Scope_Struct *scope_struct, DT_array *vec) {
+extern "C" void array_print_float(Scope_Struct *scope_struct, DT_array *vec) {
     float *ptr = static_cast<float*>(vec->data);
     int size = vec->virtual_size;
 
@@ -175,13 +197,12 @@ extern "C" float array_print_float(Scope_Struct *scope_struct, DT_array *vec) {
     for (int i=0; i<size-1; ++i)
         printf("%.3f, ",ptr[i]);
     printf("%.3f]\n",ptr[size-1]);
-    return 0;
 }
 
 
 extern "C" DT_array *arange_float(Scope_Struct *scope_struct, float begin, float end) {
     DT_array *vec = newT<DT_array>(scope_struct, "float_vec");
-    vec->New(end-begin, 4);
+    vec->New(end-begin, 4, "float");
 
     float *ptr = static_cast<float*>(vec->data);
     
@@ -195,12 +216,20 @@ extern "C" DT_array *arange_float(Scope_Struct *scope_struct, float begin, float
     return vec; 
 } 
 
-extern "C" DT_float_vec *zeros_float(Scope_Struct *scope_struct, int size) {
-  DT_float_vec *vec = newT<DT_float_vec>(scope_struct, "float_vec");
-  vec->New(size);
-  for(int i=0; i<size; ++i)
-    vec->vec[i] = 0;
-  return vec;
+extern "C" DT_array *zeros_float(Scope_Struct *scope_struct, int N) {
+    DT_array *vec = newT<DT_array>(scope_struct, "array");
+    vec->New(N, 4, "float");
+
+    float *ptr = static_cast<float*>(vec->data);
+    
+    int c=0;
+    for(int i=0; i<N; ++i)
+    {
+        ptr[c] = 0.0f;
+        c++;
+    }
+
+    return vec; 
 }
 
 
@@ -231,7 +260,7 @@ extern "C" DT_array *array_Split_Parallel(Scope_Struct *scope_struct, DT_array *
       
 
     DT_array *out_vector = newT<DT_array>(scope_struct, "array");
-    out_vector->New(size, elem_size);
+    out_vector->New(size, elem_size, vec->type);
 
 
     // std::cout << "Splitting from " << std::to_string(segment_size*thread_id) << " to " << std::to_string(segment_size*(thread_id+1)) << ".\n";
@@ -256,3 +285,4 @@ extern "C" DT_array *array_Split_Parallel(Scope_Struct *scope_struct, DT_array *
     return out_vector;
 
 }
+

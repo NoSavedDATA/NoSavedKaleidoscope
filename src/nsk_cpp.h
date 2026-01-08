@@ -8,6 +8,7 @@
 #include "compiler_frontend/logging_v.h"
 #include "compiler_frontend/global_vars.h"
 #include "data_types/codegen_notes.h"
+#include "data_types/array.h"
 #include "data_types/float_vec.h"
 #include "data_types/nsk_vector.h"
 #include "math/include.h"

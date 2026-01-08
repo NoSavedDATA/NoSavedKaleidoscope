@@ -151,7 +151,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("array_double_size", array_double_sizeTy);
 
 	FunctionType *array_print_intTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
 		false
 	);
@@ -185,6 +185,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("ones_int", ones_intTy);
 
+	FunctionType *array_int_addTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("array_int_add", array_int_addTy);
+
 	FunctionType *randfloat_arrayTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getFloatTy(*TheContext), Type::getFloatTy(*TheContext)},
@@ -193,7 +200,7 @@ void Generate_LLVM_Functions() {
 	TheModule->getOrInsertFunction("randfloat_array", randfloat_arrayTy);
 
 	FunctionType *array_print_floatTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
+		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
 		false
 	);
@@ -541,20 +548,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Print", scope_struct_PrintTy);
-
-	FunctionType *set_scope_objectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("set_scope_object", set_scope_objectTy);
-
-	FunctionType *get_scope_objectTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("get_scope_object", get_scope_objectTy);
 
 	FunctionType *scope_struct_Save_for_AsyncTy= FunctionType::get(
 		int8PtrTy,
@@ -1069,7 +1062,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *allocate_voidTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext), int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("allocate_void", allocate_voidTy);

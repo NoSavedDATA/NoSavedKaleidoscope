@@ -26,6 +26,7 @@ return_pinned_methods, vararg_methods, string_methods, native_methods, native_fu
 return_string_fn, threaded_tensor_functions, require_scope_functions, notators_str, user_cpp_functions;
 
 
+extern std::map<std::string, int> Function_Arg_Count;
 extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 extern std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
@@ -66,4 +67,4 @@ extern ExitOnError ExitOnErr;
 extern PointerType *floatPtrTy, *int8PtrTy;
 extern llvm::Type *floatTy, *intTy, *boolTy;
 
-extern Value *stack, *stack_top_value, *function_stack_top;
+extern Value *stack, *stack_top_value;
