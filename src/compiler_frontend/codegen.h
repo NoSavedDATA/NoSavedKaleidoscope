@@ -61,7 +61,7 @@ bool Check_Is_Compatible_Data_Type(Data_Tree LType, Data_Tree RType, Parser_Stru
 bool CheckIsEquivalent(std::string LType, std::string RType);
 
 void Allocate_On_Pointer_Stack(Value *, std::string, std::string, Value *);
-void Set_Stack_Top(Value *);
+void Set_Stack_Top(Value *, std::string);
 Value *Load_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name);
 void Set_Pointer_Stack(Value *scope_struct, std::string function_name, std::string var_name, Value *val);
 Value *Load_Stack(Value *scope_struct, const std::string &function_name, const std::string &var_name, const std::string &type);

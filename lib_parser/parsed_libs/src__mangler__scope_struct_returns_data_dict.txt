@@ -1,7 +1,6 @@
 	functions_return_data_type["scope_struct_spec"] = Data_Tree("float");
 	functions_return_data_type["scope_struct_CreateFirst"] = Data_Tree("");
 	functions_return_data_type["scope_struct_Create"] = Data_Tree("");
-	functions_return_data_type["scope_struct_Copy"] = Data_Tree("");
 	functions_return_data_type["scope_struct_Overwrite"] = Data_Tree("");
 	functions_return_data_type["get_scope_thread_id"] = Data_Tree("int");
 	functions_return_data_type["scope_struct_Reset_Threads"] = Data_Tree("float");

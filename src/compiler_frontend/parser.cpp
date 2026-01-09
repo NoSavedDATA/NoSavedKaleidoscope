@@ -1559,10 +1559,14 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
 
     std::string prefix_datatype = Extract_List_Prefix(data_type);
 
-    if (Object_toClass[parser_struct.function_name].count(IdentifierStr)>0||data_typeVars[parser_struct.function_name].count(IdentifierStr)>0)
+    if (!has_notes&&\
+        (Object_toClass[parser_struct.function_name].count(IdentifierStr)>0|| \
+         data_typeVars[parser_struct.function_name].count(IdentifierStr)>0))
         LogError(parser_struct.line, "Redefinition of " + IdentifierStr);
+
     if ((ends_with(data_type, "_list")||ends_with(data_type,"_dict")) && !in_str(prefix_datatype, data_tokens) )
       Object_toClass[parser_struct.function_name][IdentifierStr] = Data_Tree(prefix_datatype);
+
     typeVars[parser_struct.function_name][IdentifierStr] = data_type;
     data_typeVars[parser_struct.function_name][IdentifierStr] = data_tree;
     getNextToken(); // eat identifier.

@@ -53,10 +53,8 @@ int last_thread_id=1;
 
 extern "C" int tid(Scope_Struct *scope_struct) {
     int thread_id = scope_struct->thread_id-1;
-    // std::thread::id id = std::this_thread::get_id();
-    //
-    long id = syscall(SYS_gettid);
-    std::cout << "tid: " << id << "\n";
+    // long id = syscall(SYS_gettid);
+    // std::cout << "tid: " << id << "\n";
     return thread_id;
 }
 

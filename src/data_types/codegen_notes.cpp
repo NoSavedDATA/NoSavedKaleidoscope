@@ -167,18 +167,18 @@ extern "C" DT_list *CreateNotesVector() {
 
 extern "C" float Dispose_NotesVector(DT_list *notes_vector, char *scopeless_name) {
 
-    for (int i=0; i<notes_vector->size; i++)
-    {
-        if (notes_vector->data_types->at(i)=="str")
-        {
-            char *val = notes_vector->get<char *>(i);
-            delete[] val;
-        }
+    // for (int i=0; i<notes_vector->size; i++)
+    // {
+    //     if (notes_vector->data_types->at(i)=="str")
+    //     {
+    //         char *val = notes_vector->get<char *>(i);
+    //         delete[] val;
+    //     }
 
-    }
+    // }
     
     delete notes_vector;
-    delete[] scopeless_name;
+    // delete[] scopeless_name;
 
 
     return 0;

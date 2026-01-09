@@ -493,12 +493,6 @@ void set_functions_args_type() {
 		
 		
 		
-		Function_Arg_Types["scope_struct_Copy"]["0"] = "Scope_Struct";
-		
-		Function_Arg_DataTypes["scope_struct_Copy"]["0"] = Data_Tree("Scope_Struct");
-		
-		Function_Arg_Names["scope_struct_Copy"].push_back("0");
-		
 		Function_Arg_Types["scope_struct_Overwrite"]["0"] = "Scope_Struct";
 		Function_Arg_Types["scope_struct_Overwrite"]["1"] = "Scope_Struct";
 		
@@ -571,15 +565,6 @@ void set_functions_args_type() {
 		Function_Arg_Names["scope_struct_Get_Async_Scope"].push_back("1");
 		Function_Arg_Names["scope_struct_Get_Async_Scope"].push_back("2");
 		
-		Function_Arg_Types["scope_struct_Copy_MarkSweepMap"]["0"] = "Scope_Struct";
-		Function_Arg_Types["scope_struct_Copy_MarkSweepMap"]["1"] = "Scope_Struct";
-		
-		Function_Arg_DataTypes["scope_struct_Copy_MarkSweepMap"]["0"] = Data_Tree("Scope_Struct");
-		Function_Arg_DataTypes["scope_struct_Copy_MarkSweepMap"]["1"] = Data_Tree("Scope_Struct");
-		
-		Function_Arg_Names["scope_struct_Copy_MarkSweepMap"].push_back("0");
-		Function_Arg_Names["scope_struct_Copy_MarkSweepMap"].push_back("1");
-		
 		Function_Arg_Types["scope_struct_Clear_GC_Root"]["0"] = "Scope_Struct";
 		
 		Function_Arg_DataTypes["scope_struct_Clear_GC_Root"]["0"] = Data_Tree("Scope_Struct");
@@ -603,18 +588,6 @@ void set_functions_args_type() {
 		Function_Arg_DataTypes["scope_struct_Sweep"]["0"] = Data_Tree("Scope_Struct");
 		
 		Function_Arg_Names["scope_struct_Sweep"].push_back("0");
-		
-		Function_Arg_Types["scope_struct_Clean_Scope"]["0"] = "Scope_Struct";
-		
-		Function_Arg_DataTypes["scope_struct_Clean_Scope"]["0"] = Data_Tree("Scope_Struct");
-		
-		Function_Arg_Names["scope_struct_Clean_Scope"].push_back("0");
-		
-		Function_Arg_Types["scope_struct_Delete"]["0"] = "Scope_Struct";
-		
-		Function_Arg_DataTypes["scope_struct_Delete"]["0"] = Data_Tree("Scope_Struct");
-		
-		Function_Arg_Names["scope_struct_Delete"].push_back("0");
 	
 		
 		

@@ -500,13 +500,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Create", scope_struct_CreateTy);
 
-	FunctionType *scope_struct_CopyTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Copy", scope_struct_CopyTy);
-
 	FunctionType *scope_struct_OverwriteTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -577,13 +570,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Get_Async_Scope", scope_struct_Get_Async_ScopeTy);
 
-	FunctionType *scope_struct_Copy_MarkSweepMapTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy, int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Copy_MarkSweepMap", scope_struct_Copy_MarkSweepMapTy);
-
 	FunctionType *scope_struct_Clear_GC_RootTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
@@ -604,20 +590,6 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Sweep", scope_struct_SweepTy);
-
-	FunctionType *scope_struct_Clean_ScopeTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Clean_Scope", scope_struct_Clean_ScopeTy);
-
-	FunctionType *scope_struct_DeleteTy= FunctionType::get(
-		int8PtrTy,
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("scope_struct_Delete", scope_struct_DeleteTy);
 
 	FunctionType *__idx__Ty= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

@@ -629,7 +629,8 @@ Function *FunctionAST::codegen() {
   if(function_name=="__anon_expr") {
     scope_struct = callret("scope_struct_CreateFirst", {}); 
     call("scope_struct_Alloc_GC", {scope_struct});
-    stack_top_value = const_int(0);
+    // stack_top_value = const_int(0);
+    function_values[current_codegen_function]["QQ_stack_top"] = const_int(0);
   }
   // else
   //   scope_struct = callret("scope_struct_Create", {});
@@ -652,10 +653,11 @@ Function *FunctionAST::codegen() {
     // Default args
     if (arg_name == "scope_struct")
     {
-        // scope_struct = callret("scope_struct_Overwrite", {scope_struct, &Arg});
+        StructType *st = struct_types["scope_struct"];
         scope_struct = &Arg;
-        Value *stack_top_value_gep = Builder->CreateStructGEP(struct_types["scope_struct"], scope_struct, 3); 
-        stack_top_value = Builder->CreateLoad(Type::getInt32Ty(*TheContext), stack_top_value_gep);
+        Value *stack_top_value_gep = Builder->CreateStructGEP(st, scope_struct, 3); 
+        // stack_top_value = Builder->CreateLoad(intTy, stack_top_value_gep);
+        function_values[current_codegen_function]["QQ_stack_top"] = Builder->CreateLoad(intTy, stack_top_value_gep);
     } else { 
         std::string type = "";
         if (data_typeVars[function_name].find(arg_name) != data_typeVars[function_name].end())

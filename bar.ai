@@ -1,0 +1,28 @@
+
+import nsk_cuda
+
+
+def list foo(t x, t y)
+	tensor[2] x
+	tensor[3] y
+	return x, y
+
+def float opa()
+	print("opa")
+
+main
+	
+
+	finish
+		asyncs 3 opa()
+
+		tensor[1] acc
+		tensor[2,2] batch_acc
+		tensor[0] x, y
+
+		for i=0, i<3
+			print("i: " + i)
+			x, y = foo(x, y)
+			acc = acc + batch_acc.mean()
+	x.print()
+	acc.print()

@@ -54,7 +54,7 @@ inline void gc_list(void *ptr, const std::string &root_type, std::vector<GC_Node
                 root_nodes.push_back(static_cast<void*>(list->get<char*>(i)));
                 continue;
             }
-            if(strcmp(type, "int")&&strcmp(type, "float")&&strcmp(type, "bool"))
+            if(strcmp(type, "int")&&strcmp(type, "float")&&strcmp(type, "bool")) // not a primary
                 root_nodes.push_back(list->get<void*>(i));
             //     work_list.push_back(GC_Node(list->get<void*>(i), type));
         }
@@ -78,10 +78,10 @@ inline void gc_list(void *ptr, const std::string &root_type, std::vector<GC_Node
 
 
 void mark_worklist_pointers(std::vector<GC_Node> &work_list, std::vector<void *> &root_nodes) {
-
     for (int i=0; i<work_list.size(); ++i) {
         GC_Node &node = work_list[i];
         root_nodes.push_back(node.ptr);
+        // std::cout << "push obj attr of type: " << node.type << "/" << node.ptr << ".\n";
 
         if (ClassPointers.count(node.type)>0) {
             for (int j=0; j<ClassPointers[node.type].size(); ++j) {
@@ -109,7 +109,8 @@ void check_roots_worklist(Scope_Struct *scope_struct, std::vector<void *> &root_
 
         // std::cout << "PUSH BACK ROOT: " << i << "/" << scope_struct->stack_top << "/" <<  root_ptr << ".\n";
         std::string root_type = get_pool_obj_type(scope_struct, root_ptr);
-        // std::cout << "PUSH BACK ROOT: " << root_ptr << "/" << root_type << ".\n";
+        // std::cout << "PUSH BACK ROOT: " << root_type << "/" << root_ptr << ".\n";
+        
         if (ClassPointers.count(root_type)>0) {
             for (int i=0; i<ClassPointers[root_type].size(); ++i) {
                 int offset = ClassPointers[root_type][i];
@@ -207,6 +208,7 @@ void GC::CleanUp_Unused() {
                             std::string obj_type = data_type_to_name[u_type]; 
                             if(obj_type!="str"&&ClassPointers.count(obj_type)==0) {
                                 void *obj_addr = static_cast<char*>(span->span_address) + i*traits->obj_size;
+                                if (obj_type!="list"&&obj_type!="tensor")
                                 std::cout << "CLEAN: addr " << obj_addr << " got object: " << u_type << "/" << obj_type << ".\n";
                                 clean_up_functions[obj_type](obj_addr);
                             }

@@ -246,7 +246,7 @@ extern "C" DT_array *array_Split_Parallel(Scope_Struct *scope_struct, DT_array *
     int threads_count = scope_struct->asyncs_count;
     int thread_id = scope_struct->thread_id-1;
 
-    int vec_size = vec->size;
+    int vec_size = vec->virtual_size;
     int elem_size = vec->elem_size;
     int segment_size;
 
@@ -259,30 +259,22 @@ extern "C" DT_array *array_Split_Parallel(Scope_Struct *scope_struct, DT_array *
       size = vec_size - segment_size*thread_id;
       
 
-    DT_array *out_vector = newT<DT_array>(scope_struct, "array");
-    out_vector->New(size, elem_size, vec->type);
-
-
-    // std::cout << "Splitting from " << std::to_string(segment_size*thread_id) << " to " << std::to_string(segment_size*(thread_id+1)) << ".\n";
-    
     int copy_size;
     if(segment_size*(thread_id+1)>vec_size) 
         copy_size = (vec_size - segment_size*thread_id)*elem_size;
     else
         copy_size = segment_size*elem_size;
 
+
+    DT_array *out_vector = newT<DT_array>(scope_struct, "array");
+    out_vector->New(size, elem_size, vec->type);
+
+    // std::cout << "Splitting from " << std::to_string(segment_size*thread_id) << " to " << std::to_string(segment_size*(thread_id+1)) << ".\n";
+    
     memcpy(out_vector->data,
            static_cast<char*>(vec->data) + segment_size*thread_id*elem_size,
            copy_size);
 
-    // int c=0;
-    // for (int i = segment_size*thread_id; i<segment_size*(thread_id+1) && i<vec->size; ++i)
-    // {
-    //   out_vector->vec[c] = vec->vec[i];
-    //   c++;
-    // }
-
     return out_vector;
-
 }
 

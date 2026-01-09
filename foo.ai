@@ -1,23 +1,219 @@
 
 
+import glob
+
+import default nsk_cuda
+import default networks
+
+start_timer()
+
+
+
+class Dataset
+    int batch_size, seq_len, num_workers, _len, yield_ptr
+    int channel load_ch
+    list<str> files
+    pinned_tensor p_x, p_y
+    def float __init__(i batch_size, i seq_len, i num_workers, s path)
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.seq_len = seq_len
+
+        self._len = 0
+        self.yield_ptr = 0
+
+        self.files = glob(path)
+
+        int channel 8 load_ch
+        self.load_ch = load_ch
+
+        pinned_tensor[num_workers, batch_size, seq_len] self.p_x
+        pinned_tensor[num_workers, batch_size] self.p_y
+
+
+    def int len()
+        self._len  = self.files.size()
+        self.files.shuffle()
+        self.yield_ptr = 0
+        self._len
+
+
+    def float terminate_workers()
+        print("Terminating workers")
+        self.load_ch.terminate()
+
+
+    def int increment_yield_ptr()
+        lock "yield"
+            if (self.yield_ptr + self.batch_size*(self.num_workers+1)) > self._len
+                self.yield_ptr = 0
+                self.files = ShuffleStrVec(self.files)
+                0
+            else
+                self.yield_ptr = self.yield_ptr + self.batch_size
+        self.yield_ptr
+
+    def float getitem_w(i idx, i b, i w)
+        var aux = self.files[idx]
+
+        wtokenize_pad_left_idx(self.p_x, aux, self.seq_len, w, b)
+
+        aux = aux.split_idx("/", -2)
+        self.p_y[w,b] = aux.to_float()
+        
+    def float worker()
+        int w = tid()
+
+        int bs, can_process, yield_ptr
+        bs = self.batch_size
+
+        while self.load_ch.alive()
+            yield_ptr = self.increment_yield_ptr()
+            
+            # write_zerosw(self.p_x, w)
+            for b=0, b < bs
+                self.getitem_w(yield_ptr+b, b, w)
+                
+            self.load_ch <- w
+
+    def list attr_w(t x, t y)
+        int w <- self.load_ch
+        # print("ATTRIBUTING " + w)        
+
+        x.gpuw(self.p_x, w)
+        y.gpuw(self.p_y, w)
+
+        return x, y
+
+
+class RNN
+    Embedding embedding
+    Linear w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, cls
+    def float __init__(i vocab_size, i hiddens, i out_hiddens)
+        # EmbeddingLn[vocab_size, hiddens, 2048] self.embedding
+        Embedding[vocab_size, hiddens] self.embedding
+
+        # param[out_hiddens, hiddens, xavu] self.cls
+        # Linear[hiddens, out_hiddens, xavu] self.cls
+        Linear[hiddens, 2048, xavu] self.w1
+        Linear[2048, 2048, xavu, i4] self.w2
+        Linear[2048, 2048, xavu, i4] self.w3
+        Linear[2048, 2048, xavu, i4] self.w4
+        # Linear[2048, 2048, xavu, i4] self.w5
+        # Linear[2048, 2048, xavu, i4] self.w6
+        # Linear[2048, 2048, xavu, i4] self.w6
+        # Linear[2048, 2048, xavu, i4] self.w7
+        # Linear[2048, 2048, xavu, i4] self.w8
+        # Linear[2048, 2048, xavu, i4] self.w9
+        # Linear[2048, 2048, xavu, i4] self.w10
+        Linear[2048, out_hiddens, xavu] self.cls
+        # Linear[hiddens, out_hiddens, xavu] self.cls
+
+    def tensor forward(t x)
+        x = self.embedding(x)
+        
+        x = self.w1(x)
+        x = self.w2(x)
+        x = self.w3(x)
+        x = self.w4(x)
+        # x = self.w5(x)
+        # x = self.w6(x)
+        # x = self.w7(x)
+        # x = self.w8(x)
+        # x = self.w9(x)
+        # x = self.w10(x)
+        x = x.mean(-2)
+        x = self.cls(x) 
+
+        return x
 
 
 
 
-def float opa()
-	print("opa")
 
-
-def float foo(array<int> v)	
-	opa()
-	v = array_int_add(v, 1)
-	v.print()
 
 
 main
-	
-	array<int> v = arange_int(2,8)
-	
-	foo(array_int_add(v, 1))
+    RNN rnn(32768,256,2)
+    # RNN rnn(32768,256,256,2)
 
-	v.print()
+    build_vocab("/mnt/d/datasets/acl_IMDB/vocab.txt", 32768)
+
+    int batch_size = 32
+    int seq_len = 200
+
+
+    
+
+    Dataset dataset(batch_size, seq_len, 8, "/mnt/d/datasets/IMDB/train/*/*.txt")
+    dataset.len()
+
+
+    float lr = 0.001
+    int max_steps = 300
+
+    finish
+        asyncs 8 dataset.worker()
+
+        for i=0, i<max_steps
+            tensor[0] x, y
+            print("i " + i)
+
+            x, y = dataset.attr_w(x, y)
+
+            x = rnn.forward(x)
+
+            cross_entropy_idx(x, y, 1/1000)
+            backprop()
+            
+            AdamW(lr, 0.9, 0.999, 0.0001, 5.0)
+            
+        dataset.terminate_workers()
+
+
+    batch_size = 32
+    seq_len = 200
+
+    infer_mode(rnn)
+
+    Dataset val_dataset(batch_size, seq_len, 10, "/mnt/d/datasets/IMDB/test/*/*.txt")
+
+    int val_steps = val_dataset.len()
+    val_steps = val_steps//batch_size
+    val_steps = 50
+
+    print("Val steps: " + val_steps)
+
+    tensor[1,zeros] acc
+
+
+    finish
+        asyncs 3 val_dataset.worker()
+
+
+        tensor[1] batch_acc
+        tensor[0] x, y
+        for i=0, i<val_steps
+            print("i " + i)
+
+            x, y = val_dataset.attr_w(x, y)
+            
+            x = rnn.forward(x)
+            
+            x = x.argmax(-1)
+            
+            batch_acc = x==y
+            
+            #acc.set(acc + batch_acc.mean())
+            acc = acc + batch_acc.mean()
+        
+        val_dataset.terminate_workers()
+    
+
+    acc = 100.0*acc/val_steps
+
+    print("Accuracy ")
+    acc.print()
+
+
+    end_timer()

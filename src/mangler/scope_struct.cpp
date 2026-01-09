@@ -50,7 +50,7 @@ void Scope_Struct::Set_Has_Grad(int has_grad) {
 }
 void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 {
-    std::cout << "copy scope" << ".\n";
+    // std::cout << "copy scope" << ".\n";
     object_ptr = scope_to_copy->object_ptr;
 
     thread_id = scope_to_copy->thread_id;
@@ -67,7 +67,11 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 
 
 void *Scope_Struct::Allocate(int size, int type_id) {
-    return gc->Allocate(size, type_id);
+    void *ret = gc->Allocate(size, type_id); 
+    // if(thread_id!=0) {
+    //     std::cout << " --> Allocating: " << ret << ".\n";
+    // }
+    return ret;
 }
 
 void Scope_Struct::Print() {
@@ -105,11 +109,6 @@ extern "C" Scope_Struct *scope_struct_Create() {
     return scope_struct;
 }
 
-extern "C" Scope_Struct *scope_struct_Copy(Scope_Struct *scope_to_copy) {
-    Scope_Struct *scope_struct = new Scope_Struct();
-    scope_struct->Copy(scope_to_copy);
-    return scope_struct;
-}
 extern "C" Scope_Struct *scope_struct_Overwrite(Scope_Struct *scope_struct, Scope_Struct *scope_to_copy) {
     scope_struct->Copy(scope_to_copy);
     return scope_struct;
@@ -174,7 +173,7 @@ extern "C" void scope_struct_Print(Scope_Struct *scope_struct) {
 
 
 extern "C" void scope_struct_Save_for_Async(Scope_Struct *scope_struct, char *fn_name) {
-    Scope_Struct *scope_struct_copy = new Scope_Struct();
+    // Scope_Struct *scope_struct_copy = new Scope_Struct();
     // scope_struct_copy->Copy(scope_struct);
     // NamedScopeStructs[fn_name] = scope_struct_copy;
     NamedScopeStructs[fn_name] = scope_struct;
@@ -186,7 +185,7 @@ extern "C" void *scope_struct_Load_for_Async(char *fn_name) {
     Scope_Struct *scope_struct_copy = new Scope_Struct();
     scope_struct_copy->Copy(scope_struct);
     scope_struct_copy->inner_most = scope_struct_copy;
-    // std::cout << "Threaded scope is: " << scope_struct_copy << "/" << scope_struct << ".\n";
+    // std::cout << "Threaded scope is: " << scope_struct << "/" << scope_struct_copy << ".\n";
     
     return scope_struct_copy;
 }
@@ -201,9 +200,6 @@ extern "C" void scope_struct_Get_Async_Scope(Scope_Struct *scope_struct, int thr
 }
 
 
-extern "C" void scope_struct_Copy_MarkSweepMap(Scope_Struct *in_scope, Scope_Struct *out_scope) {
-    // in_scope->mark_sweep_map = out_scope->mark_sweep_map;
-}
 
 
 
@@ -217,12 +213,7 @@ extern "C" void scope_struct_Add_GC_Root(Scope_Struct *scope_struct, void *root_
 }
 
 
-
-
 inline void delete_scope(Scope_Struct *scope_struct) {
-    // std::cout << "delete scope" << ".\n";
-    // if (scope_struct->mark_sweep_map!=nullptr)
-    //     delete scope_struct->mark_sweep_map;
     delete scope_struct;
 }
 
@@ -233,29 +224,11 @@ void alloc_gc_vspace(Scope_Struct *scope_struct, int size) {
 }
 
 
-
 extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
     GC *gc = scope_struct->gc;
     // std::cout << "sweep: " << scope_struct << " - / - " << gc << ".\n";
     // scope_struct->Print_Stack();
-    // std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
+    std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
     gc->Sweep(scope_struct);
 }
 
-extern "C" void scope_struct_Clean_Scope(Scope_Struct *scope_struct) {
-    GC *gc = scope_struct->gc;
-    // std::cout << "Clean scope from 0 to " << scope_struct->stack_top << ".\n";
-    
-    // if (gc->allocations>1000||gc->size_occupied>1000000) {
-    if (gc->size_occupied>sweep_after_alloc) {
-        // std::cout << "clean check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
-        // std::cout << "" << gc->size_occupied << ".\n";
-        // std::cout << "CLEAN UP" << ".\n";
-        gc->Sweep(scope_struct);
-    }
-    // delete_scope(scope_struct);
-}
-
-extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {
-    delete_scope(scope_struct);
-}

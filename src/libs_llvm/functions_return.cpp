@@ -35,7 +35,7 @@ void set_functions_return_type() {
 						{"float_vec_first_nonzero", "float"}, {"float_vec_print", "float"}, {"float_vec_pow", "float_vec"}, {"float_vec_sum", "float"}, {"float_vec_int_add", "float_vec"}, {"float_vec_int_div", "float_vec"}, {"float_vec_float_vec_add", "float_vec"}, {"float_vec_float_vec_sub", "float_vec"}, {"float_vec_Split_Parallel", "float_vec"}, {"float_vec_Split_Strided_Parallel", "float_vec"}, {"float_vec_size", "int"}, 
 						{"is_null", "bool"}, 
 						{"nsk_vec_size", "int"}, {"int_vec_CalculateSliceIdx", ""}, {"int_vec_Slice", "int_vec"}, {"int_vec_print", "int"}, {"int_vec_Split_Parallel", "int_vec"}, {"int_vec_Split_Strided_Parallel", "int_vec"}, {"int_vec_size", "int"}, 
-						{"scope_struct_spec", "float"}, {"scope_struct_CreateFirst", ""}, {"scope_struct_Create", ""}, {"scope_struct_Copy", ""}, {"scope_struct_Overwrite", ""}, {"get_scope_thread_id", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, 
+						{"scope_struct_spec", "float"}, {"scope_struct_CreateFirst", ""}, {"scope_struct_Create", ""}, {"scope_struct_Overwrite", ""}, {"get_scope_thread_id", "int"}, {"scope_struct_Reset_Threads", "float"}, {"scope_struct_Increment_Thread", "float"}, 
 						{"dir_exists", "float"}, {"path_exists", "float"}, 
 						{"read_float", "float"}, {"float_to_str", "str"}, {"nsk_pow", "float"}, {"nsk_sqrt", "float"}, 
 						{"min", "float"}, {"max", "float"}, {"logE2f", "float"}, {"roundE", "float"}, {"floorE", "float"}, {"logical_not", "float"}, 
@@ -177,7 +177,6 @@ void set_functions_return_type() {
 	functions_return_data_type["scope_struct_spec"] = Data_Tree("float");
 	functions_return_data_type["scope_struct_CreateFirst"] = Data_Tree("");
 	functions_return_data_type["scope_struct_Create"] = Data_Tree("");
-	functions_return_data_type["scope_struct_Copy"] = Data_Tree("");
 	functions_return_data_type["scope_struct_Overwrite"] = Data_Tree("");
 	functions_return_data_type["get_scope_thread_id"] = Data_Tree("int");
 	functions_return_data_type["scope_struct_Reset_Threads"] = Data_Tree("float");

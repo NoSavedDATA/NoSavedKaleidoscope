@@ -40,10 +40,11 @@ extern "C" void FreeChar(char *_char) {
 
 extern "C" char *CopyString(Scope_Struct *scope_struct, char *in_str)
 {
-  size_t length = strlen(in_str) + 1;
+  size_t length = strlen(in_str) + 1; // +1 for null terminator
 
-  // char *copied = allocate<char>(scope_struct, length, "str");
-  char *copied = (char*)malloc(length);
+  char *copied = allocate<char>(scope_struct, length, "str");
+  // std::cout << "COPY STR GOT: " << copied << ".\n";
+  // char *copied = (char*)malloc(length);
   memcpy(copied, in_str, length);
 
   return copied;
