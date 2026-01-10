@@ -940,6 +940,11 @@ Nameable::Nameable(Parser_Struct parser_struct, std::string Name, int Depth) : p
   this->isSelf = (Depth==1&&Name=="self");
 }
 
+NameableIdx::NameableIdx(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx) : Nameable(parser_struct), Idx(std::move(Idx)) {
+  this->Inner = std::move(Inner); 
+  this->Inner->IsLeaf = false;
+  this->isSelf = this->Inner->isSelf;
+}
 
 void Nameable::AddNested(std::unique_ptr<Nameable> Inner) {
   this->Inner = std::move(Inner);
@@ -1031,8 +1036,10 @@ bool NameableCall::GetNeedGCSafePoint() {
 }
 
 
-NameableIdx::NameableIdx(Parser_Struct parser_struct, std::unique_ptr<Nameable> Inner, std::unique_ptr<IndexExprAST> Idx) : Nameable(parser_struct), Idx(std::move(Idx)) {
-  this->Inner = std::move(Inner); 
-  this->Inner->IsLeaf = false;
-  this->isSelf = this->Inner->isSelf;
+
+PositionalArgExprAST::PositionalArgExprAST(Parser_Struct parser_struct, const std::string & ArgName, std::unique_ptr<ExprAST> Inner)
+    : parser_struct(parser_struct), ArgName(ArgName), Inner(std::move(Inner)) {}
+
+Data_Tree PositionalArgExprAST::GetDataTree(bool from_assignment) {
+    return Inner->GetDataTree(false);
 }

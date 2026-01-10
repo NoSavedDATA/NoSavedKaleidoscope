@@ -44,11 +44,6 @@ class FunctionAST {
   std::vector<std::unique_ptr<ExprAST>> Body;
 
   public:
-    /*
-    FunctionAST(std::unique_ptr<PrototypeAST> Proto,
-                std::vector<ExprAST> Body)
-        : Proto(std::move(Proto)), Body(std::move(Body)) {}
-    */
     FunctionAST(std::unique_ptr<PrototypeAST> Proto,
                 std::vector<std::unique_ptr<ExprAST>> Body);
   

@@ -477,8 +477,6 @@ class NameableIdx : public Nameable {
 };
 
 
-
-
 class NameableAppend : public Nameable {
   Data_Tree inner_dt;
   public:
@@ -491,6 +489,22 @@ class NameableAppend : public Nameable {
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+};
+
+
+
+
+
+class PositionalArgExprAST : public ExprAST {
+    public:
+        std::string ArgName;
+        std::unique_ptr<ExprAST> Inner;
+        Parser_Struct parser_struct;
+
+        PositionalArgExprAST(Parser_Struct, const std::string &, std::unique_ptr<ExprAST>);
+
+    Value *codegen(Value *scope_struct) override;
+    Data_Tree GetDataTree(bool from_assignment=false) override;
 };
 
 
@@ -893,15 +907,11 @@ class NoGradExprAST : public ExprAST {
   Value* codegen(Value *scope_struct) override;
 };
   
-  
-  
-  
-  
-  /// PrototypeAST - This class represents the "prototype" for a function,
-  /// which captures its name, and its argument names (thus implicitly the number
-  /// of arguments the function takes), as well as if it is an operator.
-  class PrototypeAST {
-  
+ 
+/// PrototypeAST - This class represents the "prototype" for a function,
+/// which captures its name, and its argument names (thus implicitly the number
+/// of arguments the function takes), as well as if it is an operator.
+class PrototypeAST {  
     std::string Name, Class, Method;
   
     bool IsOperator;
@@ -912,6 +922,7 @@ class NoGradExprAST : public ExprAST {
       std::vector<std::string> Args;
       std::vector<std::string> Types;
       std::vector<Data_Tree> TypeTrees;
+
       PrototypeAST(const std::string &Name, const std::string &Return_Type, const std::string &Class, const std::string &Method,
                   std::vector<std::string> Args,
                   std::vector<std::string> Types,
@@ -928,9 +939,5 @@ class NoGradExprAST : public ExprAST {
   
     char getOperatorName() const; 
   
-  
-  
     unsigned getBinaryPrecedence() const; 
-  };
-
-
+};

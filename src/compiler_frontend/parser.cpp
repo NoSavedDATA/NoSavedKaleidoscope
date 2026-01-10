@@ -43,8 +43,10 @@ std::map<std::string, int> Function_Arg_Count;
 std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 std::map<std::string, std::vector<std::string>> Function_Arg_Names;
+std::map<std::string, std::map<std::string, std::unique_ptr<ExprAST>>> ArgsInit;
 
 std::map<std::string, std::map<std::string, int>> ChannelDirections;
+
 
 int has_previous_async=0;
 
@@ -1238,6 +1240,12 @@ std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Stru
       }
       else if (auto Arg = ParseExpression(parser_struct, class_name, false))
       {
+        if (auto BinExpr = dynamic_cast<BinaryExprAST*>(Arg.get())) {
+            if (BinExpr->Op=='=') {
+                LogBlue("Call has attr");
+                Arg = std::make_unique<PositionalArgExprAST>(parser_struct, BinExpr->LHS->GetName(), std::move(BinExpr->RHS));
+            }
+        }
         Args.push_back(std::move(Arg));
       }        
       else
@@ -2112,7 +2120,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
     if (IdentifierStr!="s" && IdentifierStr!="t" && IdentifierStr!="f" && IdentifierStr!="i" && (!in_str(IdentifierStr, data_tokens)) && !in_str(type, Classes))
       LogErrorP_to_comma(parser_struct.line, "Prototype var type must be s, t, i, f or a data type. Got " + IdentifierStr);
-    else {
+    else
+    {
       std::string data_type = type;
 
       Data_Tree data_tree = ParseDataTree(type, in_str(type, compound_tokens), parser_struct);
@@ -2146,7 +2155,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
         if(CurTok!=tok_identifier)
           LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
-        
+
+
         IdName = IdentifierStr;
         getNextToken(); // get arg name;
         
@@ -2158,7 +2168,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
         ChannelDirections[FnName][IdName] = channel_direction;
       } else
           LogError(parser_struct.line, "Unexpected token " + ReverseToken(CurTok) + ". Expected argument name.");
-      
+     
 
       Types.push_back(data_type);
       ArgNames.push_back(IdName);
@@ -2178,10 +2188,14 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
 
       if(in_str(data_type, Classes))
         Object_toClass[FnName][IdName] = Data_Tree(data_type); 
+
+
+      if (CurTok=='=') {
+          getNextToken();
+          ArgsInit[FnName].emplace(IdName, std::move(ParseExpression(parser_struct, parser_struct.class_name)));
+      }
     }
     
-    Function_Arg_Count[FnName] = args_count;
-
 
     if (CurTok == ')')
         break;
@@ -2192,6 +2206,8 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
     
     getNextToken();
   }
+
+  Function_Arg_Count[FnName] = args_count;
 
   // std::cout << "CREATING PROTO WITH " << ArgNames.size() << " PARAMETERS.\n";
 
@@ -2343,9 +2359,9 @@ std::unique_ptr<FunctionAST> ParseTopLevelExpr(Parser_Struct parser_struct) {
     while(CurTok==tok_space)
       getNextToken();
   }
-  
 
   // Make an anonymous proto.
+  
   auto Proto = std::make_unique<PrototypeAST>("__anon_expr", "float", "", "",
                                                 std::vector<std::string>(),
                                                 std::vector<std::string>(),

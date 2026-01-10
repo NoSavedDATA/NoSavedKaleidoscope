@@ -1569,7 +1569,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
   
     
 
-    
+
 
     std::string Lname = LHS->GetName();
 
@@ -2483,10 +2483,13 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
                                                   std::vector<std::unique_ptr<ExprAST>> Args, Value *scope_struct, std::string fn_name,
                                                   bool is_nsk_fn, bool is_obj_init, int arg_offset=1)
 {
-
-  // Get Arguments
-  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
-
+  // -- Required Arguments -- //
+  unsigned i, e;
+  for (i = 0, e = Args.size(); i != e; ++i) {
+    if (dynamic_cast<PositionalArgExprAST*>(Args[i].get()))
+        break;
+    
+    
     Value *arg = Args[i]->codegen(scope_struct);
  
     Data_Tree data_type = Args[i]->GetDataTree();
@@ -2519,7 +2522,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
 
 
     if(type=="int"&&expected_data_type.Type=="float")
-      arg = Builder->CreateSIToFP(arg, Type::getFloatTy(*TheContext), "lfp");
+      arg = Builder->CreateSIToFP(arg, floatTy, "lfp");
 
 
     std::string copy_fn = type+"_CopyArg";
@@ -2536,7 +2539,8 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
 
     if (!is_nsk_fn && !in_str(type, primary_data_tokens) && \
         (F||dynamic_cast<BinaryExprAST*>(Args[i].get())\
-          ||dynamic_cast<UnaryExprAST*>(Args[i].get())||dynamic_cast<NameableCall*>(Args[i].get()))) {
+          ||dynamic_cast<UnaryExprAST*>(Args[i].get())\
+          ||dynamic_cast<NameableCall*>(Args[i].get()))) {
         // If it creates a new memory address for a high-level fn, store address on the stack.
         
         Allocate_On_Pointer_Stack_no_metadata(scope_struct, parser_struct.function_name, arg);
@@ -2553,9 +2557,43 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
   }
 
 
+  // -- Add Default Arguments -- //
+  if (Function_Arg_Count.count(fn_name)>0) {
+      int arg_count = Function_Arg_Count[fn_name];
+      LogBlue(fn_name + " has " + std::to_string(i) + " args vs " + std::to_string(arg_count) + " required arguments.");
+
+      int c=i+1;
+      
+      std::vector<std::string> fn_args_name = Function_Arg_Names[fn_name];
+      for (; i<Args.size(); ++i, ++c) { // Positional Arguments
+          auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
+          std::string arg_name = PosArg->ArgName;
+        
+          auto it = std::find(fn_args_name.begin(), fn_args_name.end(), arg_name);
+          int arg_idx = it-fn_args_name.begin();
+
+          for (; c<arg_idx; ++c) {
+              std::string arg_name = Function_Arg_Names[fn_name][c];
+              std::cout << "middle arg " << arg_name << ".\n";
+              Value *arg_default = ArgsInit[fn_name][arg_name]->codegen(scope_struct);
+              ArgsV.push_back(arg_default);
+          }
+
+
+          ArgsV.push_back(Args[i]->codegen(scope_struct));
+          std::cout << "making arg " << i << "/" << arg_idx << "/" << arg_name << ".\n";
+      }
+
+      for (; i<arg_count; ++i) {
+          std::string arg_name = fn_args_name[i+1];
+          Value *arg_default = ArgsInit[fn_name][arg_name]->codegen(scope_struct);
+          ArgsV.push_back(arg_default);
+      }
+  }
+
+
   if (fn_name=="list_append") {
     std::string appended_type = UnmangleVec(Args[Args.size()-1]->GetDataTree());
-    // LogBlue("Add type " + appended_type + " to list_append on line " + std::to_string(parser_struct.line));
     ArgsV.push_back(global_str(appended_type));
   }
 
@@ -3087,7 +3125,13 @@ Value *NameableIdx::codegen(Value *scope_struct) {
   }
 }
 
-inline bool Check_Args_Count(const std::string &Callee, int target_args_size, Parser_Struct parser_struct) {
+
+Value *PositionalArgExprAST::codegen(Value *scope_struct) {
+    return Inner->codegen(scope_struct);
+}
+
+inline bool Check_Args_Count(const std::string &Callee, std::vector<std::unique_ptr<ExprAST>> &Args,
+                             int target_args_size, Parser_Struct parser_struct) {
   Function *CalleeF;
   CalleeF = getFunction(Callee);
   
@@ -3236,8 +3280,8 @@ Value *NameableCall::codegen(Value *scope_struct) {
   }
   
 
-  if(!Check_Args_Count(Callee, target_args_size, parser_struct))
-    return const_float(0);
+  // if(!Check_Args_Count(Callee, Args, target_args_size, parser_struct))
+  //   return const_float(0);
 
 
   if (ReturnType=="")

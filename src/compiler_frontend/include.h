@@ -30,6 +30,7 @@ extern std::map<std::string, int> Function_Arg_Count;
 extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 extern std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;
+extern std::map<std::string, std::map<std::string, std::unique_ptr<ExprAST>>> ArgsInit;
 
 
 extern std::map<std::string, Data_Tree> Idx_Fn_Return;
