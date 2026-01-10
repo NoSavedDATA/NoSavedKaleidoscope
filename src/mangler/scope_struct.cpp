@@ -228,7 +228,7 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
     GC *gc = scope_struct->gc;
     // std::cout << "sweep: " << scope_struct << " - / - " << gc << ".\n";
     // scope_struct->Print_Stack();
-    std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
+    // std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
     gc->Sweep(scope_struct);
 }
 

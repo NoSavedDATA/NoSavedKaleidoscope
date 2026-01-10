@@ -113,6 +113,10 @@ bool ExprAST::GetIsList() {
   return isList;
 }
 
+bool ExprAST::GetNeedGCSafePoint() {
+    return false;
+}
+
 
 nlohmann::json ExprAST::toJSON() {
   nlohmann::json j;
@@ -324,6 +328,10 @@ UnkVarExprAST::UnkVarExprAST(
   }
 }
 
+bool UnkVarExprAST::GetNeedGCSafePoint() {
+    return true;
+}
+
 
 TupleExprAST::TupleExprAST(
   Parser_Struct parser_struct,
@@ -403,6 +411,10 @@ DataExprAST::DataExprAST(
   }
 }
 
+bool DataExprAST::GetNeedGCSafePoint() {
+    return true;
+}
+
 
 LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_Struct parser_struct)
   : LibName(LibName), IsDefault(IsDefault), parser_struct(parser_struct) {
@@ -464,6 +476,9 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
 UnaryExprAST::UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct parser_struct)
     : Opcode(Opcode), Operand(std::move(Operand)), parser_struct(parser_struct) {}
   
+bool UnaryExprAST::GetNeedGCSafePoint() {
+    return Operand->GetNeedGCSafePoint();
+}
   
 
 
@@ -521,6 +536,9 @@ BinaryExprAST::BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
   
   
   
+bool BinaryExprAST::GetNeedGCSafePoint() {
+    return (LHS->GetNeedGCSafePoint()||RHS->GetNeedGCSafePoint());
+}
 
 
   
@@ -609,6 +627,7 @@ nlohmann::json ClassExprAST::toJSON() {
   return j;
 }
   
+GCSafePointExprAST::GCSafePointExprAST(Parser_Struct parser_struct) : parser_struct(parser_struct) {}
   
   
   /// IfExprAST - Expression class for if/then/else.
@@ -1005,6 +1024,10 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
     else
       this->Args.push_back(std::make_unique<IntExprAST>(TERMINATE_VARARG));
   }
+}
+
+bool NameableCall::GetNeedGCSafePoint() {
+    return true;
 }
 
 

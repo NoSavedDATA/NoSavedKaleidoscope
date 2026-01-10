@@ -1,5 +1,3 @@
-
-
 import glob
 
 import default nsk_cuda
@@ -70,7 +68,6 @@ class Dataset
         while self.load_ch.alive()
             yield_ptr = self.increment_yield_ptr()
             
-            # write_zerosw(self.p_x, w)
             for b=0, b < bs
                 self.getitem_w(yield_ptr+b, b, w)
                 
@@ -107,7 +104,6 @@ class RNN
         # Linear[2048, 2048, xavu, i4] self.w9
         # Linear[2048, 2048, xavu, i4] self.w10
         Linear[2048, out_hiddens, xavu] self.cls
-        # Linear[hiddens, out_hiddens, xavu] self.cls
 
     def tensor forward(t x)
         x = self.embedding(x)
@@ -168,6 +164,7 @@ main
             
             AdamW(lr, 0.9, 0.999, 0.0001, 5.0)
             
+
         dataset.terminate_workers()
 
 
@@ -206,7 +203,8 @@ main
             
             #acc.set(acc + batch_acc.mean())
             acc = acc + batch_acc.mean()
-        
+			
+
         val_dataset.terminate_workers()
     
 

@@ -695,6 +695,8 @@ std::vector<std::unique_ptr<ExprAST>> ParseIndentedBodies(Parser_Struct parser_s
   std::vector<std::unique_ptr<ExprAST>> Body, NullBody;
   //std::cout << "\nSeen tabs on for body POST: " << SeenTabs << "\n\n";
 
+
+  bool has_safe_point=false;
   handle_tok_space();
   while(!in_char(CurTok, terminal_tokens))
   {
@@ -715,6 +717,13 @@ std::vector<std::unique_ptr<ExprAST>> ParseIndentedBodies(Parser_Struct parser_s
     auto body = ParseExpression(parser_struct, class_name);
     if (!body)
       return std::move(NullBody);
+
+    bool has_call = body->GetNeedGCSafePoint();
+    if(has_call && !has_safe_point) {
+        has_safe_point=true;
+        Body.push_back(std::make_unique<GCSafePointExprAST>(parser_struct));
+    }
+
     Body.push_back(std::move(body));
     
     handle_tok_space();
@@ -1000,21 +1009,16 @@ std::unique_ptr<ExprAST> ParseFinishExpr(Parser_Struct parser_struct, std::strin
 
 
 std::unique_ptr<ExprAST> ParseMainExpr(Parser_Struct parser_struct, std::string class_name) {
-
-
-
-  
-
   
   int cur_level_tabs = SeenTabs;
   
   getNextToken(); // eat main
 
-  std::vector<std::unique_ptr<ExprAST>> Bodies;
+  std::vector<std::unique_ptr<ExprAST>> Body;
   std::vector<bool> IsAsync;
 
   for (int i=0; i<has_previous_async; ++i)
-    Bodies.push_back(std::make_unique<AsyncFnPriorExprAST>());
+    Body.push_back(std::make_unique<AsyncFnPriorExprAST>());
   
   
 
@@ -1025,16 +1029,25 @@ std::unique_ptr<ExprAST> ParseMainExpr(Parser_Struct parser_struct, std::string 
 
   handle_tok_space();
 
+  bool has_safe_point=false;
   while(!in_char(CurTok, terminal_tokens))
   {
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
       break;
-    Bodies.push_back(std::move(ParseExpression(parser_struct, class_name)));
+
+    auto body = std::move(ParseExpression(parser_struct, class_name));
+
+    bool has_call = body->GetNeedGCSafePoint();
+    if(has_call && !has_safe_point) {
+        has_safe_point=true;
+        Body.push_back(std::make_unique<GCSafePointExprAST>(parser_struct));
+    }
+
+    Body.push_back(std::move(body));
     handle_tok_space();
   }
 
-
-  return std::make_unique<MainExprAST>(std::move(Bodies));
+  return std::make_unique<MainExprAST>(std::move(Body));
 }
 
 
@@ -1043,8 +1056,6 @@ std::unique_ptr<ExprAST> ParseMainExpr(Parser_Struct parser_struct, std::string 
 
 std::unique_ptr<ExprAST> ParseNewList(Parser_Struct parser_struct, std::string class_name) {
 
-  
-  
   getNextToken(); // [
   std::vector<std::unique_ptr<ExprAST>> Elements;
   if (CurTok != ']') {
@@ -2282,7 +2293,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
   std::vector<std::unique_ptr<ExprAST>> Body;
 
 
-
+  bool has_safe_point=false;
   while(!in_char(CurTok, terminal_tokens))
   {
     if (SeenTabs <= cur_level_tabs && CurTok != tok_space)
@@ -2294,7 +2305,15 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
     if (SeenTabs <= cur_level_tabs)
       break;
 
-    Body.push_back(std::move(ParseExpression(parser_struct, class_name)));
+    auto body = std::move(ParseExpression(parser_struct, class_name));
+
+    bool has_call = body->GetNeedGCSafePoint();
+    if(has_call && !has_safe_point) {
+        has_safe_point=true;
+        Body.push_back(std::make_unique<GCSafePointExprAST>(parser_struct));
+    }
+
+    Body.push_back(std::move(body));
   }
 
   //std::cout << "function number of expressions: " << Body.size() << "\n";

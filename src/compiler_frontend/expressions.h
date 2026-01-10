@@ -74,6 +74,8 @@ class ExprAST {
     virtual void SetIsMsg(bool); 
     virtual bool GetIsMsg(); 
 
+    virtual bool GetNeedGCSafePoint();
+
     virtual nlohmann::json toJSON();
 };
   
@@ -229,6 +231,7 @@ class UnkVarExprAST : public VarExprAST {
       std::vector<std::unique_ptr<ExprAST>> Notes);
 
   Value *codegen(Value *scope_struct) override;
+  bool GetNeedGCSafePoint() override;
 };
   
   
@@ -333,6 +336,7 @@ class DataExprAST : public VarExprAST {
       std::vector<std::unique_ptr<ExprAST>> Notes);
 
   Value *codegen(Value *scope_struct) override;
+  bool GetNeedGCSafePoint() override;
 };
 
 
@@ -368,6 +372,7 @@ public:
   UnaryExprAST(int Opcode, std::unique_ptr<ExprAST> Operand, Parser_Struct);
 
   Value *codegen(Value *scope_struct) override;
+  bool GetNeedGCSafePoint() override;
 };
   
   
@@ -386,6 +391,7 @@ public:
   Value *codegen(Value *scope_struct) override;
   std::string GetType(bool from_assignment=false) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  bool GetNeedGCSafePoint() override;
 };
 
 
@@ -455,6 +461,7 @@ class NameableCall : public Nameable {
 
   Value *codegen(Value *scope_struct) override;
   Data_Tree GetDataTree(bool from_assignment=false) override;
+  bool GetNeedGCSafePoint() override;
 };
 
 
@@ -675,6 +682,17 @@ class ClassExprAST : public ExprAST {
 };
 
 
+
+class GCSafePointExprAST : public ExprAST {
+  public:
+    Parser_Struct parser_struct;
+
+  GCSafePointExprAST(Parser_Struct); 
+
+  Value *codegen(Value *) override;
+};
+
+
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
   std::unique_ptr<ExprAST> Cond;
@@ -689,6 +707,8 @@ class IfExprAST : public ExprAST {
 
   Value *codegen(Value *scope_struct) override;
 };
+
+
   
 /// ForExprAST - Expression class for for.
 class ForExprAST : public ExprAST {

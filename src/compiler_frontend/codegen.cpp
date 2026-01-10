@@ -720,6 +720,12 @@ Value *LibImportExprAST::codegen(Value *scope_struct) {
 
 
 
+Value *GCSafePointExprAST::codegen(Value *scope_struct) {
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+    Set_Stack_Top(scope_struct, parser_struct.function_name);
+    check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
+    return const_float(0.0f);
+}
 
 
 Value *IfExprAST::codegen(Value *scope_struct) {
@@ -1575,17 +1581,13 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       std::string store_trigger = LType + "_StoreTrigger";
       std::string copy_fn = LType + "_Copy";
 
-
-
       
       // Copy data types that support copying (i.e, function <DT>_Copy exists)
       if(auto Rvar = dynamic_cast<VariableExprAST *>(RHS.get())) // if it is leaf
       {
         Function *F = TheModule->getFunction(copy_fn);
         if (F)
-        {
           Val = callret(copy_fn, {scope_struct, Val});
-        }
       }
 
       // Store trigger behavior for supported types (i.e, function <DT>_StoreTrigger exists)
@@ -3186,13 +3188,9 @@ Value *NameableCall::codegen(Value *scope_struct) {
   Value *previous_obj, *previous_stack_top;
   
   if (!is_nsk_fn) {
-      Set_Stack_Top(scope_struct, parser_struct.function_name);
       // Prevents the case in which it allocates a slot for an argument
-      // previous_stack_top = stack_top_value;
       previous_stack_top = function_values[parser_struct.function_name]["QQ_stack_top"];
-      // call("scope_struct_Sweep", {scope_struct});
-      // LogBlue("Sweep from " + Callee);
-      check_scope_struct_sweep(TheFunction, scope_struct, parser_struct);
+      Set_Stack_Top(scope_struct, parser_struct.function_name);
   }
 
 
