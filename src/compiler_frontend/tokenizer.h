@@ -35,6 +35,7 @@ enum Token {
     tok_extern = -3,
     tok_import = -51,
 
+
     // primary
     tok_identifier = -4,
     tok_number = -5,
@@ -102,7 +103,7 @@ enum Token {
     tok_tuple = -46,
     tok_list = -47,
 	tok_array = -64,
-    tok_dict = -48,
+    tok_map = -48,
 };
 
 

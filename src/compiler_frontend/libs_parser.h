@@ -19,8 +19,13 @@ struct LibFunction {
   std::vector<std::string> ArgNames;
   std::vector<int> ArgIsPointer;
 
+  bool HasRetOverwrite;
+  std::string LibType="";
+  Data_Tree LibDT;
+
   LibFunction(std::string ReturnType, bool IsPointer, std::string Name,
-              std::vector<std::string>, std::vector<std::string>, std::vector<int> ArgIsPointer, bool);
+              std::vector<std::string>, std::vector<std::string>, std::vector<int> ArgIsPointer, bool,
+              bool, std::string, Data_Tree);
 
   void Link_to_LLVM(void *, void *);
   void Add_to_Nsk_Dicts(void *, std::string, bool);

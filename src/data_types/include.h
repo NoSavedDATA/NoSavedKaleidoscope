@@ -16,6 +16,7 @@
 #include "int.h"
 #include "int_vec.h"
 #include "list.h"
+#include "map.h"
 #include "nsk_vector.h"
 #include "nullptr.h"
 #include "str.h"

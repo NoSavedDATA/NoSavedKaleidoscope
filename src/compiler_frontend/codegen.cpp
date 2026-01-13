@@ -310,10 +310,10 @@ inline Value *Load_Array(std::string &function_name, Value *var) {
 }
 
 inline void Check_Is_Array_Inbounds(Parser_Struct &parser_struct, Value *var, Value *idx) {
-    return;
-    // Value *vec_gep = Builder->CreateStructGEP(struct_types["vec"], var, 0);
-    // Value *size = Builder->CreateLoad(Type::getInt32Ty(*TheContext), vec_gep);
-    Value *size = const_int(1000000);
+    // return;
+    Value *vec_gep = Builder->CreateStructGEP(struct_types["vec"], var, 0);
+    Value *size = Builder->CreateLoad(intTy, vec_gep);
+    // Value *size = const_int(1000000);
 
     Value *in_bounds = Builder->CreateICmpSLT(idx, size);
 
@@ -363,7 +363,7 @@ void check_scope_struct_sweep(Function *TheFunction, Value *scope_struct, const 
   Value *GC = Builder->CreateLoad(struct_types["GC"]->getPointerTo(), GC_ptr, "GC");
 
   Value *GC_allocations_ptr = Builder->CreateStructGEP(struct_types["GC"], GC, 0, "GC_allocations_ptr");
-  Value *GC_allocations = Builder->CreateLoad(Type::getInt32Ty(*TheContext), GC_allocations_ptr, "GC_allocations");
+  Value *GC_allocations = Builder->CreateLoad(intTy, GC_allocations_ptr, "GC_allocations");
 
   Value *GC_size_alloc_ptr = Builder->CreateStructGEP(struct_types["GC"], GC, 1, "GC_allocations_ptr");
   Value *GC_size_alloc = Builder->CreateLoad(Type::getInt64Ty(*TheContext), GC_size_alloc_ptr, "GC_allocations");
@@ -422,6 +422,9 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
       
     Type = data_typeVars[parser_struct.function_name][VarName].Type;
 
+    LogBlue("Var " + VarName + " gets type");
+    data_typeVars[parser_struct.function_name][VarName].Print();
+
     if(Init->GetIsMsg()) {
       Value *void_ptr = Constant::getNullValue(Type::getInt8Ty(*TheContext)->getPointerTo());
       initial_value = callret(Type+"_channel_message", {scope_struct, void_ptr, initial_value});
@@ -444,15 +447,12 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
     scopeless_name = callret("CopyString", {scope_struct, var_name});
  
 
-
-
     
 
 
     if(is_self)
     {
       int object_ptr_offset = ClassVariables[parser_struct.class_name][VarName]; 
-      // p2t(VarName+" offset is "+std::to_string(object_ptr_offset));
   
       Value *obj = get_scope_obj(scope_struct);
       call("object_ptr_Attribute_object", {obj, const_int(object_ptr_offset), initial_value});
@@ -471,7 +471,7 @@ Value *UnkVarExprAST::codegen(Value *scope_struct) {
   }
 
 
-  return ConstantFP::get(*TheContext, APFloat(0.0));
+  return const_float(0.0f);
 }
 
 
@@ -669,11 +669,11 @@ Value *DataExprAST::codegen(Value *scope_struct) {
      
      
     
-    if(!IsStruct||Type=="list"||Type=="array") {
+    if(!IsStruct||Type=="list"||Type=="array"||Type=="map") {
       std::string create_fn = Type;
       create_fn = (create_fn=="tuple") ? "list" : create_fn;
       create_fn = create_fn + "_Create";
-      if (create_fn=="array_Create")
+      if (create_fn=="array_Create" || create_fn=="map_Create")
           initial_value = callret(create_fn, {scope_struct, var_name, scopeless_name, initial_value, notes_vector,
                                               VoidPtr_toValue(&data_type)});
       else
@@ -1520,21 +1520,96 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       // LogBlue("New type is: " + type);
       std::string RType = RHS->GetDataTree().Type;
       
-      if(ends_with(type, "dict"))
+      if(type=="map")
       {
-        store_op = type+"_Store_Key";
-        
-        if (RType=="int" || RType=="float")
-        {
-          store_op = store_op + "_" + RType;
+        Value *query = idx;
+        StructType *st = struct_types["map"];
 
-          call(store_op, {scope_struct, vec_ptr, idx, Val}); 
-          return const_float(0);
-        }
         
-        call(store_op, {scope_struct, vec_ptr, idx, Val, global_str(RType)});
+        Value *size_gep = Builder->CreateStructGEP(st, vec_ptr, 0);
+        Value *map_size = Builder->CreateLoad(intTy, size_gep);
+
+        Value *keys_gep = Builder->CreateStructGEP(st, vec_ptr, 4);
+        Value *keys = Builder->CreateLoad(int8PtrTy, keys_gep);
+
+
+        Function *TheFunction = Builder->GetInsertBlock()->getParent();
+        
+        // BasicBlock *CondBB = BasicBlock::Create(*TheContext, "map.cond.bb", TheFunction);
+        BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "map.loop.bb", TheFunction);
+        BasicBlock *NextBB = BasicBlock::Create(*TheContext, "map.next.bb", TheFunction);
+        BasicBlock *NewKeyBB = BasicBlock::Create(*TheContext, "map.new_key.bb", TheFunction);
+        BasicBlock *SetValueBB = BasicBlock::Create(*TheContext, "map.set_value.bb", TheFunction);
+        BasicBlock *CurBB = Builder->GetInsertBlock();
+
+        
+        // Loop Body
+        Builder->CreateBr(LoopBB);
+        Builder->SetInsertPoint(LoopBB);
+
+        PHINode *idx_k = Builder->CreatePHI(intTy, 2);
+        idx_k->addIncoming(const_int(0), CurBB);
+
+        Value *key = Builder->CreateGEP(int8PtrTy->getPointerTo(), keys, idx_k);
+        Value *key_str = Builder->CreateLoad(int8PtrTy, key);
+
+        Value *Cond = callret("strcmp", {key_str, query});
+        Builder->CreateCondBr(Builder->CreateICmpEQ(Cond, const_int(0)), SetValueBB, NextBB); // swap to avoid !strcmp
+
+
+        // idx+1        
+        Builder->SetInsertPoint(NextBB);
+
+        Value *NextVal = Builder->CreateAdd(idx_k, const_int(1));
+        idx_k->addIncoming(NextVal, NextBB);
+
+        Value *IdxInBoundsCheck = Builder->CreateICmpSLT(NextVal, map_size);
+        Builder->CreateCondBr(IdxInBoundsCheck, LoopBB, NewKeyBB);
+
+
+        // Insert New Key
+        Builder->SetInsertPoint(NewKeyBB);
+        PHINode *new_idx = Builder->CreatePHI(intTy, 1);
+        new_idx->addIncoming(NextVal, NextBB);
+
+        Value *new_key_gep = Builder->CreateGEP(int8PtrTy, keys, new_idx);
+        Builder->CreateStore(query, new_key_gep);
+
+        Builder->CreateStore(Builder->CreateAdd(map_size, const_int(1)),
+                             size_gep);
+
+        Builder->CreateBr(SetValueBB);
+
+
+        // Key Found Body
+        Builder->SetInsertPoint(SetValueBB);
+
+        Value *values_gep = Builder->CreateStructGEP(st, vec_ptr, 5);
+        Value *values = Builder->CreateLoad(int8PtrTy->getPointerTo(), values_gep);
+
+        Value *value_idx_gep = Builder->CreateGEP(int8PtrTy, values, idx_k);
+        Builder->CreateStore(Val, value_idx_gep);
+
+
         return const_float(0);
       }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
       if (type=="array") {
           StructType *st = struct_types["vec"];
@@ -1973,7 +2048,7 @@ Function *codegenAsyncFunction(std::vector<std::unique_ptr<ExprAST>> asyncBody, 
       if(!in_str(type, primary_data_tokens))
         type="void";
     }
-    std::cout << "dive: " << pair.first << ".\n";
+    // std::cout << "dive: " << pair.first << ".\n";
 
     call("dive_"+type, {global_str(functionName), pair.second, global_str(pair.first)});
 
@@ -3066,7 +3141,7 @@ Value *NameableIdx::codegen(Value *scope_struct) {
   
 
 
-  if (compound_type == "dict") {
+  if (compound_type == "map") {
     Value *ret_val = callret("dict_Query", {scope_struct, loaded_var, idx});
     if(type=="float"||type=="int")
       ret_val = callret("to_"+type, {scope_struct, ret_val});

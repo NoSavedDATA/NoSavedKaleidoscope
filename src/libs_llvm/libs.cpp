@@ -948,6 +948,27 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("str_vec_print", str_vec_printTy);
 
+	FunctionType *map_CreateTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_Create", map_CreateTy);
+
+	FunctionType *print_strTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("print_str", print_strTy);
+
+	FunctionType *map_printTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_print", map_printTy);
+
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},

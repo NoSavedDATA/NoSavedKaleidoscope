@@ -44,12 +44,18 @@ void Generate_Struct_Types() {
     struct_types["int_vec"] = int_vecTy;
 
     // array
-    StructType *vecTy  = StructType::create(
+    struct_types["vec"] = StructType::create(
         *TheContext,
         {intTy, intTy, intTy, int8PtrTy},
         "DT_array"
+    ); 
+
+    // map
+    struct_types["map"]  = StructType::create(
+        *TheContext,
+        {intTy, intTy, intTy, intTy, int8PtrTy, int8PtrTy, int8PtrTy},
+        "DT_map"
     );
-    struct_types["vec"] = vecTy;
     
     // --- Scope_Struct --- 
     // GC

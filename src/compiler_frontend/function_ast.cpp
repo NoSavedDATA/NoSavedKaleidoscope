@@ -139,7 +139,13 @@ void InitializeModule() {
   );
   TheModule->getOrInsertFunction("str_Delete", str_DeleteTy);
 
-
+  //
+  FunctionType *strcmpTy = FunctionType::get(
+      intTy,
+      {int8PtrTy, int8PtrTy},
+      false
+  );
+  TheModule->getOrInsertFunction("strcmp", strcmpTy);
 
   //  
   FunctionType *sleepTy = FunctionType::get(

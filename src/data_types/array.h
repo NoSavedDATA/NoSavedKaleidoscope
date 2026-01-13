@@ -9,6 +9,7 @@ class DT_array {
 
     DT_array();
     void New(int, int, std::string);
+    void New(int, std::string);
 };
 
 

@@ -20,6 +20,17 @@ void DT_array::New(int size, int elem_size, std::string type) {
     data = (void*)malloc(size*elem_size);
 }
 
+void DT_array::New(int size, std::string type) {
+    this->virtual_size = size;
+    this->elem_size = 8;
+    this->type = type;
+
+    size = ((size + 7) / 8)*8;
+    this->size = size;
+    
+    data = (void*)malloc(size*8);
+}
+
 
 extern "C" DT_array *array_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_array *init_val,
                                   DT_list *notes_vector, Data_Tree dt)

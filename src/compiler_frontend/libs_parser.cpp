@@ -60,8 +60,9 @@ inline std::vector<fs::path> get_lib_files(std::string lib_dir)
 
 
 
-LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgTypes, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer, bool IsVarArg)
-    : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgTypes(ArgTypes), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer), IsVarArg(IsVarArg) {}
+LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgTypes, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer, bool IsVarArg, bool HasRetOverwrite, std::string LibType, Data_Tree LibDT)
+    : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgTypes(ArgTypes), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer), IsVarArg(IsVarArg),
+      HasRetOverwrite(HasRetOverwrite), LibType(LibType), LibDT(LibDT) {}
 
 void LibFunction::Print() {
     std::cout << "extern \"C\" " << ReturnType << " ";
@@ -98,8 +99,11 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
     std::vector<std::string> arg_types_str;
 
 
-    
-    if(ReturnType=="int"&&!IsPointer) {
+    if (HasRetOverwrite) {
+        fn_return_type = int8PtrTy;
+        fn_return_type_str = LibType;
+    }
+    else if(ReturnType=="int"&&!IsPointer) {
         fn_return_type = intTy;
         fn_return_type_str = "int";
     }
@@ -201,16 +205,6 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
     }
 
 
-    // if(Name=="tensor_CalculateIdx"||Name=="tensor_Idx")
-    //     LogBlue(Name + " has return " + fn_return_type_str + " is_var_arg " + std::to_string(IsVarArg));
-    // if(Name=="tensor_Idx"||Name=="tensor_CalculateIdx") {
-    //     std::cout << "ret: " << fn_return_type_str << ".\n";
-    //     for (const auto &arg : arg_types_str)
-    //         std::cout << "\targ: " << arg << ".\n";
-    //     std::cout << ".\n";
-    // }
-
-
     if (Name=="_glob_b_")
         fn_return_type_str = "str_vec";
     Lib_Functions_Return[Name] = fn_return_type_str; // for llvm return type (so_libs.cpp)
@@ -226,8 +220,6 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
         return_dt = Data_Tree(fn_return_type_str);
 
     functions_return_data_type[Name] = return_dt;
-    
-
 
     FunctionType *llvm_function = FunctionType::get(
         fn_return_type,
@@ -252,6 +244,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
         LogError(-1, "Failed to define native function in JIT: " + toString(std::move(Err)));
 }
 
+
 void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is_default) {
     user_cpp_functions.push_back(Name);
     native_methods.push_back(Name);
@@ -260,7 +253,7 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
 
 
     // Check if it is a data-type
-    if(ReturnType!="float"||IsPointer)
+    if (ReturnType!="float"||IsPointer)
     {
         std::string nsk_data_type = ReturnType;
         if(begins_with(ReturnType, "DT_"))
@@ -273,7 +266,9 @@ void LibFunction::Add_to_Nsk_Dicts(void *func_ptr, std::string lib_name, bool is
         if (Name=="_glob_b_")
             nsk_data_type = "str_vec";
 
-        if(ends_with(nsk_data_type, "_vec")) {
+        if (HasRetOverwrite)
+            functions_return_data_type[Name] = LibDT;
+        else if(ends_with(nsk_data_type, "_vec")) {
             Data_Tree vec_type = Data_Tree("vec");
             vec_type.Nested_Data.push_back(Data_Tree(remove_substring(nsk_data_type, "_vec")));
             functions_return_data_type[Name] = vec_type;
@@ -424,7 +419,6 @@ bool LibParser::TryParseFnDataType() {
         return false;
     LastChar = _getCh(); // eat >
     
-    LogBlue("Parsed a data type");
 
     while(LastChar==32||LastChar==tok_tab)
         LastChar = _getCh();
@@ -439,13 +433,11 @@ bool LibParser::TryParseFnDataType() {
     }
 
     lib_dt = Data_Tree(lib_type);
-    std::cout << "got type: " << lib_type << ".\n";
 
     if (LastChar=='<') {
         ParseDT(lib_dt);
     }
     
-    lib_dt.Print();
 
     while(LastChar!=10 && LastChar!=tok_eof && LastChar!=tok_finish)
         LastChar = _getCh();
@@ -656,11 +648,10 @@ void LibParser::ParseExtern() {
         }
     }
     
-    if (token==tok_lib_dt) {
-        std::cout << "curtok: " << token << "/" << ReverseToken(token) << ".\n";
-    }
+    bool has_ret_overwrite = token==tok_lib_dt;
 
-    LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_names, arg_is_pointer, is_var_arg);
+    LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_names, arg_is_pointer, is_var_arg,
+                                          has_ret_overwrite, lib_type, lib_dt);
     Functions[file_name].push_back(lib_fn);
     // std::cout << "\n\n";
 }

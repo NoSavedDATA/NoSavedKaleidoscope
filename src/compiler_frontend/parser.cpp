@@ -2172,10 +2172,7 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
       Types.push_back(data_type);
       ArgNames.push_back(IdName);
       args_count++;
-      // if(!in_str(data_type, primary_data_tokens)) {
-      //     Types.push_back("bool");
-      //     ArgNames.push_back(IdName+"_shall_stack");
-      // }
+
 
       Function_Arg_Names[FnName].push_back(IdName);
       Function_Arg_Types[FnName][IdName] = data_type;

@@ -1,0 +1,33 @@
+
+	
+	Function_Arg_Types["map_Create"]["0"] = "Scope_Struct";
+	Function_Arg_Types["map_Create"]["1"] = "str";
+	Function_Arg_Types["map_Create"]["2"] = "str";
+	Function_Arg_Types["map_Create"]["3"] = "map";
+	Function_Arg_Types["map_Create"]["4"] = "list";
+	Function_Arg_Types["map_Create"]["5"] = "Data_Tree";
+	
+	Function_Arg_DataTypes["map_Create"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["map_Create"]["1"] = Data_Tree("str");
+	Function_Arg_DataTypes["map_Create"]["2"] = Data_Tree("str");
+	Function_Arg_DataTypes["map_Create"]["3"] = Data_Tree("map");
+	Data_Tree map_Create_4 = Data_Tree("list");
+	map_Create_4.Nested_Data.push_back(Data_Tree("any"));
+	Function_Arg_DataTypes["map_Create"]["4"] = map_Create_4;
+	Function_Arg_DataTypes["map_Create"]["5"] = Data_Tree("Data_Tree");
+	
+	Function_Arg_Names["map_Create"].push_back("0");
+	Function_Arg_Names["map_Create"].push_back("1");
+	Function_Arg_Names["map_Create"].push_back("2");
+	Function_Arg_Names["map_Create"].push_back("3");
+	Function_Arg_Names["map_Create"].push_back("4");
+	Function_Arg_Names["map_Create"].push_back("5");
+	
+	Function_Arg_Types["map_print"]["0"] = "Scope_Struct";
+	Function_Arg_Types["map_print"]["1"] = "map";
+	
+	Function_Arg_DataTypes["map_print"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["map_print"]["1"] = Data_Tree("map");
+	
+	Function_Arg_Names["map_print"].push_back("0");
+	Function_Arg_Names["map_print"].push_back("1");
