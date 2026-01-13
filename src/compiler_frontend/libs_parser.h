@@ -4,9 +4,10 @@
 #include <map>
 #include <vector>
 
-
 #include <filesystem>
 #include <fstream>
+
+#include "../data_types/data_tree.h"
 
 namespace fs = std::filesystem;
 
@@ -31,6 +32,8 @@ struct LibFunction {
 struct LibParser {
   int file_idx=-1;
   std::string running_string="";
+  std::string lib_type="";
+  Data_Tree lib_dt;
   int token;
   char LastChar = ' ';
 
@@ -49,6 +52,8 @@ struct LibParser {
   int _getTok(); 
   int _getToken(); 
 
+  void ParseDT(Data_Tree &);
+  bool TryParseFnDataType();
   void ParseExtern(); 
 
   void ParseLibs(); 

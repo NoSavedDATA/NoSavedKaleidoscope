@@ -92,7 +92,6 @@ std::map<int, std::string> token_to_string = {
   { tok_main , "tok main" },
 
 
-  { tok_space, "tok_space" },
 
   { tok_post_class_attr_attr, ".attr."},
   { tok_post_class_attr_identifier, ".identifier"},
@@ -100,6 +99,12 @@ std::map<int, std::string> token_to_string = {
   // var definition
   { tok_attr_var, "tok attr var"},
   { tok_attr_tensor, "tok attr tensor"},
+
+
+  // specials
+  
+  { tok_commentary, "// commentary" },
+  { tok_lib_dt, "$>" },
 
   { tok_global, "global"},
   { tok_no_grad, "no_grad"},
@@ -109,6 +114,7 @@ std::map<int, std::string> token_to_string = {
   
 
   { 10, "tok space"},
+  { tok_space, "tok space"},
   { 32, "blank space"},
   { 13, "carriage return"},
 
@@ -149,6 +155,9 @@ std::map<int, std::string> token_to_string = {
 
   { 91, "[" },
   { 93, "]" },
+
+  { 123, "{" },
+  { 125, "}" },
 
   { tok_equal, "==" },
   { tok_diff, "!=" },

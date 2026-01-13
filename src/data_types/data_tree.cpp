@@ -129,10 +129,16 @@ std::string Data_Tree::toString() {
     std::string str = Type; 
     if (Nested_Data.size()>0)
     {
-        str += "<" + Nested_Data[0].Type;
-        for(int i=1; i<Nested_Data.size(); ++i)
-            str +=  "," + Nested_Data[i].Type;
-        str +=  ">";
+        str += "<";
+        Data_Tree dt = Nested_Data[0];
+        str += dt.toString();
+        for (int i=1; i<Nested_Data.size(); ++i) {
+            dt = Nested_Data[i];
+            str += ",";
+            str += dt.toString();
+        }
+        str += ">";
+
     }
     return str;
 }

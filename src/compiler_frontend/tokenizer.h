@@ -84,6 +84,7 @@ enum Token {
 
     tok_space = -14,
     tok_commentary = -53,
+    tok_lib_dt = -65,
 
 
     // var definition

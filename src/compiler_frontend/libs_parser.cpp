@@ -388,24 +388,103 @@ char LibParser::_getCh() {
 }
 
 
+void LibParser::ParseDT(Data_Tree &dt) {
+    LastChar = _getCh(); // eat <
+
+    if (!(isalpha(LastChar)||LastChar=='_')) { // identifier
+        LogError(-1, "Expected data type identifier after < of nested data tree inside $> expression ");
+    }
+
+    while(true) {
+        std::string nested_type="";
+        while(isalpha(LastChar)||LastChar=='_') { 
+            nested_type += LastChar;
+            LastChar = _getCh();
+        }
+        Data_Tree nested_dt = Data_Tree(nested_type);
+        if (LastChar=='<')
+            ParseDT(nested_dt);
+        while (LastChar==32)
+            LastChar = _getCh();
+        if (LastChar==',')
+            LastChar = _getCh();
+        while (LastChar==32)
+            LastChar = _getCh();
+        dt.Nested_Data.push_back(nested_dt);
+        if (LastChar=='>')
+            break;
+    }
+    LastChar = _getCh(); // eat >
+}
+
+
+bool LibParser::TryParseFnDataType() {
+    LastChar = _getCh(); // eat $
+    if (LastChar!='>')
+        return false;
+    LastChar = _getCh(); // eat >
+    
+    LogBlue("Parsed a data type");
+
+    while(LastChar==32||LastChar==tok_tab)
+        LastChar = _getCh();
+
+    if (!(isalpha(LastChar)||LastChar=='_')) { // identifier
+        LogError(-1, "Expected data type identifier after $> expression ");
+    }
+    
+    while(isalpha(LastChar)||LastChar=='_') { 
+        lib_type += LastChar;
+        LastChar = _getCh();
+    }
+
+    lib_dt = Data_Tree(lib_type);
+    std::cout << "got type: " << lib_type << ".\n";
+
+    if (LastChar=='<') {
+        ParseDT(lib_dt);
+    }
+    
+    lib_dt.Print();
+
+    while(LastChar!=10 && LastChar!=tok_eof && LastChar!=tok_finish)
+        LastChar = _getCh();
+
+    return true;
+}
+
+
 int LibParser::_getTok() {
+    bool consume_no_ret=false;
 
-    while (LastChar==32 || LastChar==tok_tab)
-    LastChar = _getCh();
-
+    while (LastChar==10||LastChar==13||LastChar==tok_space||LastChar==tok_tab||LastChar==32) { // skip blanks
+        LastChar = _getCh();
+        consume_no_ret=true;
+    }
+    
+    
     if(LastChar=='/')
     {
         LastChar = _getCh();
         if(LastChar=='/')
         {
             LastChar = _getCh();
-            while(LastChar!=10 && LastChar!=tok_eof && LastChar!=tok_finish)
+
+            while(LastChar==32||LastChar==tok_tab) 
                 LastChar = _getCh();
 
+            if (LastChar=='$' && TryParseFnDataType())
+                return tok_lib_dt;    
+
+            while(LastChar!=10 && LastChar!=tok_eof && LastChar!=tok_finish)
+                LastChar = _getCh();
+            
             return tok_commentary;
-        } else
+        } else {
             return LastChar;
+        }
     }
+
 
 
     if(LastChar=='('||LastChar==')'||LastChar=='*'||LastChar==',')
@@ -416,7 +495,7 @@ int LibParser::_getTok() {
     }
 
 
-    if (LastChar=='"') {
+    if (LastChar=='"') { // str ""
     
         LastChar = _getCh();
         running_string = "";
@@ -432,7 +511,7 @@ int LibParser::_getTok() {
     }
 
     
-    if (isalpha(LastChar)||LastChar=='_') {
+    if (isalpha(LastChar)||LastChar=='_') { // identifier
         running_string = "";
 
         while(isalnum(LastChar)||LastChar=='_'||LastChar==':'||LastChar=='<'||LastChar=='>')
@@ -444,22 +523,25 @@ int LibParser::_getTok() {
         if(running_string=="extern")
             return tok_extern;
 
-
         return tok_identifier;
     }
 
-
-    while (LastChar==tok_space||LastChar==tok_tab||LastChar==32) // skip blanks
-    LastChar = _getCh();
+    while (LastChar==10||LastChar==tok_space||LastChar==tok_tab||LastChar==32||LastChar==13) { // skip blanks
+        LastChar = _getCh();  
+        consume_no_ret=true;
+    }
     
+    if (consume_no_ret)
+        return LastChar;
 
     LastChar = _getCh();
 
     if(LastChar==tok_eof||LastChar==tok_finish)
-    return tok_eof;
+        return tok_eof;
 
     return LastChar;
 }
+
 
 int LibParser::_getToken() {
     token = _getTok();
@@ -468,13 +550,9 @@ int LibParser::_getToken() {
 
 
 void LibParser::ParseExtern() {
-
     std::string file_name = files[file_idx].string();
 
     _getToken(); // eat extern
-
-
-
 
     if (token!=tok_str)
       return;
@@ -483,8 +561,6 @@ void LibParser::ParseExtern() {
 
     std::string return_type = running_string;
     _getToken(); // eat return type
-
-
 
 
     bool is_pointer = false;
@@ -501,8 +577,6 @@ void LibParser::ParseExtern() {
     std::string fn_name = running_string;
 
     _getToken(); // eat fn name
-
-
 
 
 
@@ -523,14 +597,12 @@ void LibParser::ParseExtern() {
     {
         if(running_string=="..."||token=='.')
         {
-            // LogBlue("Got dot at argument type on function: " + fn_name);
-            
+            // LogBlue("Got dot at argument type on function: " + fn_name);            
             is_var_arg=true;
             while(token!=')')
                 _getToken();
             break;
         }
-
         
         arg_types.push_back(running_string);      
         last_type = running_string;
@@ -546,7 +618,6 @@ void LibParser::ParseExtern() {
             last_is_pointer = 0;
             arg_is_pointer.push_back(0);
         }
-
         
         arg_names.push_back(running_string);
         last_name = running_string;
@@ -566,11 +637,31 @@ void LibParser::ParseExtern() {
             arg_is_pointer.push_back(last_is_pointer);
         }
     }
-
     
+
+    token = _getToken(); // eat )
+
+    while (token==13||token==10||token==32||token==tok_tab)
+        token = _getToken();
+    if (token=='{') {
+        token = _getToken(); // eat {
+        token = _getToken(); // Look one more token in search of return wrapping: $>
+        if (token!=tok_lib_dt) {    
+            while (LastChar==10||LastChar==13||LastChar==tok_tab||LastChar==32) { // skip blanks
+                token = tok_space;
+                LastChar = _getCh();
+            }
+            while (token==tok_space)
+                token = _getToken();
+        }
+    }
+    
+    if (token==tok_lib_dt) {
+        std::cout << "curtok: " << token << "/" << ReverseToken(token) << ".\n";
+    }
+
     LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_names, arg_is_pointer, is_var_arg);
     Functions[file_name].push_back(lib_fn);
-
     // std::cout << "\n\n";
 }
 
@@ -598,8 +689,7 @@ void LibParser::PrintFunctions() {
 
 void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool is_default) {
 
-    if (!has_main) {
-
+    if (!has_main) { // For LSP only
         for (auto pair : Functions) {  // std::map<std::string, std::vector<LibFunction*>>
             for (auto fn : pair.second) // std::vector<LibFunction*>> 
             {
@@ -608,7 +698,6 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
                 fn->Add_to_Nsk_Dicts(nullptr, lib_name, is_default);
             }
         }
-
         return;
     }
 
@@ -629,7 +718,6 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
         {
             // std::cout << "Importing function:" << "\n";
             // fn->Print();
-            
             dlerror(); // Clear any existing error
             void* func_ptr = dlsym(handle, fn->Name.c_str());
             const char *dlsym_error = dlerror();
@@ -648,13 +736,11 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
                 InitFuncType initialize_fn = reinterpret_cast<InitFuncType>(func_ptr);
                 initialize_fn();
             }
-            
 
             fn->Link_to_LLVM(func_ptr, handle);
             fn->Add_to_Nsk_Dicts(func_ptr, lib_name, is_default);
         }
     }
-
     if (has_error)
         std::exit(0);
 }

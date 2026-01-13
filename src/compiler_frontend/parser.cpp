@@ -1241,10 +1241,9 @@ std::optional<std::vector<std::unique_ptr<ExprAST>>> Parse_Arguments(Parser_Stru
       else if (auto Arg = ParseExpression(parser_struct, class_name, false))
       {
         if (auto BinExpr = dynamic_cast<BinaryExprAST*>(Arg.get())) {
-            if (BinExpr->Op=='=') {
-                LogBlue("Call has attr");
+            if (BinExpr->Op=='=')
                 Arg = std::make_unique<PositionalArgExprAST>(parser_struct, BinExpr->LHS->GetName(), std::move(BinExpr->RHS));
-            }
+            
         }
         Args.push_back(std::move(Arg));
       }        

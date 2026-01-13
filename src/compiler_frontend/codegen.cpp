@@ -2560,13 +2560,17 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
   // -- Add Default Arguments -- //
   if (Function_Arg_Count.count(fn_name)>0) {
       int arg_count = Function_Arg_Count[fn_name];
-      LogBlue(fn_name + " has " + std::to_string(i) + " args vs " + std::to_string(arg_count) + " required arguments.");
 
       int c=i+1;
       
       std::vector<std::string> fn_args_name = Function_Arg_Names[fn_name];
       for (; i<Args.size(); ++i, ++c) { // Positional Arguments
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
+          if(!PosArg) {
+            LogError(parser_struct.line, "Standard argument followed by positional argument.");
+            return std::move(ArgsV);
+          }
+
           std::string arg_name = PosArg->ArgName;
         
           auto it = std::find(fn_args_name.begin(), fn_args_name.end(), arg_name);
@@ -2574,14 +2578,12 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
 
           for (; c<arg_idx; ++c) {
               std::string arg_name = Function_Arg_Names[fn_name][c];
-              std::cout << "middle arg " << arg_name << ".\n";
               Value *arg_default = ArgsInit[fn_name][arg_name]->codegen(scope_struct);
               ArgsV.push_back(arg_default);
           }
 
 
           ArgsV.push_back(Args[i]->codegen(scope_struct));
-          std::cout << "making arg " << i << "/" << arg_idx << "/" << arg_name << ".\n";
       }
 
       for (; i<arg_count; ++i) {

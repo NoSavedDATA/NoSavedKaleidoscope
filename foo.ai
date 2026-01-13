@@ -1,5 +1,5 @@
 
-
+import example_lib
 
 def int add2(int x, int y=2)
 	return x + y
@@ -8,6 +8,10 @@ def int add3(int x, int y=5, int z=8, int u=100, int w=10)
 	return x + y + z + u + w
 
 main
+	placeholder[2,3] u
+	u.print()
+	
+
 	int x = add2(2)
 	int y = add3(8, u=15, w=100)
 
