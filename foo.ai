@@ -4,19 +4,27 @@ import example_lib
 
 main
 	
-	placeholder[2,3] x
-	placeholder[4,4] y
-	placeholder[0,0] z
 
-	int b=0
+	placeholder[2,3] x
+	placeholder[3,4] y
+	placeholder[4,5] z
+	placeholder[5,6] w
+	placeholder[6,7] t
+
+
 	
 	x.print()
 
 	map<str, placeholder> m
 
-	m["zeta"] = y
-	m["z"] = y
-	m["zz"] = x
-	m["zzz"] = y
+	m["x"] = x
+	m["y"] = y
+	m["z"] = z
+	m["zz"] = w
+	m["zzz"] = t
 
 	m.print()
+
+	x = m["u"]
+
+	x.print()

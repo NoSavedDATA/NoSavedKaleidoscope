@@ -99,6 +99,10 @@ int Data_Tree::Compare(Data_Tree other_tree) {
 
     if(Type!="map"&&other_tree.Type=="map"&&CompareMap(other_tree))
         return 0;
+
+    if(Type=="map"&&other_tree.Type!="map"&&Nested_Data[1].Type==other_tree.Type)
+        return 0;
+
  
     if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_tree.Type))
         return comparisons+1;

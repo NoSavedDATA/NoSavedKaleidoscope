@@ -14,9 +14,7 @@ DT_map_node::DT_map_node(int key_size, int value_size) {
     value = malloc(value_size);
 }
 
-
 DT_map::DT_map() {}
-
 
 void DT_map::New(int size, int key_size, int value_size) {
     this->size = size;
@@ -53,27 +51,9 @@ extern "C" DT_map *map_Create(Scope_Struct *scope_struct, char *name, char *scop
         value_size = 8;
 
     DT_map *map = newT<DT_map>(scope_struct, "map");
-    map->New(8, key_size, value_size); 
+    map->New(0, key_size, value_size); 
 
-
-    DT_map_node *node = new DT_map_node(key_size, value_size);
-    char *key = allocate<char>(scope_struct, 2, "str");
-    key[0] = 'x';
-    key[1] = '\0';
-    node->key = key;
-    node->value = nullptr;
-    map->nodes[7] = node;
-
-
-    node = new DT_map_node(key_size, value_size);
-    key = allocate<char>(scope_struct, 2, "str");
-    key[0] = 'y';
-    key[1] = '\0';
-    node->key = key;
-    node->value = nullptr;
-    map->nodes[4] = node;
     
-
     return map;
 }
 
