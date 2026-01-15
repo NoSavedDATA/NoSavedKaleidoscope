@@ -1,4 +1,4 @@
-1822-01-13 20:06:01
+1822-01-14 18:18:59
 
 	FunctionType *map_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -20,3 +20,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("map_print", map_printTy);
+
+	FunctionType *map_bad_keyTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_bad_key", map_bad_keyTy);

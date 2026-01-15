@@ -15,6 +15,7 @@ struct Data_Tree {
     Data_Tree(std::string, std::vector<Data_Tree> nested_data);
     Data_Tree(std::string);
 
+    bool CompareMap(Data_Tree&);
     int Compare(Data_Tree);
     void Print();
     std::string toString();

@@ -78,6 +78,53 @@ Value *load_alloca(std::string name, std::string type, std::string from_function
     return Builder->CreateLoad(load_type, alloca, name.c_str());
 }
 
+Value *str_llvm_hash(Value *str_value, Function *F) {
+    Type *i8  = Builder->getInt8Ty();
+
+    Value *initHash = Builder->getInt32(2166136261u);
+    Value *initPtr  = str_value;
+
+    BasicBlock *preBB  = Builder->GetInsertBlock();
+    BasicBlock *loopBB = BasicBlock::Create(*TheContext, "hash.loop", F);
+    BasicBlock *exitBB = BasicBlock::Create(*TheContext, "hash.exit", F);
+
+    Builder->CreateBr(loopBB);
+    Builder->SetInsertPoint(loopBB);
+
+    PHINode *phiHash = Builder->CreatePHI(intTy, 2);
+    PHINode *phiPtr  = Builder->CreatePHI(int8PtrTy, 2);
+
+    phiHash->addIncoming(initHash, preBB);
+    phiPtr->addIncoming(initPtr,  preBB);
+
+    Value *ch = Builder->CreateLoad(i8, phiPtr);
+    Value *isZero = Builder->CreateICmpEQ(ch, Builder->getInt8(0));
+
+    BasicBlock *bodyBB = BasicBlock::Create(*TheContext, "hash.body", F);
+    Builder->CreateCondBr(isZero, exitBB, bodyBB);
+
+    /* ---- body ---- */
+    Builder->SetInsertPoint(bodyBB);
+
+    Value *ch32 = Builder->CreateZExt(ch, intTy);
+    Value *h1   = Builder->CreateXor(phiHash, ch32);
+    Value *h2   = Builder->CreateMul(h1, Builder->getInt32(16777619u));
+
+    Value *nextPtr = Builder->CreateGEP(i8, phiPtr, Builder->getInt32(1));
+
+    phiHash->addIncoming(h2, bodyBB);
+    phiPtr->addIncoming(nextPtr, bodyBB);
+
+    Builder->CreateBr(loopBB);
+
+    /* ---- exit ---- */
+    Builder->SetInsertPoint(exitBB);
+
+    return phiHash;
+}
+
+
+
 
 Function *getFunction(std::string Name) {
   // First, see if the function has already been added to the current module.
@@ -1524,71 +1571,90 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
       {
         Value *query = idx;
         StructType *st = struct_types["map"];
+        StructType *st_node = struct_types["map_node"];
 
-        
+        Value *nullPtr = ConstantPointerNull::get(
+            cast<PointerType>(int8PtrTy)
+        );
+
+        // Create the node to be stored
+        Value *new_node_ptr = callret("allocate_void", {scope_struct, const_int(24), global_str("map_node")});
+        Value *new_node_key_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 0);
+        Builder->CreateStore(query, new_node_key_gep);
+        Value *new_node_value_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 1);
+        Builder->CreateStore(Val, new_node_value_gep);
+        Value *new_node_next_gep = Builder->CreateStructGEP(st_node, new_node_ptr, 2);
+        Builder->CreateStore(nullPtr, new_node_next_gep);
+
+        // Map logic 
         Value *size_gep = Builder->CreateStructGEP(st, vec_ptr, 0);
         Value *map_size = Builder->CreateLoad(intTy, size_gep);
 
-        Value *keys_gep = Builder->CreateStructGEP(st, vec_ptr, 4);
-        Value *keys = Builder->CreateLoad(int8PtrTy, keys_gep);
+        Value *capacity_gep = Builder->CreateStructGEP(st, vec_ptr, 1);
+        Value *map_capacity = Builder->CreateLoad(intTy, capacity_gep);
+
+        Value *nodes_gep = Builder->CreateStructGEP(st, vec_ptr, 4);
+        Value *nodes = Builder->CreateLoad(int8PtrTy->getPointerTo(), nodes_gep);
 
 
         Function *TheFunction = Builder->GetInsertBlock()->getParent();
         
-        // BasicBlock *CondBB = BasicBlock::Create(*TheContext, "map.cond.bb", TheFunction);
-        BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "map.loop.bb", TheFunction);
-        BasicBlock *NextBB = BasicBlock::Create(*TheContext, "map.next.bb", TheFunction);
-        BasicBlock *NewKeyBB = BasicBlock::Create(*TheContext, "map.new_key.bb", TheFunction);
-        BasicBlock *SetValueBB = BasicBlock::Create(*TheContext, "map.set_value.bb", TheFunction);
-        BasicBlock *CurBB = Builder->GetInsertBlock();
+
+        // BasicBlock *FirstCheckBB = BasicBlock::Create(*TheContext, "map.pointer_chase.bb", TheFunction);
+        BasicBlock *PtrChaseBB = BasicBlock::Create(*TheContext, "map.pointer_chase.bb", TheFunction);
+        BasicBlock *FromPtrChaseBB = BasicBlock::Create(*TheContext, "map.new_from_pointer_chase.bb", TheFunction);
+        BasicBlock *FromNullBB = BasicBlock::Create(*TheContext, "map.from_null.bb", TheFunction);
+        BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "map.after.bb", TheFunction);
+        
+        // Check if bucket is nullptr
+        Value *query_hash;
+        query_hash = str_llvm_hash(query, TheFunction);
+        
+        Value *hash_pos = Builder->CreateURem(query_hash, map_capacity);
+
 
         
-        // Loop Body
-        Builder->CreateBr(LoopBB);
-        Builder->SetInsertPoint(LoopBB);
+        Value *node_gep = Builder->CreateGEP(int8PtrTy->getPointerTo(), nodes, hash_pos);
+        Value *node = Builder->CreateLoad(int8PtrTy, node_gep);
 
-        PHINode *idx_k = Builder->CreatePHI(intTy, 2);
-        idx_k->addIncoming(const_int(0), CurBB);
+        Value *IsNull = Builder->CreateICmpEQ(node, nullPtr);
+        BasicBlock *CurBB = Builder->GetInsertBlock();
 
-        Value *key = Builder->CreateGEP(int8PtrTy->getPointerTo(), keys, idx_k);
-        Value *key_str = Builder->CreateLoad(int8PtrTy, key);
+        Builder->CreateCondBr(IsNull, FromNullBB, PtrChaseBB);
 
-        Value *Cond = callret("strcmp", {key_str, query});
-        Builder->CreateCondBr(Builder->CreateICmpEQ(Cond, const_int(0)), SetValueBB, NextBB); // swap to avoid !strcmp
-
-
-        // idx+1        
-        Builder->SetInsertPoint(NextBB);
-
-        Value *NextVal = Builder->CreateAdd(idx_k, const_int(1));
-        idx_k->addIncoming(NextVal, NextBB);
-
-        Value *IdxInBoundsCheck = Builder->CreateICmpSLT(NextVal, map_size);
-        Builder->CreateCondBr(IdxInBoundsCheck, LoopBB, NewKeyBB);
+        // From nullptr
+        Builder->SetInsertPoint(FromNullBB);
+        Builder->CreateStore(new_node_ptr, node_gep); 
+        Builder->CreateBr(AfterBB);
 
 
-        // Insert New Key
-        Builder->SetInsertPoint(NewKeyBB);
-        PHINode *new_idx = Builder->CreatePHI(intTy, 1);
-        new_idx->addIncoming(NextVal, NextBB);
+        // Pointer Chase
+        Builder->SetInsertPoint(PtrChaseBB);
+        PHINode *map_phi_node = Builder->CreatePHI(int8PtrTy, 2);
+        map_phi_node->addIncoming(node, CurBB);
+        
+        Value *next_node_gep = Builder->CreateStructGEP(st_node, map_phi_node, 2);
+        Value *next_node = Builder->CreateLoad(int8PtrTy, next_node_gep);
+        map_phi_node->addIncoming(next_node, PtrChaseBB);
 
-        Value *new_key_gep = Builder->CreateGEP(int8PtrTy, keys, new_idx);
-        Builder->CreateStore(query, new_key_gep);
+        Value *IsNextNull = Builder->CreateICmpEQ(next_node, nullPtr);
 
-        Builder->CreateStore(Builder->CreateAdd(map_size, const_int(1)),
-                             size_gep);
-
-        Builder->CreateBr(SetValueBB);
+        Builder->CreateCondBr(IsNextNull, FromPtrChaseBB, PtrChaseBB);
 
 
-        // Key Found Body
-        Builder->SetInsertPoint(SetValueBB);
 
-        Value *values_gep = Builder->CreateStructGEP(st, vec_ptr, 5);
-        Value *values = Builder->CreateLoad(int8PtrTy->getPointerTo(), values_gep);
+        // New pointer from Pointer Chase
+        Builder->SetInsertPoint(FromPtrChaseBB);
+        Builder->CreateStore(new_node_ptr, next_node_gep); 
+        Builder->CreateBr(AfterBB);
 
-        Value *value_idx_gep = Builder->CreateGEP(int8PtrTy, values, idx_k);
-        Builder->CreateStore(Val, value_idx_gep);
+
+        // After
+        Builder->SetInsertPoint(AfterBB);
+        Builder->CreateStore(Builder->CreateAdd(map_size, const_int(1)), size_gep);
+        
+
+
 
 
         return const_float(0);
@@ -3142,10 +3208,63 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
 
   if (compound_type == "map") {
-    Value *ret_val = callret("dict_Query", {scope_struct, loaded_var, idx});
-    if(type=="float"||type=="int")
-      ret_val = callret("to_"+type, {scope_struct, ret_val});
-    return ret_val;
+    Value *query = idx;
+    LogBlue("Map query");
+    StructType *st = struct_types["map"];
+    Value *size_gep = Builder->CreateStructGEP(st, loaded_var, 0);
+    Value *map_size = Builder->CreateLoad(intTy, size_gep); 
+
+    Value *keys_gep = Builder->CreateStructGEP(st, loaded_var, 4);
+    Value *keys = Builder->CreateLoad(int8PtrTy, keys_gep); 
+
+    // Function *TheFunction = Builder->GetInsertBlock()->getParent();
+    // BasicBlock *InvalidBB = BasicBlock::Create(*TheContext, "map.unvalid.bb", TheFunction);
+    // BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "map.loop.bb", TheFunction);
+    // BasicBlock *NextBB = BasicBlock::Create(*TheContext, "map.next_idx.bb", TheFunction);
+    // BasicBlock *GetValBB = BasicBlock::Create(*TheContext, "map.get_val.bb", TheFunction);
+    // BasicBlock *CurBB = Builder->GetInsertBlock();
+
+    // Builder->CreateCondBr(Builder->CreateICmpEQ(map_size, const_int(0)),
+    //                              InvalidBB, LoopBB);
+    
+    // // Invalid Key 
+    // Builder->SetInsertPoint(InvalidBB);
+    // call("map_bad_key", {scope_struct, idx});
+    // Builder->CreateUnreachable();
+
+    // Builder->SetInsertPoint(LoopBB);
+
+    // PHINode *idx_loop_phi = Builder->CreatePHI(intTy, 2);
+    // idx_loop_phi->addIncoming(const_int(0), CurBB);
+
+
+    // Value *key_gep = Builder->CreateGEP(int8PtrTy->getPointerTo(), keys, idx_loop_phi);
+    // Value *key = Builder->CreateLoad(int8PtrTy, key_gep);
+    
+    // Value *QueryFoundCond = callret("strcmp", {query, key});
+    // QueryFoundCond = Builder->CreateICmpEQ(QueryFoundCond, const_int(0));
+
+    // Builder->CreateCondBr(QueryFoundCond, GetValBB, NextBB);
+
+    // // idx+1
+    // Builder->SetInsertPoint(NextBB);
+    // Value *NextVal = Builder->CreateAdd(idx_loop_phi, const_int(1));
+    // idx_loop_phi->addIncoming(NextVal, NextBB);
+
+    // Builder->CreateCondBr(Builder->CreateICmpSLT(NextVal, map_size), LoopBB, InvalidBB);
+
+    // // Retrieve Value
+    // Builder->SetInsertPoint(GetValBB);
+    // PHINode *idx_get_val_phi = Builder->CreatePHI(intTy, 1);
+    // idx_get_val_phi->addIncoming(idx_loop_phi, LoopBB);
+
+
+    // Value *values_gep = Builder->CreateStructGEP(st, loaded_var, 5);
+    // Value *values = Builder->CreateLoad(int8PtrTy->getPointerTo(), values_gep);
+    // Value *value_gep = Builder->CreateGEP(int8PtrTy, values, idx_get_val_phi);
+    // Value *value = Builder->CreateLoad(int8PtrTy, value_gep);
+    // return value;
+    return const_float(0.0f);
   }
 
   if(Idx->idx_slice_or_query=="query") {

@@ -10,7 +10,6 @@
 #include "../mark_sweep/include.h"
 
 
-#define SENTINEL_BYTE 0xCD
 
 
 bool check_initialized_field(void *ptr) {

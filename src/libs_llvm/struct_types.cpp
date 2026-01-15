@@ -50,10 +50,16 @@ void Generate_Struct_Types() {
         "DT_array"
     ); 
 
+    // --- map ---
+    struct_types["map_node"]  = StructType::create(
+        *TheContext,
+        {int8PtrTy, int8PtrTy, int8PtrTy},
+        "DT_map"
+    );
     // map
     struct_types["map"]  = StructType::create(
         *TheContext,
-        {intTy, intTy, intTy, intTy, int8PtrTy, int8PtrTy, int8PtrTy},
+        {intTy, intTy, intTy, intTy, struct_types["map_node"]->getPointerTo()->getPointerTo()},
         "DT_map"
     );
     

@@ -50,7 +50,9 @@ bool CompareListRecursive(Data_Tree L, Data_Tree R) {
     return true;
 }
 
-
+bool Data_Tree::CompareMap(Data_Tree &R) {
+    return CheckIsEquivalent(Type, R.Nested_Data[1].Type);
+}
 
 bool CompareListTuple(Data_Tree *L, Data_Tree R) {
 
@@ -93,6 +95,9 @@ int Data_Tree::Compare(Data_Tree other_tree) {
         return 0;
 
     if(Type=="array"&&other_tree.Type=="array")
+        return 0;
+
+    if(Type!="map"&&other_tree.Type=="map"&&CompareMap(other_tree))
         return 0;
  
     if((Nested_Data.size()==0&&other_tree.Nested_Data.size()==0) && !CheckIsEquivalent(Type, other_tree.Type))

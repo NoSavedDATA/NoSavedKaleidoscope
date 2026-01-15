@@ -216,12 +216,12 @@ std::unordered_map<std::string, uint16_t> data_name_to_size = {{"int", 4}, {"flo
 
 std::unordered_map<std::string, uint16_t> data_name_to_type = {{"int", 2}, {"float", 3}, {"bool", 4}, {"str", 5}, {"list", 6},
                                                                {"tuple", 7}, {"map", 8}, {"channel", 9}, {"int_vec", 10},
-                                                               {"float_vec", 11}, {"array", 12}};
+                                                               {"float_vec", 11}, {"array", 12}, {"map_node", 13}};
 std::unordered_map<uint16_t, std::string> data_type_to_name = {{2, "int"}, {3, "float"}, {4, "bool"}, {5, "str"}, {6, "list"},
                                                                {7, "tuple"}, {8, "map"}, {9, "channel"}, {10, "int_vec"},
-                                                               {11, "float_vec"}, {12, "array"}};
+                                                               {11, "float_vec"}, {12, "array"}, {13, "map_node"}};
 
-uint16_t data_type_count=13;
+uint16_t data_type_count=14;
 
 
 std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},

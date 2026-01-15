@@ -879,6 +879,15 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["map_print"].push_back("0");
 		Function_Arg_Names["map_print"].push_back("1");
+		
+		Function_Arg_Types["map_bad_key"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_bad_key"]["1"] = "str";
+		
+		Function_Arg_DataTypes["map_bad_key"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_bad_key"]["1"] = Data_Tree("str");
+		
+		Function_Arg_Names["map_bad_key"].push_back("0");
+		Function_Arg_Names["map_bad_key"].push_back("1");
 	
 		
 		Function_Arg_Types["randint"]["0"] = "Scope_Struct";
