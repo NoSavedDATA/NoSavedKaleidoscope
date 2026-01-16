@@ -59,7 +59,7 @@ void Generate_Struct_Types() {
     // map
     struct_types["map"]  = StructType::create(
         *TheContext,
-        {intTy, intTy, intTy, intTy, struct_types["map_node"]->getPointerTo()->getPointerTo()},
+        {intTy, intTy, intTy, intTy, intTy, struct_types["map_node"]->getPointerTo()->getPointerTo()},
         "DT_map"
     );
     

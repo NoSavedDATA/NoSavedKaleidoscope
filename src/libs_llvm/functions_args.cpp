@@ -871,6 +871,15 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_Create"].push_back("4");
 		Function_Arg_Names["map_Create"].push_back("5");
 		
+		Function_Arg_Types["map_expand"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_expand"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_expand"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_expand"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_expand"].push_back("0");
+		Function_Arg_Names["map_expand"].push_back("1");
+		
 		Function_Arg_Types["map_print"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_print"]["1"] = "map";
 		

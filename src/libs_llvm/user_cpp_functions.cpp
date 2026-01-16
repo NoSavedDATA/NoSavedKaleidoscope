@@ -44,7 +44,7 @@ void set_user_functions() {
 		"print_codegen", "print_codegen_silent", 
 		"read_float", "float_to_str", "nsk_pow", "nsk_sqrt", 
 		"dict_Create", "dict_New", "dict_Store_Key", "dict_Store_Key_int", "dict_Store_Key_float", "dict_print", "dict_Query", 
-		"map_Create", "print_str", "map_print", "map_bad_key", 
+		"map_Create", "map_expand", "print_str", "map_print", "map_bad_key", 
 		"dir_exists", "path_exists", 
 		"_quit_", 
 

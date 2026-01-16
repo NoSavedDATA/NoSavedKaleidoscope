@@ -955,6 +955,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("map_Create", map_CreateTy);
 
+	FunctionType *map_expandTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_expand", map_expandTy);
+
 	FunctionType *print_strTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy},
