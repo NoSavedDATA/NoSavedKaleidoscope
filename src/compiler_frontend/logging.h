@@ -13,6 +13,9 @@ void LogBlue(std::string);
 
 std::unique_ptr<ExprAST> LogError_toNextToken(int, std::string Str); 
 
+std::unique_ptr<ExprAST> LogErrorNextBlock(int line, std::string Str);
+std::unique_ptr<ExprAST> LogErrorNextFloatingBlock(int line, std::string Str);
+
 
 std::unique_ptr<ExprAST> LogErrorBreakLine(int, std::string Str); 
 

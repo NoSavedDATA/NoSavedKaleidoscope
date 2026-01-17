@@ -34,7 +34,6 @@ extern "C" void *allocate_void(Scope_Struct *scope_struct, int size, const char 
     void *ptr = scope_struct->Allocate(size, type_id);
     memset(ptr, SENTINEL_BYTE, size);
 
-    // scope_struct->gc.pointer_nodes.push_back(GC_Node(ptr, type));
 
     scope_struct->gc->size_occupied += size;
     scope_struct->gc->allocations++;

@@ -1271,127 +1271,9 @@ Value *WhileExprAST::codegen(Value *scope_struct) {
 
 
 
-std::string VariableExprAST::GetType(bool from_assignment) {
-  std::string type = Type;
-
-  if (type=="None") {
-    if (typeVars[parser_struct.function_name].find(Name) != typeVars[parser_struct.function_name].end())
-      type = typeVars[parser_struct.function_name][Name];
-    SetType(type);
-    // LogBlue("variable " + parser_struct.function_name + "/" + Name +  " has type " + type);
-  } else {
-    if(CanBeString)
-      SetType("str");
-  }
-  return type;
-}
-
-Data_Tree VariableExprAST::GetDataTree(bool from_assignment) {
-  // if(!data_type.empty)
-  //   return data_type;
-
-
-  Data_Tree data_type;
-  if (data_typeVars[parser_struct.function_name].find(Name) != data_typeVars[parser_struct.function_name].end())
-    data_type = data_typeVars[parser_struct.function_name][Name];
-  else
-    LogError(-1, "Could not find variable " + Name + " on scope " + parser_struct.function_name);
-
-
-
-
-  
-  return data_type;
-}
 
 
 bool seen_var_attr = false;
-Value *VariableExprAST::codegen(Value *scope_struct) {
-  if (not ShallCodegen)
-    return ConstantFP::get(*TheContext, APFloat(0.0f));
-  // Look this variable up in the function.
-
-  LogBlue("VariableExprAST o.O");
-
-  // Function *TheFunction = Builder->GetInsertBlock()->getParent();
-  
-
-  // Value *V;
-
-
-  // std::string type = GetType();
-  
-  // if (type=="None") {
-  //   if(!CanBeString)
-  //   {
-  //     LogError(parser_struct.line, "Variable " + Name + " was not found on scope " + parser_struct.function_name + ".");
-  //     return ConstantFP::get(*TheContext, APFloat(0.0f));
-  //   }
-  //   Value *_str = callret("CopyString", {scope_struct, global_str(Name)});
-  //   return _str;
-  // }
-
-
-
-  
-  // std::string pre_dot = GetPreDot();
-  // bool is_self = GetSelf();
-  // bool is_attr = GetIsAttribute();
-    
-
-
-
-  // if (!(is_self||is_attr))
-  //   return load_alloca(Name, type, parser_struct.function_name); 
-
-  
-
-  // if (is_self) {
-  //   int object_ptr_offset = ClassVariables[parser_struct.class_name][Name];
-  //   if (type=="float"||type=="int")
-  //     return callret("object_Load_on_Offset_"+type, {scope_struct, const_int(object_ptr_offset)});
-  //   else
-  //   {
-  //     // p2t("object_Load_on_Offset");
-  //     return callret("object_Load_on_Offset", {scope_struct, const_int(object_ptr_offset)});
-  //   }
-  // }
-
-  // Value *var_name;
-
-  // var_name = NameSolver->codegen(scope_struct);
-  // NameSolverAST *name_solver = static_cast<NameSolverAST *>(NameSolver.get());
-  // std::string Name = std::get<0>(name_solver->Names[name_solver->Names.size()-1]);
-  
-
-
- 
-  // std::string msg = "VariableExpr Variable " + Name + " load for type: " + type;
-  // p2t(msg);
-
-
-
-  // if (type=="object")
-  //   return var_name;
-
-
-  
-
-  
-  // // p2t("Variable load");
-  // std::string load_fn = type + "_Load";
-  // // std::cout << "Load: " << load_fn << "-------------------------------------------.\n";
-  // V = callret(load_fn, {scope_struct, var_name});
-
-  // return V;
-  return const_float(0.0);
-}
-
-
-
-
-
-
 
 
 
@@ -1699,6 +1581,9 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
             query_hash = query;
         Value *hash_pos = Builder->CreateURem(query_hash, map_capacity);
 
+        // call("print_str", {query});
+        // call("print_int", {hash_pos});
+
         Value *node_gep = Builder->CreateGEP(int8PtrTy->getPointerTo(), nodes, hash_pos);
         Value *node = Builder->CreateLoad(int8PtrTy, node_gep);
 
@@ -1735,9 +1620,9 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
         // Key overwrite
         Builder->SetInsertPoint(FromFirstKeyBB);
-        Value *next_node_gep = Builder->CreateStructGEP(st_node, node, 2);
-        Value *next_node = Builder->CreateLoad(int8PtrTy, next_node_gep);
-        Builder->CreateStore(next_node, new_node_next_gep);
+        Value *next_node_of_first_gep = Builder->CreateStructGEP(st_node, node, 2);
+        Value *next_node_of_first = Builder->CreateLoad(int8PtrTy, next_node_of_first_gep);
+        Builder->CreateStore(next_node_of_first, new_node_next_gep);
         Builder->CreateStore(new_node_ptr, node_gep);
         Builder->CreateBr(AfterBB);
 
@@ -1747,9 +1632,8 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
         PHINode *map_phi_node = Builder->CreatePHI(int8PtrTy, 2);
         map_phi_node->addIncoming(node, CheckFirstKeyBB);
         
-        next_node_gep = Builder->CreateStructGEP(st_node, map_phi_node, 2);
-        next_node = Builder->CreateLoad(int8PtrTy, next_node_gep);
-        // map_phi_node->addIncoming(next_node, PtrChaseBB);
+        Value *next_node_gep = Builder->CreateStructGEP(st_node, map_phi_node, 2);
+        Value *next_node = Builder->CreateLoad(int8PtrTy, next_node_gep);
         map_phi_node->addIncoming(next_node, PtrChaseCheckKeyBB);
 
         Value *IsNextNull = Builder->CreateICmpEQ(next_node, nullPtr);
@@ -1863,7 +1747,7 @@ Value *BinaryExprAST::codegen(Value *scope_struct) {
 
       
       // Copy data types that support copying (i.e, function <DT>_Copy exists)
-      if(auto Rvar = dynamic_cast<VariableExprAST *>(RHS.get())) // if it is leaf
+      if(auto Rvar = dynamic_cast<Nameable *>(RHS.get())) // if it is leaf
       {
         Function *F = TheModule->getFunction(copy_fn);
         if (F)
@@ -3363,11 +3247,9 @@ Value *NameableIdx::codegen(Value *scope_struct) {
 
     std::string key_type = inner_dt.Nested_Data[0].Type;
     std::string value_type = inner_dt.Nested_Data[1].Type;
-    LogBlue("Query with key type: " + key_type);
     if (query->getType()==intTy&&key_type=="float")
         query = Builder->CreateSIToFP(query, floatTy);
 
-    
 
     Value *capacity_gep = Builder->CreateStructGEP(st, loaded_var, 1);
     Value *map_capacity = Builder->CreateLoad(intTy, capacity_gep);

@@ -86,9 +86,9 @@ inline uint16_t get_16_l2(const uint64_t* base, int idx) {
 }
 
 
-// Find first uint16 that has leftmost bit set to 0
+// Find first uint16 that has the 2 leftmost bits set to 0
 inline int find_free_16_l2(uint64_t* buf, int words) {
-    const int per = 4; // 64 / 12;
+    const int per = 4; // 4 x 16 bits inside each int64;
     for (int w = 0; w < words; ++w) {
         if (~buf[w]) {
             for (int i = 0; i < per; ++i) {

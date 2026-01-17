@@ -21,8 +21,12 @@ GC_span_traits::GC_span_traits(int obj_size) : obj_size(obj_size) {
     while (N<32&&pages<4) {
         pages++;
         N = (8192*pages) / obj_size;
+        // std::cout << "N: " << N << ", pages: " << pages << ", obj size: " << obj_size << ".\n";
     }
     size = (8192*pages);
+
+    if ((float)((8192*pages)/obj_size) != ((8192*pages)/(float)obj_size))
+        N-=1;
     // std::cout << "Trait " << obj_size << "\n\tPages: " << pages << "\n\tN_elem: " << N << "\n\tTotal size: " << size << "\n\n";
 }
 
@@ -55,6 +59,7 @@ GC_Span::GC_Span(GC_Arena *arena, GC_span_traits *traits) : arena(arena), traits
 
     for (int i=traits->N; i< ((traits->N + types_per_word-1) / types_per_word)*types_per_word; ++i)
         set_16_L2(type_metadata, i, 1u); // Set as protected
+    // std::cout << "Created new span: " << traits->N << "/" << traits->size << ".\n";
 }
 
 GC_Arena::GC_Arena() {

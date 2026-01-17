@@ -1,33 +1,54 @@
-
-import example_lib
 import samples.auxy.playground_lib2
+import example_lib
 
-def float foo()
-	print("123")
-	map<str, int> m
 
-	m["x"] = 2
-	m["y"] = 10
-	m["z"] = 18
-	m["zz"] = 14
-	m["zzz"] = 16
-	m["ululu"] = 18
-	m["u"] = 34
+
+
+class A
+	int b
+	ctor()
+		self.b = 0
+		print("made obj A")
+
+	def float test()
+		self.b = 0
+		print("made obj A")
+		print("b is " + self.b)
+
+	def float i()
+		self.b = 0
+		print("made obj A")
+		print("b is " + self.b)
+
+	
+	
 
 
 
 main
-	foo()
-
-	placeholder[2,3] x
-	placeholder[3,4] y
-	placeholder[0,0] z
-
+	for i=0, i<1
+		map<str, int> m
+		placeholder[2,3] w
+		placeholder[3,4] t
+		placeholder[0,0] z
+		m["x"] = 1
+		m["y"] = 2
+		m["z"] = 3
+		m["zz"] = 4
+		m["zzz"] = 5
+		m["u"] = 6
+		m["ululu"] = 7
+		u = m["z"]
+		uu = m["z"]
+		m["zz"] = 8
+		int x=m["ululu"]
+		int y=m["zz"]
+		print("x: " + x)
+		print("y: " + y)
+		m.print()
+		print("loop " + i)
+	opa_tche()
 	oe()
+	opa()
 
-	z = add_int_to_placeholder(y,3,3)
-	z.print()
-
-	
-
-
+	A a()

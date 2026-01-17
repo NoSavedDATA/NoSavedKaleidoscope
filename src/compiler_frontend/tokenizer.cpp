@@ -50,6 +50,7 @@ std::map<int, std::string> token_to_string = {
 
   // functions/classes
   { tok_def, "def" },
+  { tok_constructor, "ctor" },
   { tok_class, "class" },
   { tok_import, "import" },
   { tok_self, "self" },
@@ -203,7 +204,7 @@ std::map<int, std::string> token_to_string = {
 
 };
 std::vector<char> ops = {'+', '-', '*', '/', '@', '=', '>', '<', 10, -14, ',', '(', ')', ';', tok_equal, tok_diff, tok_higher_eq, tok_minor_eq};
-std::vector<char> terminal_tokens = {';', tok_def, tok_extern, tok_class, tok_eof};
+std::vector<char> terminal_tokens = {';', tok_constructor, tok_def, tok_extern, tok_class, tok_eof};
 
 
 extern std::vector<std::string> LLVM_IR_Functions = {"pow", "sqrt"};
@@ -227,7 +228,7 @@ std::unordered_map<uint16_t, std::string> data_type_to_name = {{2, "int"}, {3, "
 uint16_t data_type_count=14;
 
 
-std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"class", tok_class}, {"extern", tok_extern},
+std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self}, {"def", tok_def}, {"ctor", tok_constructor}, {"class", tok_class}, {"extern", tok_extern},
                                              {"import", tok_import}, {"if", tok_if}, {"then", tok_then}, {"else", tok_else}, {"for", tok_for},
 										     {"while", tok_while}, {"async", tok_async}, {"asyncs", tok_asyncs}, {"finish", tok_async_finish},
 											 {"in", tok_in}, {"global", tok_global}, {"no_grad", tok_no_grad}, {"lock", tok_lock},

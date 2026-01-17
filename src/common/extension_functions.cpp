@@ -13,26 +13,6 @@ bool ShallCodegen = true;
 // Cuda
 #include "include.h"
 
-float FirstNonzero(int *vec, int size)
-{  
-
-  float idx = -1;
-  for (int i=0; i<size; i++)
-    if (vec[i]!=0)
-    {    
-      idx = i;
-      break;
-    }
-  return idx;
-}
-
-void LogErrorCodegen(std::string Str, int line) {
-  ShallCodegen = false;
-  
-  if (Str!=" ")
-    std::cout << "\nLine: " << line << "\n   \033[31m Error: \033[0m " << Str << "\n\n";
-}
-
 
 
 

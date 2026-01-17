@@ -29,6 +29,7 @@ enum Token {
 
     // functions/classes
     tok_def = -2,
+    tok_constructor = -66,
     tok_class = -77,
     tok_self = -78,
     tok_class_attr = -79,
@@ -176,3 +177,4 @@ int get_tokenPrecedence();
 
 void get_tok_until_space();
 // void get_tok_util_dot_or_space();
+

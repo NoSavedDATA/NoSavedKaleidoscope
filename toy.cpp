@@ -267,7 +267,7 @@ void InitializeTokenizer() {
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
     while (true) {
-        //  std::cout << "MAIN LOOP, reading token: " << ReverseToken(CurTok) << "\n";
+         // std::cout << "MAIN LOOP, reading token: " << CurTok << "/" << ReverseToken(CurTok) << "\n";
         switch (CurTok) {
         case 13:
             std::cout << "FOUND CARRIAGE RETURN" << ".\n";
@@ -275,6 +275,9 @@ static void MainLoop() {
         case tok_eof:
             return;
         case ';': // ignore top-level semicolons.
+            getNextToken();
+            break;
+        case '.': 
             getNextToken();
             break;
         case tok_space:
@@ -294,6 +297,9 @@ static void MainLoop() {
             break;
         case tok_extern:
             HandleExtern();
+            break;
+        case tok_constructor:
+            LogErrorNextBlock(LineCounter, "Constructor has no class associated.");
             break;
         default:
             

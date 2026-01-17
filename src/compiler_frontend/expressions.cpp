@@ -160,17 +160,6 @@ VariableListExprAST::VariableListExprAST(std::vector<std::unique_ptr<Nameable>> 
 } 
 
   
-  /// VariableExprAST - Expression class for referencing a variable, like "a".
-VariableExprAST::VariableExprAST(std::unique_ptr<ExprAST> NameSolver, bool CanBeString, const std::string &Name, Parser_Struct parser_struct)
-                                : CanBeString(CanBeString), Name(Name), parser_struct(parser_struct) {
-  this->isVarLoad = true;
-  this->NameSolver = std::move(NameSolver);
-}
-  
-const std::string &VariableExprAST::getName() const { return Name; }
-std::string VariableExprAST::GetName()  {
-  return Name;
-}
 
 
   

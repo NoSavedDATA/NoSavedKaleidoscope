@@ -49,9 +49,7 @@ using namespace llvm;
 
 /// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogErrorS(int line, std::string Str) {
-  // ShallCodegen = false;
   Shall_Exit = true;
-  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
 
   
   if(line!=-1)
@@ -125,20 +123,48 @@ std::unique_ptr<ExprAST> LogErrorBreakLine(int line, std::string Str) {
   return nullptr;
 }
 
+std::unique_ptr<ExprAST> LogErrorNextBlock(int line, std::string Str) {
+  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
+  LogErrorS(line, Str);
+
+
+
+  while(((CurTok!=tok_def || SeenTabs>0) && CurTok!=tok_class && CurTok!=tok_main && CurTok!=tok_eof && CurTok!=tok_finish))
+    getNextToken();
+
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return nullptr;
+}
+
+std::unique_ptr<ExprAST> LogErrorNextFloatingBlock(int line, std::string Str) {
+  //fprintf(stderr, "\033[31m Error: \033[0m%s\n", Str);
+  LogErrorS(line, Str);
+
+
+
+  while(((CurTok!=tok_def) && CurTok!=tok_class && CurTok!=tok_main && CurTok!=tok_eof && CurTok!=tok_finish))
+    getNextToken();
+
+  if (CurTok==tok_space)
+    getNextToken();
+  
+  return nullptr;
+}
+
 void LogWarning(const char *Str) {
   std::cout << "\nLine: " << LineCounter << "\n   \033[33m Aviso: \033[0m " << Str << "\n\n";
 }
 
 // Modified LogError function with token parameter
 std::unique_ptr<ExprAST> LogErrorT(int line, int CurTok) {
-  // ShallCodegen = false;
   Shall_Exit = true;
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
   std::cout << "\n\n" << tokenizer.current_file << "\n";
   std::cout << "\nLine: " << line << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
-
 
   // while (true) {
   //   char c = tokenizer.get();

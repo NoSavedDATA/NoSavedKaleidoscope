@@ -1987,7 +1987,7 @@ std::unique_ptr<ExprAST> ParseExpression(Parser_Struct parser_struct, std::strin
 ///   ::= id '(' id* ')'
 ///   ::= binary LETTER number? (id, id)
 ///   ::= unary LETTER (id)
-std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
+std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool from_ctor) {
   std::string FnName="";
   if (parser_struct.class_name!="")
     FnName = parser_struct.class_name+"_";
@@ -1996,20 +1996,21 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   _class = parser_struct.class_name;
 
   
-  
 
-  std::string return_type;
-
-  if (!in_str(IdentifierStr, data_tokens)) {
-    LogErrorBreakLine(parser_struct.line, "Expected prototype function return type.");
+  if (!in_str(IdentifierStr, data_tokens) && !from_ctor) {
+    LogErrorNextFloatingBlock(parser_struct.line, "Expected function return type.");
     return nullptr;
   }
 
-  return_type = IdentifierStr;
-  Data_Tree return_data_type = ParseDataTree(return_type, in_str(IdentifierStr,compound_tokens), parser_struct);
-  // std::cout << "return is"  << ".\n";
-  // return_data_type.Print();
-
+  std::string return_type;
+  Data_Tree return_data_type;
+  if (from_ctor) {
+      return_type = "int";
+      return_data_type = Data_Tree("int");
+  } else {  
+      return_type = IdentifierStr;
+      return_data_type = ParseDataTree(return_type, in_str(IdentifierStr,compound_tokens), parser_struct);
+  }
   
 
 
@@ -2019,6 +2020,12 @@ std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct) {
   switch (CurTok) {
   default:
     return LogErrorP(parser_struct.line, "Expected prototype function name.");
+  case tok_constructor:
+    FnName += "__init__";
+    method =  "__init__";
+    Kind = 0;
+    getNextToken();
+    break;
   case tok_identifier:
     FnName += IdentifierStr;
     method = IdentifierStr;
@@ -2214,9 +2221,6 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
     getNextToken();
   }
 
-
-
-
   // Get lib name
   std::string lib_name = IdentifierStr;
   int dots=0; 
@@ -2234,33 +2238,32 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
         if (c=='.')
             c = tokenizer.get();
       }
-      // CurTok=tok_space;
   }
-
+  
   getNextToken(true);
-  // while(CurTok=='.')
-  // {
-  //   dots++;
-  //   getNextToken(); // get dot
-  //   lib_name += "/" + IdentifierStr;
-  //   getNextToken();
-  // }
-
+  
   std::string full_path_lib = tokenizer.current_dir+"/"+lib_name+".ai";
 
   // Import logic
   if(fs::exists(full_path_lib))
   {
-    // get_tok_until_space();
-    getNextToken();
-    tokenizer.importFile(full_path_lib, dots);
-    if (CurTok=='.')
-        getNextToken();
+
+    // getNextToken();
+  
+    tokenizer.importFile(full_path_lib, dots); // changed current
+    // tokenizer.cur_c = ' ';
+    // CurTok=tok_space;
+
+    // if (CurTok=='.') {
+    //     if(isalpha(tokenizer.cur_c)) {
+    //         CurTok=tok_space;
+    //     } else
+    //         getNextToken();
+    // }
 
     return nullptr;
-  } else {
+  } else
     return std::make_unique<LibImportExprAST>(lib_name, is_default, parser_struct);
-  }
 }
 
 
@@ -2271,16 +2274,14 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
 
   int cur_level_tabs = SeenTabs;
 
-  getNextToken(); // eat def.
+  bool is_constructor = (CurTok==tok_constructor);
+  if (CurTok==tok_def)
+      getNextToken(); // eat def.
 
 
-  auto Proto = ParsePrototype(parser_struct);
+  auto Proto = ParsePrototype(parser_struct, is_constructor);
   if (!Proto)
-  {
-    std::string _error = "Error defining " + parser_struct.class_name + " prototype.";  
-    LogError(parser_struct.line, _error);
     return nullptr;
-  } 
 
   // std::cout << "PROTO NAME IS " << Proto->getName() << ".\n";
   parser_struct.function_name = Proto->getName();
@@ -2443,6 +2444,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
 
       if (CurTok!=',')
         break;
+
       getNextToken(); // eat ','
     }
     while (CurTok==tok_space)
@@ -2450,26 +2452,14 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
   }
   ClassSize[Name] = last_offset;
 
-
-  
-
-  // for (auto &pair : ClassVariables[Name])
-  // {
-  //   std::cout << Name << ": " << pair.first << " - " << pair.second << ".\n";
-  // }
-  
-  // llvm::Type *class_struct = StructType::create(*TheContext);
-  // class_struct->setBody(llvm_types);
-  // ClassStructs[Name] = class_struct; // I fear this approach may lead to stack overflow, like what happend to the previous string allocas.
+  if (last_offset==0)
+    return LogErrorNextBlock(parser_struct.line, "Class " + Name + " missing attributes field.");
 
 
 
 
-
-
-  if (CurTok!=tok_def)
-    return LogError(parser_struct.line, "A class definition requires it's functions. Got token: " + std::to_string(CurTok) + "/" + ReverseToken(CurTok));
-    // return LogError(parser_struct.line, "A class definition requires it's functions. Got token: " + ReverseToken(CurTok));
+  if (CurTok!=tok_constructor)
+    return LogErrorNextBlock(parser_struct.line, "Class " + Name + " requires constructor, got token: "  + ReverseToken(CurTok));
 
   int i=0;
 
@@ -2479,7 +2469,7 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
 
   std::vector<fn_descriptor> Functions;
 
-  while(CurTok==tok_def)
+  while(CurTok==tok_constructor||CurTok==tok_def)
   {
     if(SeenTabs==0)
       break;
@@ -2488,8 +2478,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     if (!Func)
       return nullptr;
       //return LogError(parser_struct.line, "Falha no parsing da função da Classe.");
-    if (!ends_with(Func->getProto().getName(),"__init__") && i==0)
-      return LogError(parser_struct.line, "Class requires __init__ method");
     
     //std::cout << "THE FUNCTION WAS CREATED AS: " << Func->getProto().getName() << "\n";
 

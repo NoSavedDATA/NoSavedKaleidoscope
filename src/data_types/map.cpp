@@ -133,6 +133,7 @@ void DT_map::Insert(int hash_pos, DT_map_node *node, DT_map_node **nodes) {
 }
 
 extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
+    std::cout << "---EXPAND"  << ".\n";
     int capacity = map->capacity*4;
 
     DT_map_node **nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
@@ -181,6 +182,7 @@ extern "C" void map_print(Scope_Struct *scope_struct, DT_map *map) {
     std::cout << "\n";
     for (int i=0; i<map->capacity; ++i) {
         DT_map_node *node = map->nodes[i];
+        // std::cout << "i: " << i << ".\n";
         while (node!=nullptr) {
             if (map->key_type=="str") {
                 char *key = static_cast<char*>(node->key);

@@ -35,9 +35,9 @@ void *GC_Span::Allocate(uint16_t type_id) {
     if (free_idx==-1)
         return nullptr;
 
+    // std::cout << "" << free_idx << "/" << traits->obj_size << "/" << traits->obj_size*free_idx << "\n";
     
     set_16_r12_mark(type_metadata, free_idx, type_id);
-    // mark_bits_alloc(mark_bits, free_idx);
     return static_cast<char*>(span_address) + traits->obj_size*free_idx;
 }
 
@@ -62,8 +62,10 @@ void *GC_Arena::Allocate(int size, uint16_t type_id) {
     if (Spans.count(size)==0) {
         if (!Check_Arena_Size_Ok(arena_size, size_allocated+traits->size))
             return nullptr;        
+        // std::cout << "\n\n\n\n----NEW ARENA" << "-----.\n\n\n";
         span = new GC_Span(this, traits);
         Spans.emplace(size, std::vector<GC_Span*>{span});
+        // std::exit(0);
         return span->Allocate(type_id);
     }
 

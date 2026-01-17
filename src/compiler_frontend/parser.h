@@ -175,7 +175,7 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
   ///   ::= id '(' id* ')'
   ///   ::= binary LETTER number? (id, id)
   ///   ::= unary LETTER (id)
-std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct); 
+std::unique_ptr<PrototypeAST> ParsePrototype(Parser_Struct parser_struct, bool from_ctor=false); 
   
   
 

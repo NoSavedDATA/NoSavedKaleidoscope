@@ -607,23 +607,6 @@ class NestedCallExprAST : public ExprAST {
     Value *codegen(Value *scope_struct) override;
 };
   
-/// VariableExprAST - Expression class for referencing a variable, like "a".
-class VariableExprAST : public ExprAST {
-
-  public:
-    std::unique_ptr<ExprAST> NameSolver;
-    std::string Name;
-    bool CanBeString;
-    Parser_Struct parser_struct;
-    VariableExprAST(std::unique_ptr<ExprAST> NameSolver, bool CanBeString, const std::string &Name, Parser_Struct parser_struct);
-
-    Value *codegen(Value *scope_struct) override;
-    const std::string &getName() const; 
-    std::string GetName() override; 
-
-    std::string GetType(bool from_assignment=false) override; 
-    Data_Tree GetDataTree(bool from_assignment=false) override;
-};
   
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST {
