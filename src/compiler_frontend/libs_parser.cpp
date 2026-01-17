@@ -28,6 +28,8 @@
 std::map<std::string, std::string> lib_function_remaps;
 std::map<std::string, Data_Tree> Idx_Fn_Return;
 
+std::vector<std::unique_ptr<ExprAST>> fn_arg_inits;
+
 
 
 using namespace llvm;
@@ -136,8 +138,6 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
         fn_return_type_str = "void_ptr";
     }
 
-    
-
 
 
     
@@ -209,6 +209,7 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
         fn_return_type_str = "str_vec";
     Lib_Functions_Return[Name] = fn_return_type_str; // for llvm return type (so_libs.cpp)
     Lib_Functions_Args[Name] = std::move(arg_types_str);
+    Function_Arg_Count[Name] = ArgTypes.size()-1; // ignoring scope struct
 
 
     Data_Tree return_dt;
@@ -427,6 +428,7 @@ bool LibParser::TryParseFnDataType() {
         LogError(-1, "Expected data type identifier after $> expression ");
     }
     
+    lib_type = "";
     while(isalpha(LastChar)||LastChar=='_') { 
         lib_type += LastChar;
         LastChar = _getCh();
@@ -434,8 +436,47 @@ bool LibParser::TryParseFnDataType() {
 
     lib_dt = Data_Tree(lib_type);
 
-    if (LastChar=='<') {
+    if (LastChar=='<')
         ParseDT(lib_dt);
+
+    
+    while(LastChar==32||LastChar==tok_tab) 
+        LastChar = _getCh();
+
+    if (LastChar=='$') {
+        LastChar=_getCh();
+        Parser_Struct parser_struct;
+        char PreCurTok = CurTok;
+
+        
+        tokenizer.has_lib_file=true;
+        tokenizer.lib_file = std::move(file);
+        CurTok = tok_identifier;
+
+        getNextToken();
+        if(CurTok==tok_space)
+            getNextToken();
+
+
+        while (CurTok==tok_identifier) {
+            std::string arg_name = IdentifierStr;
+            getNextToken(); // eat identifier
+
+            if (CurTok!='=') {
+                LogError(-1, "Expected \"=\" for arg init.");
+                std::exit(0);
+            }
+            getNextToken(); // eat =
+            auto arg = ParseExpression(parser_struct, "");
+
+            ArgsInit[fn_name].emplace(arg_name, std::move(arg));
+        }
+
+                
+        tokenizer.has_lib_file=false;
+        file = std::move(tokenizer.lib_file);
+        CurTok = PreCurTok;
+
     }
     
 
@@ -566,7 +607,7 @@ void LibParser::ParseExtern() {
     // std::cout << "\nextern \"C\" " << return_type << " " << running_string << ".\n";
     // std::cout << "" << ReverseToken(token) << ".\n";
     
-    std::string fn_name = running_string;
+    fn_name = running_string;
 
     _getToken(); // eat fn name
 

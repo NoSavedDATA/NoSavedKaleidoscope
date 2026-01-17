@@ -620,7 +620,6 @@ void Allocate_On_Pointer_Stack(Value *scope_struct, std::string function_name, s
     stack_top_value = Builder->CreateAdd(stack_top_value, const_int(1));
     function_values[function_name]["QQ_stack_top"] = stack_top_value;
     // p2t("allocate " + var_name);
-    // call("print_void_ptr", {val});
 }
 void Allocate_On_Pointer_Stack_no_metadata(Value *scope_struct, std::string function_name, Value *val) {
     Value *stack_top_value = function_values[function_name]["QQ_stack_top"];
@@ -768,7 +767,7 @@ Value *DataExprAST::codegen(Value *scope_struct) {
     } else if (is_attr) {
       LogError(parser_struct.line, "Creating attribute in a data expression is not supported.");
     }
-    else {      
+    else { 
         Allocate_On_Pointer_Stack(scope_struct, parser_struct.function_name, VarName, initial_value); 
         function_values[parser_struct.function_name][VarName] = initial_value;
         if (parser_struct.loop_depth==0&&Type=="array")
@@ -2146,8 +2145,11 @@ Value *UnaryExprAST::codegen(Value *scope_struct) {
   
 
   Function *F = getFunction(std::string("unary") + std::to_string(Opcode));
-  if (!F)
-    return LogErrorV(parser_struct.line,"Unknown unary operator.");
+  if (!F) {
+    auto err = LogErrorV(parser_struct.line,"Unknown unary operator.");
+    std::cout << "" << Opcode << "/" << ReverseToken(Opcode) << ".\n";
+    return err;
+  }
 
   return Builder->CreateCall(F, OperandV, "unop");
 }
@@ -2837,15 +2839,17 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
 
   }
 
+  i = i + arg_offset-1;
 
   // -- Add Default Arguments -- //
-  if (Function_Arg_Count.count(fn_name)>0) {
+  if (Function_Arg_Count.count(fn_name)>0&&!in_str(fn_name, vararg_methods)) {
       int arg_count = Function_Arg_Count[fn_name];
 
       int c=i+1;
       
       std::vector<std::string> fn_args_name = Function_Arg_Names[fn_name];
       for (; i<Args.size(); ++i, ++c) { // Positional Arguments
+        std::cout << "try positional argument: " << i << ".\n";
           auto PosArg = dynamic_cast<PositionalArgExprAST*>(Args[i].get());
           if(!PosArg) {
             LogError(parser_struct.line, "Standard argument followed by positional argument.");
@@ -2863,7 +2867,7 @@ inline std::vector<Value *> Codegen_Argument_List(Parser_Struct parser_struct, s
               ArgsV.push_back(arg_default);
           }
 
-
+        
           ArgsV.push_back(Args[i]->codegen(scope_struct));
       }
 
@@ -3388,7 +3392,6 @@ Value *NameableIdx::codegen(Value *scope_struct) {
         query_hash = query;
     Value *hash_pos = Builder->CreateURem(query_hash, map_capacity);
 
-    call("print_int", {hash_pos}); 
 
     Value *node_gep = Builder->CreateGEP(int8PtrTy, nodes, hash_pos);
     Value *node = Builder->CreateLoad(int8PtrTy, node_gep);
@@ -3623,7 +3626,7 @@ Value *NameableCall::codegen(Value *scope_struct) {
 
   Value *previous_obj, *previous_stack_top;
   
-  if (!is_nsk_fn) {
+  if (!is_nsk_fn||Callee=="scope_struct_Sweep") {
       // Prevents the case in which it allocates a slot for an argument
       previous_stack_top = function_values[parser_struct.function_name]["QQ_stack_top"];
       Set_Stack_Top(scope_struct, parser_struct.function_name);

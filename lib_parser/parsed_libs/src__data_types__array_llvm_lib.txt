@@ -1,4 +1,4 @@
-1822-01-13 15:38:04
+1822-01-16 17:04:41
 
 	FunctionType *array_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -104,6 +104,13 @@
 		false
 	);
 	TheModule->getOrInsertFunction("ones_float", ones_floatTy);
+
+	FunctionType *array_print_strTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_print_str", array_print_strTy);
 
 	FunctionType *array_Split_ParallelTy= FunctionType::get(
 		int8PtrTy,

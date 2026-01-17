@@ -136,6 +136,7 @@ std::unique_ptr<ExprAST> LogErrorT(int line, int CurTok) {
   //char buf[100];
   //snprintf(buf, sizeof(buf), "token %d inesperado.", CurTok);
   //fprintf(stderr, "\033[31mError: \033[0m%s\n", buf);
+  std::cout << "\n\n" << tokenizer.current_file << "\n";
   std::cout << "\nLine: " << line << "\n   \033[31m Error: \033[0mUnexpected token " << ReverseToken(CurTok) << ". Expected an expression.\n\n";
 
 

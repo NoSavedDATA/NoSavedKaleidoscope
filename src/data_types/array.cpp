@@ -55,8 +55,6 @@ extern "C" DT_array *array_Create(Scope_Struct *scope_struct, char *name, char *
 
 void array_Clean_Up(void *data_ptr) {
     DT_array *array = static_cast<DT_array *>(data_ptr);
-    std::cout << "clean array " << array << ".\n";
-    
     free(array->data);
 }
 
@@ -250,6 +248,17 @@ extern "C" DT_float_vec *ones_float(Scope_Struct *scope_struct, int size) {
   for(int i=0; i<size; ++i)
     vec->vec[i] = 1;
   return vec;
+}
+
+
+extern "C" void array_print_str(Scope_Struct *scope_struct, DT_array *vec) {
+    char **ptr = static_cast<char**>(vec->data);
+    int size = vec->virtual_size;
+
+    std::cout << "[";
+    for (int i=0; i<size-1; ++i)
+        std::cout << ptr[i] << ",";
+    std::cout << ptr[size-1] << "]\n";
 }
 
 

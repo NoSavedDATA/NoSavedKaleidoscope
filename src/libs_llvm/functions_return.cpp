@@ -46,7 +46,7 @@ void set_functions_return_type() {
 						{"CreateNotesVector", "list"}, {"Dispose_NotesVector", "float"}, {"Add_To_NotesVector_float", "list"}, {"Add_To_NotesVector_int", "list"}, {"Add_To_NotesVector_str", "list"}, 
 						{"channel_str_message", "float"}, {"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_message", "float"}, {"channel_float_message", "float"}, {"float_channel_Idx", "float"}, {"float_channel_sum", "float"}, {"float_channel_mean", "float"}, {"float_channel_terminate", "float"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"channel_int_message", "float"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_mean", "float"}, {"int_channel_terminate", "float"}, {"int_channel_alive", "bool"}, 
 						{"list_New", "list"}, {"list_append", "float"}, {"list_print", "float"}, {"tuple_print", "float"}, {"list_Create", "list"}, {"list_shuffle", "float"}, {"list_size", "int"}, {"list_as_float_vec", "float_vec"}, {"list_CalculateIdx", "int"}, {"to_int", "int"}, {"to_float", "float"}, {"list_CalculateSliceIdx", ""}, {"list_Slice", "list"}, {"int_list_Store_Idx", "float"}, {"float_list_Store_Idx", "float"}, {"list_Store_Idx", "float"}, {"zip", "list"}, 
-						{"map_Create", "map"}, 
+						{"map_Create", "map"}, {"map_keys", "array"}, {"map_values", "array"}, 
 
 	};
 
@@ -172,6 +172,8 @@ void set_functions_return_type() {
 	functions_return_data_type["str_str_equal"] = Data_Tree("bool");
 	functions_return_data_type["readline"] = Data_Tree("str");
 	functions_return_data_type["map_Create"] = Data_Tree("map");
+	functions_return_data_type["map_keys"] = Data_Tree("array");
+	functions_return_data_type["map_values"] = Data_Tree("array");
 	functions_return_data_type["emerge_int"] = Data_Tree("int");
 	functions_return_data_type["emerge_float"] = Data_Tree("float");
 	functions_return_data_type["_tid"] = Data_Tree("float");

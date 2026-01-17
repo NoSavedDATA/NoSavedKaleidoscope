@@ -41,6 +41,24 @@
 	Function_Arg_Names["map_print"].push_back("0");
 	Function_Arg_Names["map_print"].push_back("1");
 	
+	Function_Arg_Types["map_keys"]["0"] = "Scope_Struct";
+	Function_Arg_Types["map_keys"]["1"] = "map";
+	
+	Function_Arg_DataTypes["map_keys"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["map_keys"]["1"] = Data_Tree("map");
+	
+	Function_Arg_Names["map_keys"].push_back("0");
+	Function_Arg_Names["map_keys"].push_back("1");
+	
+	Function_Arg_Types["map_values"]["0"] = "Scope_Struct";
+	Function_Arg_Types["map_values"]["1"] = "map";
+	
+	Function_Arg_DataTypes["map_values"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["map_values"]["1"] = Data_Tree("map");
+	
+	Function_Arg_Names["map_values"].push_back("0");
+	Function_Arg_Names["map_values"].push_back("1");
+	
 	Function_Arg_Types["map_bad_key"]["0"] = "Scope_Struct";
 	Function_Arg_Types["map_bad_key"]["1"] = "str";
 	

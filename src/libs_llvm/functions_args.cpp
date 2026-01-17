@@ -889,6 +889,24 @@ void set_functions_args_type() {
 		Function_Arg_Names["map_print"].push_back("0");
 		Function_Arg_Names["map_print"].push_back("1");
 		
+		Function_Arg_Types["map_keys"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_keys"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_keys"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_keys"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_keys"].push_back("0");
+		Function_Arg_Names["map_keys"].push_back("1");
+		
+		Function_Arg_Types["map_values"]["0"] = "Scope_Struct";
+		Function_Arg_Types["map_values"]["1"] = "map";
+		
+		Function_Arg_DataTypes["map_values"]["0"] = Data_Tree("Scope_Struct");
+		Function_Arg_DataTypes["map_values"]["1"] = Data_Tree("map");
+		
+		Function_Arg_Names["map_values"].push_back("0");
+		Function_Arg_Names["map_values"].push_back("1");
+		
 		Function_Arg_Types["map_bad_key"]["0"] = "Scope_Struct";
 		Function_Arg_Types["map_bad_key"]["1"] = "str";
 		
@@ -1170,6 +1188,17 @@ void set_functions_args_type() {
 		
 		Function_Arg_Names["ones_float"].push_back("0");
 		Function_Arg_Names["ones_float"].push_back("1");
+		
+		Function_Arg_Types["array_print_str"]["0"] = "Scope_Struct";
+		Function_Arg_Types["array_print_str"]["1"] = "array";
+		
+		Function_Arg_DataTypes["array_print_str"]["0"] = Data_Tree("Scope_Struct");
+		Data_Tree array_print_str_1 = Data_Tree("array");
+		array_print_str_1.Nested_Data.push_back(Data_Tree("any"));
+		Function_Arg_DataTypes["array_print_str"]["1"] = array_print_str_1;
+		
+		Function_Arg_Names["array_print_str"].push_back("0");
+		Function_Arg_Names["array_print_str"].push_back("1");
 		
 		Function_Arg_Types["array_Split_Parallel"]["0"] = "Scope_Struct";
 		Function_Arg_Types["array_Split_Parallel"]["1"] = "array";

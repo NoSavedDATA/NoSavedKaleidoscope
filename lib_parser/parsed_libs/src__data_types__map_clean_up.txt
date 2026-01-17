@@ -1,0 +1,2 @@
+	clean_up_functions["map_node"] = map_node_Clean_Up;
+	clean_up_functions["map"] = map_Clean_Up;

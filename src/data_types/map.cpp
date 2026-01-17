@@ -2,9 +2,12 @@
 #include <stdio.h>
 #include <string>
 
+#include "../common/extension_functions.h"
 #include "../compiler_frontend/logging_v.h"
+#include "../compiler_frontend/tokenizer.h"
 #include "../pool/include.h"
 #include "../pool/pool.h"
+#include "array.h"
 
 #include "data_tree.h"
 #include "map.h"
@@ -54,13 +57,12 @@ void DT_map::New(int size, int key_size, int value_size, std::string key_type, s
     if (capacity<8)
         capacity=8;
 
-    // expand_at = capacity*4;
-    expand_at = 3;
+    expand_at = capacity*4;
 
     nodes = (DT_map_node**)malloc(capacity*8); // 8 == size of one void *
     for (int i=0; i<capacity; ++i)
         nodes[i] = nullptr;
-    std::cout << "create map: " << key_size << "/" << value_size  << "/" << key_type << ".\n";
+    // std::cout << "create map: " << key_size << "/" << value_size  << "/" << key_type << ".\n";
 }
 
 extern "C" DT_map *map_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_map *init_val,
@@ -90,6 +92,31 @@ extern "C" DT_map *map_Create(Scope_Struct *scope_struct, char *name, char *scop
 
     
     return map;
+}
+
+void map_node_Clean_Up(void *ptr) {
+    // Let the map clean as it has better context.
+}
+
+void map_Clean_Up(void *ptr) {
+    DT_map *map = static_cast<DT_map*>(ptr);
+ 
+    bool key_primary = in_str(map->key_type, primary_data_tokens);
+    bool val_primary = in_str(map->val_type, primary_data_tokens);
+
+    for (int i=0; i<map->capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        while (node!=nullptr) {
+            if(key_primary) 
+                free(node->key);
+            if(val_primary) 
+                free(node->value);
+            
+            node = node->next;
+        }
+    }
+
+    free(map->nodes);
 }
 
 
@@ -144,6 +171,7 @@ extern "C" void map_expand(Scope_Struct *scope_struct, DT_map *map) {
     map->expand_at = capacity*4;
 }
 
+
 extern "C" void print_str(char *str) {
     std::cout << "print_str: " << str << ".\n";
 }
@@ -169,6 +197,67 @@ extern "C" void map_print(Scope_Struct *scope_struct, DT_map *map) {
             node = node->next;
         }
     }
+}
+
+
+extern "C" DT_array *map_keys(Scope_Struct *scope_struct, DT_map *map) {
+    DT_array *array = newT<DT_array>(scope_struct, "array");
+    array->New(map->size, map->key_size, map->key_type);
+    
+    int idx=0;
+    for (int i=0; i<map->capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        while (node!=nullptr) {
+            if (map->key_type=="str") {
+                char *key = static_cast<char*>(node->key);
+                char **vec = static_cast<char**>(array->data);
+                vec[idx] = key;
+            } else if (map->key_type=="int") {
+                int *key = static_cast<int*>(node->key);
+                int *vec = static_cast<int*>(array->data);
+                vec[idx] = *key;
+            } else if (map->key_type=="float") {
+                float *key = static_cast<float*>(node->key);
+                float *vec = static_cast<float*>(array->data);
+                vec[idx] = *key;
+            }
+             
+            
+            idx++;
+            node = node->next;
+        }
+    }
+    return array;
+}
+
+extern "C" DT_array *map_values(Scope_Struct *scope_struct, DT_map *map) {
+    DT_array *array = newT<DT_array>(scope_struct, "array");
+    array->New(map->size, map->val_size, map->val_type);
+    
+    int idx=0;
+    for (int i=0; i<map->capacity; ++i) {
+        DT_map_node *node = map->nodes[i];
+        while (node!=nullptr) {
+            if (map->val_type=="str") {
+                char *value = static_cast<char*>(node->value);
+                char **vec = static_cast<char**>(array->data);
+                vec[idx] = value;
+            } else if (map->val_type=="int") {
+                int *value = static_cast<int*>(node->value);
+                int *vec = static_cast<int*>(array->data);
+                vec[idx] = *value;
+            } else if (map->val_type=="float") {
+                float *value = static_cast<float*>(node->value);
+                float *vec = static_cast<float*>(array->data);
+                vec[idx] = *value;
+            }
+             
+            
+            idx++;
+            node = node->next;
+        }
+    }
+    return array;
 }
 
 extern "C" void map_bad_key(Scope_Struct *scope_struct, char *key) {

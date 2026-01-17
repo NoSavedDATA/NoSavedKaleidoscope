@@ -445,7 +445,7 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
     std::string include_path = lib_dir + "/include.ai";
     if(fs::exists(include_path)) {
       has_nsk_ai=true;
-      get_tok_util_space();
+      get_tok_until_space();
       tokenizer.importFile(include_path, 0);
     } else 
       getNextToken(); // eat lib name

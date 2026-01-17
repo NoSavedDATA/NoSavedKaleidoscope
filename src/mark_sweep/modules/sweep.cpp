@@ -13,6 +13,7 @@
 #include "../../clean_up/clean_up.h"
 #include "../../data_types/array.h"
 #include "../../data_types/list.h"
+#include "../../data_types/map.h"
 #include "../../mangler/scope_struct.h"
 #include "../../pool/pool.h"
 #include "../include.h"
@@ -74,6 +75,20 @@ inline void gc_list(void *ptr, const std::string &root_type, std::vector<GC_Node
                 root_nodes.push_back(data[i]);
         } 
     }
+    if (root_type=="map") {
+        DT_map *map = static_cast<DT_map*>(ptr);
+        bool is_value_compound = in_str(map->val_type, compound_tokens);
+
+        for (int i=0; i<map->capacity; ++i) {
+            DT_map_node *node = map->nodes[i];
+            while (node!=nullptr) {
+                root_nodes.push_back(node);
+                if(is_value_compound);
+                    gc_list(node, map->val_type, work_list, root_nodes);
+                node = node->next;
+            }
+        }
+    }
 }
 
 
@@ -125,24 +140,6 @@ void check_roots_worklist(Scope_Struct *scope_struct, std::vector<void *> &root_
         gc_list(root_ptr, root_type, work_list, root_nodes);
     }
     mark_worklist_pointers(work_list, root_nodes);
-
-    // for (void &root : scope_struct->root_nodes)
-    // {
-    //     root_nodes.push_back(GC_Node(root.ptr, root.type));
-    //     if (ClassPointers.count(root.type)>0) {
-    //         for (int i=0; i<ClassPointers[root.type].size(); ++i) {
-    //             int offset = ClassPointers[root.type][i];
-    //             std::string type = ClassPointersType[root.type][i];
-                
-    //             void **slot = (void **)(static_cast<char*>(root.ptr)+offset);
-                
-    //             if(check_initialized_field(slot))
-    //                 work_list.push_back(GC_Node(*slot, type));
-    //         }
-    //     }
-    //     gc_list(root.ptr, root.type, work_list, root_nodes);
-    // }
-    // mark_worklist_pointers(work_list, root_nodes);
 }
 
 

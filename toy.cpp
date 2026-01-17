@@ -352,6 +352,7 @@ int main(int argc, char* argv[]) {
   // Install standard binary operators.
   // 1 is lowest precedence.
   BinopPrecedence[tok_space] = 1;
+  BinopPrecedence['$'] = 1;
   BinopPrecedence['='] = 4;
   BinopPrecedence[tok_arrow] = 4;
   BinopPrecedence['!'] = 9;

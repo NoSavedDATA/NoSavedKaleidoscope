@@ -1601,8 +1601,7 @@ std::unique_ptr<ExprAST> ParseDataExpr(Parser_Struct parser_struct, std::string 
       Init->SetIsMsg(is_message);
       if (!Init)
         return nullptr;
-    } else
-    {
+    } else {
       if (data_type=="float")
         Init = std::make_unique<NumberExprAST>(0.0f);
       else if (data_type=="int")
@@ -1903,29 +1902,15 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
       
 
 
-    if (CurTok == tok_space)
+    if (CurTok==tok_space || CurTok=='$')
     {
-      //std::cout << "Returning tok space with " << SeenTabs << " tabs. \n\n\n";
+      // std::cout << "Returning tok space with " << SeenTabs << " tabs. \n\n\n";
       getNextToken();
       return std::make_tuple(std::move(LHS), L_cuda, L_type);
     }
 
     int BinOp = CurTok;
 
-
-    /*
-    //todo: it somehow jumps wrong op placements
-    std::cout << "\n\nCur tok: " << CurTok << "\n";
-    std::cout << in_char(CurTok, ops) <<  "\n";
-
-    if (not in_char(CurTok, ops))
-    {
-      LogErrorBreakLine("Operador desconhecido.");
-      return std::make_tuple(nullptr,0);
-    }
-    
-    std::cout << "Cur tok post error: " << CurTok << "\n";
-    */
 
 
 
@@ -1952,8 +1937,6 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
 
     
     R_type = RHS->GetType();
-    // std::cout << "--Rtype is: " << R_type << ".\n";
-    
     
     
 
@@ -1963,29 +1946,19 @@ std::tuple<std::unique_ptr<ExprAST>, int, std::string> ParseBinOpRHS(Parser_Stru
     
 
     if (TokPrec < NextPrec)
-    {
-      //std::cout << NextPrec << " Next Prec\n";
-        
+    {        
       auto tuple = ParseBinOpRHS(parser_struct, TokPrec + 1, std::move(RHS));
       RHS = std::move(std::get<0>(tuple));
       R_cuda = std::get<1>(tuple);
       R_type = std::get<2>(tuple);
 
-      // std::cout << "--Updated type is: " << R_type << ".\n";
-
 
       if (!RHS)
-        return std::make_tuple(nullptr,0,"None");
-      
+        return std::make_tuple(nullptr,0,"None");  
     }
-
-
-    
-    
-    
+     
     LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS), parser_struct);
     
-
     LhsTok = RhsTok;
   }
 }
@@ -2246,31 +2219,43 @@ std::unique_ptr<ExprAST> ParseImport(Parser_Struct parser_struct) {
 
   // Get lib name
   std::string lib_name = IdentifierStr;
-  getNextToken();
-  // get_tok_util_dot_or_space();
-
   int dots=0; 
+  if (tokenizer.cur_c=='.') {
+      char c = tokenizer.get();
 
-  while(CurTok=='.')
-  {
-    dots++;
-    getNextToken(); // get dot
-    lib_name += "/" + IdentifierStr;
-    getNextToken();
+      while(c!=10&&c!=13) {
+        lib_name += "/";
+        dots++;
+        while (isalnum(c)||c=='_') {
+            lib_name += c;
+            c = tokenizer.get();
+        }
+        // std::cout << "get: " << c << ".\n";
+        if (c=='.')
+            c = tokenizer.get();
+      }
+      // CurTok=tok_space;
   }
-  
+
+  getNextToken(true);
+  // while(CurTok=='.')
+  // {
+  //   dots++;
+  //   getNextToken(); // get dot
+  //   lib_name += "/" + IdentifierStr;
+  //   getNextToken();
+  // }
 
   std::string full_path_lib = tokenizer.current_dir+"/"+lib_name+".ai";
 
   // Import logic
   if(fs::exists(full_path_lib))
   {
-
-    // std::cout << "Reverse: " << ReverseToken(CurTok) << ".\n";
-    // std::cout << "cur_line: " << cur_line << ".\n";
-
-    get_tok_util_space();
+    // get_tok_until_space();
+    getNextToken();
     tokenizer.importFile(full_path_lib, dots);
+    if (CurTok=='.')
+        getNextToken();
 
     return nullptr;
   } else {

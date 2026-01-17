@@ -38,7 +38,9 @@ struct LibParser {
   int file_idx=-1;
   std::string running_string="";
   std::string lib_type="";
+  std::string fn_name;
   Data_Tree lib_dt;
+
   int token;
   char LastChar = ' ';
 

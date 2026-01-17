@@ -227,6 +227,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("ones_float", ones_floatTy);
 
+	FunctionType *array_print_strTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("array_print_str", array_print_strTy);
+
 	FunctionType *array_Split_ParallelTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
@@ -975,6 +982,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("map_print", map_printTy);
+
+	FunctionType *map_keysTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_keys", map_keysTy);
+
+	FunctionType *map_valuesTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("map_values", map_valuesTy);
 
 	FunctionType *map_bad_keyTy= FunctionType::get(
 		int8PtrTy,

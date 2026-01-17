@@ -114,7 +114,8 @@ struct Tokenizer {
     std::istream* current;
     std::string current_dir = std::filesystem::current_path().string();
     char cur_c=' ';
-    bool has_main = false;
+    bool has_main = false, has_lib_file = false;
+    std::ifstream lib_file;
 
     std::string token;
     std::string current_file = "main";
@@ -130,7 +131,7 @@ struct Tokenizer {
 };
   
 std::string ReverseToken(int _char);
-static int get_token();
+static int get_token(bool);
 
 
 
@@ -163,7 +164,7 @@ extern std::vector<std::string> data_tokens, compound_tokens, primary_data_token
 /// token the parser is looking at.  getNextToken reads another token from the
 /// lexer and updates CurTok with its results.
 extern int CurTok;
-int getNextToken();
+int getNextToken(bool block=false);
 
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
@@ -173,5 +174,5 @@ extern std::map<char, int> BinopPrecedence;
 int get_tokenPrecedence();
 
 
-void get_tok_util_space();
+void get_tok_until_space();
 // void get_tok_util_dot_or_space();

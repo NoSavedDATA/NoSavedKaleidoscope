@@ -1,1 +1,1 @@
-{"map_Create", "map"}, 
+{"map_Create", "map"}, {"map_keys", "array"}, {"map_values", "array"}, 

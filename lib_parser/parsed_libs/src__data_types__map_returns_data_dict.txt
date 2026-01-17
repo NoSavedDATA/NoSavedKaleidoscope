@@ -1,1 +1,3 @@
 	functions_return_data_type["map_Create"] = Data_Tree("map");
+	functions_return_data_type["map_keys"] = Data_Tree("array");
+	functions_return_data_type["map_values"] = Data_Tree("array");

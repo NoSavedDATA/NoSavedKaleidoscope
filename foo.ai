@@ -1,23 +1,33 @@
 
 import example_lib
+import samples.auxy.playground_lib2
+
+def float foo()
+	print("123")
+	map<str, int> m
+
+	m["x"] = 2
+	m["y"] = 10
+	m["z"] = 18
+	m["zz"] = 14
+	m["zzz"] = 16
+	m["ululu"] = 18
+	m["u"] = 34
+
 
 
 main
-	map<float, int> m
+	foo()
 
-	m[1] = 2
-	m[5] = 10
-	m[5.4] = 18
-	m[7] = 14
-	m[8] = 16
-	m[9] = 18
-	m[17] = 34
+	placeholder[2,3] x
+	placeholder[3,4] y
+	placeholder[0,0] z
+
+	oe()
+
+	z = add_int_to_placeholder(y,3,3)
+	z.print()
+
+	
 
 
-	m.print()
-
-	int x = m[5]
-
-	print("x: " + x)
-
-	***brb -> going to eat***

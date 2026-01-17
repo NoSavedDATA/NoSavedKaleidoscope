@@ -61,6 +61,7 @@ std::map<int, std::string> token_to_string = {
   { tok_number, "tok number" },
   { tok_str, "tok str `` ''" },
   { tok_var, "var" },
+  { tok_int, "int number" },
 
   
 
@@ -125,6 +126,8 @@ std::map<int, std::string> token_to_string = {
   { tok_xor, "tok xor" },
   
   { '.', "dot<.>" },
+
+  { 36, "$" },
 
   { 40, "(" },
   { 41, ")" },
@@ -266,8 +269,16 @@ std::istream& Tokenizer::get_word() {
 
 
 std::string cur_line = "";
+char lib_ch;
 
 char Tokenizer::get() {
+    if (has_lib_file) {
+        lib_file.get(lib_ch);
+        // std::cout << "->: " << lib_ch << "\n";
+        cur_c = lib_ch;
+        return lib_ch;
+    }
+
     while (true) {
         if (!current) return tok_eof;
  
@@ -377,9 +388,10 @@ Tokenizer tokenizer = Tokenizer();
 
 
 /// get_token - Return the next token from standard input.
-static int get_token() {
+static int get_token(bool block) {
   static int LastChar = ' ';
-
+  if (block)
+    return tok_space;
 
 
 
@@ -430,12 +442,12 @@ static int get_token() {
   
 
   if (isalpha(LastChar) || LastChar=='_') { // identifier: [a-zA-Z][a-zA-Z0-9]*
+    // std::cout << "got alpha " << LastChar<< ".\n";
     IdentifierStr = LastChar;
     bool name_ok=true;
     while(true)
     {
       LastChar = tokenizer.get();
-
       if (LastChar=='['||LastChar=='.')
         break;
       
@@ -443,11 +455,9 @@ static int get_token() {
       {
         IdentifierStr += LastChar;
         continue;
-      }
-        
+      }        
       break;
     }
-
 
  
     if (in_str(IdentifierStr, compound_tokens))
@@ -522,7 +532,7 @@ static int get_token() {
     while (LastChar != EOF && LastChar != '\n' && LastChar != 10 && LastChar != '\r');
 
     if (LastChar != EOF)
-      return get_token();
+      return get_token(false);
   }
 
   // Check for end of file.  Don't eat the EOF.
@@ -617,8 +627,8 @@ static int get_token() {
 /// token the parser is looking at.  getNextToken reads another token from the
 /// lexer and updates CurTok with its results.
 int CurTok;
-int getNextToken() {
-  CurTok = get_token(); 
+int getNextToken(bool block) {
+  CurTok = get_token(block); 
   // std::cout << "\nLine: " << cur_line << "\n";
   return CurTok;
 }
@@ -626,7 +636,7 @@ int getNextToken() {
 
 
 
-void get_tok_util_space() {
+void get_tok_until_space() {
   if(CurTok!=tok_space&&tokenizer.cur_c!=10) // gets until the \n before switching files
   {
     // std::cout << "CurTok: " << ReverseToken(CurTok) << " / " << CurTok  << " / " << std::to_string(int(tokenizer.cur_c)) << ".\n";
