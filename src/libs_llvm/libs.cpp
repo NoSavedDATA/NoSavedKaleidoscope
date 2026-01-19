@@ -1424,13 +1424,6 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("emerge_float", emerge_floatTy);
 
-	FunctionType *_tidTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("_tid", _tidTy);
-
 	FunctionType *tidTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy},

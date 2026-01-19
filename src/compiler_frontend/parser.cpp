@@ -217,6 +217,12 @@ std::unique_ptr<ExprAST> ParseStringExpr(Parser_Struct parser_struct) {
   return std::move(Result);
 }
 
+std::unique_ptr<ExprAST> ParseBreakExpr(Parser_Struct parser_struct) {
+  auto Result = std::make_unique<BreakExprAST>();
+  getNextToken(); // break
+  return std::move(Result);
+}
+
 
 inline void handle_tok_space() {
   while(CurTok==tok_space)
@@ -543,7 +549,9 @@ std::unique_ptr<ExprAST> ParseNameableExpr(Parser_Struct parser_struct, std::uni
   nameable->AddNested(std::move(inner));
   
 
-
+ 
+  if (CurTok==tok_identifier)
+      return LogErrorBreakLine(parser_struct.line, "Could not associate expression to word: " + IdName);
 
   if (CurTok==',' && can_be_list && depth==1)
   {
@@ -875,9 +883,8 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
 
   int cur_level_tabs = SeenTabs;
 
-  getNextToken(); // eat the async.
-
-  
+  getNextToken(); // eat async
+ 
   std::vector<std::unique_ptr<ExprAST>> Bodies;
   
   std::string async_scope = parser_struct.function_name + "_async";
@@ -887,16 +894,14 @@ std::unique_ptr<ExprAST> ParseAsyncExpr(Parser_Struct parser_struct, std::string
     data_typeVars[async_scope][pair.first] = pair.second;
 
 
-
   Parser_Struct body_parser_struct = parser_struct;
   body_parser_struct.function_name = async_scope;
 
   Bodies.push_back(std::make_unique<IncThreadIdExprAST>());
-  if (CurTok != tok_space)
+  if (CurTok!=tok_space)
     Bodies.push_back(std::move(ParseExpression(body_parser_struct, class_name)));
   else
     Bodies = ParseIndentedBodies(body_parser_struct, cur_level_tabs, class_name);
-  
   
   
   if(parser_struct.function_name!="__anon_expr")
@@ -1795,6 +1800,8 @@ std::unique_ptr<ExprAST> ParsePrimary(Parser_Struct parser_struct, std::string c
     return ParseForExpr(parser_struct, class_name);
   case tok_while:
     return ParseWhileExpr(parser_struct, class_name);
+  case tok_break:
+    return ParseBreakExpr(parser_struct);
   case tok_async_finish:
     return ParseFinishExpr(parser_struct, class_name);
   case tok_async:
@@ -2283,9 +2290,7 @@ std::unique_ptr<FunctionAST> ParseDefinition(Parser_Struct parser_struct, std::s
   if (!Proto)
     return nullptr;
 
-  // std::cout << "PROTO NAME IS " << Proto->getName() << ".\n";
   parser_struct.function_name = Proto->getName();
-  // parser_struct.function_name = class_name+"_"+Proto->getName();
   
   
   std::vector<std::unique_ptr<ExprAST>> Body;
@@ -2461,7 +2466,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
   if (CurTok!=tok_constructor)
     return LogErrorNextBlock(parser_struct.line, "Class " + Name + " requires constructor, got token: "  + ReverseToken(CurTok));
 
-  int i=0;
 
 
   parser_struct.class_name = Name;
@@ -2477,7 +2481,6 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     auto Func = ParseDefinition(parser_struct, Name);
     if (!Func)
       return nullptr;
-      //return LogError(parser_struct.line, "Falha no parsing da função da Classe.");
     
     //std::cout << "THE FUNCTION WAS CREATED AS: " << Func->getProto().getName() << "\n";
 
@@ -2506,10 +2509,10 @@ std::unique_ptr<ExprAST> ParseClass(Parser_Struct parser_struct) {
     
 
 
-    if(CurTok==tok_space)
-      getNextToken();
+    handle_tok_space();
+    // if(CurTok==tok_space)
+    //   getNextToken();
 
-    i+=1;
   }
   
   std::unique_ptr<ClassExprAST> class_expr = std::make_unique<ClassExprAST>(parser_struct, Name, Functions);

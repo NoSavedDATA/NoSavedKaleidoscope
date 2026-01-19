@@ -86,12 +86,6 @@ void set_functions_args_type() {
 		
 	
 		
-		Function_Arg_Types["_tid"]["0"] = "Scope_Struct";
-		
-		Function_Arg_DataTypes["_tid"]["0"] = Data_Tree("Scope_Struct");
-		
-		Function_Arg_Names["_tid"].push_back("0");
-		
 		Function_Arg_Types["tid"]["0"] = "Scope_Struct";
 		
 		Function_Arg_DataTypes["tid"]["0"] = Data_Tree("Scope_Struct");

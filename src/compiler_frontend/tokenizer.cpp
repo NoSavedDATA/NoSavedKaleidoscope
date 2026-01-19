@@ -72,6 +72,7 @@ std::map<int, std::string> token_to_string = {
   { tok_else, "else" },
   { tok_for, "for" },
   { tok_while, "while" },
+  { tok_break, "break" },
   { tok_spawn, "spawn" },
   { tok_channel, "channel" },
   { tok_async, "async" },
@@ -234,7 +235,7 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
 											 {"in", tok_in}, {"global", tok_global}, {"no_grad", tok_no_grad}, {"lock", tok_lock},
 											 {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary}, {"return", tok_ret},
 											 {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel}, {"main", tok_main}, {"and", tok_and},
-										     {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}};
+										     {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}, {"break", tok_break}};
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number
@@ -398,8 +399,9 @@ static int get_token(bool block) {
 
 
   // Skip any whitespace and backspace.  
-  while (LastChar==32 || LastChar==tok_tab || LastChar==13)
+  while (LastChar==32 || LastChar==tok_tab || LastChar==13) {
     LastChar = tokenizer.get();
+  }
   
     
 
@@ -483,22 +485,17 @@ static int get_token(bool block) {
       IdentifierStr = "_tanh";
     return tok_identifier;
   }
-
-
   // if (LastChar=='@') {
   //   LastChar = tokenizer.get();
-
   //   std::string NumStr;
   //   do {
   //     NumStr += LastChar;
   //     LastChar = tokenizer.get();
   //   } while(isdigit(LastChar));
-
   //   NumVal = strtod(NumStr.c_str(), nullptr);
-
   //   return tok_int;
   // }
-
+  
   if (isdigit(LastChar)) { // Number: [-.]+[0-9.]+
     bool is_float=false;
     
@@ -550,7 +547,6 @@ static int get_token(bool block) {
     int seen_spaces=0;
 
     while(LastChar==10 || LastChar==tok_tab || LastChar==32) {
-      // std::cout << "Process Line Feed"  << ".\n";
       if(LastChar==10)
         LineCounter++;
       if(ThisChar==10)
@@ -563,7 +559,7 @@ static int get_token(bool block) {
       if (LastChar==tok_tab)
         SeenTabs+=1;
       if (LastChar==32)
-        seen_spaces+=1;
+        seen_spaces++;
       if (seen_spaces==3)
       {
         seen_spaces=0;
@@ -574,7 +570,8 @@ static int get_token(bool block) {
       LastChar = tokenizer.get(); 
       // std::cout << "Line Feed post: " << LastChar  << ".\n";
     }
-    //std::cout << "\nThisChar: " << ThisChar << " LastChar " << LastChar << "\n";
+    if (ThisChar==10&&isalpha(LastChar))
+        SeenTabs = 0;
 
     return tok_space;
   }
@@ -657,26 +654,6 @@ void get_tok_until_space() {
 }
 
 
-// void get_tok_util_dot_or_space() {
-//   char c=' ';
-//   IdentifierStr="";
-//   if(!(CurTok==tok_space||tokenizer.cur_c==10))
-//   {
-//     while(c!=10&&c!='.') {
-//       c = tokenizer.get();
-//       if(c!=32&&c!='.')
-//         IdentifierStr += c;
-//     }
-//   } else
-//     c = tokenizer.cur_c;
-//   if(c==10) {
-//     CurTok = tok_space;
-//     cur_line = "";
-//     LineCounter++;
-//   }
-//   if(c=='.')
-//     CurTok='.';
-// }
 
 
 /// BinopPrecedence - This holds the precedence for each binary operator that is

@@ -27,7 +27,7 @@ extern "C" void *channel_Create(Scope_Struct *scope_struct, int buffer_size) {
 
 
 
-
+// str msg <- ch
 extern "C" void *str_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
     std::unique_lock<std::mutex> lock(ch->mtx);
 
@@ -42,6 +42,7 @@ extern "C" void *str_channel_message(Scope_Struct *scope_struct, void *ptr, Chan
     return str;
 }
 
+// ch <- msg
 extern "C" float channel_str_message(Scope_Struct *scope_struct, Channel *ch, char *str) {
     std::unique_lock<std::mutex> lock(ch->mtx);
 
@@ -193,7 +194,7 @@ extern "C" int float_channel_alive(Scope_Struct *scope_struct, Channel *ch) {
 
 
 
-
+// int x <- ch
 extern "C" int int_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
     std::unique_lock<std::mutex> lock(ch->mtx);
 
@@ -208,6 +209,7 @@ extern "C" int int_channel_message(Scope_Struct *scope_struct, void *ptr, Channe
     return x;
 }
 
+// ch <- msg
 extern "C" float channel_int_message(Scope_Struct *scope_struct, Channel *ch, int x) {
     std::unique_lock<std::mutex> lock(ch->mtx);
 

@@ -24,7 +24,7 @@ void set_user_functions() {
 		"str_vec_Create", "LenStrVec", "ShuffleStrVec", "shuffle_str", "IndexStrVec", "str_vec_Idx", "str_vec_CalculateIdx", "str_vec_print", 
 		"nullptr_get", "is_null", 
 		"bool_to_str", 
-		"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "_tid", "tid", "pthread_create_aux", "pthread_join_aux", "pthread_create_aux", "pthread_join_aux", 
+		"dive_void", "dive_int", "dive_float", "emerge_void", "emerge_int", "emerge_float", "tid", "pthread_create_aux", "pthread_join_aux", "pthread_create_aux", "pthread_join_aux", 
 		"Delete_Ptr", 
 		"print_randoms", "randint", 
 		"LockMutex", "UnlockMutex", 

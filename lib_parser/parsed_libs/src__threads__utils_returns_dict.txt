@@ -1,1 +1,1 @@
-{"emerge_int", "int"}, {"emerge_float", "float"}, {"_tid", "float"}, {"tid", "int"}, 
+{"emerge_int", "int"}, {"emerge_float", "float"}, {"tid", "int"}, 

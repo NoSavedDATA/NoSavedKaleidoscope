@@ -1,54 +1,30 @@
-import samples.auxy.playground_lib2
-import example_lib
+def int producer(int channel ch)
+    int i = 0
+    while i < 100000
+        ch <- i
+        i = i + 1
+
+	ch.terminate()
+
+def int consumer(int channel ch)
+    int x
+	int w = tid()
+	print("start thread: " + w)
+    while true
+        x <- ch
+		if x==-1
+			break
+		print(w + ": " + x)
 
 
-
-
-class A
-	int b
-	ctor()
-		self.b = 0
-		print("made obj A")
-
-	def float test()
-		self.b = 0
-		print("made obj A")
-		print("b is " + self.b)
-
-	def float i()
-		self.b = 0
-		print("made obj A")
-		print("b is " + self.b)
-
-	
-	
 
 
 
 main
-	for i=0, i<1
-		map<str, int> m
-		placeholder[2,3] w
-		placeholder[3,4] t
-		placeholder[0,0] z
-		m["x"] = 1
-		m["y"] = 2
-		m["z"] = 3
-		m["zz"] = 4
-		m["zzz"] = 5
-		m["u"] = 6
-		m["ululu"] = 7
-		u = m["z"]
-		uu = m["z"]
-		m["zz"] = 8
-		int x=m["ululu"]
-		int y=m["zz"]
-		print("x: " + x)
-		print("y: " + y)
-		m.print()
-		print("loop " + i)
-	opa_tche()
-	oe()
-	opa()
+	int channel ch
+	finish
+		async producer(ch)
 
-	A a()
+		asyncs 20 consumer(ch)
+
+

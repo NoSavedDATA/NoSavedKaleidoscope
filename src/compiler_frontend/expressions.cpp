@@ -651,7 +651,7 @@ ForEachExprAST::ForEachExprAST(const std::string &VarName, std::unique_ptr<ExprA
 WhileExprAST::WhileExprAST(std::unique_ptr<ExprAST> Cond, std::vector<std::unique_ptr<ExprAST>> Body, Parser_Struct parser_struct)
   : Cond(std::move(Cond)), Body(std::move(Body)), parser_struct(parser_struct) {}
 
-
+BreakExprAST::BreakExprAST() {}
 
 IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vector<std::unique_ptr<ExprAST>> Second_Idxs, bool IsSlice)
             : Idxs(std::move(Idxs)), Second_Idxs(std::move(Second_Idxs)), IsSlice(IsSlice) {
@@ -1007,7 +1007,8 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
   if(Callee=="list_append" && this->Args[0]->GetDataTree().Type=="float")
     Callee = "list_append_float";
     
-
+  if(functions_return_data_type.count(Callee)==0)
+      LogError(parser_struct.line, "Function " + Callee + " not found.");
 
   if (in_str(Callee, vararg_methods))
   {

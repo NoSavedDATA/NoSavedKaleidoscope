@@ -1,4 +1,4 @@
-1822-01-09 15:35:38
+1822-01-19 14:21:39
 
 	FunctionType *dive_voidTy= FunctionType::get(
 		int8PtrTy,
@@ -41,13 +41,6 @@
 		false
 	);
 	TheModule->getOrInsertFunction("emerge_float", emerge_floatTy);
-
-	FunctionType *_tidTy= FunctionType::get(
-		Type::getFloatTy(*TheContext),
-		{int8PtrTy},
-		false
-	);
-	TheModule->getOrInsertFunction("_tid", _tidTy);
 
 	FunctionType *tidTy= FunctionType::get(
 		Type::getInt32Ty(*TheContext),

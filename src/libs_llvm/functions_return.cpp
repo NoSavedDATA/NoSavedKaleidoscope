@@ -25,7 +25,7 @@ void set_functions_return_type() {
 						{"__idx__", "int"}, {"__sliced_idx__", "int"}, 
 						{"_quit_", "float"}, 
 						{"dict_Create", "dict"}, {"dict_New", "dict"}, {"dict_print", "float"}, 
-						{"emerge_int", "int"}, {"emerge_float", "float"}, {"_tid", "float"}, {"tid", "int"}, 
+						{"emerge_int", "int"}, {"emerge_float", "float"}, {"tid", "int"}, 
 						{"array_Create", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "array"}, {"array_int_add", "array"}, {"randfloat_array", "array"}, {"arange_float", "array"}, {"zeros_float", "array"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 
 						{"str_Create", "str"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, 
 						{"bool_to_str", "str"}, 
@@ -176,7 +176,6 @@ void set_functions_return_type() {
 	functions_return_data_type["map_values"] = Data_Tree("array");
 	functions_return_data_type["emerge_int"] = Data_Tree("int");
 	functions_return_data_type["emerge_float"] = Data_Tree("float");
-	functions_return_data_type["_tid"] = Data_Tree("float");
 	functions_return_data_type["tid"] = Data_Tree("int");
 	functions_return_data_type["scope_struct_spec"] = Data_Tree("float");
 	functions_return_data_type["scope_struct_CreateFirst"] = Data_Tree("");
