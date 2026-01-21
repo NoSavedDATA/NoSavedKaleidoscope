@@ -20,13 +20,9 @@
 
 
 
-extern "C" DT_dict *dict_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_dict *init_val, DT_list *notes_vector) {
+extern "C" DT_dict *dict_Create(Scope_Struct *scope_struct) {
 
-
-    if (init_val==nullptr)
-        init_val = new DT_dict();
-
-    return init_val;
+    return nullptr;
 }
 
 
@@ -51,13 +47,12 @@ extern "C" DT_dict *dict_New(Scope_Struct *scope_struct, char *key, ...)
     {
         type = va_arg(args, char *);
         
-        
-        if (strcmp(type, "float")==0)
+        if (!strcmp(type, "float"))
         {
             // std::cout << "appending float" << ".\n";
             float value = va_arg(args, float);
             dict->append(key, value, type);
-        } else if (strcmp(type, "int")==0) {
+        } else if (!strcmp(type, "int")) {
             // std::cout << "appending float" << ".\n";
             int value = va_arg(args, int);
             dict->append(key, value, type);

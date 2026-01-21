@@ -29,22 +29,12 @@ DT_float_vec::~DT_float_vec() {
 
 
 
-extern "C" void *float_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
+extern "C" void *float_vec_Create(Scope_Struct *scope_struct, int size)
 {
-  if (init_val!=nullptr)
-    return init_val;
-  if(notes_vector==nullptr)  
-    return nullptr;
-
-  if(notes_vector->size!=1||notes_vector==nullptr) {
-    LogErrorC(-1, "float_vec requires size argument");
-    return nullptr;
-  }
-
   DT_float_vec *vec = newT<DT_float_vec>(scope_struct, "float_vec");
-  vec->New(notes_vector->get<int>(0));
+  vec->New(size);
 
-  return init_val;
+  return vec;
 }
 
  

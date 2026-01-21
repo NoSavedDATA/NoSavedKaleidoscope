@@ -22,7 +22,7 @@ int gc_sizes[GC_obj_sizes];
 uint16_t GC_size_to_class[GC_N+1];
 std::unordered_map<int, GC_span_traits*> GC_span_traits_vec;
 
-std::unordered_map<int, char *> arena_base_addr;
+std::unordered_map<int, std::vector<char *>> arena_base_addr;
 
 
 
@@ -90,7 +90,7 @@ void *GC_Arena::Allocate(int size, uint16_t type_id) {
 }
 
 
-void *GC::Allocate(int size, uint16_t type_id) {
+void *GC::Allocate(int size, uint16_t type_id, int tid) {
     int obj_size = GC_size_to_class[(size+7)/8];
     // std::cout << "Allocate size: " << size << "/" << obj_size << "/" << type_id << ".\n";
 
@@ -109,8 +109,7 @@ void *GC::Allocate(int size, uint16_t type_id) {
     }
 
     if (address==nullptr) {
-        // LogErrorC(-1, "Failed, acquire new arena.");
-        GC_Arena *new_arena = new GC_Arena();
+        GC_Arena *new_arena = new GC_Arena(tid);
         arenas.push_back(new_arena);
         address = new_arena->Allocate(obj_size, type_id);
     }

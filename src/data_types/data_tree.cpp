@@ -27,6 +27,9 @@ bool CompareListUnkList(Data_Tree *L, Data_Tree R) {
 
 bool CompareListRecursive(Data_Tree L, Data_Tree R) {
     
+    if (L.Nested_Data.size()==0) //todo: check this condition
+        return true;
+
     std::string list_type = L.Nested_Data[0].Type;
 
     if (in_str(list_type,{"list", "tuple", "dict", "array"})) {

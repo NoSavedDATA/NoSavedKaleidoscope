@@ -1,8 +1,8 @@
-1821-11-16 10:36:34
+1822-01-20 14:37:25
 
 	FunctionType *dict_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("dict_Create", dict_CreateTy);

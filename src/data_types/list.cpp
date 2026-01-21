@@ -113,13 +113,10 @@ extern "C" float tuple_print(Scope_Struct *scope_struct, DT_list *list) {
 
 
 
-extern "C" DT_list *list_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_list *init_val, DT_list *notes_vector)
+extern "C" DT_list *list_Create(Scope_Struct *scope_struct)
 {
-  if (init_val==nullptr)
-    init_val = newT<DT_list>(scope_struct, "list");
-
-
-  return init_val;
+  DT_list *new_list = newT<DT_list>(scope_struct, "list");
+  return new_list;
 }
 
 
@@ -373,7 +370,6 @@ extern "C" DT_list *zip(Scope_Struct *scope_struct, DT_list *list, ...) {
 extern "C" void *list_Idx(Scope_Struct *scope_struct, DT_list *vec, int idx)
 {
   std::string type = vec->data_types->at(idx);
-  // std::cout << "list_Idx on index " << idx << " & recover data type " << type << ".\n";
 
   if (type=="float") {
     float* float_ptr = new float(vec->get<float>(idx));

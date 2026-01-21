@@ -1,8 +1,8 @@
-1821-12-09 15:57:08
+1822-01-20 14:37:37
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_Create", float_vec_CreateTy);

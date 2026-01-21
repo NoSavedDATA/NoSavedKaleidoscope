@@ -67,7 +67,7 @@ void Scope_Struct::Copy(Scope_Struct *scope_to_copy)
 
 
 void *Scope_Struct::Allocate(int size, int type_id) {
-    void *ret = gc->Allocate(size, type_id); 
+    void *ret = gc->Allocate(size, type_id, thread_id); 
     // if(thread_id!=0) {
     //     std::cout << " --> Allocating: " << ret << ".\n";
     // }
@@ -230,5 +230,27 @@ extern "C" void scope_struct_Sweep(Scope_Struct *scope_struct) {
     // scope_struct->Print_Stack();
     // std::cout << "sweep check: " << gc->allocations << "/" << gc->size_occupied << ".\n";
     gc->Sweep(scope_struct);
+}
+
+extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {
+    GC *gc = scope_struct->gc;
+
+    gc->Sweep(scope_struct);
+
+    for (auto arena : gc->arenas) {
+        
+        for (auto span_vec_pair : arena->Spans) {
+            for (auto span : span_vec_pair.second) {
+                free(span->mark_bits);
+                free(span->type_metadata);
+                free(span);
+            }
+        } 
+        // free(arena->arena); // todo: channels may receive data only after the arena was cleaned
+        free(arena->metadata);
+    }
+
+    free(scope_struct);
+    free(gc);
 }
 

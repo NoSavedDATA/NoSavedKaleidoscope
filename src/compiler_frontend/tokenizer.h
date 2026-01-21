@@ -100,6 +100,7 @@ enum Token {
     tok_no_grad = -50,
 
     tok_data = -44,
+    tok_new = -68,
     tok_struct = -54,
     tok_var = -45,
     tok_tuple = -46,

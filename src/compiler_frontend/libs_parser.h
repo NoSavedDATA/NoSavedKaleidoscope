@@ -23,9 +23,11 @@ struct LibFunction {
   std::string LibType="";
   Data_Tree LibDT;
 
+  int DefaultArgsCount;
+
   LibFunction(std::string ReturnType, bool IsPointer, std::string Name,
               std::vector<std::string>, std::vector<std::string>, std::vector<int> ArgIsPointer, bool,
-              bool, std::string, Data_Tree);
+              bool, std::string, Data_Tree, int);
 
   void Link_to_LLVM(void *, void *);
   void Add_to_Nsk_Dicts(void *, std::string, bool);
@@ -35,7 +37,7 @@ struct LibFunction {
 
 
 struct LibParser {
-  int file_idx=-1;
+  int file_idx=-1, CurDefaultArgs=0;
   std::string running_string="";
   std::string lib_type="";
   std::string fn_name;

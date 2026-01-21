@@ -92,6 +92,7 @@ class IndexExprAST : public ExprAST {
     IndexExprAST(std::vector<std::unique_ptr<ExprAST>>, std::vector<std::unique_ptr<ExprAST>>, bool);
 
     Value *codegen(Value *scope_struct) override;
+    Data_Tree GetDataTree(bool from_assignment=false) override;
     int size() {
       return Size;
     }
@@ -336,6 +337,23 @@ class DataExprAST : public VarExprAST {
       std::vector<std::unique_ptr<ExprAST>> Notes);
 
   Value *codegen(Value *scope_struct) override;
+  bool GetNeedGCSafePoint() override;
+};
+
+
+class NewExprAST : public ExprAST {
+  public:
+    std::string DataName, Callee;
+    std::vector<std::unique_ptr<ExprAST>> Args;
+    Data_Tree data_type;
+    Parser_Struct parser_struct;
+
+    NewExprAST(
+      Parser_Struct, std::string,
+      std::vector<std::unique_ptr<ExprAST>> Args);
+
+  Value *codegen(Value *scope_struct) override;
+  Data_Tree GetDataTree(bool from_assignment=false) override;
   bool GetNeedGCSafePoint() override;
 };
 

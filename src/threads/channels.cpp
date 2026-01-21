@@ -18,13 +18,14 @@ void Channel::New(int buffer_size) {
 }
 
 
+
+
 extern "C" void *channel_Create(Scope_Struct *scope_struct, int buffer_size) {
     Channel *ch = newT<Channel>(scope_struct, "channel");
     ch->New(buffer_size);
     // ch->name = "4ch";
     return ch;
 }
-
 
 
 // str msg <- ch
@@ -36,8 +37,8 @@ extern "C" void *str_channel_message(Scope_Struct *scope_struct, void *ptr, Chan
         return ptr;
 
     char *str = ch->data_list->unqueue<char*>();
-
     ch->cv.notify_all();
+
 
     return str;
 }
@@ -56,6 +57,33 @@ extern "C" float channel_str_message(Scope_Struct *scope_struct, Channel *ch, ch
 
     ch->data_list->append(std::any(copied), "str");
 
+    ch->cv.notify_all();
+    
+    return 0;
+}
+
+
+extern "C" void *void_channel_message(Scope_Struct *scope_struct, void *ptr, Channel *ch) {    
+    std::unique_lock<std::mutex> lock(ch->mtx);
+
+    ch->cv.wait(lock, [&]{ return ch->terminated || ch->data_list->data->size() > 0; } );    
+    if(ch->terminated)
+        return ptr;
+
+    void *ret = ch->data_list->unqueue<void*>();
+    ch->cv.notify_all();
+
+    return ret;
+}
+
+extern "C" float channel_void_message(Scope_Struct *scope_struct, Channel *ch, void *ptr) {
+    std::unique_lock<std::mutex> lock(ch->mtx);
+
+    ch->cv.wait(lock, [&]{ return ch->terminated || ch->data_list->data->size() < ch->buffer_size; } );    
+    if(ch->terminated)
+        return -1;
+
+    ch->data_list->append(std::any(ptr), "any");
     ch->cv.notify_all();
     
     return 0;

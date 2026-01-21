@@ -32,12 +32,8 @@ void DT_array::New(int size, std::string type) {
 }
 
 
-extern "C" DT_array *array_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_array *init_val,
-                                  DT_list *notes_vector, Data_Tree dt)
+extern "C" DT_array *array_Create(Scope_Struct *scope_struct, Data_Tree dt)
 {
-  if (init_val!=nullptr)
-    return init_val;
-
   std::string elem_type = dt.Nested_Data[0].Type;
   int elem_size;
   if(data_name_to_size.count(elem_type)>0)
@@ -242,13 +238,22 @@ extern "C" DT_array *zeros_float(Scope_Struct *scope_struct, int N) {
 }
 
 
-extern "C" DT_float_vec *ones_float(Scope_Struct *scope_struct, int size) {
-  DT_float_vec *vec = newT<DT_float_vec>(scope_struct, "float_vec");
-  vec->New(size);
-  for(int i=0; i<size; ++i)
-    vec->vec[i] = 1;
-  return vec;
+extern "C" DT_array *ones_float(Scope_Struct *scope_struct, int N) {
+    DT_array *vec = newT<DT_array>(scope_struct, "array");
+    vec->New(N, 4, "float");
+
+    float *ptr = static_cast<float*>(vec->data);
+    
+    int c=0;
+    for(int i=0; i<N; ++i)
+    {
+        ptr[c] = 1.0f;
+        c++;
+    }
+
+    return vec; 
 }
+
 
 
 extern "C" void array_print_str(Scope_Struct *scope_struct, DT_array *vec) {
@@ -272,7 +277,6 @@ extern "C" DT_array *array_Split_Parallel(Scope_Struct *scope_struct, DT_array *
 
     segment_size = ceilf(vec_size/(float)threads_count);
 
-    // std::cout << "SEGMENT SIZE IS " << segment_size << ".\n";
 
     int size = segment_size;
     if((thread_id+1)==threads_count)
@@ -289,7 +293,6 @@ extern "C" DT_array *array_Split_Parallel(Scope_Struct *scope_struct, DT_array *
     DT_array *out_vector = newT<DT_array>(scope_struct, "array");
     out_vector->New(size, elem_size, vec->type);
 
-    // std::cout << "Splitting from " << std::to_string(segment_size*thread_id) << " to " << std::to_string(segment_size*(thread_id+1)) << ".\n";
     
     memcpy(out_vector->data,
            static_cast<char*>(vec->data) + segment_size*thread_id*elem_size,
@@ -297,4 +300,3 @@ extern "C" DT_array *array_Split_Parallel(Scope_Struct *scope_struct, DT_array *
 
     return out_vector;
 }
-

@@ -12,6 +12,7 @@ const int GC_page_size=8192;
 
 const int sweep_after_alloc = 32 << 20;
 const int GC_arena_size = 64 << 20;
+// const int GC_arena_size = 8192;
 
 const int pages_per_arena = GC_arena_size / GC_page_size;
 
@@ -19,7 +20,7 @@ const int GC_obj_sizes=15;
 const int GC_max_object_size = 16384;
 extern int gc_sizes[GC_obj_sizes];
 
-extern std::unordered_map<int, char *> arena_base_addr;
+extern std::unordered_map<int, std::vector<char *>> arena_base_addr;
 
 
 constexpr size_t GC_ALIGN = 8; // 8-byte granularity
@@ -64,7 +65,7 @@ struct GC_Arena {
     std::unordered_map<int, std::vector<GC_Span*>> Spans;
     std::unordered_map<int, GC_Span*> page_to_span;
 
-    GC_Arena();
+    GC_Arena(int);
     void *Allocate(int, uint16_t);
 };
 
@@ -72,10 +73,9 @@ struct GC {
     int allocations=0;
     uint64_t size_occupied=0;
     std::vector<GC_Arena*> arenas;
-    std::vector<GC_Node> root_nodes;
     
     GC(int);
-    void *Allocate(int, uint16_t);
+    void *Allocate(int, uint16_t, int);
     void Sweep(Scope_Struct *);
     void CleanUp_Unused();
 };

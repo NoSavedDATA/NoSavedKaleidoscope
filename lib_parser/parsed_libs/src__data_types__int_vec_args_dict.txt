@@ -1,26 +1,13 @@
 
 	
 	Function_Arg_Types["int_vec_Create"]["0"] = "Scope_Struct";
-	Function_Arg_Types["int_vec_Create"]["1"] = "str";
-	Function_Arg_Types["int_vec_Create"]["2"] = "str";
-	Function_Arg_Types["int_vec_Create"]["3"] = "int_vec";
-	Function_Arg_Types["int_vec_Create"]["4"] = "list";
+	Function_Arg_Types["int_vec_Create"]["1"] = "int";
 	
 	Function_Arg_DataTypes["int_vec_Create"]["0"] = Data_Tree("Scope_Struct");
-	Function_Arg_DataTypes["int_vec_Create"]["1"] = Data_Tree("str");
-	Function_Arg_DataTypes["int_vec_Create"]["2"] = Data_Tree("str");
-	Data_Tree int_vec_Create_3 = Data_Tree("vec");
-	int_vec_Create_3.Nested_Data.push_back(Data_Tree("int"));
-	Function_Arg_DataTypes["int_vec_Create"]["3"] = int_vec_Create_3;
-	Data_Tree int_vec_Create_4 = Data_Tree("list");
-	int_vec_Create_4.Nested_Data.push_back(Data_Tree("any"));
-	Function_Arg_DataTypes["int_vec_Create"]["4"] = int_vec_Create_4;
+	Function_Arg_DataTypes["int_vec_Create"]["1"] = Data_Tree("int");
 	
 	Function_Arg_Names["int_vec_Create"].push_back("0");
 	Function_Arg_Names["int_vec_Create"].push_back("1");
-	Function_Arg_Names["int_vec_Create"].push_back("2");
-	Function_Arg_Names["int_vec_Create"].push_back("3");
-	Function_Arg_Names["int_vec_Create"].push_back("4");
 	
 	Function_Arg_Types["nsk_vec_size"]["0"] = "Scope_Struct";
 	Function_Arg_Types["nsk_vec_size"]["1"] = "Nsk_Vector";

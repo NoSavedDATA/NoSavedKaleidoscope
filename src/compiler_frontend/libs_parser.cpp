@@ -62,9 +62,9 @@ inline std::vector<fs::path> get_lib_files(std::string lib_dir)
 
 
 
-LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgTypes, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer, bool IsVarArg, bool HasRetOverwrite, std::string LibType, Data_Tree LibDT)
+LibFunction::LibFunction(std::string ReturnType, bool IsPointer, std::string Name, std::vector<std::string> ArgTypes, std::vector<std::string> ArgNames, std::vector<int> ArgIsPointer, bool IsVarArg, bool HasRetOverwrite, std::string LibType, Data_Tree LibDT, int DefaultArgsCount)
     : ReturnType(ReturnType), IsPointer(IsPointer), Name(Name), ArgTypes(ArgTypes), ArgNames(ArgNames), ArgIsPointer(ArgIsPointer), IsVarArg(IsVarArg),
-      HasRetOverwrite(HasRetOverwrite), LibType(LibType), LibDT(LibDT) {}
+      HasRetOverwrite(HasRetOverwrite), LibType(LibType), LibDT(LibDT), DefaultArgsCount(DefaultArgsCount) {}
 
 void LibFunction::Print() {
     std::cout << "extern \"C\" " << ReturnType << " ";
@@ -162,6 +162,8 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
 
 
     // std::cout << "\n\nFn name " << Name << ".\n";
+    //
+    
 
     for(int i=0; i<ArgTypes.size(); ++i) {
         if (!begins_with(Name, "initialize__"))
@@ -210,6 +212,8 @@ void LibFunction::Link_to_LLVM(void *func_ptr, void *handle) {
     Lib_Functions_Return[Name] = fn_return_type_str; // for llvm return type (so_libs.cpp)
     Lib_Functions_Args[Name] = std::move(arg_types_str);
     Function_Arg_Count[Name] = ArgTypes.size()-1; // ignoring scope struct
+    DefaultArgsCount++; // scope struct
+    Function_Required_Arg_Count[Name] = ArgTypes.size()-DefaultArgsCount;
 
 
     Data_Tree return_dt;
@@ -443,6 +447,7 @@ bool LibParser::TryParseFnDataType() {
     while(LastChar==32||LastChar==tok_tab) 
         LastChar = _getCh();
 
+
     if (LastChar=='$') {
         LastChar=_getCh();
         Parser_Struct parser_struct;
@@ -459,6 +464,7 @@ bool LibParser::TryParseFnDataType() {
 
 
         while (CurTok==tok_identifier) {
+            CurDefaultArgs++;
             std::string arg_name = IdentifierStr;
             getNextToken(); // eat identifier
 
@@ -617,6 +623,7 @@ void LibParser::ParseExtern() {
     std::vector<int> arg_is_pointer;
     std::string last_type, last_name;
     int last_is_pointer;
+    CurDefaultArgs=0;
 
     if(token!='(')
       return;
@@ -692,7 +699,7 @@ void LibParser::ParseExtern() {
     bool has_ret_overwrite = token==tok_lib_dt;
 
     LibFunction *lib_fn = new LibFunction(return_type, is_pointer, fn_name, arg_types, arg_names, arg_is_pointer, is_var_arg,
-                                          has_ret_overwrite, lib_type, lib_dt);
+                                          has_ret_overwrite, lib_type, lib_dt, CurDefaultArgs);
     Functions[file_name].push_back(lib_fn);
     // std::cout << "\n\n";
 }
@@ -754,7 +761,7 @@ void LibParser::ImportLibs(std::string so_lib_path, std::string lib_name, bool i
             void* func_ptr = dlsym(handle, fn->Name.c_str());
             const char *dlsym_error = dlerror();
             if (dlsym_error) {
-                LogError(-1, "Cannot load symbol " + fn->Name + ": " + dlsym_error);
+                LogError(-1, "Cannot load symbol " + fn->Name + ": " + dlsym_error + ". Please, compile the .so again");
                 has_error=true;
                 continue;
             }

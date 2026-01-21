@@ -1,4 +1,5 @@
 	functions_return_data_type["channel_str_message"] = Data_Tree("float");
+	functions_return_data_type["channel_void_message"] = Data_Tree("float");
 	functions_return_data_type["str_channel_Idx"] = Data_Tree("str");
 	functions_return_data_type["str_channel_alive"] = Data_Tree("int");
 	functions_return_data_type["float_channel_message"] = Data_Tree("float");

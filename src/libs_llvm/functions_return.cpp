@@ -26,7 +26,7 @@ void set_functions_return_type() {
 						{"_quit_", "float"}, 
 						{"dict_Create", "dict"}, {"dict_New", "dict"}, {"dict_print", "float"}, 
 						{"emerge_int", "int"}, {"emerge_float", "float"}, {"tid", "int"}, 
-						{"array_Create", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "array"}, {"array_int_add", "array"}, {"randfloat_array", "array"}, {"arange_float", "array"}, {"zeros_float", "array"}, {"ones_float", "float_vec"}, {"array_Split_Parallel", "array"}, 
+						{"array_Create", "array"}, {"array_size", "int"}, {"array_bad_idx", "int"}, {"arange_int", "array"}, {"zeros_int", "array"}, {"randint_array", "array"}, {"ones_int", "array"}, {"array_int_add", "array"}, {"randfloat_array", "array"}, {"arange_float", "array"}, {"zeros_float", "array"}, {"ones_float", "array"}, {"array_Split_Parallel", "array"}, 
 						{"str_Create", "str"}, {"str_Copy", "str"}, {"str_CopyArg", "str"}, {"str_str_add", "str"}, {"str_int_add", "str"}, {"str_float_add", "str"}, {"int_str_add", "str"}, {"float_str_add", "str"}, {"str_bool_add", "str"}, {"bool_str_add", "str"}, {"PrintStr", "float"}, {"cat_str_float", "str"}, {"str_split_idx", "str"}, {"str_to_float", "float"}, {"str_str_different", "bool"}, {"str_str_equal", "bool"}, {"readline", "str"}, 
 						{"bool_to_str", "str"}, 
 						{"GetEmptyChar", "str"}, {"CopyString", "str"}, {"ConcatStr", "str"}, {"ConcatStrFreeLeft", "str"}, {"ConcatFloatToStr", "str"}, {"ConcatNumToStrFree", "str"}, 
@@ -44,7 +44,7 @@ void set_functions_return_type() {
 						{"object_Load_float", "float"}, {"object_Load_int", "int"}, {"object_Load_on_Offset_float", "float"}, {"object_Load_on_Offset_int", "int"}, 
 						{"print_randoms", "float"}, {"randint", "int"}, 
 						{"CreateNotesVector", "list"}, {"Dispose_NotesVector", "float"}, {"Add_To_NotesVector_float", "list"}, {"Add_To_NotesVector_int", "list"}, {"Add_To_NotesVector_str", "list"}, 
-						{"channel_str_message", "float"}, {"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_message", "float"}, {"channel_float_message", "float"}, {"float_channel_Idx", "float"}, {"float_channel_sum", "float"}, {"float_channel_mean", "float"}, {"float_channel_terminate", "float"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"channel_int_message", "float"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_mean", "float"}, {"int_channel_terminate", "float"}, {"int_channel_alive", "bool"}, 
+						{"channel_str_message", "float"}, {"channel_void_message", "float"}, {"str_channel_Idx", "str"}, {"str_channel_alive", "int"}, {"float_channel_message", "float"}, {"channel_float_message", "float"}, {"float_channel_Idx", "float"}, {"float_channel_sum", "float"}, {"float_channel_mean", "float"}, {"float_channel_terminate", "float"}, {"float_channel_alive", "int"}, {"int_channel_message", "int"}, {"channel_int_message", "float"}, {"int_channel_Idx", "int"}, {"int_channel_sum", "int"}, {"int_channel_mean", "float"}, {"int_channel_terminate", "float"}, {"int_channel_alive", "bool"}, 
 						{"list_New", "list"}, {"list_append", "float"}, {"list_print", "float"}, {"tuple_print", "float"}, {"list_Create", "list"}, {"list_shuffle", "float"}, {"list_size", "int"}, {"list_as_float_vec", "float_vec"}, {"list_CalculateIdx", "int"}, {"to_int", "int"}, {"to_float", "float"}, {"list_CalculateSliceIdx", ""}, {"list_Slice", "list"}, {"int_list_Store_Idx", "float"}, {"float_list_Store_Idx", "float"}, {"list_Store_Idx", "float"}, {"zip", "list"}, 
 						{"map_Create", "map"}, {"map_keys", "array"}, {"map_values", "array"}, 
 
@@ -109,10 +109,7 @@ void set_functions_return_type() {
 	functions_return_data_type["randfloat_array"] = Data_Tree("array");
 	functions_return_data_type["arange_float"] = Data_Tree("array");
 	functions_return_data_type["zeros_float"] = Data_Tree("array");
-
-	Data_Tree ones_float_vec = Data_Tree("vec");
-	ones_float_vec.Nested_Data.push_back(Data_Tree("float"));
-	functions_return_data_type["ones_float"] = ones_float_vec;
+	functions_return_data_type["ones_float"] = Data_Tree("array");
 	functions_return_data_type["array_Split_Parallel"] = Data_Tree("array");
 	functions_return_data_type["read_int"] = Data_Tree("int");
 	functions_return_data_type["int_to_str"] = Data_Tree("str");
@@ -198,6 +195,7 @@ void set_functions_return_type() {
 	functions_return_data_type["object_Load_on_Offset_float"] = Data_Tree("float");
 	functions_return_data_type["object_Load_on_Offset_int"] = Data_Tree("int");
 	functions_return_data_type["channel_str_message"] = Data_Tree("float");
+	functions_return_data_type["channel_void_message"] = Data_Tree("float");
 	functions_return_data_type["str_channel_Idx"] = Data_Tree("str");
 	functions_return_data_type["str_channel_alive"] = Data_Tree("int");
 	functions_return_data_type["float_channel_message"] = Data_Tree("float");

@@ -59,20 +59,16 @@ GC_Span::GC_Span(GC_Arena *arena, GC_span_traits *traits) : arena(arena), traits
 
     for (int i=traits->N; i< ((traits->N + types_per_word-1) / types_per_word)*types_per_word; ++i)
         set_16_L2(type_metadata, i, 1u); // Set as protected
-    // std::cout << "Created new span: " << traits->N << "/" << traits->size << ".\n";
 }
 
-GC_Arena::GC_Arena() {
-    // std::cout << "init arena size " << arena_size << ".\n";
-    // arena = calloc(arena_size, 1);
-
-    // arena = malloc(arena_size);
+GC_Arena::GC_Arena(int tid) {
     arena = aligned_alloc(8192, arena_size);
+    // arena = aligned_alloc(64u, arena_size);
+    arena_base_addr[tid].push_back(static_cast<char*>(arena));
 }
 
 GC::GC(int tid) {
-    GC_Arena *arena = new GC_Arena();
-    arena_base_addr[tid] = static_cast<char*>(arena->arena);
+    GC_Arena *arena = new GC_Arena(tid);
     arenas.push_back( arena );
 }
 
@@ -89,51 +85,60 @@ extern "C" void scope_struct_Alloc_GC(Scope_Struct *scope_struct) {
 
 
 void protect_pool_addr(Scope_Struct *scope_struct, void *addr) {
-    // std::cout << "Protect address " << addr << ".\n";
 
-    char *arena_addr = arena_base_addr[scope_struct->thread_id];
+    int tid = scope_struct->thread_id;
+    char *p = static_cast<char*>(addr);
 
-    long arena_offset = static_cast<char*>(addr) - arena_addr;
-    int arena =  arena_offset / GC_arena_size;
-    if (arena<0) {
-        std::cout << "------>Address " << addr << " address does not reside in any memory pool.\n";
-        std::cout << "Arena: " << arena << ".\n";
+    char *arena_addr;
+    // int arena =  arena_offset / GC_arena_size;
+
+    int arena_id=-1;
+    bool in_bounds;
+    do {
+        arena_id++;
+        arena_addr = arena_base_addr[tid][arena_id]; 
+        // arena =  arena_offset / GC_arena_size;
+        in_bounds = (p>=arena_addr&&p<arena_addr+GC_arena_size);
+    } while(!in_bounds&&arena_id<arena_base_addr[tid].size()-1);
+    if (!in_bounds) {
+        std::cout << "protect_pool_addr()\n------>Address " << addr << " address does not reside in any memory pool.\n";
         std::exit(0);
     }
+    long arena_offset = p - arena_addr;
     int page  =  (arena_offset / GC_page_size) % pages_per_arena;
-    // std::cout << "Belongs to arena: " << arena << ".\n";
-    // std::cout << "Belongs to page: " << page << ".\n";
 
-    GC_Span *span = scope_struct->gc->arenas[arena]->page_to_span[page];
+    GC_Span *span = scope_struct->gc->arenas[arena_id]->page_to_span[page];
 
     long obj_idx = (static_cast<char*>(addr) - static_cast<char*>(span->span_address)) / span->traits->obj_size;
-    // std::cout << "Obj idx in span: " << obj_idx << ".\n";
-    // std::cout << "span: " << span << ".\n";
-    // std::cout << "span obj_size " << span->traits->obj_size << ", pages: " << span->traits->pages << ", N: " << span->traits->N << ".\n";
     set_16_L2(span->type_metadata, obj_idx, 1u);
 }
 
 bool unprotect_pool_addr(Scope_Struct *scope_struct, void *addr) {
-    // std::cout << "Protect address " << addr << ".\n";
 
-    char *arena_addr = arena_base_addr[scope_struct->thread_id];
+    int tid = scope_struct->thread_id;
+    char *p = static_cast<char*>(addr);
 
-    long arena_offset = static_cast<char*>(addr) - arena_addr;
-    int arena =  arena_offset / GC_arena_size;
-    if (arena<0) {
-        // std::cout << " Address " << addr << " address does not reside in any memory pool.";
+    char *arena_addr;
+    // int arena =  arena_offset / GC_arena_size;
+
+    int arena_id=-1;
+    bool in_bounds;
+    do {
+        arena_id++;
+        arena_addr = arena_base_addr[tid][arena_id]; 
+        // arena =  arena_offset / GC_arena_size;
+        in_bounds = (p>=arena_addr&&p<arena_addr+GC_arena_size);
+    } while(!in_bounds&&arena_id<arena_base_addr[tid].size()-1);
+    if (!in_bounds) {
+        std::cout << "unprotect_pool_addr()\n--------Address " << addr << " address does not reside in any memory pool.";
         return false;
     }
+    long arena_offset = p - arena_addr;
     int page  =  (arena_offset / GC_page_size) % pages_per_arena;
-    // std::cout << "Belongs to arena: " << arena << ".\n";
-    // std::cout << "Belongs to page: " << page << ".\n";
 
-    GC_Span *span = scope_struct->gc->arenas[arena]->page_to_span[page];
+    GC_Span *span = scope_struct->gc->arenas[arena_id]->page_to_span[page];
 
     long obj_idx = (static_cast<char*>(addr) - static_cast<char*>(span->span_address)) / span->traits->obj_size;
-    // std::cout << "Obj idx in span: " << obj_idx << ".\n";
-    // std::cout << "span: " << span << ".\n";
-    // std::cout << "span obj_size " << span->traits->obj_size << ", pages: " << span->traits->pages << ", N: " << span->traits->N << ".\n";
     set_16_L2(span->type_metadata, obj_idx, 0u);
     return true;
 }

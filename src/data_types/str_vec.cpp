@@ -19,9 +19,9 @@ std::map<std::string, std::vector<char *>> StrVecAuxHash;
 
 
 
-extern "C" void *str_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, void *init_val, DT_list *notes_vector)
+extern "C" void *str_vec_Create(Scope_Struct *scope_struct)
 {
-  return init_val;
+  return nullptr;
 }
 
 

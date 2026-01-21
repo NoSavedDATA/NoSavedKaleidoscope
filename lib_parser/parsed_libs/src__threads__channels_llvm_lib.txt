@@ -1,4 +1,4 @@
-1822-01-19 14:11:45
+1822-01-20 23:02:22
 
 	FunctionType *channel_CreateTy= FunctionType::get(
 		int8PtrTy,
@@ -20,6 +20,20 @@
 		false
 	);
 	TheModule->getOrInsertFunction("channel_str_message", channel_str_messageTy);
+
+	FunctionType *void_channel_messageTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("void_channel_message", void_channel_messageTy);
+
+	FunctionType *channel_void_messageTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_void_message", channel_void_messageTy);
 
 	FunctionType *str_channel_IdxTy= FunctionType::get(
 		int8PtrTy,

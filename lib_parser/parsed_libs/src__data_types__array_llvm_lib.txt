@@ -1,8 +1,8 @@
-1822-01-16 17:04:41
+1822-01-20 22:29:56
 
 	FunctionType *array_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("array_Create", array_CreateTy);

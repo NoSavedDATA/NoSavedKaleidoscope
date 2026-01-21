@@ -430,6 +430,7 @@ int main(int argc, char* argv[]) {
 
   
   
+  functions_return_data_type["scope_struct_Sweep"] = Data_Tree("float");
 
   return_tensor_fn = concat_str_vec(return_tensor_functions, return_tensor_methods);
 

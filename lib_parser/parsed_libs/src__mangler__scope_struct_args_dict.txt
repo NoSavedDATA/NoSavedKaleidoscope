@@ -131,3 +131,9 @@
 	Function_Arg_DataTypes["scope_struct_Sweep"]["0"] = Data_Tree("Scope_Struct");
 	
 	Function_Arg_Names["scope_struct_Sweep"].push_back("0");
+	
+	Function_Arg_Types["scope_struct_Delete"]["0"] = "Scope_Struct";
+	
+	Function_Arg_DataTypes["scope_struct_Delete"]["0"] = Data_Tree("Scope_Struct");
+	
+	Function_Arg_Names["scope_struct_Delete"].push_back("0");

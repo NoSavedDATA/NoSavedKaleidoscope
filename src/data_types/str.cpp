@@ -25,10 +25,8 @@
 
 
   
-extern "C" char *str_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, char *init_val, DT_list *notes_vector) {
-
-
-  return init_val;
+extern "C" char *str_Create(Scope_Struct *scope_struct) {
+  return nullptr;
 }
 
 

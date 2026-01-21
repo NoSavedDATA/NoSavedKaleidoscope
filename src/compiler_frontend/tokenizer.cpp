@@ -64,6 +64,8 @@ std::map<int, std::string> token_to_string = {
   { tok_var, "var" },
   { tok_int, "int number" },
 
+  { tok_new, "tok new" },
+
   
 
   // control
@@ -235,7 +237,7 @@ std::map<std::string, char> string_tokens = {{"var", tok_var}, {"self", tok_self
 											 {"in", tok_in}, {"global", tok_global}, {"no_grad", tok_no_grad}, {"lock", tok_lock},
 											 {"unlock", tok_unlock}, {"binary", tok_binary}, {"unary", tok_unary}, {"return", tok_ret},
 											 {"as", tok_as}, {"spawn", tok_spawn}, {"channel", tok_channel}, {"main", tok_main}, {"and", tok_and},
-										     {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}, {"break", tok_break}};
+										     {"not", tok_not}, {"or", tok_or}, {"xor", tok_xor}, {"break", tok_break}, {"new", tok_new}};
 
 std::string IdentifierStr; // Filled in if tok_identifier
 float NumVal;             // Filled in if tok_number

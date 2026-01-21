@@ -33,6 +33,30 @@
 	Function_Arg_Names["channel_str_message"].push_back("1");
 	Function_Arg_Names["channel_str_message"].push_back("2");
 	
+	Function_Arg_Types["void_channel_message"]["0"] = "Scope_Struct";
+	Function_Arg_Types["void_channel_message"]["1"] = "void";
+	Function_Arg_Types["void_channel_message"]["2"] = "Channel";
+	
+	Function_Arg_DataTypes["void_channel_message"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["void_channel_message"]["1"] = Data_Tree("void");
+	Function_Arg_DataTypes["void_channel_message"]["2"] = Data_Tree("Channel");
+	
+	Function_Arg_Names["void_channel_message"].push_back("0");
+	Function_Arg_Names["void_channel_message"].push_back("1");
+	Function_Arg_Names["void_channel_message"].push_back("2");
+	
+	Function_Arg_Types["channel_void_message"]["0"] = "Scope_Struct";
+	Function_Arg_Types["channel_void_message"]["1"] = "Channel";
+	Function_Arg_Types["channel_void_message"]["2"] = "void";
+	
+	Function_Arg_DataTypes["channel_void_message"]["0"] = Data_Tree("Scope_Struct");
+	Function_Arg_DataTypes["channel_void_message"]["1"] = Data_Tree("Channel");
+	Function_Arg_DataTypes["channel_void_message"]["2"] = Data_Tree("void");
+	
+	Function_Arg_Names["channel_void_message"].push_back("0");
+	Function_Arg_Names["channel_void_message"].push_back("1");
+	Function_Arg_Names["channel_void_message"].push_back("2");
+	
 	Function_Arg_Types["str_channel_Idx"]["0"] = "Scope_Struct";
 	Function_Arg_Types["str_channel_Idx"]["1"] = "Channel";
 	Function_Arg_Types["str_channel_Idx"]["2"] = "int";

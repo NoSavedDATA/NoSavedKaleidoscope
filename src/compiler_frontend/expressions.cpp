@@ -404,17 +404,34 @@ bool DataExprAST::GetNeedGCSafePoint() {
     return true;
 }
 
+Data_Tree NewExprAST::GetDataTree(bool from_assignment) {
+    if (functions_return_data_type.count(Callee)==0)
+        LogError(parser_struct.line, "Could not find data type " + DataName);
+    Data_Tree new_dt = functions_return_data_type[Callee];
+    data_type = new_dt;
+    return new_dt;
+}
+
+NewExprAST::NewExprAST(Parser_Struct parser_struct, std::string DataName, std::vector<std::unique_ptr<ExprAST>> Args)
+                    : parser_struct(parser_struct), DataName(DataName), Args(std::move(Args)) {
+    Callee = DataName + "_Create";
+    GetDataTree();
+}
+
+bool NewExprAST::GetNeedGCSafePoint() {
+    return true;
+}
 
 LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_Struct parser_struct)
   : LibName(LibName), IsDefault(IsDefault), parser_struct(parser_struct) {
 
 
-  std::string ai_path = LibName+".ai";
+  std::string ai_path = LibName+".nk";
 
   if (!(in_str(LibName, imported_libs))) {
     // std::cout << "import " << LibName << ".\n";
     
-    bool has_nsk_ai=false, has_so_lib=false;
+    bool has_nk=false, has_so_lib=false;
     std::string lib_path = std::getenv("NSK_LIBS");
 
     std::string lib_dir = lib_path + "/" + LibName;
@@ -431,9 +448,9 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
 
 
 
-    std::string include_path = lib_dir + "/include.ai";
+    std::string include_path = lib_dir + "/include.nk";
     if(fs::exists(include_path)) {
-      has_nsk_ai=true;
+      has_nk=true;
       get_tok_until_space();
       tokenizer.importFile(include_path, 0);
     } else 
@@ -441,8 +458,8 @@ LibImportExprAST::LibImportExprAST(std::string LibName, bool IsDefault, Parser_S
     
 
 
-    if(!(has_nsk_ai||has_so_lib))
-      LogError(parser_struct.line, "Failed to import library: " + LibName + ".\n\t    Could not find .ai or lib.so file.");
+    if(!(has_nk||has_so_lib))
+      LogError(parser_struct.line, "Failed to import library: " + LibName + ".\n\t    Could not find .nk or lib.so file.");
     else
       imported_libs.push_back(LibName);
   }
@@ -499,6 +516,12 @@ Data_Tree BinaryExprAST::GetDataTree(bool from_assignment) {
   
   std::string operation = op_map[Op];
   Operation = Elements + "_" + operation;
+
+  if (LType=="channel" && !in_str(RType, primary_data_tokens)&&RType!="str")
+    Operation = "channel_void_message";
+
+  if (RType=="channel" && !in_str(LType, primary_data_tokens)&&LType!="str")
+    Operation = "void_channel_message";
   
 
   std::string type;
@@ -657,6 +680,10 @@ IndexExprAST::IndexExprAST(std::vector<std::unique_ptr<ExprAST>> Idxs, std::vect
             : Idxs(std::move(Idxs)), Second_Idxs(std::move(Second_Idxs)), IsSlice(IsSlice) {
   Size = this->Idxs.size();
 }
+
+Data_Tree IndexExprAST::GetDataTree(bool from_assignment) { 
+    return Idxs[0]->GetDataTree();
+}
   
 
 
@@ -774,9 +801,6 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
   
   if(Idx_Fn_Return.count(compound_type+"_Idx")) {
     Data_Tree idx_data_tree = Data_Tree(Idx_Fn_Return[compound_type+"_Idx"]);
-    // std::cout << "_Idx data tree:" << ".\n";
-    // idx_data_tree.Print();
-    // std::cout << "" << "\n";
 
     return Data_Tree(Idx_Fn_Return[compound_type+"_Idx"]);
   }
@@ -797,8 +821,8 @@ Data_Tree NameableIdx::GetDataTree(bool from_assignment) {
       LogError(parser_struct.line, "Can only index tuple with a constant integer.");
   } 
 
-  // std::cout << "---> Data tree of Nameable IDX is " << ".\n";
-  // inner_dt.Print();
+  if(compound_type=="list" && inner_dt.Nested_Data.size()==0)
+      return Data_Tree("any");
 
   return inner_dt.Nested_Data[0];
 }
@@ -970,7 +994,6 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
 
 
   if (Callee=="pow")
-    LogBlue("POW DEPTH IS "+std::to_string(Depth));
   
   if (Depth==1 && lib_function_remaps.count(Callee)>0)
     Callee = lib_function_remaps[Callee];
@@ -1007,8 +1030,8 @@ NameableCall::NameableCall(Parser_Struct parser_struct, std::unique_ptr<Nameable
   if(Callee=="list_append" && this->Args[0]->GetDataTree().Type=="float")
     Callee = "list_append_float";
     
-  if(functions_return_data_type.count(Callee)==0)
-      LogError(parser_struct.line, "Function " + Callee + " not found.");
+  // if(functions_return_data_type.count(Callee)==0)
+  //     LogError(parser_struct.line, "Function " + Callee + " not found.");
 
   if (in_str(Callee, vararg_methods))
   {

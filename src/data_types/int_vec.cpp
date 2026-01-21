@@ -22,19 +22,10 @@ void DT_int_vec::New(int size)  {
 }
 
 
-extern "C" void *int_vec_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_int_vec *init_val, DT_list *notes_vector)
+extern "C" void *int_vec_Create(Scope_Struct *scope_struct, int size)
 {
-  if (init_val!=nullptr)
-    return init_val;
-  if(notes_vector==nullptr)  
-    return nullptr;
-
-  if(notes_vector->size!=1) {
-    LogErrorC(-1, "int_vec requires size argument");
-    return nullptr;
-  }
   DT_int_vec *vec = newT<DT_int_vec>(scope_struct, "int_vec");
-  vec->New(notes_vector->get<int>(0));
+  vec->New(size);
 
   return vec;
 }

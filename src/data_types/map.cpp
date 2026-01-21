@@ -65,10 +65,7 @@ void DT_map::New(int size, int key_size, int value_size, std::string key_type, s
     // std::cout << "create map: " << key_size << "/" << value_size  << "/" << key_type << ".\n";
 }
 
-extern "C" DT_map *map_Create(Scope_Struct *scope_struct, char *name, char *scopeless_name, DT_map *init_val,
-                                  DT_list *notes_vector, Data_Tree dt) {
-    if(init_val!=nullptr)
-        return init_val;
+extern "C" DT_map *map_Create(Scope_Struct *scope_struct, Data_Tree dt) {
     
     if (dt.Nested_Data.size()<2)
         LogErrorC(scope_struct->code_line, "map requires key and value info");
@@ -261,8 +258,17 @@ extern "C" DT_array *map_values(Scope_Struct *scope_struct, DT_map *map) {
     return array;
 }
 
-extern "C" void map_bad_key(Scope_Struct *scope_struct, char *key) {
+extern "C" void map_bad_key_str(Scope_Struct *scope_struct, char *key) {
     std::string key_str = key;
     LogErrorC(scope_struct->code_line, "Map does not contain key: " + key_str);
 }
+
+extern "C" void map_bad_key_int(Scope_Struct *scope_struct, int key) {
+    LogErrorC(scope_struct->code_line, "Map does not contain key: " + std::to_string(key));
+}
+
+extern "C" void map_bad_key_float(Scope_Struct *scope_struct, float key) {
+    LogErrorC(scope_struct->code_line, "Map does not contain key: " + std::to_string(key));
+}
+
 

@@ -124,7 +124,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *array_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("array_Create", array_CreateTy);
@@ -275,6 +275,20 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("channel_str_message", channel_str_messageTy);
+
+	FunctionType *void_channel_messageTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("void_channel_message", void_channel_messageTy);
+
+	FunctionType *channel_void_messageTy= FunctionType::get(
+		Type::getFloatTy(*TheContext),
+		{int8PtrTy, int8PtrTy, int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("channel_void_message", channel_void_messageTy);
 
 	FunctionType *str_channel_IdxTy= FunctionType::get(
 		int8PtrTy,
@@ -598,6 +612,13 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("scope_struct_Sweep", scope_struct_SweepTy);
 
+	FunctionType *scope_struct_DeleteTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Delete", scope_struct_DeleteTy);
+
 	FunctionType *__idx__Ty= FunctionType::get(
 		Type::getInt32Ty(*TheContext),
 		{int8PtrTy, Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext), Type::getInt32Ty(*TheContext)},
@@ -691,7 +712,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *dict_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("dict_Create", dict_CreateTy);
@@ -789,7 +810,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *list_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("list_Create", list_CreateTy);
@@ -901,7 +922,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *str_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("str_vec_Create", str_vec_CreateTy);
@@ -957,7 +978,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *map_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("map_Create", map_CreateTy);
@@ -997,16 +1018,30 @@ void Generate_LLVM_Functions() {
 	);
 	TheModule->getOrInsertFunction("map_values", map_valuesTy);
 
-	FunctionType *map_bad_keyTy= FunctionType::get(
+	FunctionType *map_bad_key_strTy= FunctionType::get(
 		int8PtrTy,
 		{int8PtrTy, int8PtrTy},
 		false
 	);
-	TheModule->getOrInsertFunction("map_bad_key", map_bad_keyTy);
+	TheModule->getOrInsertFunction("map_bad_key_str", map_bad_key_strTy);
+
+	FunctionType *map_bad_key_intTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("map_bad_key_int", map_bad_key_intTy);
+
+	FunctionType *map_bad_key_floatTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy, Type::getFloatTy(*TheContext)},
+		false
+	);
+	TheModule->getOrInsertFunction("map_bad_key_float", map_bad_key_floatTy);
 
 	FunctionType *float_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("float_vec_Create", float_vec_CreateTy);
@@ -1160,7 +1195,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *int_vec_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy, Type::getInt32Ty(*TheContext)},
 		false
 	);
 	TheModule->getOrInsertFunction("int_vec_Create", int_vec_CreateTy);
@@ -1216,7 +1251,7 @@ void Generate_LLVM_Functions() {
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("str_Create", str_CreateTy);
@@ -1339,6 +1374,13 @@ void Generate_LLVM_Functions() {
 		false
 	);
 	TheModule->getOrInsertFunction("readline", readlineTy);
+
+	FunctionType *LogErrorCallTy= FunctionType::get(
+		int8PtrTy,
+		{Type::getInt32Ty(*TheContext), int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("LogErrorCall", LogErrorCallTy);
 
 	FunctionType *print_codegenTy= FunctionType::get(
 		int8PtrTy,

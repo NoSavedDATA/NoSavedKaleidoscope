@@ -27,6 +27,7 @@ return_string_fn, threaded_tensor_functions, require_scope_functions, notators_s
 
 
 extern std::map<std::string, int> Function_Arg_Count;
+extern std::map<std::string, int> Function_Required_Arg_Count;
 extern std::map<std::string, std::map<std::string, std::string>> Function_Arg_Types;
 extern std::map<std::string, std::map<std::string, Data_Tree>> Function_Arg_DataTypes;
 extern std::map<std::string, std::vector<std::string>> Function_Arg_Names;

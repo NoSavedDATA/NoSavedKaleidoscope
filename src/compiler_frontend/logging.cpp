@@ -200,8 +200,13 @@ std::unique_ptr<PrototypeAST> LogErrorP_to_comma(int line, std::string Str) {
 }
 
 Value *LogErrorV(int line, std::string Str) {
-  LogError(line, Str);
+  LogErrorS(line, Str);
   return nullptr;
+}
+
+
+extern "C" void LogErrorCall(int line, char *msg) {
+  LogErrorS(line, msg);
 }
 
 

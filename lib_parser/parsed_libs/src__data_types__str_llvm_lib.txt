@@ -1,8 +1,8 @@
-1821-11-17 16:09:36
+1822-01-20 14:35:29
 
 	FunctionType *str_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("str_Create", str_CreateTy);

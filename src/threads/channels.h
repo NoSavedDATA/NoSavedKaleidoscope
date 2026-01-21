@@ -30,3 +30,6 @@ struct Channel {
 };
 
 void channel_Clean_Up(void *ptr);
+
+
+void channel_handle_pool(Scope_Struct *scope_struct, void *ptr, char *data_name);

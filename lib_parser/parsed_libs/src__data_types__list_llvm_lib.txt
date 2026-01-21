@@ -1,4 +1,4 @@
-1821-11-16 10:36:04
+1822-01-20 14:36:26
 
 	FunctionType *list_NewTy= FunctionType::get(
 		int8PtrTy,
@@ -51,7 +51,7 @@
 
 	FunctionType *list_CreateTy= FunctionType::get(
 		int8PtrTy,
-		{int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy, int8PtrTy},
+		{int8PtrTy},
 		false
 	);
 	TheModule->getOrInsertFunction("list_Create", list_CreateTy);

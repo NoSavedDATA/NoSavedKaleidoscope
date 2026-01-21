@@ -1,4 +1,4 @@
-1822-01-16 16:56:28
+1822-01-20 12:41:11
 
 	FunctionType *print_stack1Ty= FunctionType::get(
 		int8PtrTy,
@@ -132,3 +132,10 @@
 		false
 	);
 	TheModule->getOrInsertFunction("scope_struct_Sweep", scope_struct_SweepTy);
+
+	FunctionType *scope_struct_DeleteTy= FunctionType::get(
+		int8PtrTy,
+		{int8PtrTy},
+		false
+	);
+	TheModule->getOrInsertFunction("scope_struct_Delete", scope_struct_DeleteTy);
