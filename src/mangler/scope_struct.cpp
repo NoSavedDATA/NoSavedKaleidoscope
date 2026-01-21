@@ -237,13 +237,12 @@ extern "C" void scope_struct_Delete(Scope_Struct *scope_struct) {
 
     gc->Sweep(scope_struct);
 
-    for (auto arena : gc->arenas) {
-        
+    for (auto arena : gc->arenas) {        
         for (auto span_vec_pair : arena->Spans) {
             for (auto span : span_vec_pair.second) {
-                free(span->mark_bits);
-                free(span->type_metadata);
-                free(span);
+                // free(span->mark_bits);
+                // free(span->type_metadata);
+                // free(span);
             }
         } 
         // free(arena->arena); // todo: channels may receive data only after the arena was cleaned

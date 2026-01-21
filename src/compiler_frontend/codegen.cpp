@@ -861,7 +861,8 @@ Value *DataExprAST::codegen(Value *scope_struct) {
 
     if(Init->GetIsMsg()) {
       Value *void_ptr = Constant::getNullValue(int8PtrTy);
-      initial_value = callret(Type+"_channel_message", {scope_struct, void_ptr, initial_value});
+      // initial_value = callret(Type+"_channel_message", {scope_struct, void_ptr, initial_value});
+      initial_value = callret("void_channel_message", {scope_struct, void_ptr, initial_value});
     }
 
 

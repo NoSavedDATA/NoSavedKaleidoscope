@@ -558,8 +558,9 @@ static int get_token(bool block) {
         SeenTabs = 0;
         seen_spaces = 0;
       }
-      if (LastChar==tok_tab)
+      if (LastChar==tok_tab) {
         SeenTabs+=1;
+      }
       if (LastChar==32)
         seen_spaces++;
       if (seen_spaces==3)

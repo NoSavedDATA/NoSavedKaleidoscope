@@ -1,29 +1,12 @@
-start_timer()
+import exemplo
 
-def int is_prime(int n)
-    for i=2, i<(n//2+1)
-        if n%i==0
-            return 0
-    return 1
-
-def int count_prime_vec(array<int> input_numbers, int channel ch)
-    int num_primes = 0
-    int thread_id = tid()
-
-    for i in input_numbers    
-        num_primes = num_primes + is_prime(i)
-
-    print("Found num primes " + num_primes + " on thread " + thread_id)
-    ch <- num_primes
+def int make_it_parallel(placeholder z)
+	z.add(1)
+	z.print()
 
 main
-	array<int> v = arange_int(2,250001)
-	int channel 10 ch
-
+	placeholder[2,2] x
 	finish
-		asyncs 10 count_prime_vec(>v, ch)
-
-	var primes = ch.sum()
-	print("Total primes: " + primes)
-		
-	end_timer()
+		asyncs 10 make_it_parallel(x)
+		x = x + 1
+	x.print()
